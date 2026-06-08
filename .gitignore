@@ -1,0 +1,61 @@
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Local tooling / workspace artifacts ---
+/.code-review-graph/
+/.omo/
+/.opencode/
+/.serena/
+/doc/
+
+# --- PHP / Symfony ---
+/vendor/
+/var/
+/.phpunit.result.cache
+/.php-cs-fixer.cache
+/.phpstan-cache/
+/.psalm-cache/
+/.phpunit.cache/
+/.env.local
+/.env.*.local
+!/.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage.xml
+
+# --- React / Node ---
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Docker / local runtime ---
+/.env
+/volumes/
+*.pid
+*.sock

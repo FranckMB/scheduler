@@ -1,0 +1,20 @@
+framework:
+    cache:
+        # Default app cache (filesystem in dev, Redis in prod)
+        app: cache.adapter.redis_tag_aware
+        default_redis_provider: '%env(REDIS_URL)%'
+
+        pools:
+            # Tenant-specific cache (club data, short TTL)
+            cache.tenant:
+                adapter: cache.adapter.redis_tag_aware
+                provider: '%env(REDIS_URL)%'
+                default_lifetime: 3600  # 1 hour
+                tags: true
+
+            # Schedule snapshots and solver inputs (longer TTL)
+            cache.schedule:
+                adapter: cache.adapter.redis_tag_aware
+                provider: '%env(REDIS_URL)%'
+                default_lifetime: 14400  # 4 hours
+                tags: true
