@@ -7,16 +7,9 @@ services:
     working_dir: /app/backend
     volumes:
       - ./:/app:cached
-    environment:
-      APP_ENV: ${APP_ENV}
-      APP_DEBUG: ${APP_DEBUG}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
-      MERCURE_URL: ${MERCURE_URL}
-      MERCURE_PUBLIC_URL: ${MERCURE_PUBLIC_URL}
-      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
-      MAILER_DSN: ${MAILER_DSN}
+    env_file:
+      - ./backend/.env
+      - ./.env
     expose:
       - "9000"
     depends_on:
@@ -101,14 +94,9 @@ services:
     working_dir: /app/backend
     volumes:
       - ./:/app:cached
-    environment:
-      APP_ENV: ${APP_ENV}
-      APP_DEBUG: ${APP_DEBUG}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
-      MERCURE_URL: ${MERCURE_URL}
-      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+    env_file:
+      - ./backend/.env
+      - ./.env
     command: >-
       sh -lc 'if [ -f bin/console ]; then
         exec php bin/console messenger:consume async --time-limit=3600 --memory-limit=256M --no-interaction;
@@ -139,9 +127,11 @@ services:
     working_dir: /app/engine
     volumes:
       - ./:/app:cached
+    env_file:
+      - ./engine/.env
+      - ./.env
     environment:
       PYTHONUNBUFFERED: "1"
-      ENGINE_PORT: ${ENGINE_PORT}
     ports:
       - "127.0.0.1:${ENGINE_PORT}:8000"
     command: >-

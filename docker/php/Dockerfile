@@ -1,4 +1,4 @@
-FROM php:8.3-fpm-bookworm
+FROM php:8.4-fpm
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     PATH="/root/.composer/vendor/bin:${PATH}"
