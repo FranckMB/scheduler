@@ -2,7 +2,7 @@ import ky from 'ky'
 import type { BeforeRequestHook, AfterResponseHook } from 'ky'
 import { useAuthStore } from '@/features/auth/authStore'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 const authHook: BeforeRequestHook = ({ request }) => {
   const token = useAuthStore.getState().token
