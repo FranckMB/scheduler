@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\CoachPlayerMembershipResource;
 use App\Entity\CoachPlayerMembership;
 
+/**
+ * @extends AbstractStateProvider<CoachPlayerMembership, CoachPlayerMembershipResource>
+ */
 class CoachPlayerMembershipStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class CoachPlayerMembershipStateProvider extends AbstractStateProvider
         return CoachPlayerMembership::class;
     }
 
+    /**
+     * @param CoachPlayerMembership $entity
+     */
     protected function mapEntityToOutput(object $entity): CoachPlayerMembershipResource
     {
         return CoachPlayerMembershipResource::fromEntity($entity);

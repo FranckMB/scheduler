@@ -8,6 +8,9 @@ use App\ApiResource\VenueClosureResource;
 use App\Dto\VenueClosureInput;
 use App\Entity\VenueClosure;
 
+/**
+ * @extends AbstractStateProcessor<VenueClosure, VenueClosureInput, VenueClosureResource>
+ */
 class VenueClosureStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,32 +18,43 @@ class VenueClosureStateProcessor extends AbstractStateProcessor
         return VenueClosure::class;
     }
 
+    /**
+     * @param VenueClosureInput $input
+     */
     protected function createEntityFromInput(object $input): VenueClosure
     {
         $entity = new VenueClosure();
-        if ($input->venueId !== null || !false) {
+        if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if ($input->dateStart !== null || !false) {
-            $entity->setDateStart($input->dateStart);
-        }
-        if ($input->dateEnd !== null || !false) {
-            $entity->setDateEnd($input->dateEnd);
-        }
-        if ($input->reason !== null || !true) {
+        $entity->setDateStart($input->dateStart);
+        $entity->setDateEnd($input->dateEnd);
+        if (null !== $input->reason) {
             $entity->setReason($input->reason);
         }
+
         return $entity;
     }
 
+    /**
+     * @param VenueClosure      $entity
+     * @param VenueClosureInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setVenueId($input->venueId);
+        if (null !== $input->venueId) {
+            $entity->setVenueId($input->venueId);
+        }
         $entity->setDateStart($input->dateStart);
         $entity->setDateEnd($input->dateEnd);
-        $entity->setReason($input->reason);
+        if (null !== $input->reason) {
+            $entity->setReason($input->reason);
+        }
     }
 
+    /**
+     * @param VenueClosure $entity
+     */
     protected function mapEntityToOutput(object $entity): VenueClosureResource
     {
         return VenueClosureResource::fromEntity($entity);

@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\SportStateProvider;
-use App\State\Processor\SportStateProcessor;
-
-use App\Entity\Sport;
-
-use App\Dto\SportInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\SportInput;
+use App\Entity\Sport;
+use App\State\Processor\SportStateProcessor;
+use App\State\Provider\SportStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Sport",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: SportInput::class,
-    provider: SportStateProvider::class,
-    processor: SportStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Sport', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: SportInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SportStateProvider::class, processor: SportStateProcessor::class)]
 class SportResource
 {
     #[Groups(['read'])]
@@ -60,7 +49,6 @@ class SportResource
     #[Groups(['read'])]
     public bool $isActive = false;
 
-
     public static function fromEntity(Sport $entity): self
     {
         $dto = new self();
@@ -72,6 +60,7 @@ class SportResource
         $dto->slug = $entity->getSlug();
         $dto->icon = $entity->getIcon();
         $dto->isActive = $entity->getIsActive();
+
         return $dto;
     }
 }

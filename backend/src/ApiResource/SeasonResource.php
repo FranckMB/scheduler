@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\SeasonStateProvider;
-use App\State\Processor\SeasonStateProcessor;
-
-use App\Entity\Season;
-
-use App\Dto\SeasonInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\SeasonInput;
+use App\Entity\Season;
+use App\State\Processor\SeasonStateProcessor;
+use App\State\Provider\SeasonStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Season",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: SeasonInput::class,
-    provider: SeasonStateProvider::class,
-    processor: SeasonStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Season', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: SeasonInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SeasonStateProvider::class, processor: SeasonStateProcessor::class)]
 class SeasonResource
 {
     #[Groups(['read'])]
@@ -63,9 +52,9 @@ class SeasonResource
     #[Groups(['read'])]
     public ?string $exportPdfUrl = null;
 
+    /** @var array<string, mixed> */
     #[Groups(['read'])]
     public array $transitionData = [];
-
 
     public static function fromEntity(Season $entity): self
     {
@@ -80,6 +69,7 @@ class SeasonResource
         $dto->status = $entity->getStatus();
         $dto->exportPdfUrl = $entity->getExportPdfUrl();
         $dto->transitionData = $entity->getTransitionData();
+
         return $dto;
     }
 }

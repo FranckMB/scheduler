@@ -4,36 +4,30 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\VenueStateProvider;
-use App\State\Processor\VenueStateProcessor;
-
-use App\Entity\Venue;
-
-use App\Dto\VenueInput;
-
+use ApiPlatform\Doctrine\Orm\Filter\BooleanFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\VenueInput;
+use App\Entity\Venue;
+use App\State\Processor\VenueStateProcessor;
+use App\State\Provider\VenueStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Venue",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: VenueInput::class,
-    provider: VenueStateProvider::class,
-    processor: VenueStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Venue', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: VenueInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: VenueStateProvider::class, processor: VenueStateProcessor::class)]
+#[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
+#[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
 class VenueResource
 {
     #[Groups(['read'])]
@@ -75,7 +69,6 @@ class VenueResource
     #[Groups(['read'])]
     public ?string $parentVenueId = null;
 
-
     public static function fromEntity(Venue $entity): self
     {
         $dto = new self();
@@ -92,6 +85,7 @@ class VenueResource
         $dto->externalRef = $entity->getExternalRef();
         $dto->isActive = $entity->getIsActive();
         $dto->parentVenueId = $entity->getParentVenueId();
+
         return $dto;
     }
 }

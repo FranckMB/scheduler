@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\TeamResource;
 use App\Entity\Team;
 
+/**
+ * @extends AbstractStateProvider<Team, TeamResource>
+ */
 class TeamStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class TeamStateProvider extends AbstractStateProvider
         return Team::class;
     }
 
+    /**
+     * @param Team $entity
+     */
     protected function mapEntityToOutput(object $entity): TeamResource
     {
         return TeamResource::fromEntity($entity);

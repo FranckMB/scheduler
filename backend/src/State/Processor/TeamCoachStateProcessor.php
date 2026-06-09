@@ -8,6 +8,9 @@ use App\ApiResource\TeamCoachResource;
 use App\Dto\TeamCoachInput;
 use App\Entity\TeamCoach;
 
+/**
+ * @extends AbstractStateProcessor<TeamCoach, TeamCoachInput, TeamCoachResource>
+ */
 class TeamCoachStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,32 +18,51 @@ class TeamCoachStateProcessor extends AbstractStateProcessor
         return TeamCoach::class;
     }
 
+    /**
+     * @param TeamCoachInput $input
+     */
     protected function createEntityFromInput(object $input): TeamCoach
     {
         $entity = new TeamCoach();
-        if ($input->teamId !== null || !false) {
+        if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
-        if ($input->coachId !== null || !false) {
+        if (null !== $input->coachId) {
             $entity->setCoachId($input->coachId);
         }
-        if ($input->role !== null || !false) {
+        if (null !== $input->role) {
             $entity->setRole($input->role);
         }
-        if ($input->isRequired !== null || !false) {
+        if (null !== $input->isRequired) {
             $entity->setIsRequired($input->isRequired);
         }
+
         return $entity;
     }
 
+    /**
+     * @param TeamCoach      $entity
+     * @param TeamCoachInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setTeamId($input->teamId);
-        $entity->setCoachId($input->coachId);
-        $entity->setRole($input->role);
-        $entity->setIsRequired($input->isRequired);
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
+        if (null !== $input->coachId) {
+            $entity->setCoachId($input->coachId);
+        }
+        if (null !== $input->role) {
+            $entity->setRole($input->role);
+        }
+        if (null !== $input->isRequired) {
+            $entity->setIsRequired($input->isRequired);
+        }
     }
 
+    /**
+     * @param TeamCoach $entity
+     */
     protected function mapEntityToOutput(object $entity): TeamCoachResource
     {
         return TeamCoachResource::fromEntity($entity);

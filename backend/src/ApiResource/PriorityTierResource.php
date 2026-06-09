@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\PriorityTierStateProvider;
-use App\State\Processor\PriorityTierStateProcessor;
-
-use App\Entity\PriorityTier;
-
-use App\Dto\PriorityTierInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\PriorityTierInput;
+use App\Entity\PriorityTier;
+use App\State\Processor\PriorityTierStateProcessor;
+use App\State\Provider\PriorityTierStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "PriorityTier",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: PriorityTierInput::class,
-    provider: PriorityTierStateProvider::class,
-    processor: PriorityTierStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'PriorityTier', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: PriorityTierInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PriorityTierStateProvider::class, processor: PriorityTierStateProcessor::class)]
 class PriorityTierResource
 {
     #[Groups(['read'])]
@@ -63,7 +52,6 @@ class PriorityTierResource
     #[Groups(['read'])]
     public int $defaultMinSessions = 0;
 
-
     public static function fromEntity(PriorityTier $entity): self
     {
         $dto = new self();
@@ -76,6 +64,7 @@ class PriorityTierResource
         $dto->color = $entity->getColor();
         $dto->orToolsWeight = $entity->getOrToolsWeight();
         $dto->defaultMinSessions = $entity->getDefaultMinSessions();
+
         return $dto;
     }
 }

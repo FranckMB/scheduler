@@ -25,7 +25,10 @@ final class ContractSchemaTest extends KernelTestCase
         $_ENV['APP_ENV'] = 'test';
     }
 
-    private static function contractVersionFile(): string { return dirname(__DIR__, 3) . '/engine/CONTRACT_VERSION'; }
+    private static function contractVersionFile(): string
+    {
+        return dirname(__DIR__, 3).'/engine/CONTRACT_VERSION';
+    }
     private const ENGINE_VALIDATE_URL = 'http://clubscheduler-engine:8000/validate';
 
     /** @group phase1 */
@@ -53,7 +56,7 @@ final class ContractSchemaTest extends KernelTestCase
         // Create club and season
         $club = new Club();
         $club->setName('Test Club');
-        $club->setSlug('test-club-' . uniqid());
+        $club->setSlug('test-club-'.uniqid());
         $club->setTimezone('Europe/Paris');
         $club->setLocale('fr');
         $club->setOnboardingCompleted(true);
@@ -78,11 +81,11 @@ final class ContractSchemaTest extends KernelTestCase
 
         // Create 4 venues
         $venues = [];
-        for ($i = 1; $i <= 4; $i++) {
+        for ($i = 1; $i <= 4; ++$i) {
             $venue = new Venue();
             $venue->setClubId($club->getId());
             $venue->setSeasonId($season->getId());
-            $venue->setName('Venue ' . $i);
+            $venue->setName('Venue '.$i);
             $venue->setSource('manual');
             $venue->setIsActive(true);
             $em->persist($venue);
@@ -91,7 +94,7 @@ final class ContractSchemaTest extends KernelTestCase
 
         // Create 10 coaches
         $coaches = [];
-        for ($i = 1; $i <= 10; $i++) {
+        for ($i = 1; $i <= 10; ++$i) {
             $coach = new Coach();
             $coach->setClubId($club->getId());
             $coach->setSeasonId($season->getId());
@@ -104,13 +107,13 @@ final class ContractSchemaTest extends KernelTestCase
 
         // Create 20 teams
         $teams = [];
-        for ($i = 1; $i <= 20; $i++) {
+        for ($i = 1; $i <= 20; ++$i) {
             $team = new Team();
             $team->setClubId($club->getId());
             $team->setSeasonId($season->getId());
             $team->setSportCategoryId($sportCategory->getId());
             $team->setPriorityTierId(1);
-            $team->setName('Team ' . $i);
+            $team->setName('Team '.$i);
             $team->setSessionsPerWeek(2);
             $team->setIsActive(true);
             $em->persist($team);
@@ -119,7 +122,7 @@ final class ContractSchemaTest extends KernelTestCase
 
         // Create constraints
         $constraints = [];
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 5; ++$i) {
             $constraint = new TeamConstraint();
             $constraint->setClubId($club->getId());
             $constraint->setSeasonId($season->getId());

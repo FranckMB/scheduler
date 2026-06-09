@@ -11,14 +11,13 @@ class UserInput
 {
     #[Assert\Email]
     #[Groups(['write'])]
-    public string $email = '';
+    public ?string $email = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $firstName = '';
+    public ?string $firstName = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $lastName = '';
-
+    public ?string $lastName = null;
 }

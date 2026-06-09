@@ -4,36 +4,30 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\CoachStateProvider;
-use App\State\Processor\CoachStateProcessor;
-
-use App\Entity\Coach;
-
-use App\Dto\CoachInput;
-
+use ApiPlatform\Doctrine\Orm\Filter\BooleanFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\CoachInput;
+use App\Entity\Coach;
+use App\State\Processor\CoachStateProcessor;
+use App\State\Provider\CoachStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Coach",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: CoachInput::class,
-    provider: CoachStateProvider::class,
-    processor: CoachStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Coach', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: CoachInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: CoachStateProvider::class, processor: CoachStateProcessor::class)]
+#[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
+#[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
 class CoachResource
 {
     #[Groups(['read'])]
@@ -75,7 +69,6 @@ class CoachResource
     #[Groups(['read'])]
     public ?string $parentCoachId = null;
 
-
     public static function fromEntity(Coach $entity): self
     {
         $dto = new self();
@@ -92,6 +85,7 @@ class CoachResource
         $dto->acceptableLateMinutes = $entity->getAcceptableLateMinutes();
         $dto->isActive = $entity->getIsActive();
         $dto->parentCoachId = $entity->getParentCoachId();
+
         return $dto;
     }
 }

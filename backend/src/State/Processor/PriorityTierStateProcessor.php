@@ -8,6 +8,9 @@ use App\ApiResource\PriorityTierResource;
 use App\Dto\PriorityTierInput;
 use App\Entity\PriorityTier;
 
+/**
+ * @extends AbstractStateProcessor<PriorityTier, PriorityTierInput, PriorityTierResource>
+ */
 class PriorityTierStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,36 +18,57 @@ class PriorityTierStateProcessor extends AbstractStateProcessor
         return PriorityTier::class;
     }
 
+    /**
+     * @param PriorityTierInput $input
+     */
     protected function createEntityFromInput(object $input): PriorityTier
     {
         $entity = new PriorityTier();
-        if ($input->label !== null || !false) {
+        if (null !== $input->label) {
             $entity->setLabel($input->label);
         }
-        if ($input->name !== null || !false) {
+        if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        if ($input->color !== null || !false) {
+        if (null !== $input->color) {
             $entity->setColor($input->color);
         }
-        if ($input->orToolsWeight !== null || !false) {
+        if (null !== $input->orToolsWeight) {
             $entity->setOrToolsWeight($input->orToolsWeight);
         }
-        if ($input->defaultMinSessions !== null || !false) {
+        if (null !== $input->defaultMinSessions) {
             $entity->setDefaultMinSessions($input->defaultMinSessions);
         }
+
         return $entity;
     }
 
+    /**
+     * @param PriorityTier      $entity
+     * @param PriorityTierInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setLabel($input->label);
-        $entity->setName($input->name);
-        $entity->setColor($input->color);
-        $entity->setOrToolsWeight($input->orToolsWeight);
-        $entity->setDefaultMinSessions($input->defaultMinSessions);
+        if (null !== $input->label) {
+            $entity->setLabel($input->label);
+        }
+        if (null !== $input->name) {
+            $entity->setName($input->name);
+        }
+        if (null !== $input->color) {
+            $entity->setColor($input->color);
+        }
+        if (null !== $input->orToolsWeight) {
+            $entity->setOrToolsWeight($input->orToolsWeight);
+        }
+        if (null !== $input->defaultMinSessions) {
+            $entity->setDefaultMinSessions($input->defaultMinSessions);
+        }
     }
 
+    /**
+     * @param PriorityTier $entity
+     */
     protected function mapEntityToOutput(object $entity): PriorityTierResource
     {
         return PriorityTierResource::fromEntity($entity);

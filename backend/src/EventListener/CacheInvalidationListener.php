@@ -50,7 +50,7 @@ class CacheInvalidationListener
     private function collectInvalidation(object $entity): void
     {
         $clubId = $this->resolveClubId($entity);
-        if ($clubId === null) {
+        if (null === $clubId) {
             return;
         }
 
@@ -86,6 +86,6 @@ class CacheInvalidationListener
 
         $clubId = $entity->$method();
 
-        return is_string($clubId) && $clubId !== '' ? $clubId : null;
+        return is_string($clubId) && '' !== $clubId ? $clubId : null;
     }
 }

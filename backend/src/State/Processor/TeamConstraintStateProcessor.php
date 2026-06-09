@@ -8,6 +8,9 @@ use App\ApiResource\TeamConstraintResource;
 use App\Dto\TeamConstraintInput;
 use App\Entity\TeamConstraint;
 
+/**
+ * @extends AbstractStateProcessor<TeamConstraint, TeamConstraintInput, TeamConstraintResource>
+ */
 class TeamConstraintStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,52 +18,81 @@ class TeamConstraintStateProcessor extends AbstractStateProcessor
         return TeamConstraint::class;
     }
 
+    /**
+     * @param TeamConstraintInput $input
+     */
     protected function createEntityFromInput(object $input): TeamConstraint
     {
         $entity = new TeamConstraint();
-        if ($input->teamId !== null || !false) {
+        if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
-        if ($input->type !== null || !false) {
+        if (null !== $input->type) {
             $entity->setType($input->type);
         }
-        if ($input->dayOfWeek !== null || !true) {
+        if (null !== $input->dayOfWeek) {
             $entity->setDayOfWeek($input->dayOfWeek);
         }
-        if ($input->startTime !== null || !true) {
+        if (null !== $input->startTime) {
             $entity->setStartTime($input->startTime);
         }
-        if ($input->endTime !== null || !true) {
+        if (null !== $input->endTime) {
             $entity->setEndTime($input->endTime);
         }
-        if ($input->venueId !== null || !true) {
+        if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if ($input->reason !== null || !true) {
+        if (null !== $input->reason) {
             $entity->setReason($input->reason);
         }
-        if ($input->createdBy !== null || !true) {
+        if (null !== $input->createdBy) {
             $entity->setCreatedBy($input->createdBy);
         }
-        if ($input->sourceOccurrenceId !== null || !true) {
+        if (null !== $input->sourceOccurrenceId) {
             $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
         }
+
         return $entity;
     }
 
+    /**
+     * @param TeamConstraint      $entity
+     * @param TeamConstraintInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setTeamId($input->teamId);
-        $entity->setType($input->type);
-        $entity->setDayOfWeek($input->dayOfWeek);
-        $entity->setStartTime($input->startTime);
-        $entity->setEndTime($input->endTime);
-        $entity->setVenueId($input->venueId);
-        $entity->setReason($input->reason);
-        $entity->setCreatedBy($input->createdBy);
-        $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
+        if (null !== $input->type) {
+            $entity->setType($input->type);
+        }
+        if (null !== $input->dayOfWeek) {
+            $entity->setDayOfWeek($input->dayOfWeek);
+        }
+        if (null !== $input->startTime) {
+            $entity->setStartTime($input->startTime);
+        }
+        if (null !== $input->endTime) {
+            $entity->setEndTime($input->endTime);
+        }
+        if (null !== $input->venueId) {
+            $entity->setVenueId($input->venueId);
+        }
+        if (null !== $input->reason) {
+            $entity->setReason($input->reason);
+        }
+        if (null !== $input->createdBy) {
+            $entity->setCreatedBy($input->createdBy);
+        }
+        if (null !== $input->sourceOccurrenceId) {
+            $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
+        }
     }
 
+    /**
+     * @param TeamConstraint $entity
+     */
     protected function mapEntityToOutput(object $entity): TeamConstraintResource
     {
         return TeamConstraintResource::fromEntity($entity);

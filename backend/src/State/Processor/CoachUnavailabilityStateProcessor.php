@@ -8,6 +8,9 @@ use App\ApiResource\CoachUnavailabilityResource;
 use App\Dto\CoachUnavailabilityInput;
 use App\Entity\CoachUnavailability;
 
+/**
+ * @extends AbstractStateProcessor<CoachUnavailability, CoachUnavailabilityInput, CoachUnavailabilityResource>
+ */
 class CoachUnavailabilityStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,32 +18,51 @@ class CoachUnavailabilityStateProcessor extends AbstractStateProcessor
         return CoachUnavailability::class;
     }
 
+    /**
+     * @param CoachUnavailabilityInput $input
+     */
     protected function createEntityFromInput(object $input): CoachUnavailability
     {
         $entity = new CoachUnavailability();
-        if ($input->coachId !== null || !false) {
+        if (null !== $input->coachId) {
             $entity->setCoachId($input->coachId);
         }
-        if ($input->dayOfWeek !== null || !false) {
+        if (null !== $input->dayOfWeek) {
             $entity->setDayOfWeek($input->dayOfWeek);
         }
-        if ($input->startTime !== null || !true) {
+        if (null !== $input->startTime) {
             $entity->setStartTime($input->startTime);
         }
-        if ($input->endTime !== null || !true) {
+        if (null !== $input->endTime) {
             $entity->setEndTime($input->endTime);
         }
+
         return $entity;
     }
 
+    /**
+     * @param CoachUnavailability      $entity
+     * @param CoachUnavailabilityInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setCoachId($input->coachId);
-        $entity->setDayOfWeek($input->dayOfWeek);
-        $entity->setStartTime($input->startTime);
-        $entity->setEndTime($input->endTime);
+        if (null !== $input->coachId) {
+            $entity->setCoachId($input->coachId);
+        }
+        if (null !== $input->dayOfWeek) {
+            $entity->setDayOfWeek($input->dayOfWeek);
+        }
+        if (null !== $input->startTime) {
+            $entity->setStartTime($input->startTime);
+        }
+        if (null !== $input->endTime) {
+            $entity->setEndTime($input->endTime);
+        }
     }
 
+    /**
+     * @param CoachUnavailability $entity
+     */
     protected function mapEntityToOutput(object $entity): CoachUnavailabilityResource
     {
         return CoachUnavailabilityResource::fromEntity($entity);

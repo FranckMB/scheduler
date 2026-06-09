@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\PlanStateProvider;
-use App\State\Processor\PlanStateProcessor;
-
-use App\Entity\Plan;
-
-use App\Dto\PlanInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\PlanInput;
+use App\Entity\Plan;
+use App\State\Processor\PlanStateProcessor;
+use App\State\Provider\PlanStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Plan",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: PlanInput::class,
-    provider: PlanStateProvider::class,
-    processor: PlanStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Plan', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: PlanInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PlanStateProvider::class, processor: PlanStateProcessor::class)]
 class PlanResource
 {
     #[Groups(['read'])]
@@ -66,9 +55,9 @@ class PlanResource
     #[Groups(['read'])]
     public string $annualPrice = '';
 
+    /** @var array<string, mixed> */
     #[Groups(['read'])]
     public array $features = [];
-
 
     public static function fromEntity(Plan $entity): self
     {
@@ -84,6 +73,7 @@ class PlanResource
         $dto->monthlyPrice = $entity->getMonthlyPrice();
         $dto->annualPrice = $entity->getAnnualPrice();
         $dto->features = $entity->getFeatures();
+
         return $dto;
     }
 }

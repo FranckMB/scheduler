@@ -11,11 +11,11 @@ class TeamConstraintInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $teamId = '';
+    public ?string $teamId = null;
 
-    #[Assert\Choice(choices: ["preferred", "avoid", "forbidden", "required"])]
+    #[Assert\Choice(choices: ['preferred', 'avoid', 'forbidden', 'required'])]
     #[Groups(['write'])]
-    public string $type = '';
+    public ?string $type = null;
 
     #[Assert\Range(min: 1, max: 7)]
     #[Groups(['write'])]
@@ -38,5 +38,4 @@ class TeamConstraintInput
 
     #[Groups(['write'])]
     public ?string $sourceOccurrenceId = null;
-
 }

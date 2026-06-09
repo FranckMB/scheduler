@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\SportCategoryStateProvider;
-use App\State\Processor\SportCategoryStateProcessor;
-
-use App\Entity\SportCategory;
-
-use App\Dto\SportCategoryInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\SportCategoryInput;
+use App\Entity\SportCategory;
+use App\State\Processor\SportCategoryStateProcessor;
+use App\State\Provider\SportCategoryStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "SportCategory",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: SportCategoryInput::class,
-    provider: SportCategoryStateProvider::class,
-    processor: SportCategoryStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'SportCategory', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: SportCategoryInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SportCategoryStateProvider::class, processor: SportCategoryStateProcessor::class)]
 class SportCategoryResource
 {
     #[Groups(['read'])]
@@ -66,7 +55,6 @@ class SportCategoryResource
     #[Groups(['read'])]
     public int $sortOrder = 0;
 
-
     public static function fromEntity(SportCategory $entity): self
     {
         $dto = new self();
@@ -80,6 +68,7 @@ class SportCategoryResource
         $dto->ageMin = $entity->getAgeMin();
         $dto->ageMax = $entity->getAgeMax();
         $dto->sortOrder = $entity->getSortOrder();
+
         return $dto;
     }
 }

@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\VenueAvailabilityStateProvider;
-use App\State\Processor\VenueAvailabilityStateProcessor;
-
-use App\Entity\VenueAvailability;
-
-use App\Dto\VenueAvailabilityInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\VenueAvailabilityInput;
+use App\Entity\VenueAvailability;
+use App\State\Processor\VenueAvailabilityStateProcessor;
+use App\State\Provider\VenueAvailabilityStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "VenueAvailability",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: VenueAvailabilityInput::class,
-    provider: VenueAvailabilityStateProvider::class,
-    processor: VenueAvailabilityStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'VenueAvailability', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: VenueAvailabilityInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: VenueAvailabilityStateProvider::class, processor: VenueAvailabilityStateProcessor::class)]
 class VenueAvailabilityResource
 {
     #[Groups(['read'])]
@@ -60,7 +49,6 @@ class VenueAvailabilityResource
     #[Groups(['read'])]
     public \DateTimeImmutable $endTime;
 
-
     public static function fromEntity(VenueAvailability $entity): self
     {
         $dto = new self();
@@ -72,6 +60,7 @@ class VenueAvailabilityResource
         $dto->dayOfWeek = $entity->getDayOfWeek();
         $dto->startTime = $entity->getStartTime();
         $dto->endTime = $entity->getEndTime();
+
         return $dto;
     }
 }

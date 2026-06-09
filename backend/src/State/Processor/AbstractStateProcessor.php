@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\State\Processor;
 
 use ApiPlatform\Metadata\DeleteOperationInterface;
+use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -12,6 +13,13 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * @template TEntity of object
+ * @template TInput of object
+ * @template TOutput of object
+ *
+ * @implements ProcessorInterface<mixed, mixed>
+ */
 abstract class AbstractStateProcessor implements ProcessorInterface
 {
     public function __construct(
@@ -20,9 +28,29 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     ) {
     }
 
+    /**
+     * @return class-string<TEntity>
+     */
     abstract protected function getEntityClass(): string;
+
+    /**
+     * @param TInput $input
+     *
+     * @return TEntity
+     */
     abstract protected function createEntityFromInput(object $input): object;
+
+    /**
+     * @param TEntity $entity
+     * @param TInput  $input
+     */
     abstract protected function updateEntityFromInput(object $entity, object $input): void;
+
+    /**
+     * @param TEntity $entity
+     *
+     * @return TOutput
+     */
     abstract protected function mapEntityToOutput(object $entity): object;
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
@@ -32,11 +60,13 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
 
         if ($operation instanceof DeleteOperationInterface) {
-            return $this->processDelete($uriVariables, $clubId);
+            $this->processDelete($uriVariables, $clubId);
+
+            return null;
         }
 
-        $method = $operation->getMethod() ?? '';
-        if ($method === 'POST') {
+        $method = $operation instanceof HttpOperation ? $operation->getMethod() : '';
+        if ('POST' === $method) {
             return $this->processPost($data, $clubId, $seasonId);
         }
 
@@ -47,14 +77,19 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         return $data;
     }
 
+    /**
+     * @param TInput $input
+     *
+     * @return TOutput
+     */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
         $entity = $this->createEntityFromInput($input);
 
-        if ($clubId !== null && method_exists($entity, 'setClubId')) {
+        if (null !== $clubId && method_exists($entity, 'setClubId')) {
             $entity->setClubId($clubId);
         }
-        if ($seasonId !== null && method_exists($entity, 'setSeasonId')) {
+        if (null !== $seasonId && method_exists($entity, 'setSeasonId')) {
             $entity->setSeasonId($seasonId);
         }
 
@@ -64,6 +99,12 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         return $this->mapEntityToOutput($entity);
     }
 
+    /**
+     * @param TInput               $input
+     * @param array<string, mixed> $uriVariables
+     *
+     * @return TOutput
+     */
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
         $id = $uriVariables['id'] ?? null;
@@ -73,7 +114,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new NotFoundHttpException('Resource not found');
         }
 
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+        if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
             throw new AccessDeniedHttpException('Access denied');
         }
 
@@ -83,6 +124,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         return $this->mapEntityToOutput($entity);
     }
 
+    /** @param array<string, mixed> $uriVariables */
     protected function processDelete(array $uriVariables, ?string $clubId): void
     {
         $id = $uriVariables['id'] ?? null;
@@ -92,7 +134,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new NotFoundHttpException('Resource not found');
         }
 
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+        if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
             throw new AccessDeniedHttpException('Access denied');
         }
 

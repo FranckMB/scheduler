@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\TeamConstraintStateProvider;
-use App\State\Processor\TeamConstraintStateProcessor;
-
-use App\Entity\TeamConstraint;
-
-use App\Dto\TeamConstraintInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\TeamConstraintInput;
+use App\Entity\TeamConstraint;
+use App\State\Processor\TeamConstraintStateProcessor;
+use App\State\Provider\TeamConstraintStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "TeamConstraint",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: TeamConstraintInput::class,
-    provider: TeamConstraintStateProvider::class,
-    processor: TeamConstraintStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'TeamConstraint', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: TeamConstraintInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamConstraintStateProvider::class, processor: TeamConstraintStateProcessor::class)]
 class TeamConstraintResource
 {
     #[Groups(['read'])]
@@ -75,7 +64,6 @@ class TeamConstraintResource
     #[Groups(['read'])]
     public ?string $sourceOccurrenceId = null;
 
-
     public static function fromEntity(TeamConstraint $entity): self
     {
         $dto = new self();
@@ -92,6 +80,7 @@ class TeamConstraintResource
         $dto->reason = $entity->getReason();
         $dto->createdBy = $entity->getCreatedBy();
         $dto->sourceOccurrenceId = $entity->getSourceOccurrenceId();
+
         return $dto;
     }
 }

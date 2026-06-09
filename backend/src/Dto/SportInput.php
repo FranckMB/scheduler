@@ -11,16 +11,15 @@ class SportInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $slug = '';
+    public ?string $slug = null;
 
     #[Groups(['write'])]
     public ?string $icon = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
-
+    public ?bool $isActive = null;
 }

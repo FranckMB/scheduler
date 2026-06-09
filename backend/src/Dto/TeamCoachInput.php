@@ -11,17 +11,16 @@ class TeamCoachInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $teamId = '';
+    public ?string $teamId = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $coachId = '';
+    public ?string $coachId = null;
 
-    #[Assert\Choice(choices: ["head", "assistant", "trainer"])]
+    #[Assert\Choice(choices: ['head', 'assistant', 'trainer'])]
     #[Groups(['write'])]
-    public string $role = '';
+    public ?string $role = null;
 
     #[Groups(['write'])]
-    public bool $isRequired = false;
-
+    public ?bool $isRequired = null;
 }

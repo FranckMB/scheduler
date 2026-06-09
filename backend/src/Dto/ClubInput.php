@@ -11,16 +11,16 @@ class ClubInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $slug = '';
+    public ?string $slug = null;
 
     #[Groups(['write'])]
     public ?int $planId = null;
 
-    #[Assert\Choice(choices: ["monthly", "annual", "quarterly"])]
+    #[Assert\Choice(choices: ['monthly', 'annual', 'quarterly'])]
     #[Groups(['write'])]
     public ?string $billingCycle = null;
 
@@ -28,23 +28,22 @@ class ClubInput
     public ?\DateTimeImmutable $planExpiresAt = null;
 
     #[Groups(['write'])]
-    public int $generationCountSeason = 0;
+    public ?int $generationCountSeason = null;
 
     #[Groups(['write'])]
     public ?string $schoolZone = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $timezone = '';
+    public ?string $timezone = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $locale = '';
+    public ?string $locale = null;
 
     #[Groups(['write'])]
-    public bool $onboardingCompleted = false;
+    public ?bool $onboardingCompleted = null;
 
     #[Groups(['write'])]
     public ?string $ffbbClubCode = null;
-
 }

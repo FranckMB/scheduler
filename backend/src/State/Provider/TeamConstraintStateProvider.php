@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\TeamConstraintResource;
 use App\Entity\TeamConstraint;
 
+/**
+ * @extends AbstractStateProvider<TeamConstraint, TeamConstraintResource>
+ */
 class TeamConstraintStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class TeamConstraintStateProvider extends AbstractStateProvider
         return TeamConstraint::class;
     }
 
+    /**
+     * @param TeamConstraint $entity
+     */
     protected function mapEntityToOutput(object $entity): TeamConstraintResource
     {
         return TeamConstraintResource::fromEntity($entity);

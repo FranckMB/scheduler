@@ -11,13 +11,12 @@ class ScheduleInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
-    #[Assert\Choice(choices: ["draft", "generating", "published", "archived"])]
+    #[Assert\Choice(choices: ['draft', 'generating', 'published', 'archived'])]
     #[Groups(['write'])]
-    public string $status = '';
+    public ?string $status = null;
 
     #[Groups(['write'])]
-    public int $solverSeed = 0;
-
+    public ?int $solverSeed = null;
 }

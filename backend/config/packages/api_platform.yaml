@@ -5,6 +5,11 @@ api_platform:
         jsonld: ["application/ld+json"]
         json: ["application/json"]
         html: ["text/html"]
+    docs_formats:
+        jsonopenapi: ["application/vnd.openapi+json"]
+        json: ["application/vnd.openapi+json"]
+        jsonld: ["application/ld+json"]
+        html: ["text/html"]
     error_formats:
         jsonld: ["application/ld+json"]
         json: ["application/json"]

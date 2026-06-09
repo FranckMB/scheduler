@@ -45,12 +45,13 @@ class Season
     #[ORM\Column(type: 'string', length: 2048, nullable: true)]
     private ?string $exportPdfUrl = null;
 
+    /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
     private array $transitionData = [];
 
     public function __construct()
     {
-        $this->id = self::newUuid();
+        $this->id = $this->newUuid();
         $now = new \DateTimeImmutable();
         $this->createdAt = $now;
         $this->updatedAt = $now;
@@ -175,11 +176,13 @@ class Season
         return $this;
     }
 
+    /** @return array<string, mixed> */
     public function getTransitionData(): array
     {
         return $this->transitionData;
     }
 
+    /** @param array<string, mixed> $transitionData */
     public function setTransitionData(array $transitionData): self
     {
         $this->transitionData = $transitionData;
@@ -187,11 +190,11 @@ class Season
         return $this;
     }
 
-    private static function newUuid(): string
+    private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\PriorityTierResource;
 use App\Entity\PriorityTier;
 
+/**
+ * @extends AbstractStateProvider<PriorityTier, PriorityTierResource>
+ */
 class PriorityTierStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class PriorityTierStateProvider extends AbstractStateProvider
         return PriorityTier::class;
     }
 
+    /**
+     * @param PriorityTier $entity
+     */
     protected function mapEntityToOutput(object $entity): PriorityTierResource
     {
         return PriorityTierResource::fromEntity($entity);

@@ -8,6 +8,9 @@ use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
 use App\Entity\Schedule;
 
+/**
+ * @extends AbstractStateProcessor<Schedule, ScheduleInput, ScheduleResource>
+ */
 class ScheduleStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,28 +18,45 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         return Schedule::class;
     }
 
+    /**
+     * @param ScheduleInput $input
+     */
     protected function createEntityFromInput(object $input): Schedule
     {
         $entity = new Schedule();
-        if ($input->name !== null || !false) {
+        if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        if ($input->status !== null || !false) {
+        if (null !== $input->status) {
             $entity->setStatus($input->status);
         }
-        if ($input->solverSeed !== null || !false) {
+        if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);
         }
+
         return $entity;
     }
 
+    /**
+     * @param Schedule      $entity
+     * @param ScheduleInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setName($input->name);
-        $entity->setStatus($input->status);
-        $entity->setSolverSeed($input->solverSeed);
+        if (null !== $input->name) {
+            $entity->setName($input->name);
+        }
+        if (null !== $input->status) {
+            $entity->setStatus($input->status);
+        }
+        if (null !== $input->solverSeed) {
+            $entity->setSolverSeed($input->solverSeed);
+        }
     }
 
+    /**
+     * @param Schedule $entity
+     */
     protected function mapEntityToOutput(object $entity): ScheduleResource
     {
         return ScheduleResource::fromEntity($entity);

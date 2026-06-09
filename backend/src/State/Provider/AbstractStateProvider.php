@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace App\State\Provider;
 
 use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProviderInterface;
 use ApiPlatform\State\Pagination\Pagination;
+use ApiPlatform\State\ProviderInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
+/**
+ * @template TEntity of object
+ * @template TOutput of object
+ *
+ * @implements ProviderInterface<TOutput>
+ */
 abstract class AbstractStateProvider implements ProviderInterface
 {
     public function __construct(
@@ -19,9 +25,21 @@ abstract class AbstractStateProvider implements ProviderInterface
     ) {
     }
 
+    /**
+     * @return class-string<TEntity>
+     */
     abstract protected function getEntityClass(): string;
+
+    /**
+     * @param TEntity $entity
+     *
+     * @return TOutput
+     */
     abstract protected function mapEntityToOutput(object $entity): object;
 
+    /**
+     * @return TOutput|array<int, TOutput>|null
+     */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
         $request = $this->requestStack->getCurrentRequest();
@@ -34,6 +52,11 @@ abstract class AbstractStateProvider implements ProviderInterface
         return $this->provideItem($uriVariables, $clubId);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     *
+     * @return array<int, TOutput>
+     */
     protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
     {
         $qb = $this->entityManager->createQueryBuilder()
@@ -53,6 +76,11 @@ abstract class AbstractStateProvider implements ProviderInterface
         return array_map([$this, 'mapEntityToOutput'], $results);
     }
 
+    /**
+     * @param array<string, mixed> $uriVariables
+     *
+     * @return TOutput|null
+     */
     protected function provideItem(array $uriVariables, ?string $clubId): ?object
     {
         $id = $uriVariables['id'] ?? null;
@@ -65,7 +93,7 @@ abstract class AbstractStateProvider implements ProviderInterface
             return null;
         }
 
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+        if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
             return null;
         }
 

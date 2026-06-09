@@ -33,11 +33,11 @@ class TenantFilterListener implements EventSubscriberInterface
         $clubId = $this->resolveClubId($event);
         $seasonId = $this->resolveSeasonId($event);
 
-        if ($seasonId !== null) {
+        if (null !== $seasonId) {
             $event->getRequest()->attributes->set('_season_id', $seasonId);
         }
 
-        if ($clubId === null) {
+        if (null === $clubId) {
             return;
         }
 
@@ -49,7 +49,7 @@ class TenantFilterListener implements EventSubscriberInterface
 
         $connection = $this->entityManager->getConnection();
         $connection->executeStatement(
-            'SET LOCAL app.club_id = ' . $connection->quote($clubId)
+            'SET LOCAL app.club_id = '.$connection->quote($clubId)
         );
     }
 
@@ -58,12 +58,12 @@ class TenantFilterListener implements EventSubscriberInterface
         $request = $event->getRequest();
 
         $clubId = $request->attributes->get('_club_id');
-        if (\is_string($clubId) && $clubId !== '') {
+        if (\is_string($clubId) && '' !== $clubId) {
             return $clubId;
         }
 
         $clubId = $request->headers->get('X-Club-Id');
-        if (\is_string($clubId) && $clubId !== '') {
+        if (\is_string($clubId) && '' !== $clubId) {
             return $clubId;
         }
 
@@ -75,12 +75,12 @@ class TenantFilterListener implements EventSubscriberInterface
         $request = $event->getRequest();
 
         $seasonId = $request->attributes->get('_season_id');
-        if (\is_string($seasonId) && $seasonId !== '') {
+        if (\is_string($seasonId) && '' !== $seasonId) {
             return $seasonId;
         }
 
         $seasonId = $request->headers->get('X-Season-Id');
-        if (\is_string($seasonId) && $seasonId !== '') {
+        if (\is_string($seasonId) && '' !== $seasonId) {
             return $seasonId;
         }
 

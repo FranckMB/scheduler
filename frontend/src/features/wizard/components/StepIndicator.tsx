@@ -1,0 +1,68 @@
+import type { WizardStep } from '@/features/wizard/wizardStore'
+
+const STEP_LABELS = ['Salles', 'Coaches', 'Équipes', 'Résumé']
+
+interface StepIndicatorProps {
+  currentStep: WizardStep
+  onStepClick?: (step: WizardStep) => void
+}
+
+export default function StepIndicator({ currentStep, onStepClick }: StepIndicatorProps) {
+  const progress = ((currentStep + 1) / STEP_LABELS.length) * 100
+
+  return (
+    <div className="w-full">
+      {/* Progress bar */}
+      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+        <div
+          className="h-full rounded-full bg-primary-600 transition-all duration-500 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* Step labels */}
+      <div className="flex items-center justify-between">
+        {STEP_LABELS.map((label, index) => {
+          const step = index as WizardStep
+          const isActive = step === currentStep
+          const isCompleted = step < currentStep
+
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onStepClick?.(step)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary-50 text-primary-700'
+                  : isCompleted
+                    ? 'text-success-600 hover:bg-neutral-50'
+                    : 'text-neutral-400'
+              }`}
+              disabled={!onStepClick}
+            >
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                  isActive
+                    ? 'bg-primary-600 text-white'
+                    : isCompleted
+                      ? 'bg-success-500 text-white'
+                      : 'bg-neutral-200 text-neutral-500'
+                }`}
+              >
+                {isCompleted ? (
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  index + 1
+                )}
+              </span>
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

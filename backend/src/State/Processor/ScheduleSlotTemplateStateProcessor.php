@@ -8,6 +8,9 @@ use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\ScheduleSlotTemplate;
 
+/**
+ * @extends AbstractStateProcessor<ScheduleSlotTemplate, ScheduleSlotTemplateInput, ScheduleSlotTemplateResource>
+ */
 class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,64 +18,95 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
         return ScheduleSlotTemplate::class;
     }
 
+    /**
+     * @param ScheduleSlotTemplateInput $input
+     */
     protected function createEntityFromInput(object $input): ScheduleSlotTemplate
     {
         $entity = new ScheduleSlotTemplate();
-        if ($input->scheduleId !== null || !false) {
+        if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
         }
-        if ($input->teamId !== null || !false) {
+        if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
-        if ($input->venueId !== null || !false) {
+        if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if ($input->coachId !== null || !true) {
+        if (null !== $input->coachId) {
             $entity->setCoachId($input->coachId);
         }
-        if ($input->dayOfWeek !== null || !false) {
+        if (null !== $input->dayOfWeek) {
             $entity->setDayOfWeek($input->dayOfWeek);
         }
-        if ($input->startTime !== null || !false) {
-            $entity->setStartTime($input->startTime);
-        }
-        if ($input->durationMinutes !== null || !false) {
+        $entity->setStartTime($input->startTime);
+        if (null !== $input->durationMinutes) {
             $entity->setDurationMinutes($input->durationMinutes);
         }
-        if ($input->lockLevel !== null || !false) {
+        if (null !== $input->lockLevel) {
             $entity->setLockLevel($input->lockLevel);
         }
-        if ($input->temporaryLock !== null || !false) {
+        if (null !== $input->temporaryLock) {
             $entity->setTemporaryLock($input->temporaryLock);
         }
-        if ($input->temporaryLockFor !== null || !true) {
+        if (null !== $input->temporaryLockFor) {
             $entity->setTemporaryLockFor($input->temporaryLockFor);
         }
-        if ($input->temporaryMinSessionsOverride !== null || !true) {
+        if (null !== $input->temporaryMinSessionsOverride) {
             $entity->setTemporaryMinSessionsOverride($input->temporaryMinSessionsOverride);
         }
-        if ($input->pendingConstraintSuggestion !== null || !true) {
+        if (null !== $input->pendingConstraintSuggestion) {
             $entity->setPendingConstraintSuggestion($input->pendingConstraintSuggestion);
         }
+
         return $entity;
     }
 
+    /**
+     * @param ScheduleSlotTemplate      $entity
+     * @param ScheduleSlotTemplateInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setScheduleId($input->scheduleId);
-        $entity->setTeamId($input->teamId);
-        $entity->setVenueId($input->venueId);
-        $entity->setCoachId($input->coachId);
-        $entity->setDayOfWeek($input->dayOfWeek);
+        if (null !== $input->scheduleId) {
+            $entity->setScheduleId($input->scheduleId);
+        }
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
+        if (null !== $input->venueId) {
+            $entity->setVenueId($input->venueId);
+        }
+        if (null !== $input->coachId) {
+            $entity->setCoachId($input->coachId);
+        }
+        if (null !== $input->dayOfWeek) {
+            $entity->setDayOfWeek($input->dayOfWeek);
+        }
         $entity->setStartTime($input->startTime);
-        $entity->setDurationMinutes($input->durationMinutes);
-        $entity->setLockLevel($input->lockLevel);
-        $entity->setTemporaryLock($input->temporaryLock);
-        $entity->setTemporaryLockFor($input->temporaryLockFor);
-        $entity->setTemporaryMinSessionsOverride($input->temporaryMinSessionsOverride);
-        $entity->setPendingConstraintSuggestion($input->pendingConstraintSuggestion);
+        if (null !== $input->durationMinutes) {
+            $entity->setDurationMinutes($input->durationMinutes);
+        }
+        if (null !== $input->lockLevel) {
+            $entity->setLockLevel($input->lockLevel);
+        }
+        if (null !== $input->temporaryLock) {
+            $entity->setTemporaryLock($input->temporaryLock);
+        }
+        if (null !== $input->temporaryLockFor) {
+            $entity->setTemporaryLockFor($input->temporaryLockFor);
+        }
+        if (null !== $input->temporaryMinSessionsOverride) {
+            $entity->setTemporaryMinSessionsOverride($input->temporaryMinSessionsOverride);
+        }
+        if (null !== $input->pendingConstraintSuggestion) {
+            $entity->setPendingConstraintSuggestion($input->pendingConstraintSuggestion);
+        }
     }
 
+    /**
+     * @param ScheduleSlotTemplate $entity
+     */
     protected function mapEntityToOutput(object $entity): ScheduleSlotTemplateResource
     {
         return ScheduleSlotTemplateResource::fromEntity($entity);

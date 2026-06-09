@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\CoachPlayerMembershipStateProvider;
-use App\State\Processor\CoachPlayerMembershipStateProcessor;
-
-use App\Entity\CoachPlayerMembership;
-
-use App\Dto\CoachPlayerMembershipInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\CoachPlayerMembershipInput;
+use App\Entity\CoachPlayerMembership;
+use App\State\Processor\CoachPlayerMembershipStateProcessor;
+use App\State\Provider\CoachPlayerMembershipStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "CoachPlayerMembership",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: CoachPlayerMembershipInput::class,
-    provider: CoachPlayerMembershipStateProvider::class,
-    processor: CoachPlayerMembershipStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'CoachPlayerMembership', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: CoachPlayerMembershipInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: CoachPlayerMembershipStateProvider::class, processor: CoachPlayerMembershipStateProcessor::class)]
 class CoachPlayerMembershipResource
 {
     #[Groups(['read'])]
@@ -60,7 +49,6 @@ class CoachPlayerMembershipResource
     #[Groups(['read'])]
     public bool $isActive = false;
 
-
     public static function fromEntity(CoachPlayerMembership $entity): self
     {
         $dto = new self();
@@ -72,6 +60,7 @@ class CoachPlayerMembershipResource
         $dto->teamId = $entity->getTeamId();
         $dto->position = $entity->getPosition();
         $dto->isActive = $entity->getIsActive();
+
         return $dto;
     }
 }

@@ -8,6 +8,9 @@ use App\ApiResource\ScheduleDiagnosticResource;
 use App\Dto\ScheduleDiagnosticInput;
 use App\Entity\ScheduleDiagnostic;
 
+/**
+ * @extends AbstractStateProcessor<ScheduleDiagnostic, ScheduleDiagnosticInput, ScheduleDiagnosticResource>
+ */
 class ScheduleDiagnosticStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,48 +18,75 @@ class ScheduleDiagnosticStateProcessor extends AbstractStateProcessor
         return ScheduleDiagnostic::class;
     }
 
+    /**
+     * @param ScheduleDiagnosticInput $input
+     */
     protected function createEntityFromInput(object $input): ScheduleDiagnostic
     {
         $entity = new ScheduleDiagnostic();
-        if ($input->scheduleId !== null || !false) {
+        if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
         }
-        if ($input->type !== null || !false) {
+        if (null !== $input->type) {
             $entity->setType($input->type);
         }
-        if ($input->severity !== null || !false) {
+        if (null !== $input->severity) {
             $entity->setSeverity($input->severity);
         }
-        if ($input->teamId !== null || !true) {
+        if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
-        if ($input->coachId !== null || !true) {
+        if (null !== $input->coachId) {
             $entity->setCoachId($input->coachId);
         }
-        if ($input->venueId !== null || !true) {
+        if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if ($input->message !== null || !false) {
+        if (null !== $input->message) {
             $entity->setMessage($input->message);
         }
-        if ($input->suggestions !== null || !false) {
+        if (null !== $input->suggestions) {
             $entity->setSuggestions($input->suggestions);
         }
+
         return $entity;
     }
 
+    /**
+     * @param ScheduleDiagnostic      $entity
+     * @param ScheduleDiagnosticInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setScheduleId($input->scheduleId);
-        $entity->setType($input->type);
-        $entity->setSeverity($input->severity);
-        $entity->setTeamId($input->teamId);
-        $entity->setCoachId($input->coachId);
-        $entity->setVenueId($input->venueId);
-        $entity->setMessage($input->message);
-        $entity->setSuggestions($input->suggestions);
+        if (null !== $input->scheduleId) {
+            $entity->setScheduleId($input->scheduleId);
+        }
+        if (null !== $input->type) {
+            $entity->setType($input->type);
+        }
+        if (null !== $input->severity) {
+            $entity->setSeverity($input->severity);
+        }
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
+        if (null !== $input->coachId) {
+            $entity->setCoachId($input->coachId);
+        }
+        if (null !== $input->venueId) {
+            $entity->setVenueId($input->venueId);
+        }
+        if (null !== $input->message) {
+            $entity->setMessage($input->message);
+        }
+        if (null !== $input->suggestions) {
+            $entity->setSuggestions($input->suggestions);
+        }
     }
 
+    /**
+     * @param ScheduleDiagnostic $entity
+     */
     protected function mapEntityToOutput(object $entity): ScheduleDiagnosticResource
     {
         return ScheduleDiagnosticResource::fromEntity($entity);

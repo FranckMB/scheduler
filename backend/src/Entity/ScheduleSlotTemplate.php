@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\LockLevel;
 use App\Repository\ScheduleSlotTemplateRepository;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -58,8 +59,8 @@ class ScheduleSlotTemplate
     #[ORM\Column(type: 'smallint')]
     private int $durationMinutes;
 
-    #[ORM\Column(type: 'string', length: 10)]
-    private string $lockLevel = 'NONE';
+    #[ORM\Column(type: 'string', length: 10, enumType: LockLevel::class)]
+    private LockLevel $lockLevel = LockLevel::NONE;
 
     #[ORM\Column(type: 'boolean')]
     private bool $temporaryLock = false;
@@ -70,12 +71,13 @@ class ScheduleSlotTemplate
     #[ORM\Column(type: 'smallint', nullable: true)]
     private ?int $temporaryMinSessionsOverride = null;
 
+    /** @var array<string, mixed>|null */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $pendingConstraintSuggestion = null;
 
     public function __construct()
     {
-        $this->id = self::newUuid();
+        $this->id = $this->newUuid();
         $now = new \DateTimeImmutable();
         $this->createdAt = $now;
         $this->updatedAt = $now;
@@ -236,12 +238,12 @@ class ScheduleSlotTemplate
         return $this;
     }
 
-    public function getLockLevel(): string
+    public function getLockLevel(): LockLevel
     {
         return $this->lockLevel;
     }
 
-    public function setLockLevel(string $lockLevel): self
+    public function setLockLevel(LockLevel $lockLevel): self
     {
         $this->lockLevel = $lockLevel;
 
@@ -289,11 +291,13 @@ class ScheduleSlotTemplate
         return $this;
     }
 
+    /** @return array<string, mixed>|null */
     public function getPendingConstraintSuggestion(): ?array
     {
         return $this->pendingConstraintSuggestion;
     }
 
+    /** @param array<string, mixed>|null $pendingConstraintSuggestion */
     public function setPendingConstraintSuggestion(?array $pendingConstraintSuggestion): self
     {
         $this->pendingConstraintSuggestion = $pendingConstraintSuggestion;
@@ -301,11 +305,11 @@ class ScheduleSlotTemplate
         return $this;
     }
 
-    private static function newUuid(): string
+    private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\UserStateProvider;
-use App\State\Processor\UserStateProcessor;
-
-use App\Entity\User;
-
-use App\Dto\UserInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\UserInput;
+use App\Entity\User;
+use App\State\Processor\UserStateProcessor;
+use App\State\Provider\UserStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "User",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: UserInput::class,
-    provider: UserStateProvider::class,
-    processor: UserStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'User', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: UserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: UserStateProvider::class, processor: UserStateProcessor::class)]
 class UserResource
 {
     #[Groups(['read'])]
@@ -60,7 +49,6 @@ class UserResource
     #[Groups(['read'])]
     public ?\DateTimeImmutable $emailVerifiedAt = null;
 
-
     public static function fromEntity(User $entity): self
     {
         $dto = new self();
@@ -72,6 +60,7 @@ class UserResource
         $dto->firstName = $entity->getFirstName();
         $dto->lastName = $entity->getLastName();
         $dto->emailVerifiedAt = $entity->getEmailVerifiedAt();
+
         return $dto;
     }
 }

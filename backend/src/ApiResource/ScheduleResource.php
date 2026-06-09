@@ -4,36 +4,42 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\ScheduleStateProvider;
-use App\State\Processor\ScheduleStateProcessor;
-
-use App\Entity\Schedule;
-
-use App\Dto\ScheduleInput;
-
+use ApiPlatform\Doctrine\Orm\Filter\BooleanFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\ScheduleInput;
+use App\Entity\Schedule;
+use App\State\Processor\ScheduleStateProcessor;
+use App\State\Provider\ScheduleStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Schedule",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: ScheduleInput::class,
-    provider: ScheduleStateProvider::class,
-    processor: ScheduleStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Schedule', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+    new Post(
+        uriTemplate: '/schedules/{id}/export-pdf',
+        controller: 'App\Controller\ExportPdfController',
+        read: false,
+        name: 'export_pdf'
+    ),
+    new Post(
+        uriTemplate: '/schedules/{id}/generate',
+        controller: 'App\Controller\GenerateScheduleController',
+        read: false,
+        name: 'generate_schedule'
+    ),
+], mercure: true, input: ScheduleInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleStateProvider::class, processor: ScheduleStateProcessor::class)]
+#[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
+#[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
 class ScheduleResource
 {
     #[Groups(['read'])]
@@ -62,9 +68,6 @@ class ScheduleResource
 
     #[Groups(['read'])]
     public ?string $snapshotHash = null;
-
-    #[Groups(['read'])]
-    public array $snapshotData = [];
 
     #[Groups(['read'])]
     public ?string $solverVersion = null;
@@ -96,7 +99,6 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?string $pdfExportUrl = null;
 
-
     public static function fromEntity(Schedule $entity): self
     {
         $dto = new self();
@@ -109,7 +111,6 @@ class ScheduleResource
         $dto->score = $entity->getScore();
         $dto->solverSeed = $entity->getSolverSeed();
         $dto->snapshotHash = $entity->getSnapshotHash();
-        $dto->snapshotData = $entity->getSnapshotData();
         $dto->solverVersion = $entity->getSolverVersion();
         $dto->constraintVersion = $entity->getConstraintVersion();
         $dto->scoreFormulaVersion = $entity->getScoreFormulaVersion();
@@ -120,6 +121,7 @@ class ScheduleResource
         $dto->solverWallTimeMs = $entity->getSolverWallTimeMs();
         $dto->pdfExportStatus = $entity->getPdfExportStatus();
         $dto->pdfExportUrl = $entity->getPdfExportUrl();
+
         return $dto;
     }
 }

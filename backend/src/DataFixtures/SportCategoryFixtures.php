@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\DataFixtures;
 
 use App\Entity\SportCategory;
-use Doctrine\Common\DataFixtures\FixtureInterface;
-use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
+use Doctrine\Common\DataFixtures\DependentFixtureInterface;
+use Doctrine\Common\DataFixtures\FixtureInterface;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectManager;
 
 final class SportCategoryFixtures implements FixtureInterface, DependentFixtureInterface, ORMFixtureInterface
@@ -19,16 +20,20 @@ final class SportCategoryFixtures implements FixtureInterface, DependentFixtureI
 
     public function load(ObjectManager $manager): void
     {
+        if (!$manager instanceof EntityManagerInterface) {
+            throw new \RuntimeException('Expected EntityManagerInterface');
+        }
+
         $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '11111111-1111-1111-1111-111111111111'");
 
         $existing = $manager->getRepository(SportCategory::class)->findOneBy(['name' => 'U9']);
-        if ($existing) {
+        if ($existing instanceof SportCategory) {
             return;
         }
 
         $sport = $manager->getRepository('App\Entity\Sport')->findOneBy(['slug' => 'basket']);
 
-        if ($sport === null) {
+        if (null === $sport) {
             throw new \RuntimeException('Sport "basket" must be loaded before SportCategoryFixtures.');
         }
 
@@ -61,13 +66,15 @@ final class SportCategoryFixtures implements FixtureInterface, DependentFixtureI
         if (!class_exists($class)) {
             throw new \RuntimeException(sprintf('Entity class %s does not exist yet (Phase 2).', $class));
         }
+
         return new $class();
     }
 
+    /** @param array<string, mixed> $data */
     private function hydrate(object $entity, array $data): void
     {
         foreach ($data as $key => $value) {
-            $setter = 'set' . ucfirst($key);
+            $setter = 'set'.ucfirst($key);
             if (method_exists($entity, $setter)) {
                 $entity->$setter($value);
             }

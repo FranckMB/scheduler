@@ -8,6 +8,9 @@ use App\ApiResource\VenueAvailabilityResource;
 use App\Dto\VenueAvailabilityInput;
 use App\Entity\VenueAvailability;
 
+/**
+ * @extends AbstractStateProcessor<VenueAvailability, VenueAvailabilityInput, VenueAvailabilityResource>
+ */
 class VenueAvailabilityStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,32 +18,43 @@ class VenueAvailabilityStateProcessor extends AbstractStateProcessor
         return VenueAvailability::class;
     }
 
+    /**
+     * @param VenueAvailabilityInput $input
+     */
     protected function createEntityFromInput(object $input): VenueAvailability
     {
         $entity = new VenueAvailability();
-        if ($input->venueId !== null || !false) {
+        if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if ($input->dayOfWeek !== null || !false) {
+        if (null !== $input->dayOfWeek) {
             $entity->setDayOfWeek($input->dayOfWeek);
         }
-        if ($input->startTime !== null || !false) {
-            $entity->setStartTime($input->startTime);
-        }
-        if ($input->endTime !== null || !false) {
-            $entity->setEndTime($input->endTime);
-        }
+        $entity->setStartTime($input->startTime);
+        $entity->setEndTime($input->endTime);
+
         return $entity;
     }
 
+    /**
+     * @param VenueAvailability      $entity
+     * @param VenueAvailabilityInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setVenueId($input->venueId);
-        $entity->setDayOfWeek($input->dayOfWeek);
+        if (null !== $input->venueId) {
+            $entity->setVenueId($input->venueId);
+        }
+        if (null !== $input->dayOfWeek) {
+            $entity->setDayOfWeek($input->dayOfWeek);
+        }
         $entity->setStartTime($input->startTime);
         $entity->setEndTime($input->endTime);
     }
 
+    /**
+     * @param VenueAvailability $entity
+     */
     protected function mapEntityToOutput(object $entity): VenueAvailabilityResource
     {
         return VenueAvailabilityResource::fromEntity($entity);

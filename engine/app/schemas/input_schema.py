@@ -85,7 +85,7 @@ class ScheduleInputSchema(SerializableModel):
     club_id: str = Field(alias="clubId")
     season_id: str = Field(alias="seasonId")
     schedule_name: str | None = Field(default=None, alias="scheduleName")
-    solver_seed: int = Field(default=0, alias="solverSeed")
+    solver_seed: int = Field(default=42, alias="solverSeed")
     venues: list[VenueSchema] = Field(default_factory=list)
     teams: list[TeamSchema] = Field(default_factory=list)
     coaches: list[CoachSchema] = Field(default_factory=list)

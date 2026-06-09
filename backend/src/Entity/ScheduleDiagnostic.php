@@ -58,12 +58,13 @@ class ScheduleDiagnostic
     #[ORM\Column(type: 'text')]
     private string $message;
 
+    /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
     private array $suggestions = [];
 
     public function __construct()
     {
-        $this->id = self::newUuid();
+        $this->id = $this->newUuid();
         $now = new \DateTimeImmutable();
         $this->createdAt = $now;
         $this->updatedAt = $now;
@@ -224,11 +225,13 @@ class ScheduleDiagnostic
         return $this;
     }
 
+    /** @return array<string, mixed> */
     public function getSuggestions(): array
     {
         return $this->suggestions;
     }
 
+    /** @param array<string, mixed> $suggestions */
     public function setSuggestions(array $suggestions): self
     {
         $this->suggestions = $suggestions;
@@ -236,11 +239,11 @@ class ScheduleDiagnostic
         return $this;
     }
 
-    private static function newUuid(): string
+    private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

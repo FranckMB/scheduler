@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\TeamCoachResource;
 use App\Entity\TeamCoach;
 
+/**
+ * @extends AbstractStateProvider<TeamCoach, TeamCoachResource>
+ */
 class TeamCoachStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class TeamCoachStateProvider extends AbstractStateProvider
         return TeamCoach::class;
     }
 
+    /**
+     * @param TeamCoach $entity
+     */
     protected function mapEntityToOutput(object $entity): TeamCoachResource
     {
         return TeamCoachResource::fromEntity($entity);

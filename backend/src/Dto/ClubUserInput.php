@@ -11,13 +11,12 @@ class ClubUserInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $userId = '';
+    public ?string $userId = null;
 
-    #[Assert\Choice(choices: ["owner", "admin", "editor", "viewer"])]
+    #[Assert\Choice(choices: ['owner', 'admin', 'editor', 'viewer'])]
     #[Groups(['write'])]
-    public string $role = '';
+    public ?string $role = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
-
+    public ?bool $isActive = null;
 }

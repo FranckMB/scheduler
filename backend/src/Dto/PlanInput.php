@@ -11,26 +11,26 @@ class PlanInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Groups(['write'])]
-    public int $maxTeams = 0;
+    public ?int $maxTeams = null;
 
     #[Groups(['write'])]
-    public int $maxVenues = 0;
+    public ?int $maxVenues = null;
 
     #[Groups(['write'])]
-    public int $maxGenerations = 0;
+    public ?int $maxGenerations = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $monthlyPrice = '';
+    public ?string $monthlyPrice = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $annualPrice = '';
+    public ?string $annualPrice = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['write'])]
-    public array $features = [];
-
+    public ?array $features = null;
 }

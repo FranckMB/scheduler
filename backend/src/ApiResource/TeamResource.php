@@ -4,36 +4,30 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\TeamStateProvider;
-use App\State\Processor\TeamStateProcessor;
-
-use App\Entity\Team;
-
-use App\Dto\TeamInput;
-
+use ApiPlatform\Doctrine\Orm\Filter\BooleanFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\TeamInput;
+use App\Entity\Team;
+use App\State\Processor\TeamStateProcessor;
+use App\State\Provider\TeamStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Team",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: TeamInput::class,
-    provider: TeamStateProvider::class,
-    processor: TeamStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Team', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
+#[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
+#[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
 class TeamResource
 {
     #[Groups(['read'])]
@@ -81,7 +75,6 @@ class TeamResource
     #[Groups(['read'])]
     public ?string $ffbbTeamId = null;
 
-
     public static function fromEntity(Team $entity): self
     {
         $dto = new self();
@@ -100,6 +93,7 @@ class TeamResource
         $dto->isActive = $entity->getIsActive();
         $dto->parentTeamId = $entity->getParentTeamId();
         $dto->ffbbTeamId = $entity->getFfbbTeamId();
+
         return $dto;
     }
 }

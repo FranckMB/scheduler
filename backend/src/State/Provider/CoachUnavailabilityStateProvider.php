@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\CoachUnavailabilityResource;
 use App\Entity\CoachUnavailability;
 
+/**
+ * @extends AbstractStateProvider<CoachUnavailability, CoachUnavailabilityResource>
+ */
 class CoachUnavailabilityStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class CoachUnavailabilityStateProvider extends AbstractStateProvider
         return CoachUnavailability::class;
     }
 
+    /**
+     * @param CoachUnavailability $entity
+     */
     protected function mapEntityToOutput(object $entity): CoachUnavailabilityResource
     {
         return CoachUnavailabilityResource::fromEntity($entity);

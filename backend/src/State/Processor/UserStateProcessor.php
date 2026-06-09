@@ -8,6 +8,9 @@ use App\ApiResource\UserResource;
 use App\Dto\UserInput;
 use App\Entity\User;
 
+/**
+ * @extends AbstractStateProcessor<User, UserInput, UserResource>
+ */
 class UserStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,28 +18,45 @@ class UserStateProcessor extends AbstractStateProcessor
         return User::class;
     }
 
+    /**
+     * @param UserInput $input
+     */
     protected function createEntityFromInput(object $input): User
     {
         $entity = new User();
-        if ($input->email !== null || !false) {
+        if (null !== $input->email) {
             $entity->setEmail($input->email);
         }
-        if ($input->firstName !== null || !false) {
+        if (null !== $input->firstName) {
             $entity->setFirstName($input->firstName);
         }
-        if ($input->lastName !== null || !false) {
+        if (null !== $input->lastName) {
             $entity->setLastName($input->lastName);
         }
+
         return $entity;
     }
 
+    /**
+     * @param User      $entity
+     * @param UserInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setEmail($input->email);
-        $entity->setFirstName($input->firstName);
-        $entity->setLastName($input->lastName);
+        if (null !== $input->email) {
+            $entity->setEmail($input->email);
+        }
+        if (null !== $input->firstName) {
+            $entity->setFirstName($input->firstName);
+        }
+        if (null !== $input->lastName) {
+            $entity->setLastName($input->lastName);
+        }
     }
 
+    /**
+     * @param User $entity
+     */
     protected function mapEntityToOutput(object $entity): UserResource
     {
         return UserResource::fromEntity($entity);

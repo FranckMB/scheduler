@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\SportResource;
 use App\Entity\Sport;
 
+/**
+ * @extends AbstractStateProvider<Sport, SportResource>
+ */
 class SportStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class SportStateProvider extends AbstractStateProvider
         return Sport::class;
     }
 
+    /**
+     * @param Sport $entity
+     */
     protected function mapEntityToOutput(object $entity): SportResource
     {
         return SportResource::fromEntity($entity);

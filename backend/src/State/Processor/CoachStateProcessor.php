@@ -8,6 +8,9 @@ use App\ApiResource\CoachResource;
 use App\Dto\CoachInput;
 use App\Entity\Coach;
 
+/**
+ * @extends AbstractStateProcessor<Coach, CoachInput, CoachResource>
+ */
 class CoachStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,52 +18,81 @@ class CoachStateProcessor extends AbstractStateProcessor
         return Coach::class;
     }
 
+    /**
+     * @param CoachInput $input
+     */
     protected function createEntityFromInput(object $input): Coach
     {
         $entity = new Coach();
-        if ($input->firstName !== null || !false) {
+        if (null !== $input->firstName) {
             $entity->setFirstName($input->firstName);
         }
-        if ($input->lastName !== null || !false) {
+        if (null !== $input->lastName) {
             $entity->setLastName($input->lastName);
         }
-        if ($input->email !== null || !true) {
+        if (null !== $input->email) {
             $entity->setEmail($input->email);
         }
-        if ($input->phone !== null || !true) {
+        if (null !== $input->phone) {
             $entity->setPhone($input->phone);
         }
-        if ($input->maxDaysOverride !== null || !true) {
+        if (null !== $input->maxDaysOverride) {
             $entity->setMaxDaysOverride($input->maxDaysOverride);
         }
-        if ($input->maxDaysOverrideConfirmed !== null || !false) {
+        if (null !== $input->maxDaysOverrideConfirmed) {
             $entity->setMaxDaysOverrideConfirmed($input->maxDaysOverrideConfirmed);
         }
-        if ($input->acceptableLateMinutes !== null || !true) {
+        if (null !== $input->acceptableLateMinutes) {
             $entity->setAcceptableLateMinutes($input->acceptableLateMinutes);
         }
-        if ($input->isActive !== null || !false) {
+        if (null !== $input->isActive) {
             $entity->setIsActive($input->isActive);
         }
-        if ($input->parentCoachId !== null || !true) {
+        if (null !== $input->parentCoachId) {
             $entity->setParentCoachId($input->parentCoachId);
         }
+
         return $entity;
     }
 
+    /**
+     * @param Coach      $entity
+     * @param CoachInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setFirstName($input->firstName);
-        $entity->setLastName($input->lastName);
-        $entity->setEmail($input->email);
-        $entity->setPhone($input->phone);
-        $entity->setMaxDaysOverride($input->maxDaysOverride);
-        $entity->setMaxDaysOverrideConfirmed($input->maxDaysOverrideConfirmed);
-        $entity->setAcceptableLateMinutes($input->acceptableLateMinutes);
-        $entity->setIsActive($input->isActive);
-        $entity->setParentCoachId($input->parentCoachId);
+        if (null !== $input->firstName) {
+            $entity->setFirstName($input->firstName);
+        }
+        if (null !== $input->lastName) {
+            $entity->setLastName($input->lastName);
+        }
+        if (null !== $input->email) {
+            $entity->setEmail($input->email);
+        }
+        if (null !== $input->phone) {
+            $entity->setPhone($input->phone);
+        }
+        if (null !== $input->maxDaysOverride) {
+            $entity->setMaxDaysOverride($input->maxDaysOverride);
+        }
+        if (null !== $input->maxDaysOverrideConfirmed) {
+            $entity->setMaxDaysOverrideConfirmed($input->maxDaysOverrideConfirmed);
+        }
+        if (null !== $input->acceptableLateMinutes) {
+            $entity->setAcceptableLateMinutes($input->acceptableLateMinutes);
+        }
+        if (null !== $input->isActive) {
+            $entity->setIsActive($input->isActive);
+        }
+        if (null !== $input->parentCoachId) {
+            $entity->setParentCoachId($input->parentCoachId);
+        }
     }
 
+    /**
+     * @param Coach $entity
+     */
     protected function mapEntityToOutput(object $entity): CoachResource
     {
         return CoachResource::fromEntity($entity);

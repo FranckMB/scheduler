@@ -8,6 +8,9 @@ use App\ApiResource\PlanResource;
 use App\Dto\PlanInput;
 use App\Entity\Plan;
 
+/**
+ * @extends AbstractStateProcessor<Plan, PlanInput, PlanResource>
+ */
 class PlanStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,44 +18,69 @@ class PlanStateProcessor extends AbstractStateProcessor
         return Plan::class;
     }
 
+    /**
+     * @param PlanInput $input
+     */
     protected function createEntityFromInput(object $input): Plan
     {
         $entity = new Plan();
-        if ($input->name !== null || !false) {
+        if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        if ($input->maxTeams !== null || !false) {
+        if (null !== $input->maxTeams) {
             $entity->setMaxTeams($input->maxTeams);
         }
-        if ($input->maxVenues !== null || !false) {
+        if (null !== $input->maxVenues) {
             $entity->setMaxVenues($input->maxVenues);
         }
-        if ($input->maxGenerations !== null || !false) {
+        if (null !== $input->maxGenerations) {
             $entity->setMaxGenerations($input->maxGenerations);
         }
-        if ($input->monthlyPrice !== null || !false) {
+        if (null !== $input->monthlyPrice) {
             $entity->setMonthlyPrice($input->monthlyPrice);
         }
-        if ($input->annualPrice !== null || !false) {
+        if (null !== $input->annualPrice) {
             $entity->setAnnualPrice($input->annualPrice);
         }
-        if ($input->features !== null || !false) {
+        if (null !== $input->features) {
             $entity->setFeatures($input->features);
         }
+
         return $entity;
     }
 
+    /**
+     * @param Plan      $entity
+     * @param PlanInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setName($input->name);
-        $entity->setMaxTeams($input->maxTeams);
-        $entity->setMaxVenues($input->maxVenues);
-        $entity->setMaxGenerations($input->maxGenerations);
-        $entity->setMonthlyPrice($input->monthlyPrice);
-        $entity->setAnnualPrice($input->annualPrice);
-        $entity->setFeatures($input->features);
+        if (null !== $input->name) {
+            $entity->setName($input->name);
+        }
+        if (null !== $input->maxTeams) {
+            $entity->setMaxTeams($input->maxTeams);
+        }
+        if (null !== $input->maxVenues) {
+            $entity->setMaxVenues($input->maxVenues);
+        }
+        if (null !== $input->maxGenerations) {
+            $entity->setMaxGenerations($input->maxGenerations);
+        }
+        if (null !== $input->monthlyPrice) {
+            $entity->setMonthlyPrice($input->monthlyPrice);
+        }
+        if (null !== $input->annualPrice) {
+            $entity->setAnnualPrice($input->annualPrice);
+        }
+        if (null !== $input->features) {
+            $entity->setFeatures($input->features);
+        }
     }
 
+    /**
+     * @param Plan $entity
+     */
     protected function mapEntityToOutput(object $entity): PlanResource
     {
         return PlanResource::fromEntity($entity);

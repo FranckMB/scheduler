@@ -7,6 +7,9 @@ namespace App\State\Provider;
 use App\ApiResource\VenueAvailabilityResource;
 use App\Entity\VenueAvailability;
 
+/**
+ * @extends AbstractStateProvider<VenueAvailability, VenueAvailabilityResource>
+ */
 class VenueAvailabilityStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
@@ -14,6 +17,9 @@ class VenueAvailabilityStateProvider extends AbstractStateProvider
         return VenueAvailability::class;
     }
 
+    /**
+     * @param VenueAvailability $entity
+     */
     protected function mapEntityToOutput(object $entity): VenueAvailabilityResource
     {
         return VenueAvailabilityResource::fromEntity($entity);

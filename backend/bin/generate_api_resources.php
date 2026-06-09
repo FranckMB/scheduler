@@ -6,9 +6,8 @@ declare(strict_types=1);
  * Generation script for API Platform DTOs, State Providers and Processors
  * for all 20 ClubScheduler entities.
  */
-
 $projectDir = dirname(__DIR__);
-$srcDir = $projectDir . '/src';
+$srcDir = $projectDir.'/src';
 
 $entities = [
     'Club' => [
@@ -375,9 +374,9 @@ $entities = [
 ];
 
 // Create directories
-@mkdir($srcDir . '/Dto', 0755, true);
-@mkdir($srcDir . '/State/Provider', 0755, true);
-@mkdir($srcDir . '/State/Processor', 0755, true);
+@mkdir($srcDir.'/Dto', 0755, true);
+@mkdir($srcDir.'/State/Provider', 0755, true);
+@mkdir($srcDir.'/State/Processor', 0755, true);
 
 // Generate AbstractStateProvider
 $abstractProvider = <<<'PHP'
@@ -457,7 +456,7 @@ abstract class AbstractStateProvider implements ProviderInterface
 }
 PHP;
 
-file_put_contents($srcDir . '/State/Provider/AbstractStateProvider.php', $abstractProvider);
+file_put_contents($srcDir.'/State/Provider/AbstractStateProvider.php', $abstractProvider);
 
 // Generate AbstractStateProcessor
 $abstractProcessor = <<<'PHP'
@@ -565,7 +564,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 }
 PHP;
 
-file_put_contents($srcDir . '/State/Processor/AbstractStateProcessor.php', $abstractProcessor);
+file_put_contents($srcDir.'/State/Processor/AbstractStateProcessor.php', $abstractProcessor);
 
 foreach ($entities as $entityName => $meta) {
     $entityClass = "App\\Entity\\{$entityName}";
@@ -595,13 +594,13 @@ foreach ($entities as $entityName => $meta) {
         $nullablePrefix = ($field['nullable'] ?? false) ? '?' : '';
         $prop = "    #[Groups(['read'])]\n";
         $prop .= "    public {$nullablePrefix}{$phpType} \${$field['name']}";
-        if (($field['nullable'] ?? false) || ($field['type'] === 'array')) {
+        if (($field['nullable'] ?? false) || ('array' === $field['type'])) {
             $prop .= ' = null';
-        } elseif ($field['type'] === 'bool') {
+        } elseif ('bool' === $field['type']) {
             $prop .= ' = false';
-        } elseif ($field['type'] === 'int') {
+        } elseif ('int' === $field['type']) {
             $prop .= ' = 0';
-        } elseif ($field['type'] === 'string') {
+        } elseif ('string' === $field['type']) {
             $prop .= " = ''";
         }
         $prop .= ";\n";
@@ -609,7 +608,7 @@ foreach ($entities as $entityName => $meta) {
     }
 
     $resourceCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\ApiResource;\n\n";
-    $resourceCode .= implode("\n", $resourceImports) . "\n\n";
+    $resourceCode .= implode("\n", $resourceImports)."\n\n";
     $resourceCode .= "#[ApiResource(\n";
     $resourceCode .= "    operations: [\n";
     $resourceCode .= "        new GetCollection(),\n";
@@ -625,20 +624,20 @@ foreach ($entities as $entityName => $meta) {
     $resourceCode .= "    paginationItemsPerPage: 30,\n";
     $resourceCode .= ")]\n";
     $resourceCode .= "class {$entityName}Resource\n{\n";
-    $resourceCode .= implode("\n", $resourceProps) . "\n";
+    $resourceCode .= implode("\n", $resourceProps)."\n";
     $resourceCode .= "\n    public static function fromEntity({$entityName} \$entity): self\n    {\n";
     $resourceCode .= "        \$dto = new self();\n";
     foreach ($meta['fields'] as $field) {
-        $getter = 'get' . ucfirst($field['name']);
-        if ($field['type'] === 'bool') {
-            $getter = 'get' . ucfirst($field['name']);
+        $getter = 'get'.ucfirst($field['name']);
+        if ('bool' === $field['type']) {
+            $getter = 'get'.ucfirst($field['name']);
         }
         $resourceCode .= "        \$dto->{$field['name']} = \$entity->{$getter}();\n";
     }
     $resourceCode .= "        return \$dto;\n";
     $resourceCode .= "    }\n}\n";
 
-    file_put_contents($srcDir . "/ApiResource/{$entityName}Resource.php", $resourceCode);
+    file_put_contents($srcDir."/ApiResource/{$entityName}Resource.php", $resourceCode);
 
     // --- Generate Input DTO ---
     $inputProps = [];
@@ -676,13 +675,13 @@ foreach ($entities as $entityName => $meta) {
 
         $prop .= "    #[Groups(['write'])]\n";
         $prop .= "    public {$nullablePrefix}{$phpType} \${$field['name']}";
-        if (($field['nullable'] ?? false) || ($field['type'] === 'array')) {
+        if (($field['nullable'] ?? false) || ('array' === $field['type'])) {
             $prop .= ' = null';
-        } elseif ($field['type'] === 'bool') {
+        } elseif ('bool' === $field['type']) {
             $prop .= ' = false';
-        } elseif ($field['type'] === 'int') {
+        } elseif ('int' === $field['type']) {
             $prop .= ' = 0';
-        } elseif ($field['type'] === 'string') {
+        } elseif ('string' === $field['type']) {
             $prop .= " = ''";
         }
         $prop .= ";\n";
@@ -690,11 +689,11 @@ foreach ($entities as $entityName => $meta) {
     }
 
     $inputCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Dto;\n\n";
-    $inputCode .= implode("\n", $inputImports) . "\n\n";
+    $inputCode .= implode("\n", $inputImports)."\n\n";
     $inputCode .= "class {$entityName}Input\n{\n";
-    $inputCode .= implode("\n", $inputProps) . "\n}\n";
+    $inputCode .= implode("\n", $inputProps)."\n}\n";
 
-    file_put_contents($srcDir . "/Dto/{$entityName}Input.php", $inputCode);
+    file_put_contents($srcDir."/Dto/{$entityName}Input.php", $inputCode);
 
     // --- Generate StateProvider ---
     $providerCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\State\\Provider;\n\n";
@@ -708,7 +707,7 @@ foreach ($entities as $entityName => $meta) {
     $providerCode .= "        return {$entityName}Resource::fromEntity(\$entity);\n";
     $providerCode .= "    }\n}\n";
 
-    file_put_contents($srcDir . "/State/Provider/{$entityName}StateProvider.php", $providerCode);
+    file_put_contents($srcDir."/State/Provider/{$entityName}StateProvider.php", $providerCode);
 
     // --- Generate StateProcessor ---
     $processorCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\State\\Processor;\n\n";
@@ -727,8 +726,8 @@ foreach ($entities as $entityName => $meta) {
         if (($field['readOnly'] ?? false) || ($field['isId'] ?? false)) {
             continue;
         }
-        $setter = 'set' . ucfirst($field['name']);
-        $processorCode .= "        if (\$input->{$field['name']} !== null || !" . (($field['nullable'] ?? false) ? 'true' : 'false') . ") {\n";
+        $setter = 'set'.ucfirst($field['name']);
+        $processorCode .= "        if (\$input->{$field['name']} !== null || !".(($field['nullable'] ?? false) ? 'true' : 'false').") {\n";
         $processorCode .= "            \$entity->{$setter}(\$input->{$field['name']});\n";
         $processorCode .= "        }\n";
     }
@@ -741,7 +740,7 @@ foreach ($entities as $entityName => $meta) {
         if (($field['readOnly'] ?? false) || ($field['isId'] ?? false)) {
             continue;
         }
-        $setter = 'set' . ucfirst($field['name']);
+        $setter = 'set'.ucfirst($field['name']);
         $processorCode .= "        \$entity->{$setter}(\$input->{$field['name']});\n";
     }
     $processorCode .= "    }\n\n";
@@ -751,7 +750,7 @@ foreach ($entities as $entityName => $meta) {
     $processorCode .= "        return {$entityName}Resource::fromEntity(\$entity);\n";
     $processorCode .= "    }\n}\n";
 
-    file_put_contents($srcDir . "/State/Processor/{$entityName}StateProcessor.php", $processorCode);
+    file_put_contents($srcDir."/State/Processor/{$entityName}StateProcessor.php", $processorCode);
 }
 
-echo "Generated " . count($entities) . " entities with DTOs, providers and processors.\n";
+echo 'Generated '.count($entities)." entities with DTOs, providers and processors.\n";

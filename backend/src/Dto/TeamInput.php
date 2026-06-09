@@ -17,14 +17,14 @@ class TeamInput
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
-    #[Assert\Choice(choices: ["M", "F", "mixed"])]
+    #[Assert\Choice(choices: ['M', 'F', 'mixed'])]
     #[Groups(['write'])]
     public ?string $gender = null;
 
     #[Groups(['write'])]
-    public int $sessionsPerWeek = 0;
+    public ?int $sessionsPerWeek = null;
 
     #[Groups(['write'])]
     public ?int $minSessionsOverride = null;
@@ -36,12 +36,11 @@ class TeamInput
     public ?string $forcedVenueId = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
+    public ?bool $isActive = null;
 
     #[Groups(['write'])]
     public ?string $parentTeamId = null;
 
     #[Groups(['write'])]
     public ?string $ffbbTeamId = null;
-
 }

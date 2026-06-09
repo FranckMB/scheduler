@@ -8,6 +8,9 @@ use App\ApiResource\SportCategoryResource;
 use App\Dto\SportCategoryInput;
 use App\Entity\SportCategory;
 
+/**
+ * @extends AbstractStateProcessor<SportCategory, SportCategoryInput, SportCategoryResource>
+ */
 class SportCategoryStateProcessor extends AbstractStateProcessor
 {
     protected function getEntityClass(): string
@@ -15,40 +18,63 @@ class SportCategoryStateProcessor extends AbstractStateProcessor
         return SportCategory::class;
     }
 
+    /**
+     * @param SportCategoryInput $input
+     */
     protected function createEntityFromInput(object $input): SportCategory
     {
         $entity = new SportCategory();
-        if ($input->sportId !== null || !false) {
+        if (null !== $input->sportId) {
             $entity->setSportId($input->sportId);
         }
-        if ($input->name !== null || !false) {
+        if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        if ($input->isCustom !== null || !false) {
+        if (null !== $input->isCustom) {
             $entity->setIsCustom($input->isCustom);
         }
-        if ($input->ageMin !== null || !true) {
+        if (null !== $input->ageMin) {
             $entity->setAgeMin($input->ageMin);
         }
-        if ($input->ageMax !== null || !true) {
+        if (null !== $input->ageMax) {
             $entity->setAgeMax($input->ageMax);
         }
-        if ($input->sortOrder !== null || !false) {
+        if (null !== $input->sortOrder) {
             $entity->setSortOrder($input->sortOrder);
         }
+
         return $entity;
     }
 
+    /**
+     * @param SportCategory      $entity
+     * @param SportCategoryInput $input
+     */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        $entity->setSportId($input->sportId);
-        $entity->setName($input->name);
-        $entity->setIsCustom($input->isCustom);
-        $entity->setAgeMin($input->ageMin);
-        $entity->setAgeMax($input->ageMax);
-        $entity->setSortOrder($input->sortOrder);
+        if (null !== $input->sportId) {
+            $entity->setSportId($input->sportId);
+        }
+        if (null !== $input->name) {
+            $entity->setName($input->name);
+        }
+        if (null !== $input->isCustom) {
+            $entity->setIsCustom($input->isCustom);
+        }
+        if (null !== $input->ageMin) {
+            $entity->setAgeMin($input->ageMin);
+        }
+        if (null !== $input->ageMax) {
+            $entity->setAgeMax($input->ageMax);
+        }
+        if (null !== $input->sortOrder) {
+            $entity->setSortOrder($input->sortOrder);
+        }
     }
 
+    /**
+     * @param SportCategory $entity
+     */
     protected function mapEntityToOutput(object $entity): SportCategoryResource
     {
         return SportCategoryResource::fromEntity($entity);

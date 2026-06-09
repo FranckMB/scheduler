@@ -30,7 +30,7 @@ class TenantFilter extends SQLFilter
     private function hasClubIdColumn(ClassMetadata $targetEntity): bool
     {
         foreach ($targetEntity->getFieldNames() as $fieldName) {
-            if ($targetEntity->getColumnName($fieldName) === 'club_id') {
+            if ('club_id' === $targetEntity->getColumnName($fieldName)) {
                 return true;
             }
         }

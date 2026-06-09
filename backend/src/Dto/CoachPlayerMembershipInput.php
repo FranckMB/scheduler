@@ -11,16 +11,15 @@ class CoachPlayerMembershipInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $coachId = '';
+    public ?string $coachId = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $teamId = '';
+    public ?string $teamId = null;
 
     #[Groups(['write'])]
     public ?string $position = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
-
+    public ?bool $isActive = null;
 }

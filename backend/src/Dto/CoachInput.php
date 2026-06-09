@@ -11,11 +11,11 @@ class CoachInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $firstName = '';
+    public ?string $firstName = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $lastName = '';
+    public ?string $lastName = null;
 
     #[Assert\Email]
     #[Groups(['write'])]
@@ -28,15 +28,14 @@ class CoachInput
     public ?int $maxDaysOverride = null;
 
     #[Groups(['write'])]
-    public bool $maxDaysOverrideConfirmed = false;
+    public ?bool $maxDaysOverrideConfirmed = null;
 
     #[Groups(['write'])]
     public ?int $acceptableLateMinutes = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
+    public ?bool $isActive = null;
 
     #[Groups(['write'])]
     public ?string $parentCoachId = null;
-
 }

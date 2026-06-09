@@ -11,7 +11,7 @@ class SeasonInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Groups(['write'])]
     public \DateTimeImmutable $startDate;
@@ -19,8 +19,7 @@ class SeasonInput
     #[Groups(['write'])]
     public \DateTimeImmutable $endDate;
 
-    #[Assert\Choice(choices: ["draft", "active", "archived", "closed"])]
+    #[Assert\Choice(choices: ['draft', 'active', 'archived', 'closed'])]
     #[Groups(['write'])]
-    public string $status = '';
-
+    public ?string $status = null;
 }

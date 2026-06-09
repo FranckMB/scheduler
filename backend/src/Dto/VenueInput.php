@@ -11,10 +11,10 @@ class VenueInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Groups(['write'])]
-    public bool $isExternal = false;
+    public ?bool $isExternal = null;
 
     #[Groups(['write'])]
     public ?string $color = null;
@@ -25,17 +25,16 @@ class VenueInput
     #[Groups(['write'])]
     public ?string $longitude = null;
 
-    #[Assert\Choice(choices: ["manual", "ffbb", "import"])]
+    #[Assert\Choice(choices: ['manual', 'ffbb', 'import'])]
     #[Groups(['write'])]
-    public string $source = '';
+    public ?string $source = null;
 
     #[Groups(['write'])]
     public ?string $externalRef = null;
 
     #[Groups(['write'])]
-    public bool $isActive = false;
+    public ?bool $isActive = null;
 
     #[Groups(['write'])]
     public ?string $parentVenueId = null;
-
 }

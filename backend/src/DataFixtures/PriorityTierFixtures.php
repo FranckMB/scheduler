@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace App\DataFixtures;
 
 use App\Entity\PriorityTier;
-use Doctrine\Common\DataFixtures\FixtureInterface;
 use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
+use Doctrine\Common\DataFixtures\FixtureInterface;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectManager;
 
 final class PriorityTierFixtures implements FixtureInterface, ORMFixtureInterface
 {
     public function load(ObjectManager $manager): void
     {
+        if (!$manager instanceof EntityManagerInterface) {
+            throw new \RuntimeException('Expected EntityManagerInterface');
+        }
+
         $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '11111111-1111-1111-1111-111111111111'");
 
         $tiers = [
@@ -60,7 +65,7 @@ final class PriorityTierFixtures implements FixtureInterface, ORMFixtureInterfac
 
         foreach ($tiers as $tier) {
             $existing = $manager->getRepository(PriorityTier::class)->find($tier['id']);
-            if ($existing) {
+            if ($existing instanceof PriorityTier) {
                 continue;
             }
             $entity = $this->newEntity('App\Entity\PriorityTier');
@@ -80,10 +85,11 @@ final class PriorityTierFixtures implements FixtureInterface, ORMFixtureInterfac
         return new $class();
     }
 
+    /** @param array<string, mixed> $data */
     private function hydrate(object $entity, array $data): void
     {
         foreach ($data as $key => $value) {
-            $setter = 'set' . ucfirst($key);
+            $setter = 'set'.ucfirst($key);
             if (method_exists($entity, $setter)) {
                 $entity->$setter($value);
             }

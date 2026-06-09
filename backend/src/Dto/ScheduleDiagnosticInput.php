@@ -11,15 +11,15 @@ class ScheduleDiagnosticInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $scheduleId = '';
+    public ?string $scheduleId = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $type = '';
+    public ?string $type = null;
 
-    #[Assert\Choice(choices: ["info", "warning", "error", "critical"])]
+    #[Assert\Choice(choices: ['info', 'warning', 'error', 'critical'])]
     #[Groups(['write'])]
-    public string $severity = '';
+    public ?string $severity = null;
 
     #[Groups(['write'])]
     public ?string $teamId = null;
@@ -32,9 +32,9 @@ class ScheduleDiagnosticInput
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $message = '';
+    public ?string $message = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['write'])]
-    public array $suggestions = [];
-
+    public ?array $suggestions = null;
 }

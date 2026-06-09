@@ -11,20 +11,19 @@ class PriorityTierInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $label = '';
+    public ?string $label = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $color = '';
+    public ?string $color = null;
 
     #[Groups(['write'])]
-    public int $orToolsWeight = 0;
+    public ?int $orToolsWeight = null;
 
     #[Groups(['write'])]
-    public int $defaultMinSessions = 0;
-
+    public ?int $defaultMinSessions = null;
 }

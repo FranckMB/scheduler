@@ -11,16 +11,15 @@ class CoachUnavailabilityInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $coachId = '';
+    public ?string $coachId = null;
 
     #[Assert\Range(min: 1, max: 7)]
     #[Groups(['write'])]
-    public int $dayOfWeek = 0;
+    public ?int $dayOfWeek = null;
 
     #[Groups(['write'])]
     public ?\DateTimeImmutable $startTime = null;
 
     #[Groups(['write'])]
     public ?\DateTimeImmutable $endTime = null;
-
 }

@@ -11,14 +11,14 @@ class SportCategoryInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $sportId = '';
+    public ?string $sportId = null;
 
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $name = '';
+    public ?string $name = null;
 
     #[Groups(['write'])]
-    public bool $isCustom = false;
+    public ?bool $isCustom = null;
 
     #[Groups(['write'])]
     public ?int $ageMin = null;
@@ -27,6 +27,5 @@ class SportCategoryInput
     public ?int $ageMax = null;
 
     #[Groups(['write'])]
-    public int $sortOrder = 0;
-
+    public ?int $sortOrder = null;
 }

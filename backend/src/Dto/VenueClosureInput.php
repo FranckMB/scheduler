@@ -11,7 +11,7 @@ class VenueClosureInput
 {
     #[Assert\NotBlank]
     #[Groups(['write'])]
-    public string $venueId = '';
+    public ?string $venueId = null;
 
     #[Groups(['write'])]
     public \DateTimeImmutable $dateStart;
@@ -21,5 +21,4 @@ class VenueClosureInput
 
     #[Groups(['write'])]
     public ?string $reason = null;
-
 }

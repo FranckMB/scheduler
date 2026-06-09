@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\ClubStateProvider;
-use App\State\Processor\ClubStateProcessor;
-
-use App\Entity\Club;
-
-use App\Dto\ClubInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\ClubInput;
+use App\Entity\Club;
+use App\State\Processor\ClubStateProcessor;
+use App\State\Provider\ClubStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "Club",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: ClubInput::class,
-    provider: ClubStateProvider::class,
-    processor: ClubStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'Club', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: ClubInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubStateProvider::class, processor: ClubStateProcessor::class)]
 class ClubResource
 {
     #[Groups(['read'])]
@@ -81,7 +70,6 @@ class ClubResource
     #[Groups(['read'])]
     public ?string $ffbbClubCode = null;
 
-
     public static function fromEntity(Club $entity): self
     {
         $dto = new self();
@@ -100,6 +88,7 @@ class ClubResource
         $dto->locale = $entity->getLocale();
         $dto->onboardingCompleted = $entity->getOnboardingCompleted();
         $dto->ffbbClubCode = $entity->getFfbbClubCode();
+
         return $dto;
     }
 }

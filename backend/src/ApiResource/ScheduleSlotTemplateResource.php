@@ -4,36 +4,26 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\ScheduleSlotTemplateStateProvider;
-use App\State\Processor\ScheduleSlotTemplateStateProcessor;
-
-use App\Entity\ScheduleSlotTemplate;
-
-use App\Dto\ScheduleSlotTemplateInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\ScheduleSlotTemplateInput;
+use App\Entity\ScheduleSlotTemplate;
+use App\Enum\LockLevel;
+use App\State\Processor\ScheduleSlotTemplateStateProcessor;
+use App\State\Provider\ScheduleSlotTemplateStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "ScheduleSlotTemplate",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: ScheduleSlotTemplateInput::class,
-    provider: ScheduleSlotTemplateStateProvider::class,
-    processor: ScheduleSlotTemplateStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'ScheduleSlotTemplate', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: ScheduleSlotTemplateInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleSlotTemplateStateProvider::class, processor: ScheduleSlotTemplateStateProcessor::class)]
 class ScheduleSlotTemplateResource
 {
     #[Groups(['read'])]
@@ -70,7 +60,7 @@ class ScheduleSlotTemplateResource
     public int $durationMinutes = 0;
 
     #[Groups(['read'])]
-    public string $lockLevel = '';
+    public LockLevel $lockLevel = LockLevel::NONE;
 
     #[Groups(['read'])]
     public bool $temporaryLock = false;
@@ -81,9 +71,9 @@ class ScheduleSlotTemplateResource
     #[Groups(['read'])]
     public ?int $temporaryMinSessionsOverride = null;
 
+    /** @var array<string, mixed>|null */
     #[Groups(['read'])]
     public ?array $pendingConstraintSuggestion = null;
-
 
     public static function fromEntity(ScheduleSlotTemplate $entity): self
     {
@@ -104,6 +94,7 @@ class ScheduleSlotTemplateResource
         $dto->temporaryLockFor = $entity->getTemporaryLockFor();
         $dto->temporaryMinSessionsOverride = $entity->getTemporaryMinSessionsOverride();
         $dto->pendingConstraintSuggestion = $entity->getPendingConstraintSuggestion();
+
         return $dto;
     }
 }

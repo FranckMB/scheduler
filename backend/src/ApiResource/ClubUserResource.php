@@ -4,36 +4,25 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use App\State\Provider\ClubUserStateProvider;
-use App\State\Processor\ClubUserStateProcessor;
-
-use App\Entity\ClubUser;
-
-use App\Dto\ClubUserInput;
-
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use ApiPlatform\Metadata\Delete;
+use App\Dto\ClubUserInput;
+use App\Entity\ClubUser;
+use App\State\Processor\ClubUserStateProcessor;
+use App\State\Provider\ClubUserStateProvider;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(
-    shortName: "ClubUser",
-    operations: [
-        new GetCollection(),
-        new Get(),
-        new Post(),
-        new Put(),
-        new Delete(),
-    ],
-    input: ClubUserInput::class,
-    provider: ClubUserStateProvider::class,
-    processor: ClubUserStateProcessor::class,
-    paginationEnabled: true,
-    paginationItemsPerPage: 30,
-)]
+#[ApiResource(shortName: 'ClubUser', operations: [
+    new GetCollection(),
+    new Get(),
+    new Post(),
+    new Put(),
+    new Delete(),
+], input: ClubUserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubUserStateProvider::class, processor: ClubUserStateProcessor::class)]
 class ClubUserResource
 {
     #[Groups(['read'])]
@@ -60,7 +49,6 @@ class ClubUserResource
     #[Groups(['read'])]
     public bool $isActive = false;
 
-
     public static function fromEntity(ClubUser $entity): self
     {
         $dto = new self();
@@ -72,6 +60,7 @@ class ClubUserResource
         $dto->role = $entity->getRole();
         $dto->joinedAt = $entity->getJoinedAt();
         $dto->isActive = $entity->getIsActive();
+
         return $dto;
     }
 }
