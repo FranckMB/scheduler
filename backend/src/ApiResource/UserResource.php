@@ -1,0 +1,77 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\ApiResource;
+
+use App\State\Provider\UserStateProvider;
+use App\State\Processor\UserStateProcessor;
+
+use App\Entity\User;
+
+use App\Dto\UserInput;
+
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
+use ApiPlatform\Metadata\Delete;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ApiResource(
+    shortName: "User",
+    operations: [
+        new GetCollection(),
+        new Get(),
+        new Post(),
+        new Put(),
+        new Delete(),
+    ],
+    input: UserInput::class,
+    provider: UserStateProvider::class,
+    processor: UserStateProcessor::class,
+    paginationEnabled: true,
+    paginationItemsPerPage: 30,
+)]
+class UserResource
+{
+    #[Groups(['read'])]
+    public string $id = '';
+
+    #[Groups(['read'])]
+    public int $version = 0;
+
+    #[Groups(['read'])]
+    public \DateTimeImmutable $createdAt;
+
+    #[Groups(['read'])]
+    public \DateTimeImmutable $updatedAt;
+
+    #[Groups(['read'])]
+    public string $email = '';
+
+    #[Groups(['read'])]
+    public string $firstName = '';
+
+    #[Groups(['read'])]
+    public string $lastName = '';
+
+    #[Groups(['read'])]
+    public ?\DateTimeImmutable $emailVerifiedAt = null;
+
+
+    public static function fromEntity(User $entity): self
+    {
+        $dto = new self();
+        $dto->id = $entity->getId();
+        $dto->version = $entity->getVersion();
+        $dto->createdAt = $entity->getCreatedAt();
+        $dto->updatedAt = $entity->getUpdatedAt();
+        $dto->email = $entity->getEmail();
+        $dto->firstName = $entity->getFirstName();
+        $dto->lastName = $entity->getLastName();
+        $dto->emailVerifiedAt = $entity->getEmailVerifiedAt();
+        return $dto;
+    }
+}

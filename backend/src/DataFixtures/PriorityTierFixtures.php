@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
+use App\Entity\PriorityTier;
 use Doctrine\Common\DataFixtures\FixtureInterface;
+use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
-final class PriorityTierFixtures implements FixtureInterface
+final class PriorityTierFixtures implements FixtureInterface, ORMFixtureInterface
 {
     public function load(ObjectManager $manager): void
     {
+        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '11111111-1111-1111-1111-111111111111'");
+
         $tiers = [
             [
                 'id' => 1,
@@ -55,7 +59,11 @@ final class PriorityTierFixtures implements FixtureInterface
         ];
 
         foreach ($tiers as $tier) {
-            $entity = $this->newEntity('App\\Entity\\PriorityTier');
+            $existing = $manager->getRepository(PriorityTier::class)->find($tier['id']);
+            if ($existing) {
+                continue;
+            }
+            $entity = $this->newEntity('App\Entity\PriorityTier');
             $this->hydrate($entity, $tier);
             $manager->persist($entity);
         }

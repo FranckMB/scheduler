@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
+use App\Entity\SportCategory;
 use Doctrine\Common\DataFixtures\FixtureInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
+use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
-final class SportCategoryFixtures implements FixtureInterface, DependentFixtureInterface
+final class SportCategoryFixtures implements FixtureInterface, DependentFixtureInterface, ORMFixtureInterface
 {
     public function getDependencies(): array
     {
@@ -17,7 +19,14 @@ final class SportCategoryFixtures implements FixtureInterface, DependentFixtureI
 
     public function load(ObjectManager $manager): void
     {
-        $sport = $manager->getRepository('App\\Entity\\Sport')->findOneBy(['slug' => 'basket']);
+        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '11111111-1111-1111-1111-111111111111'");
+
+        $existing = $manager->getRepository(SportCategory::class)->findOneBy(['name' => 'U9']);
+        if ($existing) {
+            return;
+        }
+
+        $sport = $manager->getRepository('App\Entity\Sport')->findOneBy(['slug' => 'basket']);
 
         if ($sport === null) {
             throw new \RuntimeException('Sport "basket" must be loaded before SportCategoryFixtures.');
@@ -35,10 +44,11 @@ final class SportCategoryFixtures implements FixtureInterface, DependentFixtureI
         ];
 
         foreach ($categories as $cat) {
-            $entity = $this->newEntity('App\\Entity\\SportCategory');
+            $entity = $this->newEntity('App\Entity\SportCategory');
             $this->hydrate($entity, array_merge($cat, [
                 'sport' => $sport,
                 'isCustom' => false,
+                'clubId' => '11111111-1111-1111-1111-111111111111',
             ]));
             $manager->persist($entity);
         }

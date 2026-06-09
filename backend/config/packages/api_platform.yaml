@@ -1,7 +1,14 @@
 api_platform:
-    title: Hello API Platform
+    title: ClubScheduler API
     version: 1.0.0
+    formats:
+        jsonld: ["application/ld+json"]
+        json: ["application/json"]
+        html: ["text/html"]
+    error_formats:
+        jsonld: ["application/ld+json"]
+        json: ["application/json"]
     defaults:
         stateless: true
         cache_headers:
-            vary: ['Content-Type', 'Authorization', 'Origin']
+            vary: ["Content-Type", "Authorization", "Origin"]

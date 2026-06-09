@@ -10,13 +10,6 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
-/**
- * Activates the tenant SQL filter and sets the PostgreSQL session variable
- * `app.club_id` on every main HTTP request.
- *
- * Phase 1 stub: club_id is resolved from request attributes or a test header.
- * In production this will be extracted from the JWT token / security token.
- */
 class TenantFilterListener implements EventSubscriberInterface
 {
     public function __construct(
@@ -27,8 +20,6 @@ class TenantFilterListener implements EventSubscriberInterface
     public static function getSubscribedEvents(): array
     {
         return [
-            // Run before the security firewall (priority 8) so the filter is
-            // ready when controllers / voters execute.
             KernelEvents::REQUEST => ['onKernelRequest', 8],
         ];
     }
@@ -40,10 +31,12 @@ class TenantFilterListener implements EventSubscriberInterface
         }
 
         $clubId = $this->resolveClubId($event);
+        $seasonId = $this->resolveSeasonId($event);
 
-        // Safety: never enable the filter (and never SET LOCAL) when we
-        // do not have a resolved tenant. This prevents accidental data
-        // leakage in CLI or during unauthenticated requests.
+        if ($seasonId !== null) {
+            $event->getRequest()->attributes->set('_season_id', $seasonId);
+        }
+
         if ($clubId === null) {
             return;
         }
@@ -64,17 +57,31 @@ class TenantFilterListener implements EventSubscriberInterface
     {
         $request = $event->getRequest();
 
-        // Phase 1 stub — will be replaced by JWT extraction once
-        // authentication is wired (Phase 2).
         $clubId = $request->attributes->get('_club_id');
         if (\is_string($clubId) && $clubId !== '') {
             return $clubId;
         }
 
-        // Allow manual override via header for integration testing.
         $clubId = $request->headers->get('X-Club-Id');
         if (\is_string($clubId) && $clubId !== '') {
             return $clubId;
+        }
+
+        return null;
+    }
+
+    private function resolveSeasonId(RequestEvent $event): ?string
+    {
+        $request = $event->getRequest();
+
+        $seasonId = $request->attributes->get('_season_id');
+        if (\is_string($seasonId) && $seasonId !== '') {
+            return $seasonId;
+        }
+
+        $seasonId = $request->headers->get('X-Season-Id');
+        if (\is_string($seasonId) && $seasonId !== '') {
+            return $seasonId;
         }
 
         return null;

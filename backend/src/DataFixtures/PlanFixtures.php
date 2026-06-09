@@ -4,13 +4,22 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
+use App\Entity\Plan;
 use Doctrine\Common\DataFixtures\FixtureInterface;
+use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
-final class PlanFixtures implements FixtureInterface
+final class PlanFixtures implements FixtureInterface, ORMFixtureInterface
 {
     public function load(ObjectManager $manager): void
     {
+        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '11111111-1111-1111-1111-111111111111'");
+
+        $existing = $manager->getRepository(Plan::class)->findOneBy(['name' => 'Découverte']);
+        if ($existing) {
+            return;
+        }
+
         $plans = [
             [
                 'name' => 'Découverte',
@@ -68,7 +77,7 @@ final class PlanFixtures implements FixtureInterface
         ];
 
         foreach ($plans as $plan) {
-            $entity = $this->newEntity('App\\Entity\\Plan');
+            $entity = $this->newEntity('App\Entity\Plan');
             $this->hydrate($entity, $plan);
             $manager->persist($entity);
         }

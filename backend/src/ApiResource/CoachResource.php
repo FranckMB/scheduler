@@ -1,0 +1,97 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\ApiResource;
+
+use App\State\Provider\CoachStateProvider;
+use App\State\Processor\CoachStateProcessor;
+
+use App\Entity\Coach;
+
+use App\Dto\CoachInput;
+
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
+use ApiPlatform\Metadata\Delete;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ApiResource(
+    shortName: "Coach",
+    operations: [
+        new GetCollection(),
+        new Get(),
+        new Post(),
+        new Put(),
+        new Delete(),
+    ],
+    input: CoachInput::class,
+    provider: CoachStateProvider::class,
+    processor: CoachStateProcessor::class,
+    paginationEnabled: true,
+    paginationItemsPerPage: 30,
+)]
+class CoachResource
+{
+    #[Groups(['read'])]
+    public string $id = '';
+
+    #[Groups(['read'])]
+    public int $version = 0;
+
+    #[Groups(['read'])]
+    public \DateTimeImmutable $createdAt;
+
+    #[Groups(['read'])]
+    public \DateTimeImmutable $updatedAt;
+
+    #[Groups(['read'])]
+    public string $firstName = '';
+
+    #[Groups(['read'])]
+    public string $lastName = '';
+
+    #[Groups(['read'])]
+    public ?string $email = null;
+
+    #[Groups(['read'])]
+    public ?string $phone = null;
+
+    #[Groups(['read'])]
+    public ?int $maxDaysOverride = null;
+
+    #[Groups(['read'])]
+    public bool $maxDaysOverrideConfirmed = false;
+
+    #[Groups(['read'])]
+    public ?int $acceptableLateMinutes = null;
+
+    #[Groups(['read'])]
+    public bool $isActive = false;
+
+    #[Groups(['read'])]
+    public ?string $parentCoachId = null;
+
+
+    public static function fromEntity(Coach $entity): self
+    {
+        $dto = new self();
+        $dto->id = $entity->getId();
+        $dto->version = $entity->getVersion();
+        $dto->createdAt = $entity->getCreatedAt();
+        $dto->updatedAt = $entity->getUpdatedAt();
+        $dto->firstName = $entity->getFirstName();
+        $dto->lastName = $entity->getLastName();
+        $dto->email = $entity->getEmail();
+        $dto->phone = $entity->getPhone();
+        $dto->maxDaysOverride = $entity->getMaxDaysOverride();
+        $dto->maxDaysOverrideConfirmed = $entity->getMaxDaysOverrideConfirmed();
+        $dto->acceptableLateMinutes = $entity->getAcceptableLateMinutes();
+        $dto->isActive = $entity->getIsActive();
+        $dto->parentCoachId = $entity->getParentCoachId();
+        return $dto;
+    }
+}
