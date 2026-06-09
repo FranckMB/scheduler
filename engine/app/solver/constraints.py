@@ -1,0 +1,671 @@
+"""Level-1 hard constraints for the OR-Tools CP-SAT scheduler model.
+
+The MVP solver treats these rules as hard constraints only: no relaxation
+variables and no penalties are introduced in this module. Travel feasibility
+and required-bridge non-overlap are explicit MVP stubs until real data exists.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping, Sequence
+
+AssignmentLike = Any
+BoolVarLike = Any
+RuleCollection = Any
+
+_MISSING = object()
+
+
+@dataclass(frozen=True)
+class AssignmentVariable:
+    """Candidate assignment variable used by the hard constraint builder.
+
+    The fields intentionally mirror the domain dimensions used by level-1
+    constraints. Future T22 model objects can also be passed directly: all
+    public functions read attributes or mapping keys with the same names.
+    """
+
+    var: BoolVarLike
+    team_id: str | None = None
+    slot_id: str | None = None
+    venue_id: str | None = None
+    coach_id: str | None = None
+    player_ids: Sequence[str] = ()
+    session_id: str | None = None
+    start: int | None = None
+    end: int | None = None
+    fixed: bool = False
+    forbidden: bool = False
+    coach_unavailable: bool = False
+    venue_closed: bool = False
+    forced_venue_id: str | None = None
+    id: str | None = None
+
+
+@dataclass
+class HardConstraintStats:
+    """Counts of level-1 hard constraints added to the CP-SAT model."""
+
+    room_at_most_one: int = 0
+    coach_at_most_one: int = 0
+    coach_player_non_overlap: int = 0
+    travel_feasibility_stub: int = 0
+    fixed_slots: int = 0
+    forbidden_assignments: int = 0
+    coach_unavailability: int = 0
+    venue_closures: int = 0
+    required_bridge_stub: int = 0
+    min_sessions: int = 0
+    forced_venues: int = 0
+
+    @property
+    def total_constraints_added(self) -> int:
+        """Return the number of concrete CP-SAT constraints added.
+
+        MVP stubs are tracked separately as implemented rules but they add no
+        CP-SAT constraint because they are always satisfied without real data.
+        """
+
+        return (
+            self.room_at_most_one
+            + self.coach_at_most_one
+            + self.coach_player_non_overlap
+            + self.fixed_slots
+            + self.forbidden_assignments
+            + self.coach_unavailability
+            + self.venue_closures
+            + self.min_sessions
+            + self.forced_venues
+        )
+
+
+def add_level_1_hard_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None = None,
+    *,
+    teams: Iterable[Any] = (),
+    min_sessions_by_team: Mapping[Any, int] | None = None,
+    fixed_assignments: Iterable[Any] = (),
+    forbidden_assignments: Iterable[Any] = (),
+    coach_unavailability: RuleCollection = (),
+    venue_closures: RuleCollection = (),
+    forced_venues: Mapping[Any, Any] | None = None,
+) -> HardConstraintStats:
+    """Add the 11 MVP level-1 hard constraints to an existing CP-SAT model."""
+
+    if assignments is None:
+        assignments = getattr(model, "x", ())
+
+    assignment_list = _normalise_assignments(assignments)
+    stats = HardConstraintStats()
+
+    # 1. One venue hosts at most one team at a time.
+    stats.room_at_most_one = add_room_at_most_one(model, assignment_list)
+
+    # 2. One coach works with at most one team at a time.
+    stats.coach_at_most_one = add_coach_at_most_one(model, assignment_list)
+
+    # 3. A person cannot coach and play at the same time.
+    stats.coach_player_non_overlap = add_coach_player_non_overlap(model, assignment_list)
+
+    # 4. MVP stub: no travel feasibility data yet, so always satisfied.
+    stats.travel_feasibility_stub = add_travel_feasibility_stub(model, assignment_list)
+
+    # 5. Pre-placed slots are fixed and excluded from optimization choices.
+    stats.fixed_slots = add_fixed_slots(model, assignment_list, fixed_assignments)
+
+    # 6. Explicitly forbidden assignment variables are forced to 0.
+    stats.forbidden_assignments = add_forbidden_assignments(
+        model, assignment_list, forbidden_assignments
+    )
+
+    # 7. Coach unavailable variables are forced to 0.
+    stats.coach_unavailability = add_coach_unavailability_constraints(
+        model, assignment_list, coach_unavailability
+    )
+
+    # 8. Closed venue variables are forced to 0.
+    stats.venue_closures = add_venue_closure_constraints(
+        model, assignment_list, venue_closures
+    )
+
+    # 9. MVP stub: no required bridge data yet, so always satisfied.
+    stats.required_bridge_stub = add_required_bridge_stub(model, assignment_list)
+
+    # 10. Effective minimum sessions are guaranteed by a hard linear bound.
+    stats.min_sessions = add_min_sessions_constraints(
+        model, assignment_list, teams=teams, min_sessions_by_team=min_sessions_by_team
+    )
+
+    # 11. If a venue is forced, every other venue option is forced to 0.
+    stats.forced_venues = add_forced_venue_constraints(
+        model, assignment_list, forced_venues=forced_venues
+    )
+
+    return stats
+
+
+def add_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
+    """Compatibility alias for level-1 hard constraints."""
+
+    return add_level_1_hard_constraints(*args, **kwargs)
+
+
+def apply_level_1_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
+    """Compatibility alias for callers that use an apply_* naming style."""
+
+    return add_level_1_hard_constraints(*args, **kwargs)
+
+
+def add_hard_constraints_level_1(*args: Any, **kwargs: Any) -> HardConstraintStats:
+    """Compatibility alias for T23 naming."""
+
+    return add_level_1_hard_constraints(*args, **kwargs)
+
+
+def add_mvp_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
+    """Compatibility alias for the MVP solver entry point."""
+
+    return add_level_1_hard_constraints(*args, **kwargs)
+
+
+def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+    """Constraint 1: one room/venue can host at most one team per time slot."""
+
+    groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    for assignment in assignments:
+        venue_id = _venue_id(assignment)
+        time_key = _time_key(assignment)
+        if venue_id is None or time_key is None:
+            continue
+        groups[(venue_id, time_key)].append(_var(assignment))
+
+    return _add_at_most_one_groups(model, groups.values())
+
+
+def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+    """Constraint 2: one coach can coach at most one team per time slot."""
+
+    groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    for assignment in assignments:
+        coach_id = _coach_id(assignment)
+        time_key = _time_key(assignment)
+        if coach_id is None or time_key is None:
+            continue
+        groups[(coach_id, time_key)].append(_var(assignment))
+
+    return _add_at_most_one_groups(model, groups.values())
+
+
+def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+    """Constraint 3: a coach-player cannot be in two roles at the same time."""
+
+    coach_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    player_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+
+    for assignment in assignments:
+        time_key = _time_key(assignment)
+        if time_key is None:
+            continue
+
+        coach_id = _coach_id(assignment)
+        if coach_id is not None:
+            coach_groups[(coach_id, time_key)].append(_var(assignment))
+
+        for player_id in _player_ids(assignment):
+            player_groups[(player_id, time_key)].append(_var(assignment))
+
+    overlap_groups = (
+        coach_groups[key] + player_groups[key]
+        for key in coach_groups.keys() & player_groups.keys()
+    )
+    return _add_at_most_one_groups(model, overlap_groups)
+
+
+def add_travel_feasibility_stub(
+    model: Any, assignments: Iterable[AssignmentLike] | None = None
+) -> int:
+    """Constraint 4 MVP stub: travel feasibility is always satisfied for now."""
+
+    _ = model, assignments
+    return 0
+
+
+def add_fixed_slots(
+    model: Any, assignments: Iterable[AssignmentLike], fixed_assignments: Iterable[Any] = ()
+) -> int:
+    """Constraint 5: pre-placed slots are fixed to 1."""
+
+    fixed_ids = set(fixed_assignments or ())
+    added = 0
+    for assignment in assignments:
+        assignment_id = _assignment_id(assignment)
+        if _bool_field(assignment, "fixed", "is_fixed", "pre_placed", "preplaced", "is_pre_placed") or (
+            assignment_id is not None and assignment_id in fixed_ids
+        ):
+            model.Add(_var(assignment) == 1)
+            added += 1
+    return added
+
+
+def add_forbidden_assignments(
+    model: Any, assignments: Iterable[AssignmentLike], forbidden_assignments: Iterable[Any] = ()
+) -> int:
+    """Constraint 6: forbidden assignment variables are fixed to 0."""
+
+    forbidden_ids = set(forbidden_assignments or ())
+    added = 0
+    for assignment in assignments:
+        assignment_id = _assignment_id(assignment)
+        if _bool_field(assignment, "forbidden", "is_forbidden") or (
+            assignment_id is not None and assignment_id in forbidden_ids
+        ):
+            model.Add(_var(assignment) == 0)
+            added += 1
+    return added
+
+
+def add_coach_unavailability_constraints(
+    model: Any, assignments: Iterable[AssignmentLike], coach_unavailability: RuleCollection = ()
+) -> int:
+    """Constraint 7: coach-unavailable assignment variables are fixed to 0."""
+
+    added = 0
+    for assignment in assignments:
+        coach_id = _coach_id(assignment)
+        time_key = _time_key(assignment)
+        if _bool_field(assignment, "coach_unavailable", "is_coach_unavailable") or _rule_matches(
+            coach_unavailability, coach_id, time_key
+        ):
+            model.Add(_var(assignment) == 0)
+            added += 1
+    return added
+
+
+def add_venue_closure_constraints(
+    model: Any, assignments: Iterable[AssignmentLike], venue_closures: RuleCollection = ()
+) -> int:
+    """Constraint 8: closed-room assignment variables are fixed to 0."""
+
+    added = 0
+    for assignment in assignments:
+        venue_id = _venue_id(assignment)
+        time_key = _time_key(assignment)
+        if _bool_field(assignment, "venue_closed", "is_venue_closed", "room_closed", "is_room_closed") or _rule_matches(
+            venue_closures, venue_id, time_key
+        ):
+            model.Add(_var(assignment) == 0)
+            added += 1
+    return added
+
+
+def add_required_bridge_stub(
+    model: Any, assignments: Iterable[AssignmentLike] | None = None
+) -> int:
+    """Constraint 9 MVP stub: required bridge non-overlap is always satisfied."""
+
+    _ = model, assignments
+    return 0
+
+
+def add_min_sessions_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    teams: Iterable[Any] = (),
+    min_sessions_by_team: Mapping[Any, int] | None = None,
+) -> int:
+    """Constraint 10: every team receives at least its effective minimum sessions."""
+
+    minimums = _effective_min_sessions_by_team(teams, min_sessions_by_team)
+    if not minimums:
+        return 0
+
+    assignments_by_team: dict[Any, list[BoolVarLike]] = defaultdict(list)
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        if team_id is None:
+            continue
+        assignments_by_team[team_id].append(_var(assignment))
+
+    added = 0
+    for team_id, minimum in minimums.items():
+        if minimum <= 0:
+            continue
+        team_vars = _dedupe_variables(assignments_by_team.get(team_id, []))
+        model.Add(sum(team_vars) >= minimum)
+        added += 1
+    return added
+
+
+def add_forced_venue_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    forced_venues: Mapping[Any, Any] | None = None,
+) -> int:
+    """Constraint 11: when a venue is forced, all other venues are fixed to 0."""
+
+    added = 0
+    for assignment in assignments:
+        venue_id = _venue_id(assignment)
+        target_venue_id = _forced_venue_id(assignment, forced_venues)
+        if target_venue_id is None or venue_id is None or venue_id == target_venue_id:
+            continue
+        model.Add(_var(assignment) == 0)
+        added += 1
+    return added
+
+
+def _normalise_assignments(
+    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike]
+) -> list[AssignmentLike]:
+    if isinstance(assignments, Mapping):
+        return [_assignment_from_mapping_item(key, value) for key, value in assignments.items()]
+    return list(assignments)
+
+
+def _assignment_from_mapping_item(key: Any, var: BoolVarLike) -> AssignmentVariable:
+    if isinstance(key, tuple):
+        values = list(key)
+        assignment_id = ":".join(str(value) for value in values)
+
+        if _looks_like_schedule_slot_key(values):
+            day_of_week = values[2]
+            slot_start = values[3]
+            return AssignmentVariable(
+                var=var,
+                team_id=str(values[0]) if values[0] is not None else None,
+                venue_id=str(values[1]) if values[1] is not None else None,
+                slot_id=f"{day_of_week}:{slot_start}",
+                id=assignment_id,
+            )
+
+        return AssignmentVariable(
+            var=var,
+            team_id=str(values[0]) if len(values) > 0 and values[0] is not None else None,
+            slot_id=str(values[1]) if len(values) > 1 and values[1] is not None else None,
+            venue_id=str(values[2]) if len(values) > 2 and values[2] is not None else None,
+            coach_id=str(values[3]) if len(values) > 3 and values[3] is not None else None,
+            session_id=str(values[4]) if len(values) > 4 and values[4] is not None else None,
+            id=assignment_id,
+        )
+    return AssignmentVariable(var=var, id=str(key))
+
+
+def _looks_like_schedule_slot_key(values: Sequence[Any]) -> bool:
+    if len(values) != 4:
+        return False
+
+    day_of_week = values[2]
+    slot_start = values[3]
+    return _looks_like_day_of_week(day_of_week) and _looks_like_slot_start(slot_start)
+
+
+def _looks_like_day_of_week(value: Any) -> bool:
+    if isinstance(value, int):
+        return 0 <= value <= 7
+    if isinstance(value, str) and value.isdigit():
+        return 0 <= int(value) <= 7
+    return False
+
+
+def _looks_like_slot_start(value: Any) -> bool:
+    if isinstance(value, int):
+        return 0 <= value < 24 * 60
+    if not isinstance(value, str):
+        return False
+    parts = value.split(":")
+    return len(parts) >= 2 and all(part.isdigit() for part in parts[:2])
+
+
+def _add_at_most_one_groups(model: Any, groups: Iterable[Iterable[BoolVarLike]]) -> int:
+    added = 0
+    for group in groups:
+        variables = _dedupe_variables(group)
+        if len(variables) < 2:
+            continue
+        if hasattr(model, "add_at_most_one"):
+            model.add_at_most_one(variables)
+        else:
+            model.AddAtMostOne(variables)
+        added += 1
+    return added
+
+
+def _dedupe_variables(variables: Iterable[BoolVarLike]) -> list[BoolVarLike]:
+    unique: list[BoolVarLike] = []
+    seen: set[Any] = set()
+    for variable in variables:
+        key = variable.Index() if hasattr(variable, "Index") else id(variable)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(variable)
+    return unique
+
+
+def _get(assignment: AssignmentLike, *names: str, default: Any = None) -> Any:
+    if isinstance(assignment, Mapping):
+        for name in names:
+            if name in assignment:
+                return assignment[name]
+
+    for name in names:
+        if hasattr(assignment, name):
+            return getattr(assignment, name)
+
+    if isinstance(assignment, Sequence) and not isinstance(assignment, (str, bytes)):
+        tuple_indexes = {
+            "var": 0,
+            "variable": 0,
+            "bool_var": 0,
+            "team_id": 1,
+            "team": 1,
+            "slot_id": 2,
+            "time_slot_id": 2,
+            "venue_id": 3,
+            "room_id": 3,
+            "coach_id": 4,
+            "session_id": 5,
+        }
+        for name in names:
+            index = tuple_indexes.get(name)
+            if index is not None and len(assignment) > index:
+                return assignment[index]
+
+    return default
+
+
+def _scalar_id(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool, tuple)):
+        return value
+    if isinstance(value, Mapping):
+        return value.get("id") or value.get("uuid") or value.get("name")
+    for attr in ("id", "uuid", "name"):
+        if hasattr(value, attr):
+            return getattr(value, attr)
+    return str(value)
+
+
+def _var(assignment: AssignmentLike) -> BoolVarLike:
+    variable = _get(assignment, "var", "variable", "bool_var", "x", default=_MISSING)
+    if variable is _MISSING:
+        raise ValueError("Assignment is missing a CP-SAT BoolVar field named var/variable/bool_var/x")
+    return variable
+
+
+def _assignment_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "id", "assignment_id", "key", default=None))
+
+
+def _team_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "team_id", "team", default=None))
+
+
+def _slot_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "slot_id", "time_slot_id", "timeslot_id", "slot", "time_slot", default=None))
+
+
+def _venue_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None))
+
+
+def _coach_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "coach_id", "trainer_id", "coach", "trainer", default=None))
+
+
+def _session_id(assignment: AssignmentLike) -> Any:
+    return _scalar_id(_get(assignment, "session_id", "lesson_id", "event_id", "session", "lesson", "event", default=None))
+
+
+def _time_key(assignment: AssignmentLike) -> Any:
+    slot_id = _slot_id(assignment)
+    if slot_id is not None:
+        return slot_id
+
+    explicit = _scalar_id(_get(assignment, "time_key", "time", default=None))
+    if explicit is not None:
+        return explicit
+
+    start = _get(assignment, "start", "starts_at", "start_minute", "start_time", default=None)
+    end = _get(assignment, "end", "ends_at", "end_minute", "end_time", default=None)
+    if start is not None and end is not None:
+        return (start, end)
+
+    return None
+
+
+def _player_ids(assignment: AssignmentLike) -> list[Any]:
+    players = _get(
+        assignment,
+        "player_ids",
+        "participant_ids",
+        "athlete_ids",
+        "players",
+        "participants",
+        "athletes",
+        default=(),
+    )
+    if players is None:
+        return []
+    if isinstance(players, (str, bytes)):
+        return [_scalar_id(players)]
+    return [_scalar_id(player) for player in players]
+
+
+def _bool_field(assignment: AssignmentLike, *names: str) -> bool:
+    return any(bool(_get(assignment, name, default=False)) for name in names)
+
+
+def _rule_matches(rules: RuleCollection, resource_id: Any, time_key: Any) -> bool:
+    if not rules or resource_id is None:
+        return False
+
+    if isinstance(rules, Mapping):
+        if (resource_id, time_key) in rules:
+            return bool(rules[(resource_id, time_key)])
+        if resource_id not in rules:
+            return False
+        values = rules[resource_id]
+        if values is True:
+            return True
+        return _contains(values, time_key)
+
+    return _contains(rules, (resource_id, time_key)) or _contains(rules, resource_id)
+
+
+def _contains(values: Any, candidate: Any) -> bool:
+    if values is None:
+        return False
+    if isinstance(values, (str, bytes)):
+        return bool(values == candidate)
+    try:
+        return candidate in values
+    except TypeError:
+        return False
+
+
+def _effective_min_sessions_by_team(
+    teams: Iterable[Any], min_sessions_by_team: Mapping[Any, int] | None
+) -> dict[Any, int]:
+    minimums: dict[Any, int] = {}
+    for team in teams:
+        team_id = _scalar_id(_get(team, "id", "team_id", default=None))
+        if team_id is None:
+            continue
+        minimum = _get(
+            team,
+            "min_sessions_effectif",
+            "effective_min_sessions",
+            "min_sessions",
+            "sessions_per_week",
+            default=None,
+        )
+        if minimum is not None:
+            minimums[team_id] = int(minimum)
+
+    if min_sessions_by_team:
+        for team_id, minimum in min_sessions_by_team.items():
+            minimums[_scalar_id(team_id)] = int(minimum)
+
+    return minimums
+
+
+def _forced_venue_id(
+    assignment: AssignmentLike, forced_venues: Mapping[Any, Any] | None
+) -> Any:
+    explicit = _scalar_id(
+        _get(
+            assignment,
+            "forced_venue_id",
+            "forced_room_id",
+            "forced_venue",
+            "forced_room",
+            default=None,
+        )
+    )
+    if explicit is not None:
+        return explicit
+
+    if not forced_venues:
+        return None
+
+    team_id = _team_id(assignment)
+    session_id = _session_id(assignment)
+    candidate_keys = (
+        (team_id, session_id),
+        f"{team_id}:{session_id}" if team_id is not None and session_id is not None else None,
+        session_id,
+        team_id,
+    )
+    for key in candidate_keys:
+        if key is not None and key in forced_venues:
+            return _scalar_id(forced_venues[key])
+    return None
+
+
+__all__ = [
+    "AssignmentVariable",
+    "HardConstraintStats",
+    "add_coach_at_most_one",
+    "add_coach_player_non_overlap",
+    "add_coach_unavailability_constraints",
+    "add_fixed_slots",
+    "add_forbidden_assignments",
+    "add_forced_venue_constraints",
+    "add_hard_constraints",
+    "add_hard_constraints_level_1",
+    "add_level_1_hard_constraints",
+    "add_min_sessions_constraints",
+    "add_mvp_hard_constraints",
+    "add_required_bridge_stub",
+    "add_room_at_most_one",
+    "add_travel_feasibility_stub",
+    "add_venue_closure_constraints",
+    "apply_level_1_hard_constraints",
+]

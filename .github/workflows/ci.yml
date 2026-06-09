@@ -94,15 +94,20 @@ jobs:
   engine-tests:
     name: Engine Tests
     runs-on: ubuntu-latest
-    needs: [lint]
     steps:
       - uses: actions/checkout@v4
 
       - name: Build engine
         run: docker compose build engine
 
-      - name: Run engine tests
-        run: docker compose run --rm engine pytest || true
+      - name: Run pytest
+        run: docker compose run --rm engine pytest
+
+      - name: Run ruff
+        run: docker compose run --rm engine ruff check .
+
+      - name: Run mypy
+        run: docker compose run --rm engine mypy
 
   build-docker:
     name: Build Docker Images

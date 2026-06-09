@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: clubscheduler-engine
+Version: 0.1.0
+Summary: ClubScheduler scheduling engine
+Requires-Python: >=3.12
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: pydantic<3,>=2
+Requires-Dist: pydantic-settings<3,>=2
+Requires-Dist: ortools<10,>=9.11
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8; extra == "dev"
+Requires-Dist: ruff<1,>=0.6; extra == "dev"
+Requires-Dist: mypy<2,>=1.11; extra == "dev"

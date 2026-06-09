@@ -1,0 +1,45 @@
+{
+  "clubId": "club-simple",
+  "seasonId": "season-2024",
+  "version": "1.0",
+  "solverSeed": 42,
+  "venues": [
+    {"id": "gym-a", "name": "Gymnasium A", "isActive": true},
+    {"id": "gym-b", "name": "Gymnasium B", "isActive": true}
+  ],
+  "teams": [
+    {"id": "senior-m", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men", "sessionsPerWeek": 2, "isActive": true},
+    {"id": "u17-m", "sportCategoryId": "u17", "priorityTierId": 2, "name": "U17 Men", "sessionsPerWeek": 2, "isActive": true},
+    {"id": "u15-m", "sportCategoryId": "u15", "priorityTierId": 3, "name": "U15 Men", "sessionsPerWeek": 1, "isActive": true},
+    {"id": "u13-m", "sportCategoryId": "u13", "priorityTierId": 4, "name": "U13 Men", "sessionsPerWeek": 1, "isActive": true},
+    {"id": "u11-m", "sportCategoryId": "u11", "priorityTierId": 5, "name": "U11 Men", "sessionsPerWeek": 1, "isActive": true}
+  ],
+  "coaches": [
+    {"id": "coach-1", "firstName": "Alice", "lastName": "Martin", "isActive": true},
+    {"id": "coach-2", "firstName": "Bob", "lastName": "Dupont", "isActive": true},
+    {"id": "coach-3", "firstName": "Charlie", "lastName": "Bernard", "isActive": true}
+  ],
+  "venueAvailabilities": [
+    {"venueId": "gym-a", "dayOfWeek": 1, "startTime": "18:00", "endTime": "20:00"},
+    {"venueId": "gym-a", "dayOfWeek": 3, "startTime": "18:00", "endTime": "20:00"},
+    {"venueId": "gym-b", "dayOfWeek": 2, "startTime": "18:00", "endTime": "20:00"},
+    {"venueId": "gym-b", "dayOfWeek": 4, "startTime": "18:00", "endTime": "20:00"}
+  ],
+  "slotTemplates": [
+    {"id": "tpl-senior-1", "teamId": "senior-m", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-senior-2", "teamId": "senior-m", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-u17-1", "teamId": "u17-m", "venueId": "gym-b", "coachId": "coach-2", "dayOfWeek": 2, "startTime": "18:30", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-u17-2", "teamId": "u17-m", "venueId": "gym-b", "coachId": "coach-2", "dayOfWeek": 4, "startTime": "18:30", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-u15-1", "teamId": "u15-m", "venueId": "gym-a", "coachId": "coach-3", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-u13-1", "teamId": "u13-m", "venueId": "gym-b", "coachId": "coach-3", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
+    {"id": "tpl-u11-1", "teamId": "u11-m", "venueId": "gym-a", "coachId": "coach-2", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"}
+  ],
+  "constraints": [],
+  "priorityTiers": [
+    {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
+    {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2},
+    {"id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1},
+    {"id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1},
+    {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1}
+  ]
+}

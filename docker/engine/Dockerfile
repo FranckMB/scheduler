@@ -1,20 +1,19 @@
 FROM python:3.12-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
 
-WORKDIR /app
+WORKDIR /app/engine
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        ca-certificates \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgomp1 && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip \
-    && pip install fastapi "uvicorn[standard]" ortools pydantic
+COPY engine/pyproject.toml ./pyproject.toml
+COPY engine/CONTRACT_VERSION ./CONTRACT_VERSION
+COPY engine/app ./app
+COPY engine/tests ./tests
+
+RUN pip install --upgrade pip && pip install ".[dev]"
 
 EXPOSE 8000
 

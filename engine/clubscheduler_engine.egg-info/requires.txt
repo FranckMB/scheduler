@@ -1,0 +1,10 @@
+fastapi<1,>=0.115
+pydantic<3,>=2
+pydantic-settings<3,>=2
+ortools<10,>=9.11
+uvicorn[standard]<1,>=0.30
+
+[dev]
+pytest<9,>=8
+ruff<1,>=0.6
+mypy<2,>=1.11

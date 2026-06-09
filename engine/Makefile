@@ -6,25 +6,24 @@ APP_ENV ?= dev
 USERID := $(shell id -u)
 GROUPID := $(shell id -g)
 EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) engine
-RUN := $(FIG) exec engine
+RUN := $(FIG) exec -T engine
 
 exec: ## Enter the engine container shell (auto-start if needed)
 	@$(FIG) ps engine | grep -q "Up" || ($(FIG) up -d engine && echo "Container started")
 	$(EXEC) bash || $(EXEC) sh
 
 install: ## Install Python dependencies
-	$(RUN) pip install -r requirements.txt
+	$(RUN) python -m pip install -e ".[dev]"
 
 test: ## Run pytest
-	$(MAKE) lint
-	$(RUN) pytest || true
+	$(RUN) pytest
 
 lint: ## Run ruff + mypy
-	$(RUN) ruff check . || true
-	$(RUN) mypy app/ || true
+	$(RUN) ruff check .
+	$(RUN) mypy
 
 format: ## Format code with ruff
-	$(RUN) ruff format . || true
+	$(RUN) ruff format .
 
 help: ## Display this help
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
