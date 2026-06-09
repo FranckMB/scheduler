@@ -6,13 +6,28 @@ APP_ENV ?= dev
 USERID := $(shell id -u)
 GROUPID := $(shell id -g)
 
-# Note: no frontend service in docker-compose yet; exec runs a one-off node container
+# Note: frontend service exists in docker-compose; exec still runs a one-off node container for ad hoc work
 exec: ## Enter a Node.js container for frontend work (one-off)
 	@echo "Starting one-off node container for frontend dev..."
-	$(FIG) run --rm -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) -w /app/frontend node:20-alpine sh -c "
+	docker run --rm -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) -v /home/franck/Projets/scheduler:/app:cached -w /app/frontend node:20-alpine sh -c "
 		if ! command -v npm >/dev/null 2>&1; then apk add --no-cache npm; fi;
 		sh
 	"
+
+start: ## Start the full Docker stack
+	$(FIG) up -d
+
+logs: ## Follow frontend service logs
+	$(FIG) logs -f frontend
+
+stop: ## Stop the frontend service
+	$(FIG) stop frontend
+
+shell: ## Open a shell in the frontend service container
+	$(FIG) exec frontend sh
+
+status: ## Show frontend service status
+	$(FIG) ps frontend
 
 install: ## Install Node dependencies
 	npm install
