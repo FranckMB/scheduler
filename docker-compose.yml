@@ -1,4 +1,27 @@
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: clubscheduler-frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      nginx:
+        condition: service_healthy
+      mercure:
+        condition: service_healthy
+      engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - clubscheduler_network
+
   php-fpm:
     build:
       context: .
