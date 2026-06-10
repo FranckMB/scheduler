@@ -12,6 +12,7 @@ use App\Entity\TeamConstraint;
 use App\Entity\Venue;
 use App\Message\GenerateScheduleMessage;
 use App\Service\ClubGenerationLock;
+use App\Service\DiagnosticMessageBuilder;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleResultImporter;
 use Doctrine\ORM\EntityManagerInterface;
@@ -34,6 +35,7 @@ final readonly class GenerateScheduleHandler
         private HttpClientInterface $httpClient,
         private HubInterface $hub,
         private ClubGenerationLock $clubGenerationLock,
+        private DiagnosticMessageBuilder $diagnosticMessageBuilder,
     ) {
     }
 
@@ -203,11 +205,15 @@ final readonly class GenerateScheduleHandler
             return;
         }
 
+        [$teamNames, $coachNames, $venueNames] = $this->buildNameMaps($schedule);
+
         foreach ($diagnostics as $diagnostic) {
             if (!is_array($diagnostic)) {
                 $this->persistDiagnostic($schedule, 'engine_failed', 'error', (string) $diagnostic);
                 continue;
             }
+
+            $message = $this->diagnosticMessageBuilder->build($diagnostic, $teamNames, $coachNames, $venueNames);
 
             $entity = (new ScheduleDiagnostic())
                 ->setClubId($schedule->getClubId())
@@ -215,7 +221,7 @@ final readonly class GenerateScheduleHandler
                 ->setScheduleId($schedule->getId())
                 ->setType((string) ($diagnostic['type'] ?? 'engine_failed'))
                 ->setSeverity((string) ($diagnostic['severity'] ?? 'error'))
-                ->setMessage((string) ($diagnostic['message'] ?? 'Schedule generation failed.'))
+                ->setMessage($message)
                 ->setSuggestions(is_array($diagnostic['suggestions'] ?? null) ? $diagnostic['suggestions'] : []);
 
             if (isset($diagnostic['team_id'])) {
@@ -230,6 +236,34 @@ final readonly class GenerateScheduleHandler
 
             $this->entityManager->persist($entity);
         }
+    }
+
+    /**
+     * @return array{0: array<string, string>, 1: array<string, string>, 2: array<string, string>}
+     */
+    private function buildNameMaps(Schedule $schedule): array
+    {
+        $criteria = [
+            'clubId' => $schedule->getClubId(),
+            'seasonId' => $schedule->getSeasonId(),
+        ];
+
+        $teamNames = [];
+        foreach ($this->entityManager->getRepository(Team::class)->findBy($criteria) as $team) {
+            $teamNames[$team->getId()] = $team->getName();
+        }
+
+        $coachNames = [];
+        foreach ($this->entityManager->getRepository(Coach::class)->findBy($criteria) as $coach) {
+            $coachNames[$coach->getId()] = trim($coach->getFirstName().' '.$coach->getLastName());
+        }
+
+        $venueNames = [];
+        foreach ($this->entityManager->getRepository(Venue::class)->findBy($criteria) as $venue) {
+            $venueNames[$venue->getId()] = $venue->getName();
+        }
+
+        return [$teamNames, $coachNames, $venueNames];
     }
 
     private function persistDiagnostic(Schedule $schedule, string $type, string $severity, string $message): void

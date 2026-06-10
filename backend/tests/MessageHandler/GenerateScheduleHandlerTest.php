@@ -14,6 +14,7 @@ use App\Entity\Venue;
 use App\Message\GenerateScheduleMessage;
 use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
+use App\Service\DiagnosticMessageBuilder;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleResultImporter;
 use Doctrine\ORM\EntityManagerInterface;
@@ -66,6 +67,7 @@ final class GenerateScheduleHandlerTest extends TestCase
             ], JSON_THROW_ON_ERROR))),
             $this->hub($publishedUpdates),
             $this->clubGenerationLock(),
+            new DiagnosticMessageBuilder(),
         );
 
         $handler(new GenerateScheduleMessage(self::SCHEDULE_ID, self::CLUB_ID, 60));
@@ -114,6 +116,7 @@ final class GenerateScheduleHandlerTest extends TestCase
             ], JSON_THROW_ON_ERROR))),
             $this->hub($publishedUpdates),
             $this->clubGenerationLock(),
+            new DiagnosticMessageBuilder(),
         );
 
         $handler(new GenerateScheduleMessage(self::SCHEDULE_ID, self::CLUB_ID));
@@ -140,6 +143,7 @@ final class GenerateScheduleHandlerTest extends TestCase
             new MockHttpClient(static fn (): MockResponse => throw new TransportException('timeout')),
             $this->hub($publishedUpdates),
             $this->clubGenerationLock(),
+            new DiagnosticMessageBuilder(),
         );
 
         $handler(new GenerateScheduleMessage(self::SCHEDULE_ID, self::CLUB_ID, 1));

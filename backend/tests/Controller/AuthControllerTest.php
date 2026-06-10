@@ -235,4 +235,53 @@ final class AuthControllerTest extends KernelTestCase
         $data2 = json_decode((string) $response2->getContent(), true);
         self::assertArrayHasKey('error', $data2, 'Error response should contain error message');
     }
+
+    /** @group phase1 */
+    public function testInvalidAraReturns400(): void
+    {
+        $unique = uniqid();
+
+        $request = Request::create(
+            '/api/register',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'email' => 'invalidara'.$unique.'@example.com',
+                'password' => 'SecurePass123!',
+                'ara' => 'ARA!123',
+                'club_name' => 'Test Club '.$unique,
+            ], JSON_THROW_ON_ERROR)
+        );
+
+        $response = self::$kernel->handle($request);
+        self::assertSame(400, $response->getStatusCode(), 'Invalid ARA format should return 400');
+    }
+
+    /** @group phase1 */
+    public function testWeakPasswordReturns400(): void
+    {
+        $unique = uniqid();
+        $ara = $this->generateUniqueAra();
+
+        $request = Request::create(
+            '/api/register',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'email' => 'weakpass'.$unique.'@example.com',
+                'password' => 'short',
+                'ara' => $ara,
+                'club_name' => 'Test Club '.$unique,
+            ], JSON_THROW_ON_ERROR)
+        );
+
+        $response = self::$kernel->handle($request);
+        self::assertSame(400, $response->getStatusCode(), 'Weak password should return 400');
+    }
 }

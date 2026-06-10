@@ -22,6 +22,12 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post(),
     new Put(),
     new Delete(),
+    new Post(
+        uriTemplate: '/clubs/{id}/import-teams',
+        controller: 'App\Controller\ImportController',
+        read: false,
+        name: 'import_teams',
+    ),
 ], input: ClubInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubStateProvider::class, processor: ClubStateProcessor::class)]
 class ClubResource
 {

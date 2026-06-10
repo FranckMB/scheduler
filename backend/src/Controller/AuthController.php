@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Dto\RegisterUserDto;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
@@ -18,7 +17,6 @@ use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\String\Slugger\AsciiSlugger;
@@ -35,50 +33,85 @@ final class AuthController extends AbstractController
     }
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
-    public function __invoke(
-        Request $request,
-        #[MapRequestPayload] RegisterUserDto $dto,
-    ): JsonResponse {
+    public function __invoke(Request $request): JsonResponse
+    {
+        $data = json_decode((string) $request->getContent(), true);
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $email = isset($data['email']) && \is_string($data['email']) ? trim($data['email']) : null;
+        $password = isset($data['password']) && \is_string($data['password']) ? $data['password'] : null;
+        $ara = isset($data['ara']) && \is_string($data['ara']) ? strtoupper(trim($data['ara'])) : null;
+        $clubName = isset($data['club_name']) && \is_string($data['club_name']) ? trim($data['club_name']) : null;
+
+        // Validate required fields
+        if (null === $email || '' === $email) {
+            return $this->json(['error' => 'Email is required'], 400);
+        }
+
+        if (null === $password || '' === $password) {
+            return $this->json(['error' => 'Password is required'], 400);
+        }
+
+        if (null === $ara || '' === $ara) {
+            return $this->json(['error' => 'ARA is required'], 400);
+        }
+
+        if (null === $clubName || '' === $clubName) {
+            return $this->json(['error' => 'Club name is required'], 400);
+        }
+
+        // Validate email format
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->json(['error' => 'Invalid email address'], 400);
+        }
+
+        // Validate ARA format
+        if (!preg_match('/^[A-Z0-9]{3,20}$/', $ara)) {
+            return $this->json(['error' => 'ARA must be 3-20 uppercase alphanumeric characters'], 400);
+        }
+
+        // Validate password strength
+        if (\strlen($password) < 8) {
+            return $this->json(['error' => 'Password must be at least 8 characters'], 400);
+        }
+
         // Check ARA uniqueness
-        $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $dto->ara]);
+        $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
         if (null !== $existingClub) {
             return $this->json(['error' => 'ARA already registered'], 409);
         }
 
         // Check email uniqueness
-        $existingUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $dto->email]);
+        $existingUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
         if (null !== $existingUser) {
             return $this->json(['error' => 'Email already registered'], 409);
         }
 
-        assert(null !== $dto->email && '' !== $dto->email);
-        assert(null !== $dto->password && '' !== $dto->password);
-        assert(null !== $dto->ara && '' !== $dto->ara);
-        assert(null !== $dto->club_name && '' !== $dto->club_name);
-
-        $this->entityManager->wrapInTransaction(function () use ($dto): void {
+        $this->entityManager->wrapInTransaction(function () use ($email, $password, $ara, $clubName): void {
             $slugger = new AsciiSlugger('fr');
-            $slug = (string) $slugger->slug($dto->club_name)->lower();
+            $slug = (string) $slugger->slug($clubName)->lower();
 
             // Append random suffix to ensure uniqueness
             $slug .= '-'.bin2hex(random_bytes(4));
 
             // Create user
             $user = new User();
-            $user->setEmail($dto->email);
+            $user->setEmail($email);
             $user->setFirstName('Admin');
             $user->setLastName('User');
-            $user->setPasswordHash($this->passwordHasher->hashPassword($user, $dto->password));
+            $user->setPasswordHash($this->passwordHasher->hashPassword($user, $password));
             $this->entityManager->persist($user);
 
             // Create club
             $club = new Club();
-            $club->setName($dto->club_name);
+            $club->setName($clubName);
             $club->setSlug($slug);
             $club->setTimezone('Europe/Paris');
             $club->setLocale('fr');
             $club->setOnboardingCompleted(false);
-            $club->setFfbbClubCode($dto->ara);
+            $club->setFfbbClubCode($ara);
             $this->entityManager->persist($club);
 
             // Create club-user membership
@@ -121,7 +154,7 @@ final class AuthController extends AbstractController
         });
 
         // Reload user to ensure it has an ID for JWT generation
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $dto->email]);
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
         if (null === $user) {
             return $this->json(['error' => 'Registration failed'], 500);
         }
