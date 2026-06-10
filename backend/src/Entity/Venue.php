@@ -40,6 +40,9 @@ class Venue
     #[ORM\Column(type: 'boolean')]
     private bool $isExternal = false;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $canSplit = false;
+
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $color = null;
 
@@ -177,6 +180,23 @@ class Venue
     public function setColor(?string $color): self
     {
         $this->color = $color;
+
+        return $this;
+    }
+
+    public function getCanSplit(): bool
+    {
+        return $this->canSplit;
+    }
+
+    public function isCanSplit(): bool
+    {
+        return $this->canSplit;
+    }
+
+    public function setCanSplit(bool $canSplit): self
+    {
+        $this->canSplit = $canSplit;
 
         return $this;
     }

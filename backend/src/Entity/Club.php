@@ -11,6 +11,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'club')]
 #[ORM\Index(name: 'idx_club_slug', columns: ['slug'])]
 #[ORM\UniqueConstraint(name: 'uniq_club_slug', columns: ['slug'])]
+#[ORM\UniqueConstraint(name: 'uniq_club_ffbb_club_code', columns: ['ffbb_club_code'])]
 #[ORM\HasLifecycleCallbacks]
 class Club
 {
@@ -58,7 +59,7 @@ class Club
     #[ORM\Column(type: 'boolean')]
     private bool $onboardingCompleted = false;
 
-    #[ORM\Column(type: 'string', length: 64, nullable: true)]
+    #[ORM\Column(type: 'string', length: 64, nullable: true, unique: true)]
     private ?string $ffbbClubCode = null;
 
     public function __construct()

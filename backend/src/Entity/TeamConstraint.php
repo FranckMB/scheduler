@@ -62,6 +62,9 @@ class TeamConstraint
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $sourceOccurrenceId = null;
 
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $source = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -245,6 +248,18 @@ class TeamConstraint
     public function setSourceOccurrenceId(?string $sourceOccurrenceId): self
     {
         $this->sourceOccurrenceId = $sourceOccurrenceId;
+
+        return $this;
+    }
+
+    public function getSource(): ?string
+    {
+        return $this->source;
+    }
+
+    public function setSource(?string $source): self
+    {
+        $this->source = $source;
 
         return $this;
     }

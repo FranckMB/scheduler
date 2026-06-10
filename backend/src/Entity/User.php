@@ -6,12 +6,14 @@ namespace App\Entity;
 
 use App\Repository\UserRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: 'app_user')]
 #[ORM\UniqueConstraint(name: 'uniq_user_email', columns: ['email'])]
 #[ORM\HasLifecycleCallbacks]
-class User
+class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]
@@ -155,6 +157,28 @@ class User
         $this->emailVerifiedAt = $emailVerifiedAt;
 
         return $this;
+    }
+
+    public function getUserIdentifier(): string
+    {
+        assert('' !== $this->email);
+
+        return $this->email;
+    }
+
+    /** @return list<string> */
+    public function getRoles(): array
+    {
+        return ['ROLE_ADMIN'];
+    }
+
+    public function getPassword(): ?string
+    {
+        return $this->passwordHash;
+    }
+
+    public function eraseCredentials(): void
+    {
     }
 
     private function newUuid(): string

@@ -47,7 +47,16 @@ class Team
     private string $name;
 
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $level = null;
+
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $gender = null;
+
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $isCompetition = false;
+
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $size = null;
 
     #[ORM\Column(type: 'smallint')]
     private int $sessionsPerWeek;
@@ -185,6 +194,18 @@ class Team
         return $this;
     }
 
+    public function getLevel(): ?string
+    {
+        return $this->level;
+    }
+
+    public function setLevel(?string $level): self
+    {
+        $this->level = $level;
+
+        return $this;
+    }
+
     public function getGender(): ?string
     {
         return $this->gender;
@@ -193,6 +214,35 @@ class Team
     public function setGender(?string $gender): self
     {
         $this->gender = $gender;
+
+        return $this;
+    }
+
+    public function getIsCompetition(): bool
+    {
+        return $this->isCompetition;
+    }
+
+    public function isIsCompetition(): bool
+    {
+        return $this->isCompetition;
+    }
+
+    public function setIsCompetition(bool $isCompetition): self
+    {
+        $this->isCompetition = $isCompetition;
+
+        return $this;
+    }
+
+    public function getSize(): ?string
+    {
+        return $this->size;
+    }
+
+    public function setSize(?string $size): self
+    {
+        $this->size = $size;
 
         return $this;
     }
