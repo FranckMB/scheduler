@@ -25,6 +25,7 @@
         "symfony/framework-bundle": "7.4.*",
         "symfony/mercure-bundle": "^0.4.2",
         "symfony/messenger": "7.4.*",
+        "symfony/mime": "7.4.*",
         "symfony/property-access": "7.4.*",
         "symfony/property-info": "7.4.*",
         "symfony/redis-messenger": "7.4.*",
@@ -96,6 +97,7 @@
         "phpstan/phpstan-doctrine": "^2.0",
         "phpstan/phpstan-symfony": "^2.0",
         "rector/rector": "^2.4",
+        "symfony/browser-kit": "7.4.*",
         "symfony/phpunit-bridge": "^8.1"
     }
 }

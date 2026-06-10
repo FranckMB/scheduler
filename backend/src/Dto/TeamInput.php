@@ -43,4 +43,7 @@ class TeamInput
 
     #[Groups(['write'])]
     public ?string $ffbbTeamId = null;
+
+    #[Groups(['write'])]
+    public ?string $level = null;
 }

@@ -37,4 +37,7 @@ class VenueInput
 
     #[Groups(['write'])]
     public ?string $parentVenueId = null;
+
+    #[Groups(['write'])]
+    public ?bool $canSplit = null;
 }

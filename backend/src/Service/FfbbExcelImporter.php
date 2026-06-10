@@ -66,7 +66,7 @@ final class FfbbExcelImporter
             $numero = $this->stringValue($row[$columnMap['numéro']] ?? null);
             $organisme = $this->stringValue($row[$columnMap['organisme']] ?? null);
 
-            if ('' === $nom || '' === $categorie || '' === $numero || '' === $organisme) {
+            if (in_array('', [$nom, $categorie, $numero, $organisme], true)) {
                 continue;
             }
 

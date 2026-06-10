@@ -53,7 +53,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
      */
     abstract protected function mapEntityToOutput(object $entity): object;
 
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
     {
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');

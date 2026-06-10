@@ -59,7 +59,7 @@ class Club
     #[ORM\Column(type: 'boolean')]
     private bool $onboardingCompleted = false;
 
-    #[ORM\Column(type: 'string', length: 64, nullable: true, unique: true)]
+    #[ORM\Column(type: 'string', length: 64, unique: true, nullable: true)]
     private ?string $ffbbClubCode = null;
 
     public function __construct()
