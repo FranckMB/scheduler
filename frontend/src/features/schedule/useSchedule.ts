@@ -43,6 +43,77 @@ export function useExportPdf() {
   })
 }
 
+export function useManualEditConstraint() {
+  return useMutation({
+    mutationFn: async ({
+      slotId,
+      type,
+      reason,
+    }: {
+      slotId: string
+      type: string
+      reason?: string
+    }) => {
+      return apiClient
+        .post(`schedule-slot-templates/${slotId}/manual-edit/constraint`, {
+          json: { type, reason },
+        })
+        .json()
+    },
+    onSuccess: (_, { slotId }) => {
+      invalidateScheduleQueries(slotId)
+    },
+  })
+}
+
+export function useManualEditLock() {
+  return useMutation({
+    mutationFn: async ({
+      slotId,
+      lockLevel,
+    }: {
+      slotId: string
+      lockLevel: 'SOFT' | 'HARD'
+    }) => {
+      return apiClient
+        .post(`schedule-slot-templates/${slotId}/manual-edit/lock`, {
+          json: { lockLevel },
+        })
+        .json()
+    },
+    onSuccess: (_, { slotId }) => {
+      invalidateScheduleQueries(slotId)
+    },
+  })
+}
+
+export function useManualEditOneTime() {
+  return useMutation({
+    mutationFn: async ({
+      slotId,
+      data,
+    }: {
+      slotId: string
+      data: {
+        dayOfWeek?: number
+        startTime?: string
+        durationMinutes?: number
+        venueId?: string
+        coachId?: string | null
+      }
+    }) => {
+      return apiClient
+        .post(`schedule-slot-templates/${slotId}/manual-edit/one-time`, {
+          json: data,
+        })
+        .json()
+    },
+    onSuccess: (_, { slotId }) => {
+      invalidateScheduleQueries(slotId)
+    },
+  })
+}
+
 export function invalidateScheduleQueries(scheduleId: string) {
   queryClient.invalidateQueries({ queryKey: SCHEDULE_QUERY_KEY(scheduleId) })
   queryClient.invalidateQueries({ queryKey: SLOTS_QUERY_KEY(scheduleId) })

@@ -1,11 +1,26 @@
 import { useWizardStore, type WizardStep } from '@/features/wizard/wizardStore'
 import StepIndicator from './components/StepIndicator'
 import VenueStep from './components/VenueStep'
-import CoachStep from './components/CoachStep'
 import TeamStep from './components/TeamStep'
+import PreferredSlotStep from './components/PreferredSlotStep'
+import TierListStep from './components/TierListStep'
+import FilterStep from './components/FilterStep'
+import CoachStep from './components/CoachStep'
+import ConstraintStep from './components/ConstraintStep'
+import ValidationStep from './components/ValidationStep'
 import SummaryStep from './components/SummaryStep'
 
-const STEP_COMPONENTS = [VenueStep, CoachStep, TeamStep, SummaryStep]
+const STEP_COMPONENTS = [
+  VenueStep,
+  TeamStep,
+  PreferredSlotStep,
+  TierListStep,
+  FilterStep,
+  CoachStep,
+  ConstraintStep,
+  ValidationStep,
+  SummaryStep,
+]
 
 export default function WizardPage() {
   const { currentStep, setCurrentStep, nextStep, prevStep, isSaving, saveError, validationErrors } =
@@ -14,14 +29,13 @@ export default function WizardPage() {
   const StepComponent = STEP_COMPONENTS[currentStep]
   const errors = validationErrors[currentStep] || []
   const isFirst = currentStep === 0
-  const isLast = currentStep === 3
+  const isLast = currentStep === 8
 
   const handleNext = () => {
     nextStep()
   }
 
   const handleStepClick = (step: WizardStep) => {
-    // Allow clicking on completed steps or current step
     if (step <= currentStep) {
       setCurrentStep(step)
     }
@@ -33,7 +47,7 @@ export default function WizardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-neutral-900">Assistant de configuration</h1>
         <p className="text-sm text-neutral-500">
-          Configurez votre planning en 4 étapes simples
+          Configurez votre planning en 9 etapes simples
         </p>
       </div>
 
@@ -83,7 +97,7 @@ export default function WizardPage() {
           disabled={isFirst}
           className="rounded-md border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
         >
-          ← Précédent
+          Precedent
         </button>
 
         {!isLast ? (
@@ -92,7 +106,7 @@ export default function WizardPage() {
             onClick={handleNext}
             className="rounded-md bg-primary-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
           >
-            Suivant →
+            Suivant
           </button>
         ) : (
           <div />

@@ -4,11 +4,12 @@ import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
-import type { EventClickArg, EventContentArg } from '@fullcalendar/core'
+import type { EventClickArg, EventContentArg, EventDropArg, EventResizeArg } from '@fullcalendar/core'
 import { useAuthStore } from '@/features/auth/authStore'
-import { useSchedule, useScheduleSlots, invalidateScheduleQueries } from '@/features/schedule/useSchedule'
+import { useSchedule, useScheduleSlots, invalidateScheduleQueries, useManualEditLock, useManualEditOneTime } from '@/features/schedule/useSchedule'
 import { ExportPdfButton } from '@/features/schedule/components/ExportPdfButton'
 import SlotDetailModal from '@/features/schedule/SlotDetailModal'
+import ManualEditDialog from '@/features/schedule/components/ManualEditDialog'
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner'
 import type { ScheduleSlot, LockLevel } from '@/features/schedule/types'
 import { LOCK_LEVEL_CONFIG, DAY_NAMES } from '@/features/schedule/types'
@@ -75,6 +76,18 @@ export default function ScheduleViewPage() {
   const club = useAuthStore((s) => s.club)
   const [selectedSlot, setSelectedSlot] = useState<ScheduleSlot | null>(null)
   const calendarRef = useRef<FullCalendar>(null)
+
+  // Manual edit drag state
+  const [editDialogSlot, setEditDialogSlot] = useState<{
+    slot: ScheduleSlot
+    originalSlot: ScheduleSlot
+    newDayOfWeek: number
+    newStartTime: string
+    newVenueId: string
+  } | null>(null)
+
+  const lockMutation = useManualEditLock()
+  const oneTimeMutation = useManualEditOneTime()
 
   const { data: schedule, isLoading: scheduleLoading } = useSchedule(id || '')
   const { data: slots, isLoading: slotsLoading } = useScheduleSlots(id || '')
@@ -149,6 +162,89 @@ export default function ScheduleViewPage() {
     const slot = info.event.extendedProps.slot as ScheduleSlot
     setSelectedSlot(slot)
   }, [])
+
+  // Helper: convert a JS Date to dayOfWeek (0=Dimanche, 1=Lundi, ... 6=Samedi)
+  function dateToDayOfWeek(date: Date): number {
+    return date.getDay()
+  }
+
+  // Helper: convert a JS Date to HH:MM:SS string
+  function dateToTimeString(date: Date): string {
+    const h = date.getHours().toString().padStart(2, '0')
+    const m = date.getMinutes().toString().padStart(2, '0')
+    const s = date.getSeconds().toString().padStart(2, '0')
+    return `${h}:${m}:${s}`
+  }
+
+  // Helper: compute time difference in minutes between two ISO time strings
+  function timeDiffMinutes(original: string, updated: string): number {
+    const base = new Date()
+    const d1 = new Date(base.toDateString() + ' ' + original)
+    const d2 = new Date(base.toDateString() + ' ' + updated)
+    return Math.abs((d2.getTime() - d1.getTime()) / 60000)
+  }
+
+  // Drag drop handler — decides silent lock vs dialog
+  const handleEventDrop = useCallback((info: EventDropArg) => {
+    const slot = info.event.extendedProps.slot as ScheduleSlot
+    const newStart = info.event.start
+    if (!newStart) return
+
+    const newDayOfWeek = dateToDayOfWeek(newStart)
+    const newStartTime = slot.startTime.includes('T')
+      ? dateToTimeString(newStart)
+      : dateToTimeString(newStart)
+
+    const dayChanged = slot.dayOfWeek !== newDayOfWeek
+    const timeDiff = timeDiffMinutes(slot.startTime, newStartTime)
+
+    if (!dayChanged && timeDiff <= 30) {
+      // Silent SOFT lock + one-time update
+      lockMutation.mutate({ slotId: slot.id, lockLevel: 'SOFT' })
+      oneTimeMutation.mutate({
+        slotId: slot.id,
+        data: { startTime: newStartTime },
+      })
+    } else {
+      // Show dialog for day change or large time shift
+      setEditDialogSlot({
+        slot,
+        originalSlot: slot,
+        newDayOfWeek,
+        newStartTime,
+        newVenueId: slot.venueId,
+      })
+    }
+  }, [lockMutation, oneTimeMutation])
+
+  // Resize handler — duration change
+  const handleEventResize = useCallback((info: EventResizeArg) => {
+    const slot = info.event.extendedProps.slot as ScheduleSlot
+    const newEnd = info.event.end
+    if (!newEnd) return
+
+    const newDuration = Math.round((newEnd.getTime() - info.event.start!.getTime()) / 60000)
+    const durationDiff = Math.abs(newDuration - slot.durationMinutes)
+
+    if (durationDiff <= 30) {
+      // Silent SOFT lock + one-time update
+      lockMutation.mutate({ slotId: slot.id, lockLevel: 'SOFT' })
+      oneTimeMutation.mutate({
+        slotId: slot.id,
+        data: { durationMinutes: newDuration },
+      })
+    } else {
+      // Show dialog for large duration change
+      const newStart = info.event.start!
+      setEditDialogSlot({
+        slot,
+        originalSlot: slot,
+        newDayOfWeek: dateToDayOfWeek(newStart),
+        newStartTime: dateToTimeString(newStart),
+        newVenueId: slot.venueId,
+      })
+    }
+  }, [lockMutation, oneTimeMutation])
 
   // Custom event content renderer
   const renderEventContent = useCallback((eventInfo: EventContentArg) => {
@@ -247,7 +343,7 @@ export default function ScheduleViewPage() {
           )
         })}
         <span className="ml-auto text-xs text-neutral-400">
-          Click a slot for details
+          Drag to reschedule · Click for details
         </span>
       </div>
 
@@ -277,7 +373,11 @@ export default function ScheduleViewPage() {
           eventClick={handleEventClick}
           eventContent={renderEventContent}
           height="auto"
-          editable={false}
+          editable={true}
+          eventDurationEditable={true}
+          eventStartEditable={true}
+          eventDrop={handleEventDrop}
+          eventResize={handleEventResize}
           selectable={false}
           dayHeaderFormat={{ weekday: 'long', day: 'numeric', month: 'short' }}
           slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
@@ -291,6 +391,22 @@ export default function ScheduleViewPage() {
         slot={selectedSlot}
         onClose={() => setSelectedSlot(null)}
       />
+
+      {/* Manual Edit Dialog */}
+      {editDialogSlot && (
+        <ManualEditDialog
+          slot={editDialogSlot.slot}
+          originalSlot={editDialogSlot.originalSlot}
+          newDayOfWeek={editDialogSlot.newDayOfWeek}
+          newStartTime={editDialogSlot.newStartTime}
+          newVenueId={editDialogSlot.newVenueId}
+          onClose={() => setEditDialogSlot(null)}
+          onSuccess={() => {
+            setEditDialogSlot(null)
+            if (id) invalidateScheduleQueries(id)
+          }}
+        />
+      )}
     </div>
   )
 }

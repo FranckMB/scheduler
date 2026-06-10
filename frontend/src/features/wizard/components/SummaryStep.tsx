@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useWizardStore,
-  DAYS,
   DAY_LABELS,
 } from '@/features/wizard/wizardStore'
 import { apiClient } from '@/shared/api/client'
@@ -13,19 +12,6 @@ export default function SummaryStep() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generateSuccess, setGenerateSuccess] = useState(false)
-
-  const availableSlots = Object.entries(data.venues.slots)
-    .filter(([, v]) => v)
-    .map(([key]) => {
-      const [day, hour, minute] = key.split('-')
-      return { day: day as (typeof DAYS)[number], hour: parseInt(hour, 10), minute: parseInt(minute, 10) }
-    })
-
-  // Group slots by day for summary
-  const slotsByDay = DAYS.reduce<Record<string, typeof availableSlots>>((acc, day) => {
-    acc[day] = availableSlots.filter((s) => s.day === day)
-    return acc
-  }, {})
 
   const handleGenerate = useCallback(async () => {
     setIsGenerating(true)
@@ -39,112 +25,135 @@ export default function SummaryStep() {
         .json<{ id: string }>()
       const scheduleId = schedule.id
 
-      // 2. Generate the schedule with wizard data
+      // 2. Build payload from wizard data
+      const venuePayloads = data.venues.map((venue) => {
+        const slots = Object.entries(venue.slots)
+          .filter(([, available]) => available)
+          .map(([key]) => {
+            const [day, hour, minute] = key.split('-')
+            return {
+              day,
+              hour: parseInt(hour, 10),
+              minute: parseInt(minute, 10),
+            }
+          })
+        return {
+          name: venue.name,
+          slots,
+          closures: venue.closures,
+          can_split: venue.can_split,
+        }
+      })
+
+      const teamPayloads = data.teams.map((team) => ({
+        name: team.name,
+        level: team.level,
+        gender: team.gender,
+        is_competition: team.is_competition,
+        size: team.size,
+        sessions_count: team.sessions_count,
+        tier: team.tier,
+        is_junior: team.is_junior,
+      }))
+
+      const coachPayloads = data.coaches.map((coach) => ({
+        name: coach.name,
+        email: coach.email,
+        phone: coach.phone,
+        team_ids: coach.teamIds,
+        is_player: coach.is_player,
+        unavailabilities: coach.unavailabilities,
+      }))
+
+      // Preferred slots as type=preferred constraints
+      const preferredConstraintPayloads = data.preferredSlots.map((ps) => ({
+        team_id: ps.teamId,
+        type: 'preferred' as const,
+        day: ps.day,
+        start_hour: ps.hour,
+        start_minute: ps.minute,
+        venue_id: ps.venueId,
+      }))
+
+      const explicitConstraintPayloads = data.constraints.map((c) => ({
+        team_id: c.teamId,
+        coach_id: c.coachId,
+        type: c.type,
+        day: c.day,
+        start_hour: c.startHour,
+        start_minute: c.startMinute,
+        end_hour: c.endHour,
+        end_minute: c.endMinute,
+        venue_id: c.venueId,
+      }))
+
+      // 3. Generate the schedule with wizard data
       await apiClient.post(`schedules/${scheduleId}/generate`, {
         json: {
-          venues: {
-            slots: availableSlots,
-            closures: data.venues.closures,
-          },
-          coaches: data.coaches,
-          teams: data.teams,
+          venues: venuePayloads,
+          teams: teamPayloads,
+          coaches: coachPayloads,
+          constraints: [...preferredConstraintPayloads, ...explicitConstraintPayloads],
         },
       })
 
       setGenerateSuccess(true)
 
-      // 3. Redirect to the schedule view
+      // 4. Redirect to the schedule view
       navigate(`/schedules/${scheduleId}`)
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Échec de la génération')
+      setGenerateError(err instanceof Error ? err.message : 'Echec de la generation')
     } finally {
       setIsGenerating(false)
     }
-  }, [availableSlots, data.venues.closures, data.coaches, data.teams, navigate])
+  }, [data, navigate])
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-neutral-900">Résumé de la configuration</h2>
+        <h2 className="text-xl font-bold text-neutral-900">Resume et Generation</h2>
         <p className="text-sm text-neutral-500">
-          Vérifiez les données avant de générer le planning
+          Verifiez toutes les donnees avant de lancer la generation
         </p>
       </div>
 
       {/* Venues summary */}
       <div className="rounded-lg border border-neutral-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-neutral-700">
-          Salles — {availableSlots.length} créneau{availableSlots.length > 1 ? 'x' : ''} disponible
-          {availableSlots.length > 1 ? 's' : ''}
+          Salles ({data.venues.length})
         </h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {DAYS.map((day) => (
-            <div key={day} className="rounded-md bg-neutral-50 p-2">
-              <p className="mb-1 text-xs font-semibold text-neutral-600">{DAY_LABELS[day]}</p>
-              <p className="text-lg font-bold text-primary-600">
-                {slotsByDay[day]?.length || 0}
-              </p>
-              <p className="text-xs text-neutral-400">créneaux</p>
-            </div>
-          ))}
-        </div>
-        {data.venues.closures.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-medium text-neutral-600">Fermetures :</p>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {data.venues.closures.map((date) => (
-                <span
-                  key={date}
-                  className="rounded bg-warning-50 px-2 py-0.5 text-xs text-warning-600"
-                >
-                  {date}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Coaches summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
-          Coaches — {data.coaches.length} coach{data.coaches.length > 1 ? 's' : ''}
-        </h3>
-        {data.coaches.length === 0 ? (
-          <p className="text-sm text-neutral-400">Aucun coach configuré</p>
-        ) : (
-          <div className="space-y-2">
-            {data.coaches.map((coach) => (
-              <div key={coach.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
+        <div className="space-y-2">
+          {data.venues.map((venue) => {
+            const availableCount = Object.values(venue.slots).filter(Boolean).length
+            return (
+              <div key={venue.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
                 <div>
                   <p className="text-sm font-medium text-neutral-900">
-                    {coach.name || <span className="text-neutral-400 italic">Sans nom</span>}
+                    {venue.name || <span className="text-neutral-400 italic">Sans nom</span>}
                   </p>
-                  {(coach.email || coach.phone) && (
-                    <p className="text-xs text-neutral-500">
-                      {[coach.email, coach.phone].filter(Boolean).join(' • ')}
-                    </p>
-                  )}
+                  <p className="text-xs text-neutral-500">
+                    {availableCount} creneau{availableCount > 1 ? 'x' : ''} disponible
+                    {venue.can_split && ' - Split possible'}
+                  </p>
                 </div>
-                {coach.unavailabilities.length > 0 && (
+                {venue.closures.length > 0 && (
                   <span className="rounded-full bg-warning-50 px-2 py-0.5 text-xs text-warning-600">
-                    {coach.unavailabilities.length} indisponibilité
-                    {coach.unavailabilities.length > 1 ? 's' : ''}
+                    {venue.closures.length} fermeture{venue.closures.length > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
-            ))}
-          </div>
-        )}
+            )
+          })}
+        </div>
       </div>
 
       {/* Teams summary */}
       <div className="rounded-lg border border-neutral-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-neutral-700">
-          Équipes — {data.teams.length} équipe{data.teams.length > 1 ? 's' : ''}
+          Equipes ({data.teams.length})
         </h3>
         {data.teams.length === 0 ? (
-          <p className="text-sm text-neutral-400">Aucune équipe configurée</p>
+          <p className="text-sm text-neutral-400">Aucune equipe configuree</p>
         ) : (
           <div className="space-y-2">
             {data.teams.map((team) => (
@@ -155,35 +164,53 @@ export default function SummaryStep() {
                       {team.name || <span className="text-neutral-400 italic">Sans nom</span>}
                     </p>
                     <p className="text-xs text-neutral-500">
-                      {team.playerCount} joueur{team.playerCount > 1 ? 's' : ''}
-                      {team.level ? ` • ${team.level}` : ''}
+                      {team.level && `${team.level} - `}
+                      {team.gender === 'M' ? 'Masculin' : team.gender === 'F' ? 'Feminin' : ''}
+                      {team.size > 0 && ` - ${team.size} joueurs`}
+                      {team.is_competition && ' - Competition'}
+                      {team.is_junior ? ' - Jeunes' : ' - Seniors'}
                     </p>
                   </div>
-                  {team.constraints.length > 0 && (
-                    <span className="rounded-full bg-info-50 px-2 py-0.5 text-xs text-info-600">
-                      {team.constraints.length} contrainte{team.constraints.length > 1 ? 's' : ''}
-                    </span>
-                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium text-white ${
+                    team.tier === 'S' ? 'bg-rose-500' :
+                    team.tier === 'A' ? 'bg-orange-500' :
+                    team.tier === 'B' ? 'bg-yellow-500' :
+                    team.tier === 'C' ? 'bg-green-500' :
+                    'bg-blue-500'
+                  }`}>
+                    Tier {team.tier}
+                  </span>
                 </div>
-                {team.constraints.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {team.constraints.map((c) => (
-                      <span
-                        key={c.id}
-                        className={`rounded px-1.5 py-0.5 text-xs ${
-                          c.type === 'fixed'
-                            ? 'bg-error-50 text-error-600'
-                            : c.type === 'forbidden'
-                              ? 'bg-warning-50 text-warning-600'
-                              : 'bg-success-50 text-success-600'
-                        }`}
-                      >
-                        {c.type === 'fixed' ? 'Fixe' : c.type === 'forbidden' ? 'Exclu' : 'Préféré'}{' '}
-                        {c.day ? DAY_LABELS[c.day] : ''}{' '}
-                        {c.startHour != null ? `${c.startHour}h-${c.endHour}h` : ''}
-                      </span>
-                    ))}
-                  </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Coaches summary */}
+      <div className="rounded-lg border border-neutral-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+          Coachs ({data.coaches.length})
+        </h3>
+        {data.coaches.length === 0 ? (
+          <p className="text-sm text-neutral-400">Aucun coach configure</p>
+        ) : (
+          <div className="space-y-2">
+            {data.coaches.map((coach) => (
+              <div key={coach.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-neutral-900">
+                    {coach.name || <span className="text-neutral-400 italic">Sans nom</span>}
+                  </p>
+                  <p className="text-xs text-neutral-500">
+                    {[coach.email, coach.phone].filter(Boolean).join(' - ') || 'Pas de contact'}
+                    {coach.is_player && ' - Joueur'}
+                  </p>
+                </div>
+                {coach.teamIds.length > 0 && (
+                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                    {coach.teamIds.length} equipe{coach.teamIds.length > 1 ? 's' : ''}
+                  </span>
                 )}
               </div>
             ))}
@@ -191,11 +218,55 @@ export default function SummaryStep() {
         )}
       </div>
 
+      {/* Constraints summary */}
+      <div className="rounded-lg border border-neutral-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+          Contraintes ({data.constraints.length + data.preferredSlots.length})
+        </h3>
+        {data.constraints.length === 0 && data.preferredSlots.length === 0 ? (
+          <p className="text-sm text-neutral-400">Aucune contrainte</p>
+        ) : (
+          <div className="space-y-2">
+            {data.preferredSlots.map((ps) => {
+              const team = data.teams.find((t) => t.id === ps.teamId)
+              return (
+                <div key={ps.id} className="rounded-md bg-success-50 px-3 py-2">
+                  <p className="text-sm font-medium text-success-700">
+                    Prefere: {team?.name || 'Equipe'} - {DAY_LABELS[ps.day]} {ps.hour}h{ps.minute.toString().padStart(2, '0')}
+                  </p>
+                </div>
+              )
+            })}
+            {data.constraints.map((c) => {
+              const team = c.teamId ? data.teams.find((t) => t.id === c.teamId) : null
+              const coach = c.coachId ? data.coaches.find((ch) => ch.id === c.coachId) : null
+              return (
+                <div
+                  key={c.id}
+                  className={`rounded-md px-3 py-2 ${
+                    c.type === 'fixed' ? 'bg-error-50 text-error-700' :
+                    c.type === 'forbidden' ? 'bg-warning-50 text-warning-700' :
+                    'bg-success-50 text-success-700'
+                  }`}
+                >
+                  <p className="text-sm font-medium">
+                    {c.type === 'fixed' ? 'Fixe' : c.type === 'forbidden' ? 'Exclu' : 'Prefere'}:
+                    {' '}{team?.name || coach?.name || 'Sans cible'}
+                    {c.day && ` - ${DAY_LABELS[c.day]}`}
+                    {c.startHour != null && ` ${c.startHour}h-${c.endHour}h`}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Generate button */}
       <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-primary-200 bg-primary-50 p-6">
-        <h3 className="text-lg font-bold text-primary-900">Générer le planning</h3>
+        <h3 className="text-lg font-bold text-primary-900">Generer le planning</h3>
         <p className="text-sm text-primary-700">
-          Le moteur de planification va créer un planning optimal basé sur vos données.
+          Le moteur de planification va creer un planning optimal base sur vos donnees.
         </p>
 
         {generateError && (
@@ -206,7 +277,7 @@ export default function SummaryStep() {
 
         {generateSuccess && (
           <div className="w-full rounded-md bg-success-50 p-3 text-sm text-success-600" role="alert">
-            Planning généré avec succès !
+            Planning genere avec succes !
           </div>
         )}
 
@@ -222,10 +293,10 @@ export default function SummaryStep() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Génération en cours...
+              Generation en cours...
             </span>
           ) : (
-            'Générer le planning'
+            'Generer le planning'
           )}
         </button>
 
@@ -234,7 +305,7 @@ export default function SummaryStep() {
           onClick={resetWizard}
           className="text-sm text-neutral-500 hover:text-neutral-700"
         >
-          Recommencer depuis le début
+          Recommencer depuis le debut
         </button>
       </div>
     </div>

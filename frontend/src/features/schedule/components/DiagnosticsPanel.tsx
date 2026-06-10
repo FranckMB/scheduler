@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { ScheduleDiagnostic, DiagnosticSeverity } from '@/features/schedule/types/diagnostic'
 
@@ -7,13 +8,21 @@ interface DiagnosticsPanelProps {
 
 const SEVERITY_CONFIG: Record<
   DiagnosticSeverity,
-  { bg: string; border: string; badge: string; icon: React.ReactNode; label: string }
+  {
+    bg: string
+    border: string
+    badge: string
+    icon: ReactNode
+    label: string
+    pluralLabel: string
+  }
 > = {
   error: {
     bg: 'bg-error-50',
     border: 'border-error-500',
     badge: 'bg-error-500 text-white',
     label: 'Erreur',
+    pluralLabel: 'Erreurs',
     icon: (
       <svg className="h-5 w-5 text-error-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -29,7 +38,8 @@ const SEVERITY_CONFIG: Record<
     bg: 'bg-warning-50',
     border: 'border-warning-500',
     badge: 'bg-warning-500 text-white',
-    label: 'Attention',
+    label: 'Avertissement',
+    pluralLabel: 'Avertissements',
     icon: (
       <svg className="h-5 w-5 text-warning-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -46,6 +56,7 @@ const SEVERITY_CONFIG: Record<
     border: 'border-info-500',
     badge: 'bg-info-500 text-white',
     label: 'Information',
+    pluralLabel: 'Informations',
     icon: (
       <svg className="h-5 w-5 text-info-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -64,6 +75,72 @@ const TYPE_LABELS: Record<ScheduleDiagnostic['type'], string> = {
   soft_lock_moved: 'Créneau préféré déplacé',
   coach_overload: 'Surcharge entraîneur',
   conflict: 'Conflit de contrainte',
+}
+
+type SuggestionLink = {
+  id: string
+  type: 'team' | 'coach' | 'venue'
+}
+
+type SuggestionItem = {
+  label: string
+  links: SuggestionLink[]
+}
+
+const DIAGNOSTIC_COPY: Record<
+  ScheduleDiagnostic['type'],
+  {
+    summary: string
+    suggestions: (diagnostic: ScheduleDiagnostic) => SuggestionItem[]
+  }
+> = {
+  unplaced: {
+    summary: 'Aucun créneau compatible n’a été trouvé pour cette équipe.',
+    suggestions: (diagnostic) => [
+      {
+        label: 'Ouvrir la fiche de l’équipe pour alléger certaines contraintes.',
+        links: diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : [],
+      },
+      {
+        label: 'Vérifier les disponibilités des lieux concernés.',
+        links: diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : [],
+      },
+    ],
+  },
+  soft_lock_moved: {
+    summary: 'Le créneau préféré a été déplacé pour améliorer l’équilibre global du planning.',
+    suggestions: (diagnostic) => [
+      {
+        label: 'Vérifier le nouveau créneau proposé.',
+        links: [
+          ...(diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : []),
+          ...(diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : []),
+        ],
+      },
+    ],
+  },
+  coach_overload: {
+    summary: 'L’entraîneur est trop sollicité sur la période analysée.',
+    suggestions: (diagnostic) => [
+      {
+        label: 'Répartir une partie des séances sur une autre ressource.',
+        links: diagnostic.coachId ? [{ type: 'coach', id: diagnostic.coachId }] : [],
+      },
+    ],
+  },
+  conflict: {
+    summary: 'Deux contraintes entrent en conflit sur le même créneau.',
+    suggestions: (diagnostic) => [
+      {
+        label: 'Déplacer l’une des séances concernées.',
+        links: [
+          ...(diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : []),
+          ...(diagnostic.coachId ? [{ type: 'coach', id: diagnostic.coachId }] : []),
+          ...(diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : []),
+        ],
+      },
+    ],
+  },
 }
 
 function groupBySeverity(
@@ -111,6 +188,8 @@ function EntityLink({
 
 function DiagnosticCard({ diagnostic }: { diagnostic: ScheduleDiagnostic }) {
   const config = SEVERITY_CONFIG[diagnostic.severity]
+  const copy = DIAGNOSTIC_COPY[diagnostic.type]
+  const suggestions = copy.suggestions(diagnostic)
 
   return (
     <div
@@ -130,24 +209,16 @@ function DiagnosticCard({ diagnostic }: { diagnostic: ScheduleDiagnostic }) {
             </span>
           </div>
 
-          <p className="text-sm text-neutral-800">{diagnostic.message}</p>
+          <p className="text-sm text-neutral-800">{copy.summary}</p>
 
-          {(diagnostic.teamId || diagnostic.coachId || diagnostic.venueId) && (
-            <div className="flex flex-wrap gap-2">
-              {diagnostic.teamId && <EntityLink type="team" id={diagnostic.teamId} />}
-              {diagnostic.coachId && <EntityLink type="coach" id={diagnostic.coachId} />}
-              {diagnostic.venueId && <EntityLink type="venue" id={diagnostic.venueId} />}
-            </div>
-          )}
-
-          {diagnostic.suggestions.length > 0 && (
-            <div className="mt-2">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Suggestions
-              </p>
-              <ul className="space-y-1">
-                {diagnostic.suggestions.map((suggestion, index) => (
-                  <li key={index} className="flex items-start gap-2 text-sm text-neutral-700">
+          <div className="mt-2 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Actions recommandées
+            </p>
+            <ul className="space-y-2">
+              {suggestions.map((suggestion, index) => (
+                <li key={index} className="space-y-2 rounded-md bg-white/70 px-3 py-2">
+                  <p className="flex items-start gap-2 text-sm text-neutral-700">
                     <svg
                       className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary-500"
                       fill="none"
@@ -161,12 +232,20 @@ function DiagnosticCard({ diagnostic }: { diagnostic: ScheduleDiagnostic }) {
                         d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    {suggestion}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                    <span>{suggestion.label}</span>
+                  </p>
+
+                  {suggestion.links.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pl-6">
+                      {suggestion.links.map((link) => (
+                        <EntityLink key={`${link.type}-${link.id}`} type={link.type} id={link.id} />
+                      ))}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -216,8 +295,7 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
             >
               {config.icon}
               <span className="text-sm font-medium text-neutral-700">
-                {count} {config.label.toLowerCase()}
-                {count > 1 ? 's' : ''}
+                {count} {count > 1 ? config.pluralLabel.toLowerCase() : config.label.toLowerCase()}
               </span>
             </div>
           )
@@ -234,7 +312,7 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
           <section key={severity} aria-label={config.label}>
             <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-neutral-900">
               {config.icon}
-              {config.label}s ({items.length})
+              {config.pluralLabel} ({items.length})
             </h3>
             <div className="space-y-3">
               {items.map((diagnostic) => (

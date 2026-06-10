@@ -1,6 +1,16 @@
 import type { WizardStep } from '@/features/wizard/wizardStore'
 
-const STEP_LABELS = ['Salles', 'Coaches', 'Équipes', 'Résumé']
+const STEP_LABELS = [
+  'Salles',
+  'Equipes',
+  'Creneaux',
+  'Tiers',
+  'Filtres',
+  'Coachs',
+  'Contraintes',
+  'Validation',
+  'Resume',
+]
 
 interface StepIndicatorProps {
   currentStep: WizardStep
@@ -32,7 +42,7 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
               key={label}
               type="button"
               onClick={() => onStepClick?.(step)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3 sm:py-2 sm:text-sm ${
                 isActive
                   ? 'bg-primary-50 text-primary-700'
                   : isCompleted
@@ -42,7 +52,7 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
               disabled={!onStepClick}
             >
               <span
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold sm:h-7 sm:w-7 ${
                   isActive
                     ? 'bg-primary-600 text-white'
                     : isCompleted
@@ -51,14 +61,14 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
                 }`}
               >
                 {isCompleted ? (
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-3 w-3 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
                   index + 1
                 )}
               </span>
-              <span className="hidden sm:inline">{label}</span>
+              <span className="hidden lg:inline">{label}</span>
             </button>
           )
         })}
