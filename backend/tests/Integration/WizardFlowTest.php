@@ -436,6 +436,47 @@ final class WizardFlowTest extends ApiTestCase
         self::assertTrue($finalVenue->isCanSplit());
     }
 
+    /** @group phase1 */
+    public function testMissingSourceOnVenueReturnsValidationError(): void
+    {
+        $club = $this->createClub();
+        $season = $this->createSeason($club);
+
+        $response = self::createClient()->request('POST', '/api/venues', [
+            'headers' => [
+                'X-Club-Id' => $club->getId(),
+                'X-Season-Id' => $season->getId(),
+            ],
+            'json' => [
+                'name' => 'Main Gymnasium',
+                'isActive' => true,
+                'isExternal' => false,
+            ],
+        ]);
+
+        self::assertContains($response->getStatusCode(), [400, 422], 'Missing source should not return 500');
+    }
+
+    /** @group phase1 */
+    public function testMissingStatusOnScheduleReturnsValidationError(): void
+    {
+        $club = $this->createClub();
+        $season = $this->createSeason($club);
+
+        $response = self::createClient()->request('POST', '/api/schedules', [
+            'headers' => [
+                'X-Club-Id' => $club->getId(),
+                'X-Season-Id' => $season->getId(),
+            ],
+            'json' => [
+                'name' => 'Spring 2026 Schedule',
+                'solverSeed' => 42,
+            ],
+        ]);
+
+        self::assertContains($response->getStatusCode(), [400, 422], 'Missing status should not return 500');
+    }
+
     private function createClub(): Club
     {
         $club = new Club();

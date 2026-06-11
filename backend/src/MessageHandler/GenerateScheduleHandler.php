@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\Coach;
+use App\Entity\CoachPlayerMembership;
+use App\Entity\CoachUnavailability;
+use App\Entity\PriorityTier;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
+use App\Entity\TeamCoach;
 use App\Entity\TeamConstraint;
 use App\Entity\Venue;
+use App\Entity\VenueAvailability;
 use App\Message\GenerateScheduleMessage;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
@@ -127,6 +133,12 @@ final readonly class GenerateScheduleHandler
             $this->entityManager->getRepository(Team::class)->findBy($criteria),
             $this->entityManager->getRepository(Coach::class)->findBy($criteria),
             $this->entityManager->getRepository(TeamConstraint::class)->findBy($criteria),
+            $this->entityManager->getRepository(VenueAvailability::class)->findBy($criteria),
+            $this->entityManager->getRepository(CoachUnavailability::class)->findBy($criteria),
+            $this->entityManager->getRepository(TeamCoach::class)->findBy($criteria),
+            $this->entityManager->getRepository(CoachPlayerMembership::class)->findBy($criteria),
+            $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy($criteria),
+            $this->entityManager->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
         );
     }
 

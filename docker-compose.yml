@@ -13,6 +13,8 @@ services:
         condition: service_healthy
       engine:
         condition: service_healthy
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null"]
       interval: 20s
@@ -176,6 +178,8 @@ services:
     working_dir: /app/frontend
     volumes:
       - ./:/app:cached
+    environment:
+      NODE_PATH: /home/pptruser/node_modules
     command: >-
       sh -lc 'if [ -f worker.js ]; then
         exec node worker.js;

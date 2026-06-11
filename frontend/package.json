@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "prepare": "husky",
+    "verify:api-contracts": "node --experimental-strip-types scripts/verify-api-contracts.ts",
+    "test": "npm run verify:api-contracts && vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -42,6 +44,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^27.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",

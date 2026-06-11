@@ -12,10 +12,17 @@ use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 final class AuthControllerTest extends KernelTestCase
 {
     private ?EntityManagerInterface $em = null;
+
+    private ?UserPasswordHasherInterface $passwordHasher = null;
+
+    private ?TokenStorageInterface $tokenStorage = null;
 
     /** @var list<string> */
     private array $createdUserIds = [];
@@ -31,10 +38,16 @@ final class AuthControllerTest extends KernelTestCase
 
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->passwordHasher = self::getContainer()->get('security.user_password_hasher');
+        $this->tokenStorage = self::getContainer()->get('security.token_storage');
     }
 
     protected function tearDown(): void
     {
+        if (null !== $this->tokenStorage) {
+            $this->tokenStorage->setToken(null);
+        }
+
         if (null !== $this->em) {
             foreach ($this->createdUserIds as $userId) {
                 $user = $this->em->getRepository(User::class)->find($userId);
@@ -283,5 +296,128 @@ final class AuthControllerTest extends KernelTestCase
 
         $response = self::$kernel->handle($request);
         self::assertSame(400, $response->getStatusCode(), 'Weak password should return 400');
+    }
+
+    /** @group phase1 */
+    public function testLoginSuccess(): void
+    {
+        $unique = uniqid();
+        $email = 'login'.$unique.'@example.com';
+
+        $user = new User();
+        $user->setEmail($email);
+        $user->setFirstName('Login');
+        $user->setLastName('User');
+        $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'SecurePass123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+        $this->createdUserIds[] = $user->getId();
+
+        $request = Request::create(
+            '/api/login',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'email' => $email,
+                'password' => 'SecurePass123!',
+            ], JSON_THROW_ON_ERROR)
+        );
+
+        $response = self::$kernel->handle($request);
+        self::assertSame(200, $response->getStatusCode(), 'Login with valid credentials should return 200');
+
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertArrayHasKey('token', $data, 'Response should contain JWT token');
+        self::assertNotEmpty($data['token'], 'JWT token should not be empty');
+    }
+
+    /** @group phase1 */
+    public function testLoginFailure(): void
+    {
+        $request = Request::create(
+            '/api/login',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode([
+                'email' => 'nonexistent@example.com',
+                'password' => 'WrongPassword123!',
+            ], JSON_THROW_ON_ERROR)
+        );
+
+        $response = self::$kernel->handle($request);
+        self::assertSame(401, $response->getStatusCode(), 'Login with invalid credentials should return 401');
+
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertArrayHasKey('code', $data, 'Error response should contain code');
+        self::assertSame(401, $data['code'], 'Error code should be 401');
+    }
+
+    /** @group phase1 */
+    public function testMeWithValidToken(): void
+    {
+        $unique = uniqid();
+
+        $user = new User();
+        $user->setEmail('me'.$unique.'@example.com');
+        $user->setFirstName('John');
+        $user->setLastName('Doe');
+        $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'SecurePass123!'));
+        $this->em->persist($user);
+
+        $club = new Club();
+        $club->setName('Me Test Club');
+        $club->setSlug('me-test-club-'.$unique);
+        $club->setTimezone('Europe/Paris');
+        $club->setLocale('fr');
+        $club->setOnboardingCompleted(false);
+        $club->setFfbbClubCode($this->generateUniqueAra());
+        $this->em->persist($club);
+        $this->em->flush();
+
+        $clubUser = new ClubUser();
+        $clubUser->setClubId($club->getId());
+        $clubUser->setUserId($user->getId());
+        $clubUser->setRole('admin');
+        $clubUser->setIsActive(true);
+        $this->em->persist($clubUser);
+        $this->em->flush();
+
+        $this->createdUserIds[] = $user->getId();
+        $this->createdClubIds[] = $club->getId();
+
+        $token = new UsernamePasswordToken($user, 'api', $user->getRoles());
+        $this->tokenStorage->setToken($token);
+
+        $request = Request::create('/api/me', 'GET');
+        $response = self::$kernel->handle($request);
+        self::assertSame(200, $response->getStatusCode(), 'GET /api/me with valid token should return 200');
+
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertSame($user->getId(), $data['id']);
+        self::assertSame('me'.$unique.'@example.com', $data['email']);
+        self::assertSame('John', $data['firstName']);
+        self::assertSame('Doe', $data['lastName']);
+        self::assertNotNull($data['club'], 'Response should contain club data');
+        self::assertSame($club->getId(), $data['club']['id']);
+        self::assertSame('Me Test Club', $data['club']['name']);
+    }
+
+    /** @group phase1 */
+    public function testMeWithoutToken(): void
+    {
+        $this->tokenStorage->setToken(null);
+
+        $request = Request::create('/api/me', 'GET');
+        $response = self::$kernel->handle($request);
+        self::assertSame(401, $response->getStatusCode(), 'GET /api/me without token should return 401');
+
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertArrayHasKey('error', $data, 'Error response should contain error key');
     }
 }

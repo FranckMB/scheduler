@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/authStore'
 import { apiClient } from '@/shared/api/client'
 
@@ -16,7 +17,7 @@ export default function LoginPage() {
 
     try {
       const data = await apiClient
-        .post('authentication_token', {
+        .post('login', {
           json: { email, password },
         })
         .json<{ token: string }>()
@@ -82,6 +83,13 @@ export default function LoginPage() {
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </button>
+
+          <div className="mt-4 text-center">
+            <span className="text-sm text-neutral-600">Pas encore de compte ? </span>
+            <Link to="/register" className="text-sm text-primary-600 hover:text-primary-700" role="link">
+              Créer un compte
+            </Link>
+          </div>
         </form>
       </div>
     </div>

@@ -97,7 +97,7 @@ function renderDialog(overrides: {
     { wrapper: createWrapper() },
   )
 
-  const dialog = result.container.querySelector('[role="dialog"]')!
+  const dialog = result.container.querySelector('[role="dialog"]') as HTMLElement
   return { ...result, onClose, onSuccess, dialog }
 }
 
@@ -105,7 +105,7 @@ function clickAction(dialog: HTMLElement, label: string) {
   const buttons = dialog.querySelectorAll('button')
   const btn = Array.from(buttons).find(
     (b) => b.textContent?.includes(label) && !b.textContent?.includes('Appliquer') && !b.textContent?.includes('Annuler'),
-  )
+  ) as HTMLElement | undefined
   if (btn) fireEvent.click(btn)
 }
 
@@ -191,7 +191,7 @@ describe('ManualEditDialog', () => {
   it('calls onClose when backdrop clicked', () => {
     const { onClose, container } = renderDialog()
 
-    const backdrop = container.querySelector('.fixed.inset-0.z-40')
+    const backdrop = container.querySelector('.fixed.inset-0.z-40') as HTMLElement | null
     if (backdrop) fireEvent.click(backdrop)
 
     expect(onClose).toHaveBeenCalled()

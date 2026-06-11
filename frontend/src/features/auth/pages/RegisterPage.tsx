@@ -1,16 +1,15 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/shared/api/client'
-import { useAuthStore } from '@/features/auth/authStore'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const araPattern = /^[A-Z0-9]{3,20}$/
 
 type FormValues = {
   email: string
   password: string
   confirmPassword: string
-  ara: string
+  firstName: string
+  lastName: string
   clubName: string
 }
 
@@ -39,10 +38,12 @@ function validate(values: FormValues): FormErrors {
     errors.confirmPassword = 'Passwords do not match.'
   }
 
-  if (!values.ara.trim()) {
-    errors.ara = 'ARA number is required.'
-  } else if (!araPattern.test(values.ara.trim())) {
-    errors.ara = 'ARA must be 3-20 uppercase letters or numbers.'
+  if (!values.firstName.trim()) {
+    errors.firstName = 'First name is required.'
+  }
+
+  if (!values.lastName.trim()) {
+    errors.lastName = 'Last name is required.'
   }
 
   if (!values.clubName.trim()) {
@@ -70,12 +71,12 @@ async function readApiError(error: unknown): Promise<string> {
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const setToken = useAuthStore((state) => state.setToken)
   const [values, setValues] = useState<FormValues>({
     email: '',
     password: '',
     confirmPassword: '',
-    ara: '',
+    firstName: '',
+    lastName: '',
     clubName: '',
   })
   const [errors, setErrors] = useState<FormErrors>({})
@@ -100,19 +101,17 @@ export default function RegisterPage() {
     setIsSubmitting(true)
 
     try {
-      const data = await apiClient
-        .post('register', {
-          json: {
-            email: values.email.trim(),
-            password: values.password,
-            ara: values.ara.trim().toUpperCase(),
-            club_name: values.clubName.trim(),
-          },
-        })
-        .json<{ token: string }>()
+      await apiClient.post('register', {
+        json: {
+          email: values.email.trim(),
+          password: values.password,
+          firstName: values.firstName.trim(),
+          lastName: values.lastName.trim(),
+          clubName: values.clubName.trim(),
+        },
+      })
 
-      setToken(data.token)
-      navigate('/wizard')
+      navigate('/login')
     } catch (error) {
       setErrors({ api: await readApiError(error) })
     } finally {
@@ -182,19 +181,33 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label htmlFor="ara" className="mb-1 block text-sm font-medium text-neutral-700">
-              ARA number
+            <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-neutral-700">
+              First name
             </label>
             <input
-              id="ara"
+              id="firstName"
               type="text"
-              value={values.ara}
-              onChange={updateField('ara')}
-              autoComplete="off"
-              placeholder="ABC123"
+              value={values.firstName}
+              onChange={updateField('firstName')}
+              autoComplete="given-name"
               className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-neutral-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
             />
-            {errors.ara && <p className="mt-1 text-sm text-error-600">{errors.ara}</p>}
+            {errors.firstName && <p className="mt-1 text-sm text-error-600">{errors.firstName}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="lastName" className="mb-1 block text-sm font-medium text-neutral-700">
+              Last name
+            </label>
+            <input
+              id="lastName"
+              type="text"
+              value={values.lastName}
+              onChange={updateField('lastName')}
+              autoComplete="family-name"
+              className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-neutral-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+            />
+            {errors.lastName && <p className="mt-1 text-sm text-error-600">{errors.lastName}</p>}
           </div>
 
           <div>

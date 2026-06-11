@@ -34,39 +34,45 @@ final class ScheduleConstraintBuilder
     }
 
     /** @return array<string, mixed> */
-    public function buildForClubSeason(string $clubId, string $seasonId, int $solverSeed = self::DEFAULT_SOLVER_SEED): array
+    public function buildForClubSeason(string $clubId, string $seasonId, int $solverSeed = self::DEFAULT_SOLVER_SEED, ?EntityManagerInterface $entityManager = null): array
     {
-        if (!$this->entityManager instanceof EntityManagerInterface || !$this->scheduleCachePool instanceof CacheItemPoolInterface) {
-            throw new \LogicException('ScheduleConstraintBuilder requires Doctrine and cache services for club/season builds.');
+        $em = $entityManager ?? $this->entityManager;
+        if (!$em instanceof EntityManagerInterface) {
+            throw new \LogicException('ScheduleConstraintBuilder requires Doctrine for club/season builds.');
         }
 
-        $cacheItem = $this->scheduleCachePool->getItem(self::cacheKey($clubId));
-        if ($cacheItem->isHit()) {
-            $cached = $cacheItem->get();
-            if (is_array($cached)) {
-                return $cached;
+        $cacheItem = null;
+        if ($this->scheduleCachePool instanceof CacheItemPoolInterface) {
+            $cacheItem = $this->scheduleCachePool->getItem(self::cacheKey($clubId));
+            if ($cacheItem->isHit()) {
+                $cached = $cacheItem->get();
+                if (is_array($cached)) {
+                    return $cached;
+                }
             }
         }
 
         $payload = $this->buildPayload(
             clubId: $clubId,
             seasonId: $seasonId,
-            venues: $this->findByClubSeason(Venue::class, $clubId, $seasonId),
-            teams: $this->findByClubSeason(Team::class, $clubId, $seasonId),
-            coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId),
-            teamConstraints: $this->findByClubSeason(TeamConstraint::class, $clubId, $seasonId),
-            venueAvailabilities: $this->findByClubSeason(VenueAvailability::class, $clubId, $seasonId),
-            coachUnavailabilities: $this->findByClubSeason(CoachUnavailability::class, $clubId, $seasonId),
-            teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId),
-            coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId),
-            slotTemplates: $this->findByClubSeason(ScheduleSlotTemplate::class, $clubId, $seasonId),
-            priorityTiers: $this->entityManager->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
+            venues: $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+            teams: $this->findByClubSeason(Team::class, $clubId, $seasonId, $em),
+            coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId, $em),
+            teamConstraints: $this->findByClubSeason(TeamConstraint::class, $clubId, $seasonId, $em),
+            venueAvailabilities: $this->findByClubSeason(VenueAvailability::class, $clubId, $seasonId, $em),
+            coachUnavailabilities: $this->findByClubSeason(CoachUnavailability::class, $clubId, $seasonId, $em),
+            teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId, $em),
+            coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId, $em),
+            slotTemplates: $this->findByClubSeason(ScheduleSlotTemplate::class, $clubId, $seasonId, $em),
+            priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $solverSeed,
         );
 
-        $cacheItem->set($payload);
-        $cacheItem->expiresAfter(self::CACHE_TTL_SECONDS);
-        $this->scheduleCachePool->save($cacheItem);
+        if ($cacheItem instanceof \Psr\Cache\CacheItemInterface) {
+            $cacheItem->set($payload);
+            $cacheItem->expiresAfter(self::CACHE_TTL_SECONDS);
+            $this->scheduleCachePool->save($cacheItem);
+        }
 
         return $payload;
     }
@@ -74,15 +80,31 @@ final class ScheduleConstraintBuilder
     /**
      * Legacy in-memory builder kept for existing cross-stack contract coverage.
      *
-     * @param array<Venue>          $venues
-     * @param array<Team>           $teams
-     * @param array<Coach>          $coaches
-     * @param array<TeamConstraint> $constraints
+     * @param array<Venue>                 $venues
+     * @param array<Team>                  $teams
+     * @param array<Coach>                 $coaches
+     * @param array<TeamConstraint>        $constraints
+     * @param array<VenueAvailability>     $venueAvailabilities
+     * @param array<CoachUnavailability>   $coachUnavailabilities
+     * @param array<TeamCoach>             $teamCoaches
+     * @param array<CoachPlayerMembership> $coachPlayerMemberships
+     * @param array<ScheduleSlotTemplate>  $slotTemplates
+     * @param array<PriorityTier>          $priorityTiers
      *
      * @return array<string, mixed>
      */
-    public function build(array $venues, array $teams, array $coaches, array $constraints): array
-    {
+    public function build(
+        array $venues,
+        array $teams,
+        array $coaches,
+        array $constraints,
+        array $venueAvailabilities = [],
+        array $coachUnavailabilities = [],
+        array $teamCoaches = [],
+        array $coachPlayerMemberships = [],
+        array $slotTemplates = [],
+        array $priorityTiers = [],
+    ): array {
         return $this->buildPayload(
             clubId: $this->firstString($venues, 'getClubId')
                 ?? $this->firstString($teams, 'getClubId')
@@ -98,6 +120,12 @@ final class ScheduleConstraintBuilder
             teams: $teams,
             coaches: $coaches,
             teamConstraints: $constraints,
+            venueAvailabilities: $venueAvailabilities,
+            coachUnavailabilities: $coachUnavailabilities,
+            teamCoaches: $teamCoaches,
+            coachPlayerMemberships: $coachPlayerMemberships,
+            slotTemplates: $slotTemplates,
+            priorityTiers: $priorityTiers,
         );
     }
 
@@ -188,13 +216,14 @@ final class ScheduleConstraintBuilder
      *
      * @return array<T>
      */
-    private function findByClubSeason(string $className, string $clubId, string $seasonId): array
+    private function findByClubSeason(string $className, string $clubId, string $seasonId, ?EntityManagerInterface $entityManager = null): array
     {
-        if (!$this->entityManager instanceof EntityManagerInterface) {
+        $em = $entityManager ?? $this->entityManager;
+        if (!$em instanceof EntityManagerInterface) {
             throw new \LogicException('Entity manager is not available.');
         }
 
-        return $this->entityManager->getRepository($className)->findBy(
+        return $em->getRepository($className)->findBy(
             ['clubId' => $clubId, 'seasonId' => $seasonId],
             ['id' => 'ASC'],
         );
@@ -296,7 +325,7 @@ final class ScheduleConstraintBuilder
             'id' => $constraint->getId(),
             'teamId' => $constraint->getTeamId(),
             'type' => $constraint->getType(),
-            'severity' => null,
+            'severity' => $constraint->getSeverity(),
             'value' => null,
             'metadata' => array_filter([
                 'dayOfWeek' => $constraint->getDayOfWeek(),

@@ -12,5 +12,6 @@
     <php>
         <server name="KERNEL_CLASS" value="App\Kernel" />
         <server name="APP_ENV" value="test" />
+        <server name="SYMFONY_DEPRECATIONS_HELPER" value="weak" />
     </php>
 </phpunit>

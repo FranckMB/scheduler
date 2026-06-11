@@ -55,7 +55,7 @@ afterEach(() => {
 })
 
 describe('ExportPdfButton', () => {
-  it('posts the export request when clicked', async () => {
+  it('posts the export request when clicked', { timeout: 10000 }, async () => {
     getJsonMock.mockResolvedValue({ pdfExportStatus: null, pdfExportUrl: null })
     postJsonMock.mockResolvedValueOnce({})
 

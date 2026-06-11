@@ -3,16 +3,25 @@ import {
   useWizardStore,
   DAYS,
   DAY_LABELS,
-  START_HOUR,
-  END_HOUR,
-  generateSlotKey,
+  generateSlotsFromRanges,
   type DayKey,
+  type TimeRange,
   type VenueData,
 } from '@/features/wizard/wizardStore'
 
 export default function VenueStep() {
-  const { data, addVenue, updateVenue, removeVenue, updateVenueSlot, addClosure, removeClosure, autoSave } =
-    useWizardStore()
+  const {
+    data,
+    addVenue,
+    updateVenue,
+    removeVenue,
+    addVenueRange,
+    updateVenueRange,
+    removeVenueRange,
+    addClosure,
+    removeClosure,
+    autoSave,
+  } = useWizardStore()
   const [closureDates, setClosureDates] = useState<Record<string, string>>({})
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -30,14 +39,6 @@ export default function VenueStep() {
     }
   }, [data.venues, triggerSave])
 
-  const handleSlotClick = (venueId: string, day: DayKey, hour: number, minute: number) => {
-    const key = generateSlotKey(day, hour, minute)
-    const venue = data.venues.find((v) => v.id === venueId)
-    if (venue) {
-      updateVenueSlot(venueId, key, !venue.slots[key])
-    }
-  }
-
   const handleAddClosure = (venueId: string) => {
     const date = closureDates[venueId]
     if (date) {
@@ -52,7 +53,7 @@ export default function VenueStep() {
         <div>
           <h2 className="text-xl font-bold text-neutral-900">Salles</h2>
           <p className="text-sm text-neutral-500">
-            Configurez les salles, leurs noms et disponibilites
+            Configurez les salles avec des plages horaires par jour
           </p>
         </div>
         <button
@@ -75,7 +76,9 @@ export default function VenueStep() {
           }
           onUpdate={(updates) => updateVenue(venue.id, updates)}
           onRemove={() => removeVenue(venue.id)}
-          onSlotClick={(day, hour, minute) => handleSlotClick(venue.id, day, hour, minute)}
+          onAddRange={(day) => addVenueRange(venue.id, day)}
+          onUpdateRange={(day, rangeId, updates) => updateVenueRange(venue.id, day, rangeId, updates)}
+          onRemoveRange={(day, rangeId) => removeVenueRange(venue.id, day, rangeId)}
           onAddClosure={() => handleAddClosure(venue.id)}
           onRemoveClosure={(date) => removeClosure(venue.id, date)}
           canRemove={data.venues.length > 1}
@@ -91,7 +94,9 @@ interface VenueCardProps {
   closureDate: string
   onUpdate: (updates: Partial<VenueData>) => void
   onRemove: () => void
-  onSlotClick: (day: DayKey, hour: number, minute: number) => void
+  onAddRange: (day: DayKey) => void
+  onUpdateRange: (day: DayKey, rangeId: string, updates: Partial<TimeRange>) => void
+  onRemoveRange: (day: DayKey, rangeId: string) => void
   onAddClosure: () => void
   onRemoveClosure: (date: string) => void
   onClosureDateChange: (date: string) => void
@@ -104,18 +109,20 @@ function VenueCard({
   closureDate,
   onUpdate,
   onRemove,
-  onSlotClick,
+  onAddRange,
+  onUpdateRange,
+  onRemoveRange,
   onAddClosure,
   onRemoveClosure,
   onClosureDateChange,
   canRemove,
 }: VenueCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const availableCount = Object.values(venue.slots).filter(Boolean).length
+  const availableCount = generateSlotsFromRanges(venue.availabilityRanges).length
+  const rangeCount = DAYS.reduce((count, day) => count + venue.availabilityRanges[day].length, 0)
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
@@ -125,7 +132,10 @@ function VenueCard({
             {venue.name || <span className="text-neutral-400 italic">Sans nom</span>}
           </span>
           <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
-            {availableCount} creneau{availableCount > 1 ? 'x' : ''}
+            {rangeCount} plage{rangeCount > 1 ? 's' : ''}
+          </span>
+          <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-600">
+            {availableCount} creneau{availableCount > 1 ? 'x' : ''} de 15 min
           </span>
           {venue.can_split && (
             <span className="rounded-full bg-info-50 px-2 py-0.5 text-xs text-info-600">
@@ -161,7 +171,6 @@ function VenueCard({
         </div>
       </div>
 
-      {/* Name and can_split */}
       <div className="px-4 py-3">
         <div className="flex items-center gap-4">
           <div className="flex-1">
@@ -186,67 +195,61 @@ function VenueCard({
         </div>
       </div>
 
-      {/* Time grid */}
       {expanded && (
         <div className="border-t border-neutral-100 px-4 py-3">
           <h4 className="mb-3 text-sm font-semibold text-neutral-700">
-            Grille de disponibilites
+            Plages de disponibilite
           </h4>
-          <div className="overflow-x-auto rounded-lg border border-neutral-200">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-neutral-50">
-                  <th className="sticky left-0 z-10 w-20 border-b border-r border-neutral-200 bg-neutral-50 px-2 py-2 text-left font-medium text-neutral-600">
-                    Heure
-                  </th>
-                  {DAYS.map((day) => (
-                    <th
-                      key={day}
-                      className="min-w-24 border-b border-neutral-200 px-1 py-2 text-center font-semibold text-neutral-700"
-                    >
-                      {DAY_LABELS[day]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i).map(
-                  (hour) =>
-                    [0, 15, 30, 45].map((minute) => {
-                      const timeLabel = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-                      return (
-                        <tr key={`${hour}-${minute}`} className="hover:bg-neutral-50">
-                          <td className="sticky left-0 z-10 border-b border-r border-neutral-100 bg-white px-2 py-0.5 font-mono text-neutral-500">
-                            {minute === 0 ? timeLabel : ''}
-                          </td>
-                          {DAYS.map((day) => {
-                            const key = generateSlotKey(day, hour, minute)
-                            const isAvailable = venue.slots[key]
-                            return (
-                              <td key={key} className="border-b border-neutral-100 p-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => onSlotClick(day, hour, minute)}
-                                  className={`h-6 w-full rounded transition-colors ${
-                                    isAvailable
-                                      ? 'bg-primary-500 hover:bg-primary-600'
-                                      : 'bg-neutral-100 hover:bg-neutral-200'
-                                  }`}
-                                  title={`${DAY_LABELS[day]} ${timeLabel}${isAvailable ? ' (disponible)' : ''}`}
-                                  aria-label={`${DAY_LABELS[day]} ${timeLabel}${isAvailable ? ' disponible' : ' indisponible'}`}
-                                />
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      )
-                    })
+          <div className="grid gap-3 md:grid-cols-2">
+            {DAYS.map((day) => (
+              <div key={day} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h5 className="text-sm font-semibold text-neutral-700">{DAY_LABELS[day]}</h5>
+                  <button
+                    type="button"
+                    onClick={() => onAddRange(day)}
+                    className="rounded bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                  >
+                    + Plage
+                  </button>
+                </div>
+                {venue.availabilityRanges[day].length === 0 ? (
+                  <p className="text-xs text-neutral-400">Aucune disponibilite</p>
+                ) : (
+                  <div className="space-y-2">
+                    {venue.availabilityRanges[day].map((range) => (
+                      <div key={range.id} className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          step={900}
+                          value={range.start}
+                          onChange={(e) => onUpdateRange(day, range.id, { start: e.target.value })}
+                          className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                        />
+                        <span className="text-xs text-neutral-500">a</span>
+                        <input
+                          type="time"
+                          step={900}
+                          value={range.end}
+                          onChange={(e) => onUpdateRange(day, range.id, { end: e.target.value })}
+                          className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onRemoveRange(day, range.id)}
+                          className="ml-auto text-error-500 hover:text-error-700"
+                          aria-label="Remove availability range"
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            ))}
           </div>
 
-          {/* Closures */}
           <div className="mt-4">
             <h5 className="mb-2 text-xs font-medium text-neutral-600">Jours de fermeture</h5>
             <div className="flex gap-2">

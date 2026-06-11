@@ -6,5 +6,10 @@ uvicorn[standard]<1,>=0.30
 
 [dev]
 pytest<9,>=8
+pytest-timeout<3,>=2
+pytest-cov<6,>=5
+hypothesis<7,>=6
 ruff<1,>=0.6
 mypy<2,>=1.11
+bandit<2,>=1.7
+pre-commit<5,>=3

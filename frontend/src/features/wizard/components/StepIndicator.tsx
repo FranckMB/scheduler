@@ -5,7 +5,6 @@ const STEP_LABELS = [
   'Equipes',
   'Creneaux',
   'Tiers',
-  'Filtres',
   'Coachs',
   'Contraintes',
   'Validation',

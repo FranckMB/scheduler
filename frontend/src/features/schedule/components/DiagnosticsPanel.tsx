@@ -99,11 +99,11 @@ const DIAGNOSTIC_COPY: Record<
     suggestions: (diagnostic) => [
       {
         label: 'Ouvrir la fiche de l’équipe pour alléger certaines contraintes.',
-        links: diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : [],
+        links: diagnostic.teamId ? ([{ type: 'team', id: diagnostic.teamId }] as SuggestionLink[]) : [],
       },
       {
         label: 'Vérifier les disponibilités des lieux concernés.',
-        links: diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : [],
+        links: diagnostic.venueId ? ([{ type: 'venue', id: diagnostic.venueId }] as SuggestionLink[]) : [],
       },
     ],
   },
@@ -113,8 +113,8 @@ const DIAGNOSTIC_COPY: Record<
       {
         label: 'Vérifier le nouveau créneau proposé.',
         links: [
-          ...(diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : []),
-          ...(diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : []),
+          ...(diagnostic.teamId ? ([{ type: 'team', id: diagnostic.teamId }] as SuggestionLink[]) : []),
+          ...(diagnostic.venueId ? ([{ type: 'venue', id: diagnostic.venueId }] as SuggestionLink[]) : []),
         ],
       },
     ],
@@ -124,7 +124,7 @@ const DIAGNOSTIC_COPY: Record<
     suggestions: (diagnostic) => [
       {
         label: 'Répartir une partie des séances sur une autre ressource.',
-        links: diagnostic.coachId ? [{ type: 'coach', id: diagnostic.coachId }] : [],
+        links: diagnostic.coachId ? ([{ type: 'coach', id: diagnostic.coachId }] as SuggestionLink[]) : [],
       },
     ],
   },
@@ -134,9 +134,9 @@ const DIAGNOSTIC_COPY: Record<
       {
         label: 'Déplacer l’une des séances concernées.',
         links: [
-          ...(diagnostic.teamId ? [{ type: 'team', id: diagnostic.teamId }] : []),
-          ...(diagnostic.coachId ? [{ type: 'coach', id: diagnostic.coachId }] : []),
-          ...(diagnostic.venueId ? [{ type: 'venue', id: diagnostic.venueId }] : []),
+          ...(diagnostic.teamId ? ([{ type: 'team', id: diagnostic.teamId }] as SuggestionLink[]) : []),
+          ...(diagnostic.coachId ? ([{ type: 'coach', id: diagnostic.coachId }] as SuggestionLink[]) : []),
+          ...(diagnostic.venueId ? ([{ type: 'venue', id: diagnostic.venueId }] as SuggestionLink[]) : []),
         ],
       },
     ],

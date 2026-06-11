@@ -65,6 +65,9 @@ class TeamConstraint
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $source = null;
 
+    #[ORM\Column(type: 'string', length: 30, nullable: true)]
+    private ?string $severity = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -260,6 +263,18 @@ class TeamConstraint
     public function setSource(?string $source): self
     {
         $this->source = $source;
+
+        return $this;
+    }
+
+    public function getSeverity(): ?string
+    {
+        return $this->severity;
+    }
+
+    public function setSeverity(?string $severity): self
+    {
+        $this->severity = $severity;
 
         return $this;
     }

@@ -53,7 +53,7 @@ async function inflateZipEntry(bytes: Uint8Array, method: number): Promise<Uint8
   }
 
   if (8 === method) {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+    const stream = new Blob([bytes as unknown as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
     return new Uint8Array(await new Response(stream).arrayBuffer())
   }
 
@@ -318,7 +318,7 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
         updateTeam(createdTeam.id, {
           name: row.name,
           level: row.category,
-          playerCount: 0,
+          size: 0,
         })
         created += 1
       }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   useWizardStore,
   DAY_LABELS,
+  generateSlotsFromRanges,
 } from '@/features/wizard/wizardStore'
 import { apiClient } from '@/shared/api/client'
 
@@ -27,16 +28,7 @@ export default function SummaryStep() {
 
       // 2. Build payload from wizard data
       const venuePayloads = data.venues.map((venue) => {
-        const slots = Object.entries(venue.slots)
-          .filter(([, available]) => available)
-          .map(([key]) => {
-            const [day, hour, minute] = key.split('-')
-            return {
-              day,
-              hour: parseInt(hour, 10),
-              minute: parseInt(minute, 10),
-            }
-          })
+        const slots = generateSlotsFromRanges(venue.availabilityRanges)
         return {
           name: venue.name,
           slots,
@@ -58,11 +50,12 @@ export default function SummaryStep() {
 
       const coachPayloads = data.coaches.map((coach) => ({
         name: coach.name,
-        email: coach.email,
-        phone: coach.phone,
+        email: null,
+        phone: null,
         team_ids: coach.teamIds,
         is_player: coach.is_player,
-        unavailabilities: coach.unavailabilities,
+        player_team_id: coach.is_player ? coach.player_team_id : null,
+        unavailabilities: data.coachConstraints.filter((constraint) => constraint.coachId === coach.id),
       }))
 
       // Preferred slots as type=preferred constraints
@@ -73,11 +66,11 @@ export default function SummaryStep() {
         start_hour: ps.hour,
         start_minute: ps.minute,
         venue_id: ps.venueId,
+        severity: ps.severity,
       }))
 
       const explicitConstraintPayloads = data.constraints.map((c) => ({
         team_id: c.teamId,
-        coach_id: c.coachId,
         type: c.type,
         day: c.day,
         start_hour: c.startHour,
@@ -85,6 +78,7 @@ export default function SummaryStep() {
         end_hour: c.endHour,
         end_minute: c.endMinute,
         venue_id: c.venueId,
+        severity: c.severity,
       }))
 
       // 3. Generate the schedule with wizard data
@@ -124,7 +118,8 @@ export default function SummaryStep() {
         </h3>
         <div className="space-y-2">
           {data.venues.map((venue) => {
-            const availableCount = Object.values(venue.slots).filter(Boolean).length
+            const availableCount = generateSlotsFromRanges(venue.availabilityRanges).length
+            const rangeCount = Object.values(venue.availabilityRanges).reduce((count, ranges) => count + ranges.length, 0)
             return (
               <div key={venue.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
                 <div>
@@ -132,7 +127,7 @@ export default function SummaryStep() {
                     {venue.name || <span className="text-neutral-400 italic">Sans nom</span>}
                   </p>
                   <p className="text-xs text-neutral-500">
-                    {availableCount} creneau{availableCount > 1 ? 'x' : ''} disponible
+                    {rangeCount} plage{rangeCount > 1 ? 's' : ''}, {availableCount} creneau{availableCount > 1 ? 'x' : ''} de 15 min
                     {venue.can_split && ' - Split possible'}
                   </p>
                 </div>
@@ -203,8 +198,8 @@ export default function SummaryStep() {
                     {coach.name || <span className="text-neutral-400 italic">Sans nom</span>}
                   </p>
                   <p className="text-xs text-neutral-500">
-                    {[coach.email, coach.phone].filter(Boolean).join(' - ') || 'Pas de contact'}
-                    {coach.is_player && ' - Joueur'}
+                    {coach.is_player ? 'Joueur' : 'Coach uniquement'}
+                    {coach.player_team_id && ` - Equipe joueur: ${data.teams.find((team) => team.id === coach.player_team_id)?.name || 'Sans nom'}`}
                   </p>
                 </div>
                 {coach.teamIds.length > 0 && (
@@ -221,9 +216,9 @@ export default function SummaryStep() {
       {/* Constraints summary */}
       <div className="rounded-lg border border-neutral-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-neutral-700">
-          Contraintes ({data.constraints.length + data.preferredSlots.length})
+          Contraintes ({data.constraints.length + data.coachConstraints.length + data.preferredSlots.length})
         </h3>
-        {data.constraints.length === 0 && data.preferredSlots.length === 0 ? (
+        {data.constraints.length === 0 && data.coachConstraints.length === 0 && data.preferredSlots.length === 0 ? (
           <p className="text-sm text-neutral-400">Aucune contrainte</p>
         ) : (
           <div className="space-y-2">
@@ -233,13 +228,25 @@ export default function SummaryStep() {
                 <div key={ps.id} className="rounded-md bg-success-50 px-3 py-2">
                   <p className="text-sm font-medium text-success-700">
                     Prefere: {team?.name || 'Equipe'} - {DAY_LABELS[ps.day]} {ps.hour}h{ps.minute.toString().padStart(2, '0')}
+                    {' '}({ps.severity})
+                  </p>
+                </div>
+              )
+            })}
+            {data.coachConstraints.map((c) => {
+              const coach = c.coachId ? data.coaches.find((ch) => ch.id === c.coachId) : null
+              return (
+                <div key={c.id} className="rounded-md bg-warning-50 px-3 py-2 text-warning-700">
+                  <p className="text-sm font-medium">
+                    Coach: {coach?.name || 'Sans cible'}
+                    {c.day && ` - ${DAY_LABELS[c.day]}`}
+                    {c.startHour != null && ` ${c.startHour}h-${c.endHour}h`}
                   </p>
                 </div>
               )
             })}
             {data.constraints.map((c) => {
               const team = c.teamId ? data.teams.find((t) => t.id === c.teamId) : null
-              const coach = c.coachId ? data.coaches.find((ch) => ch.id === c.coachId) : null
               return (
                 <div
                   key={c.id}
@@ -251,7 +258,7 @@ export default function SummaryStep() {
                 >
                   <p className="text-sm font-medium">
                     {c.type === 'fixed' ? 'Fixe' : c.type === 'forbidden' ? 'Exclu' : 'Prefere'}:
-                    {' '}{team?.name || coach?.name || 'Sans cible'}
+                    {' '}{team?.name || 'Sans cible'}
                     {c.day && ` - ${DAY_LABELS[c.day]}`}
                     {c.startHour != null && ` ${c.startHour}h-${c.endHour}h`}
                   </p>

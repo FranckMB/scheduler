@@ -5,10 +5,20 @@ import { useAuthStore } from '@/features/auth/authStore'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 const authHook: BeforeRequestHook = ({ request }) => {
-  const token = useAuthStore.getState().token
+  const { token, club, seasonId } = useAuthStore.getState()
+
   if (token) {
     request.headers.set('Authorization', `Bearer ${token}`)
   }
+
+  if (club?.id) {
+    request.headers.set('X-Club-Id', club.id)
+  }
+
+  if (seasonId) {
+    request.headers.set('X-Season-Id', seasonId)
+  }
+
   request.headers.set('Content-Type', 'application/json')
   request.headers.set('Accept', 'application/json')
 }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useWizardStore, DAY_LABELS, type DayKey } from '@/features/wizard/wizardStore'
+import { useWizardStore, DAY_LABELS, generateSlotsFromRanges, type DayKey } from '@/features/wizard/wizardStore'
 
 interface ValidationIssue {
   severity: 'error' | 'warning' | 'info'
@@ -22,12 +22,12 @@ export default function ValidationStep() {
           detail: 'Chaque salle doit avoir un nom pour la generation.',
         })
       }
-      const availableSlots = Object.values(venue.slots).filter(Boolean).length
+      const availableSlots = generateSlotsFromRanges(venue.availabilityRanges).length
       if (availableSlots === 0) {
         result.push({
           severity: 'error',
-          message: `Aucun creneau disponible pour "${venue.name || 'Salle sans nom'}"`,
-          detail: 'Le moteur a besoin d\'au moins un creneau disponible par salle.',
+          message: `Aucune plage disponible pour "${venue.name || 'Salle sans nom'}"`,
+          detail: 'Le moteur a besoin d\'au moins une plage horaire disponible par salle.',
         })
       }
       if (availableSlots < 10) {
@@ -65,13 +65,24 @@ export default function ValidationStep() {
       }
     }
 
+    const teamsWithoutCoach = data.teams.filter(
+      (team) => !data.coaches.some((coach) => coach.teamIds.includes(team.id))
+    )
+    if (teamsWithoutCoach.length > 0) {
+      result.push({
+        severity: 'warning',
+        message: 'Equipes sans coach assigne',
+        detail: teamsWithoutCoach.map((team) => team.name || 'Equipe sans nom').join(', '),
+      })
+    }
+
     // Check constraint coherence
     for (const constraint of data.constraints) {
-      if (!constraint.teamId && !constraint.coachId) {
+      if (!constraint.teamId) {
         result.push({
           severity: 'error',
-          message: 'Contrainte sans cible',
-          detail: 'Chaque contrainte doit cibler une equipe ou un coach.',
+          message: 'Contrainte equipe sans cible',
+          detail: 'Chaque contrainte equipe doit cibler une equipe.',
         })
       }
 
@@ -115,6 +126,16 @@ export default function ValidationStep() {
             }
           }
         }
+      }
+    }
+
+    for (const constraint of data.coachConstraints) {
+      if (!constraint.coachId) {
+        result.push({
+          severity: 'error',
+          message: 'Contrainte coach sans cible',
+          detail: 'Chaque contrainte coach doit cibler un coach.',
+        })
       }
     }
 
@@ -243,8 +264,8 @@ export default function ValidationStep() {
             <p className="text-xs text-neutral-500">Coach{data.coaches.length > 1 ? 's' : ''}</p>
           </div>
           <div className="rounded-md bg-neutral-50 p-3 text-center">
-            <p className="text-2xl font-bold text-primary-600">{data.constraints.length}</p>
-            <p className="text-xs text-neutral-500">Contrainte{data.constraints.length > 1 ? 's' : ''}</p>
+            <p className="text-2xl font-bold text-primary-600">{data.constraints.length + data.coachConstraints.length}</p>
+            <p className="text-xs text-neutral-500">Contrainte{data.constraints.length + data.coachConstraints.length > 1 ? 's' : ''}</p>
           </div>
         </div>
       </div>

@@ -13,6 +13,7 @@ class ScheduleInput
     #[Groups(['write'])]
     public ?string $name = null;
 
+    #[Assert\NotBlank]
     #[Assert\Choice(choices: ['draft', 'generating', 'published', 'archived'])]
     #[Groups(['write'])]
     public ?string $status = null;

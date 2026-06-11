@@ -372,6 +372,12 @@ final class GenerateScheduleHandlerDiagnosticsTest extends TestCase
             Coach::class => $this->repository([$this->coach()]),
             Venue::class => $this->repository([$this->venue()]),
             \App\Entity\TeamConstraint::class => $this->repository([]),
+            \App\Entity\VenueAvailability::class => $this->repository([]),
+            \App\Entity\CoachUnavailability::class => $this->repository([]),
+            \App\Entity\TeamCoach::class => $this->repository([]),
+            \App\Entity\CoachPlayerMembership::class => $this->repository([]),
+            \App\Entity\ScheduleSlotTemplate::class => $this->repository([]),
+            \App\Entity\PriorityTier::class => $this->repository([]),
         ];
 
         $entityManager = $this->createMock(EntityManagerInterface::class);

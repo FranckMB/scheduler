@@ -25,6 +25,7 @@ class VenueInput
     #[Groups(['write'])]
     public ?string $longitude = null;
 
+    #[Assert\NotBlank]
     #[Assert\Choice(choices: ['manual', 'ffbb', 'import'])]
     #[Groups(['write'])]
     public ?string $source = null;

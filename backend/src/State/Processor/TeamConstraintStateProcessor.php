@@ -51,6 +51,9 @@ class TeamConstraintStateProcessor extends AbstractStateProcessor
         if (null !== $input->sourceOccurrenceId) {
             $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
         }
+        if (null !== $input->severity) {
+            $entity->setSeverity($input->severity);
+        }
 
         return $entity;
     }
@@ -87,6 +90,9 @@ class TeamConstraintStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->sourceOccurrenceId) {
             $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
+        }
+        if (null !== $input->severity) {
+            $entity->setSeverity($input->severity);
         }
     }
 

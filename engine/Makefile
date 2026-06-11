@@ -16,11 +16,16 @@ install: ## Install Python dependencies
 	$(RUN) python -m pip install -e ".[dev]"
 
 test: ## Run pytest
+	$(RUN) ruff check .
+	$(RUN) mypy
+	$(RUN) bandit -r app/
 	$(RUN) pytest
+	$(RUN) pytest --cov=app --cov-report=term-missing
 
 lint: ## Run ruff + mypy
 	$(RUN) ruff check .
 	$(RUN) mypy
+	$(RUN) bandit -r app/
 
 format: ## Format code with ruff
 	$(RUN) ruff format .

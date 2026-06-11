@@ -38,4 +38,7 @@ class TeamConstraintInput
 
     #[Groups(['write'])]
     public ?string $sourceOccurrenceId = null;
+
+    #[Groups(['write'])]
+    public ?string $severity = null;
 }

@@ -64,6 +64,9 @@ class TeamConstraintResource
     #[Groups(['read'])]
     public ?string $sourceOccurrenceId = null;
 
+    #[Groups(['read'])]
+    public ?string $severity = null;
+
     public static function fromEntity(TeamConstraint $entity): self
     {
         $dto = new self();
@@ -80,6 +83,7 @@ class TeamConstraintResource
         $dto->reason = $entity->getReason();
         $dto->createdBy = $entity->getCreatedBy();
         $dto->sourceOccurrenceId = $entity->getSourceOccurrenceId();
+        $dto->severity = $entity->getSeverity();
 
         return $dto;
     }

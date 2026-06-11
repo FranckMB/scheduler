@@ -5,10 +5,12 @@ import {
   DAY_LABELS,
   type PreferredSlot,
   type DayKey,
+  type PreferredSlotSeverity,
 } from '@/features/wizard/wizardStore'
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 7h to 22h
 const MINUTES = [0, 15, 30, 45]
+const SEVERITIES: PreferredSlotSeverity[] = ['Obligatoire', 'Fortement préféré', 'Préféré', 'Flexible']
 
 export default function PreferredSlotStep() {
   const { data, addPreferredSlot, updatePreferredSlot, removePreferredSlot, autoSave } =
@@ -174,6 +176,18 @@ function TeamPreferredSlots({
                   {venues.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name || 'Sans nom'}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={slot.severity}
+                  onChange={(e) => onUpdate(slot.id, { severity: e.target.value as PreferredSlotSeverity })}
+                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                >
+                  {SEVERITIES.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
                     </option>
                   ))}
                 </select>

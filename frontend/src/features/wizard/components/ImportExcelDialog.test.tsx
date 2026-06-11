@@ -184,7 +184,7 @@ function buildXlsxFile(rows: string[][], name = 'ffbb-import.xlsx'): File {
     },
   ])
 
-  return new File([entries], name, {
+  return new File([entries as unknown as BlobPart], name, {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
 }

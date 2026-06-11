@@ -11,6 +11,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\User;
 use App\Repository\ClubRepository;
+use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -28,6 +29,7 @@ final class AuthController extends AbstractController
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly JWTTokenManagerInterface $jwtManager,
         private readonly ClubRepository $clubRepository,
+        private readonly ClubUserRepository $clubUserRepository,
         private readonly SportRepository $sportRepository,
     ) {
     }
@@ -168,5 +170,31 @@ final class AuthController extends AbstractController
                 'email' => $user->getEmail(),
             ],
         ], 201);
+    }
+
+    #[Route('/api/me', name: 'api_me', methods: ['GET'])]
+    public function me(): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $clubUser = $this->clubUserRepository->findOneBy(['userId' => $user->getId(), 'isActive' => true]);
+        $club = null;
+        if (null !== $clubUser) {
+            $clubEntity = $this->clubRepository->find($clubUser->getClubId());
+            if (null !== $clubEntity) {
+                $club = ['id' => $clubEntity->getId(), 'name' => $clubEntity->getName()];
+            }
+        }
+
+        return $this->json([
+            'id' => $user->getId(),
+            'email' => $user->getEmail(),
+            'firstName' => $user->getFirstName(),
+            'lastName' => $user->getLastName(),
+            'club' => $club,
+        ]);
     }
 }

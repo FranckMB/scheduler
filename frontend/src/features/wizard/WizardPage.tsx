@@ -4,7 +4,6 @@ import VenueStep from './components/VenueStep'
 import TeamStep from './components/TeamStep'
 import PreferredSlotStep from './components/PreferredSlotStep'
 import TierListStep from './components/TierListStep'
-import FilterStep from './components/FilterStep'
 import CoachStep from './components/CoachStep'
 import ConstraintStep from './components/ConstraintStep'
 import ValidationStep from './components/ValidationStep'
@@ -15,7 +14,6 @@ const STEP_COMPONENTS = [
   TeamStep,
   PreferredSlotStep,
   TierListStep,
-  FilterStep,
   CoachStep,
   ConstraintStep,
   ValidationStep,
@@ -29,7 +27,7 @@ export default function WizardPage() {
   const StepComponent = STEP_COMPONENTS[currentStep]
   const errors = validationErrors[currentStep] || []
   const isFirst = currentStep === 0
-  const isLast = currentStep === 8
+  const isLast = currentStep === 7
 
   const handleNext = () => {
     nextStep()
@@ -47,7 +45,7 @@ export default function WizardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-neutral-900">Assistant de configuration</h1>
         <p className="text-sm text-neutral-500">
-          Configurez votre planning en 9 etapes simples
+          Configurez votre planning en 8 etapes simples
         </p>
       </div>
 

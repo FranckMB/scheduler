@@ -37,6 +37,10 @@ class TenantFilterListener implements EventSubscriberInterface
             $event->getRequest()->attributes->set('_season_id', $seasonId);
         }
 
+        if (null !== $clubId) {
+            $event->getRequest()->attributes->set('_club_id', $clubId);
+        }
+
         if (null === $clubId) {
             return;
         }

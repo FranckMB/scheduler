@@ -4,7 +4,7 @@ import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
-import type { EventClickArg, EventContentArg, EventDropArg, EventResizeArg } from '@fullcalendar/core'
+import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useSchedule, useScheduleSlots, invalidateScheduleQueries, useManualEditLock, useManualEditOneTime } from '@/features/schedule/useSchedule'
 import { ExportPdfButton } from '@/features/schedule/components/ExportPdfButton'
@@ -218,7 +218,7 @@ export default function ScheduleViewPage() {
   }, [lockMutation, oneTimeMutation])
 
   // Resize handler — duration change
-  const handleEventResize = useCallback((info: EventResizeArg) => {
+  const handleEventResize = useCallback((info: any) => {
     const slot = info.event.extendedProps.slot as ScheduleSlot
     const newEnd = info.event.end
     if (!newEnd) return
@@ -350,39 +350,41 @@ export default function ScheduleViewPage() {
       {/* Calendar */}
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <FullCalendar
-          ref={calendarRef}
-          plugins={[timeGridPlugin, dayGridPlugin, listPlugin]}
-          initialView="timeGridWeek"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'timeGridWeek,timeGridDay,listWeek',
-          }}
-          buttonText={{
-            today: 'Today',
-            week: 'Week',
-            day: 'Day',
-            list: 'List',
-          }}
-          slotMinTime="06:00:00"
-          slotMaxTime="22:00:00"
-          slotDuration="00:30:00"
-          allDaySlot={false}
-          weekends={true}
-          events={calendarEvents}
-          eventClick={handleEventClick}
-          eventContent={renderEventContent}
-          height="auto"
-          editable={true}
-          eventDurationEditable={true}
-          eventStartEditable={true}
-          eventDrop={handleEventDrop}
-          eventResize={handleEventResize}
-          selectable={false}
-          dayHeaderFormat={{ weekday: 'long', day: 'numeric', month: 'short' }}
-          slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-          locale="fr"
-          firstDay={1}
+          {...({
+            ref: calendarRef,
+            plugins: [timeGridPlugin, dayGridPlugin, listPlugin],
+            initialView: 'timeGridWeek',
+            headerToolbar: {
+              left: 'prev,next today',
+              center: 'title',
+              right: 'timeGridWeek,timeGridDay,listWeek',
+            },
+            buttonText: {
+              today: 'Today',
+              week: 'Week',
+              day: 'Day',
+              list: 'List',
+            },
+            slotMinTime: '06:00:00',
+            slotMaxTime: '22:00:00',
+            slotDuration: '00:30:00',
+            allDaySlot: false,
+            weekends: true,
+            events: calendarEvents,
+            eventClick: handleEventClick,
+            eventContent: renderEventContent,
+            height: 'auto',
+            editable: true,
+            eventDurationEditable: true,
+            eventStartEditable: true,
+            eventDrop: handleEventDrop,
+            eventResize: handleEventResize,
+            selectable: false,
+            dayHeaderFormat: { weekday: 'long', day: 'numeric', month: 'short' },
+            slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+            locale: 'fr',
+            firstDay: 1,
+          } as any)}
         />
       </div>
 

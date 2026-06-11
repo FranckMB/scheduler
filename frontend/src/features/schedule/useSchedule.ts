@@ -55,7 +55,7 @@ export function useManualEditConstraint() {
       reason?: string
     }) => {
       return apiClient
-        .post(`schedule-slot-templates/${slotId}/manual-edit/constraint`, {
+        .post(`schedule-slots/${slotId}/manual-edit/constraint`, {
           json: { type, reason },
         })
         .json()
@@ -76,7 +76,7 @@ export function useManualEditLock() {
       lockLevel: 'SOFT' | 'HARD'
     }) => {
       return apiClient
-        .post(`schedule-slot-templates/${slotId}/manual-edit/lock`, {
+        .post(`schedule-slots/${slotId}/manual-edit/lock`, {
           json: { lockLevel },
         })
         .json()
@@ -103,7 +103,7 @@ export function useManualEditOneTime() {
       }
     }) => {
       return apiClient
-        .post(`schedule-slot-templates/${slotId}/manual-edit/one-time`, {
+        .post(`schedule-slots/${slotId}/manual-edit/one-time`, {
           json: data,
         })
         .json()

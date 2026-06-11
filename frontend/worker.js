@@ -1,7 +1,14 @@
-const http = require('http');
-const puppeteer = require('puppeteer');
-const fs = require('fs');
-const path = require('path');
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Puppeteer is pre-installed in the base image at /home/pptruser/node_modules/
+const puppeteer = createRequire(__filename)('/home/pptruser/node_modules/puppeteer');
 
 const PORT = 3000;
 const OUTPUT_DIR = '/app/backend/public/exports';

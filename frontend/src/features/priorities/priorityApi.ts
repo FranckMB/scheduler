@@ -36,7 +36,7 @@ export function useUpdateTeamTier() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateTeamPayload }) => {
-      return apiClient.patch(`teams/${id}`, { json: data }).json<Team>()
+      return apiClient.put(`teams/${id}`, { json: data }).json<Team>()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] })
@@ -50,7 +50,7 @@ export function useUpdateTeamMinSessions() {
   return useMutation({
     mutationFn: async ({ id, minSessionsOverride }: { id: string; minSessionsOverride: number | null }) => {
       return apiClient
-        .patch(`teams/${id}`, { json: { minSessionsOverride } })
+        .put(`teams/${id}`, { json: { minSessionsOverride } })
         .json<Team>()
     },
     onSuccess: () => {
