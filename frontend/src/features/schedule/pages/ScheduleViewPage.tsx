@@ -290,9 +290,9 @@ export default function ScheduleViewPage() {
 
   if (!id) {
     return (
-      <div className="mx-auto max-w-4xl">
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <p className="text-error-600">Aucun identifiant de planning trouvé.</p>
+        <div className="mx-auto max-w-4xl">
+          <div className="glass rounded-xl p-6 shadow-lg">
+            <p className="text-error-400">Aucun identifiant de planning trouvé.</p>
         </div>
       </div>
     )
@@ -311,15 +311,15 @@ export default function ScheduleViewPage() {
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-neutral-900">
+          <h2 className="text-2xl font-bold text-fg-primary">
             {schedule?.name || `Planning #${id}`}
           </h2>
           {schedule && (
-            <p className="mt-1 text-sm text-neutral-500">
-              Status: <span className="font-medium text-neutral-700">{schedule.status}</span>
+            <p className="mt-1 text-sm text-fg-muted">
+              Status: <span className="font-medium text-fg-primary">{schedule.status}</span>
               {schedule.score !== null && (
                 <span className="ml-3">
-                  Score: <span className="font-medium text-neutral-700">{schedule.score}</span>
+                  Score: <span className="font-medium text-fg-primary">{schedule.score}</span>
                 </span>
               )}
             </p>
@@ -331,8 +331,8 @@ export default function ScheduleViewPage() {
       </div>
 
       {/* Legend */}
-      <div className="mb-3 flex flex-wrap items-center gap-4 rounded-lg bg-white px-4 py-2 shadow-sm">
-        <span className="text-sm font-medium text-neutral-600">Lock levels:</span>
+      <div className="glass mb-3 flex flex-wrap items-center gap-4 rounded-xl px-4 py-2 shadow-sm">
+        <span className="text-sm font-medium text-fg-muted">Lock levels:</span>
         {(['NONE', 'SOFT', 'HARD'] as LockLevel[]).map((level) => {
           const config = LOCK_LEVEL_CONFIG[level]
           return (
@@ -342,13 +342,13 @@ export default function ScheduleViewPage() {
             </span>
           )
         })}
-        <span className="ml-auto text-xs text-neutral-400">
+        <span className="ml-auto text-xs text-fg-muted">
           Drag to reschedule · Click for details
         </span>
       </div>
 
       {/* Calendar */}
-      <div className="rounded-lg bg-white p-4 shadow-sm">
+      <div className="glass rounded-xl p-4 shadow-lg">
         <FullCalendar
           {...({
             ref: calendarRef,

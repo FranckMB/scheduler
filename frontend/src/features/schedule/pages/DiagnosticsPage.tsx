@@ -10,8 +10,8 @@ export default function DiagnosticsPage() {
   if (!id) {
     return (
       <div className="mx-auto max-w-4xl">
-        <div className="rounded-lg bg-error-50 p-6 text-center">
-          <p className="text-error-600">Identifiant d&apos;emploi du temps manquant.</p>
+        <div className="rounded-lg bg-error-900/40 p-6 text-center">
+          <p className="text-error-400">Identifiant d&apos;emploi du temps manquant.</p>
         </div>
       </div>
     )
@@ -20,9 +20,9 @@ export default function DiagnosticsPage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-4xl">
-        <div className="rounded-lg bg-white p-12 text-center shadow-sm">
+        <div className="rounded-lg bg-neutral-800 p-12 text-center shadow-sm">
           <LoadingSpinner size="lg" />
-          <p className="mt-4 text-neutral-600">Analyse de l&apos;emploi du temps en cours...</p>
+          <p className="mt-4 text-neutral-300">Analyse de l&apos;emploi du temps en cours...</p>
         </div>
       </div>
     )
@@ -31,9 +31,9 @@ export default function DiagnosticsPage() {
   if (error) {
     return (
       <div className="mx-auto max-w-4xl">
-        <div className="rounded-lg bg-error-50 p-6 text-center">
+        <div className="rounded-lg bg-error-900/40 p-6 text-center">
           <svg
-            className="mx-auto h-12 w-12 text-error-500"
+            className="mx-auto h-12 w-12 text-error-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -45,8 +45,8 @@ export default function DiagnosticsPage() {
               d="M12 9v2m0 4h.01M12 3l9.5 16.5H2.5L12 3z"
             />
           </svg>
-          <h3 className="mt-3 text-lg font-medium text-error-600">Erreur de chargement</h3>
-          <p className="mt-1 text-sm text-neutral-600">
+          <h3 className="mt-3 text-lg font-medium text-error-400">Erreur de chargement</h3>
+          <p className="mt-1 text-sm text-neutral-400">
             Impossible de récupérer les diagnostics. Veuillez réessayer.
           </p>
         </div>
@@ -57,8 +57,8 @@ export default function DiagnosticsPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-neutral-900">Diagnostics de l&apos;emploi du temps</h2>
-        <p className="mt-1 text-sm text-neutral-600">
+        <h2 className="text-2xl font-bold text-white">Diagnostics de l&apos;emploi du temps</h2>
+        <p className="mt-1 text-sm text-neutral-400">
           Résultats de l&apos;analyse après génération. Les éléments ci-dessous indiquent les
           problèmes détectés et les actions recommandées.
         </p>

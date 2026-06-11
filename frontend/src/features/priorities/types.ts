@@ -26,11 +26,11 @@ export interface UpdateTeamPayload {
 }
 
 export const TIER_COLORS: Record<string, string> = {
-  S: 'bg-rose-100 text-rose-800 border-rose-300',
-  A: 'bg-orange-100 text-orange-800 border-orange-300',
-  B: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  C: 'bg-green-100 text-green-800 border-green-300',
-  D: 'bg-blue-100 text-blue-800 border-blue-300',
+  S: 'bg-rose-900/40 text-rose-300 border-rose-700',
+  A: 'bg-orange-900/40 text-orange-300 border-orange-700',
+  B: 'bg-yellow-900/40 text-yellow-300 border-yellow-700',
+  C: 'bg-green-900/40 text-green-300 border-green-700',
+  D: 'bg-blue-900/40 text-blue-300 border-blue-700',
 }
 
 export const TIER_BADGE_COLORS: Record<string, string> = {

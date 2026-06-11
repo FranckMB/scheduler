@@ -93,9 +93,9 @@ function TierListContent() {
 
   if (teamsError || tiersError) {
     return (
-      <div className="rounded-lg border border-error-200 bg-error-50 p-6 text-center">
-        <p className="text-error-700 font-medium">Failed to load data</p>
-        <p className="text-error-500 text-sm mt-1">
+      <div className="glass rounded-xl border border-error-700/50 bg-error-900/40 p-6 text-center">
+        <p className="text-error-300 font-medium">Failed to load data</p>
+        <p className="text-error-400 text-sm mt-1">
           {(teamsError ?? tiersError)?.message}
         </p>
       </div>
@@ -104,7 +104,7 @@ function TierListContent() {
 
   if (!tiers || !teams) {
     return (
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-6 text-center text-neutral-500">
+      <div className="glass rounded-xl border border-border-subtle p-6 text-center text-fg-muted">
         No data available
       </div>
     )
@@ -120,7 +120,7 @@ function TierListContent() {
 
       <DragOverlay>
         {activeTeam ? (
-          <div className="rounded-lg border border-primary-300 bg-white p-3 shadow-lg rotate-2">
+          <div className="glass-strong rounded-xl border border-primary-600/50 p-3 shadow-lg rotate-2">
             <TeamCard team={activeTeam} />
           </div>
         ) : null}
@@ -133,8 +133,8 @@ export default function TierListPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-neutral-900">Priority Tiers</h2>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h2 className="text-2xl font-bold text-fg-primary">Priority Tiers</h2>
+        <p className="mt-1 text-sm text-fg-muted">
           Drag and drop teams between tiers to adjust scheduling priority. Changes auto-save.
         </p>
       </div>

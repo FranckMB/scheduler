@@ -105,15 +105,15 @@ export default function SummaryStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-neutral-900">Resume et Generation</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-xl font-bold text-fg-primary">Resume et Generation</h2>
+        <p className="text-sm text-fg-muted">
           Verifiez toutes les donnees avant de lancer la generation
         </p>
       </div>
 
       {/* Venues summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+      <div className="glass rounded-lg border border-border-subtle p-4">
+        <h3 className="mb-3 text-sm font-semibold text-fg-primary">
           Salles ({data.venues.length})
         </h3>
         <div className="space-y-2">
@@ -121,18 +121,18 @@ export default function SummaryStep() {
             const availableCount = generateSlotsFromRanges(venue.availabilityRanges).length
             const rangeCount = Object.values(venue.availabilityRanges).reduce((count, ranges) => count + ranges.length, 0)
             return (
-              <div key={venue.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
+              <div key={venue.id} className="glass flex items-center justify-between rounded-md bg-bg-elevated px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-neutral-900">
-                    {venue.name || <span className="text-neutral-400 italic">Sans nom</span>}
+                  <p className="text-sm font-medium text-fg-primary">
+                    {venue.name || <span className="text-fg-disabled italic">Sans nom</span>}
                   </p>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-fg-muted">
                     {rangeCount} plage{rangeCount > 1 ? 's' : ''}, {availableCount} creneau{availableCount > 1 ? 'x' : ''} de 15 min
                     {venue.can_split && ' - Split possible'}
                   </p>
                 </div>
                 {venue.closures.length > 0 && (
-                  <span className="rounded-full bg-warning-50 px-2 py-0.5 text-xs text-warning-600">
+                  <span className="rounded-full bg-warning-900/40 px-2 py-0.5 text-xs text-warning-300">
                     {venue.closures.length} fermeture{venue.closures.length > 1 ? 's' : ''}
                   </span>
                 )}
@@ -143,22 +143,22 @@ export default function SummaryStep() {
       </div>
 
       {/* Teams summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+      <div className="glass rounded-lg border border-border-subtle p-4">
+        <h3 className="mb-3 text-sm font-semibold text-fg-primary">
           Equipes ({data.teams.length})
         </h3>
         {data.teams.length === 0 ? (
-          <p className="text-sm text-neutral-400">Aucune equipe configuree</p>
+          <p className="text-sm text-fg-disabled">Aucune equipe configuree</p>
         ) : (
           <div className="space-y-2">
             {data.teams.map((team) => (
-              <div key={team.id} className="rounded-md bg-neutral-50 px-3 py-2">
+              <div key={team.id} className="glass rounded-md bg-bg-elevated px-3 py-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-neutral-900">
-                      {team.name || <span className="text-neutral-400 italic">Sans nom</span>}
+                    <p className="text-sm font-medium text-fg-primary">
+                      {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
                     </p>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-fg-muted">
                       {team.level && `${team.level} - `}
                       {team.gender === 'M' ? 'Masculin' : team.gender === 'F' ? 'Feminin' : ''}
                       {team.size > 0 && ` - ${team.size} joueurs`}
@@ -183,27 +183,27 @@ export default function SummaryStep() {
       </div>
 
       {/* Coaches summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+      <div className="glass rounded-lg border border-border-subtle p-4">
+        <h3 className="mb-3 text-sm font-semibold text-fg-primary">
           Coachs ({data.coaches.length})
         </h3>
         {data.coaches.length === 0 ? (
-          <p className="text-sm text-neutral-400">Aucun coach configure</p>
+          <p className="text-sm text-fg-disabled">Aucun coach configure</p>
         ) : (
           <div className="space-y-2">
             {data.coaches.map((coach) => (
-              <div key={coach.id} className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2">
+              <div key={coach.id} className="glass flex items-center justify-between rounded-md bg-bg-elevated px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-neutral-900">
-                    {coach.name || <span className="text-neutral-400 italic">Sans nom</span>}
+                  <p className="text-sm font-medium text-fg-primary">
+                    {coach.name || <span className="text-fg-disabled italic">Sans nom</span>}
                   </p>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-fg-muted">
                     {coach.is_player ? 'Joueur' : 'Coach uniquement'}
                     {coach.player_team_id && ` - Equipe joueur: ${data.teams.find((team) => team.id === coach.player_team_id)?.name || 'Sans nom'}`}
                   </p>
                 </div>
                 {coach.teamIds.length > 0 && (
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                  <span className="rounded-full bg-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
                     {coach.teamIds.length} equipe{coach.teamIds.length > 1 ? 's' : ''}
                   </span>
                 )}
@@ -214,19 +214,19 @@ export default function SummaryStep() {
       </div>
 
       {/* Constraints summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">
+      <div className="glass rounded-lg border border-border-subtle p-4">
+        <h3 className="mb-3 text-sm font-semibold text-fg-primary">
           Contraintes ({data.constraints.length + data.coachConstraints.length + data.preferredSlots.length})
         </h3>
         {data.constraints.length === 0 && data.coachConstraints.length === 0 && data.preferredSlots.length === 0 ? (
-          <p className="text-sm text-neutral-400">Aucune contrainte</p>
+          <p className="text-sm text-fg-disabled">Aucune contrainte</p>
         ) : (
           <div className="space-y-2">
             {data.preferredSlots.map((ps) => {
               const team = data.teams.find((t) => t.id === ps.teamId)
               return (
-                <div key={ps.id} className="rounded-md bg-success-50 px-3 py-2">
-                  <p className="text-sm font-medium text-success-700">
+                <div key={ps.id} className="rounded-md bg-success-900/30 px-3 py-2">
+                  <p className="text-sm font-medium text-success-300">
                     Prefere: {team?.name || 'Equipe'} - {DAY_LABELS[ps.day]} {ps.hour}h{ps.minute.toString().padStart(2, '0')}
                     {' '}({ps.severity})
                   </p>
@@ -236,7 +236,7 @@ export default function SummaryStep() {
             {data.coachConstraints.map((c) => {
               const coach = c.coachId ? data.coaches.find((ch) => ch.id === c.coachId) : null
               return (
-                <div key={c.id} className="rounded-md bg-warning-50 px-3 py-2 text-warning-700">
+                <div key={c.id} className="rounded-md bg-warning-900/30 px-3 py-2 text-warning-300">
                   <p className="text-sm font-medium">
                     Coach: {coach?.name || 'Sans cible'}
                     {c.day && ` - ${DAY_LABELS[c.day]}`}
@@ -250,10 +250,10 @@ export default function SummaryStep() {
               return (
                 <div
                   key={c.id}
-                  className={`rounded-md px-3 py-2 ${
-                    c.type === 'fixed' ? 'bg-error-50 text-error-700' :
-                    c.type === 'forbidden' ? 'bg-warning-50 text-warning-700' :
-                    'bg-success-50 text-success-700'
+                    className={`rounded-md px-3 py-2 ${
+                    c.type === 'fixed' ? 'bg-error-900/30 text-error-300' :
+                    c.type === 'forbidden' ? 'bg-warning-900/30 text-warning-300' :
+                    'bg-success-900/30 text-success-300'
                   }`}
                 >
                   <p className="text-sm font-medium">
@@ -270,20 +270,20 @@ export default function SummaryStep() {
       </div>
 
       {/* Generate button */}
-      <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-primary-200 bg-primary-50 p-6">
-        <h3 className="text-lg font-bold text-primary-900">Generer le planning</h3>
-        <p className="text-sm text-primary-700">
+      <div className="glass rounded-lg border-2 border-primary-700/50 bg-primary-900/20 p-6">
+        <h3 className="text-lg font-bold text-primary-300">Generer le planning</h3>
+        <p className="text-sm text-fg-muted">
           Le moteur de planification va creer un planning optimal base sur vos donnees.
         </p>
 
         {generateError && (
-          <div className="w-full rounded-md bg-error-50 p-3 text-sm text-error-600" role="alert">
+          <div className="w-full rounded-md bg-error-900/40 p-3 text-sm text-error-400" role="alert">
             {generateError}
           </div>
         )}
 
         {generateSuccess && (
-          <div className="w-full rounded-md bg-success-50 p-3 text-sm text-success-600" role="alert">
+          <div className="w-full rounded-md bg-success-900/40 p-3 text-sm text-success-400" role="alert">
             Planning genere avec succes !
           </div>
         )}
@@ -292,7 +292,7 @@ export default function SummaryStep() {
           type="button"
           onClick={handleGenerate}
           disabled={isGenerating}
-          className="rounded-lg bg-primary-600 px-8 py-3 text-base font-bold text-white shadow-md hover:bg-primary-700 disabled:opacity-50"
+          className="rounded-lg bg-primary-600 px-8 py-3 text-base font-bold text-white shadow-md transition hover:bg-primary-700 hover:shadow-lg disabled:opacity-50"
         >
           {isGenerating ? (
             <span className="flex items-center gap-2">
@@ -310,7 +310,7 @@ export default function SummaryStep() {
         <button
           type="button"
           onClick={resetWizard}
-          className="text-sm text-neutral-500 hover:text-neutral-700"
+          className="text-sm text-fg-muted transition hover:text-fg-primary"
         >
           Recommencer depuis le debut
         </button>

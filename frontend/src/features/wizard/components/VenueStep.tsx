@@ -51,15 +51,15 @@ export default function VenueStep() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Salles</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Salles</h2>
+          <p className="text-sm text-fg-muted">
             Configurez les salles avec des plages horaires par jour
           </p>
         </div>
         <button
           type="button"
           onClick={addVenue}
-          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
         >
           + Ajouter une salle
         </button>
@@ -122,23 +122,23 @@ function VenueCard({
   const rangeCount = DAYS.reduce((count, day) => count + venue.availabilityRanges[day].length, 0)
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+    <div className="glass rounded-lg border border-border-subtle shadow-sm">
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-900/50 text-sm font-bold text-primary-300">
             {index + 1}
           </span>
-          <span className="font-medium text-neutral-900">
-            {venue.name || <span className="text-neutral-400 italic">Sans nom</span>}
+          <span className="font-medium text-fg-primary">
+            {venue.name || <span className="text-fg-disabled italic">Sans nom</span>}
           </span>
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+          <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-fg-muted">
             {rangeCount} plage{rangeCount > 1 ? 's' : ''}
           </span>
-          <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-600">
+          <span className="rounded-full bg-primary-900/40 px-2 py-0.5 text-xs text-primary-300">
             {availableCount} creneau{availableCount > 1 ? 'x' : ''} de 15 min
           </span>
           {venue.can_split && (
-            <span className="rounded-full bg-info-50 px-2 py-0.5 text-xs text-info-600">
+            <span className="rounded-full bg-info-900/40 px-2 py-0.5 text-xs text-info-300">
               Split possible
             </span>
           )}
@@ -147,7 +147,7 @@ function VenueCard({
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-sm text-primary-600 hover:text-primary-700"
+            className="text-sm text-primary-400 hover:text-primary-300"
           >
             {expanded ? 'Reduire' : 'Details'}
           </button>
@@ -155,7 +155,7 @@ function VenueCard({
             <button
               type="button"
               onClick={onRemove}
-              className="rounded p-1 text-error-500 hover:bg-error-50"
+              className="rounded p-1 text-error-400 hover:bg-error-900/40"
               aria-label="Remove venue"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -174,13 +174,13 @@ function VenueCard({
       <div className="px-4 py-3">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Nom de la salle</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Nom de la salle</label>
             <input
               type="text"
               value={venue.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               placeholder="Ex: Gymnase Principal"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <label className="flex items-center gap-2 pt-5">
@@ -188,33 +188,33 @@ function VenueCard({
               type="checkbox"
               checked={venue.can_split}
               onChange={(e) => onUpdate({ can_split: e.target.checked })}
-              className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+              className="h-4 w-4 rounded border-neutral-600 bg-neutral-700 text-primary-500 focus:ring-primary-500"
             />
-            <span className="text-sm text-neutral-700">Split possible</span>
+            <span className="text-sm text-neutral-300">Split possible</span>
           </label>
         </div>
       </div>
 
       {expanded && (
-        <div className="border-t border-neutral-100 px-4 py-3">
-          <h4 className="mb-3 text-sm font-semibold text-neutral-700">
+        <div className="border-t border-border-subtle px-4 py-3">
+          <h4 className="mb-3 text-sm font-semibold text-fg-primary">
             Plages de disponibilite
           </h4>
           <div className="grid gap-3 md:grid-cols-2">
             {DAYS.map((day) => (
-              <div key={day} className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <div key={day} className="glass rounded-lg border border-border-subtle bg-bg-elevated p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <h5 className="text-sm font-semibold text-neutral-700">{DAY_LABELS[day]}</h5>
+                  <h5 className="text-sm font-semibold text-fg-primary">{DAY_LABELS[day]}</h5>
                   <button
                     type="button"
                     onClick={() => onAddRange(day)}
-                    className="rounded bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                    className="rounded bg-surface px-2 py-1 text-xs font-medium text-fg-primary transition hover:bg-surface-hover"
                   >
                     + Plage
                   </button>
                 </div>
                 {venue.availabilityRanges[day].length === 0 ? (
-                  <p className="text-xs text-neutral-400">Aucune disponibilite</p>
+                  <p className="text-xs text-fg-disabled">Aucune disponibilite</p>
                 ) : (
                   <div className="space-y-2">
                     {venue.availabilityRanges[day].map((range) => (
@@ -224,15 +224,15 @@ function VenueCard({
                           step={900}
                           value={range.start}
                           onChange={(e) => onUpdateRange(day, range.id, { start: e.target.value })}
-                          className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                          className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                         />
-                        <span className="text-xs text-neutral-500">a</span>
+                        <span className="text-xs text-fg-muted">a</span>
                         <input
                           type="time"
                           step={900}
                           value={range.end}
                           onChange={(e) => onUpdateRange(day, range.id, { end: e.target.value })}
-                          className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                          className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                         />
                         <button
                           type="button"
@@ -251,19 +251,19 @@ function VenueCard({
           </div>
 
           <div className="mt-4">
-            <h5 className="mb-2 text-xs font-medium text-neutral-600">Jours de fermeture</h5>
+            <h5 className="mb-2 text-xs font-medium text-fg-muted">Jours de fermeture</h5>
             <div className="flex gap-2">
               <input
                 type="date"
                 value={closureDate}
                 onChange={(e) => onClosureDateChange(e.target.value)}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
               <button
                 type="button"
                 onClick={onAddClosure}
                 disabled={!closureDate}
-                className="rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-200 disabled:opacity-50"
+                className="rounded-md bg-surface px-3 py-1.5 text-sm font-medium text-fg-primary transition hover:bg-surface-hover disabled:opacity-50"
               >
                 Ajouter
               </button>
@@ -273,7 +273,7 @@ function VenueCard({
                 {venue.closures.map((date) => (
                   <span
                     key={date}
-                    className="inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-1 text-xs font-medium text-warning-600"
+                    className="inline-flex items-center gap-1 rounded-full bg-warning-900/40 px-2 py-1 text-xs font-medium text-warning-300"
                   >
                     {date}
                     <button

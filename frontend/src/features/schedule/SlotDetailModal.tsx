@@ -50,13 +50,13 @@ export default function SlotDetailModal({
         aria-modal="true"
         aria-label="Slot details"
       >
-        <div className="w-full max-w-lg rounded-xl bg-white shadow-lg">
+        <div className="w-full max-w-lg rounded-xl bg-neutral-800 shadow-lg">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-neutral-900">Slot Details</h2>
+          <div className="flex items-center justify-between border-b border-neutral-700 px-6 py-4">
+            <h2 className="text-lg font-semibold text-white">Slot Details</h2>
             <button
               type="button"
-              className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+              className="rounded-md p-1 text-neutral-500 hover:bg-neutral-700 hover:text-neutral-300"
               onClick={onClose}
               aria-label="Close"
             >
@@ -71,32 +71,32 @@ export default function SlotDetailModal({
             {/* Team & Venue */}
             <div className="mb-4 grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm font-medium text-neutral-500">Team</dt>
-                <dd className="mt-1 text-base font-semibold text-neutral-900">{teamName}</dd>
+                <dt className="text-sm font-medium text-neutral-400">Team</dt>
+                <dd className="mt-1 text-base font-semibold text-white">{teamName}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-neutral-500">Venue</dt>
-                <dd className="mt-1 text-base font-semibold text-neutral-900">{venueName}</dd>
+                <dt className="text-sm font-medium text-neutral-400">Venue</dt>
+                <dd className="mt-1 text-base font-semibold text-white">{venueName}</dd>
               </div>
             </div>
 
             {/* Coach */}
             {coachName && (
               <div className="mb-4">
-                <dt className="text-sm font-medium text-neutral-500">Coach</dt>
-                <dd className="mt-1 text-base text-neutral-900">{coachName}</dd>
+                <dt className="text-sm font-medium text-neutral-400">Coach</dt>
+                <dd className="mt-1 text-base text-white">{coachName}</dd>
               </div>
             )}
 
             {/* Day & Time */}
             <div className="mb-4 grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-sm font-medium text-neutral-500">Day</dt>
-                <dd className="mt-1 text-base text-neutral-900">{DAY_NAMES[slot.dayOfWeek]}</dd>
+                <dt className="text-sm font-medium text-neutral-400">Day</dt>
+                <dd className="mt-1 text-base text-white">{DAY_NAMES[slot.dayOfWeek]}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-neutral-500">Time</dt>
-                <dd className="mt-1 text-base text-neutral-900">
+                <dt className="text-sm font-medium text-neutral-400">Time</dt>
+                <dd className="mt-1 text-base text-white">
                   {formatTime(slot.startTime)} — {formatDuration(slot.durationMinutes)}
                 </dd>
               </div>
@@ -104,20 +104,20 @@ export default function SlotDetailModal({
 
             {/* Duration */}
             <div className="mb-4">
-              <dt className="text-sm font-medium text-neutral-500">Duration</dt>
-              <dd className="mt-1 text-base text-neutral-900">{formatDuration(slot.durationMinutes)}</dd>
+              <dt className="text-sm font-medium text-neutral-400">Duration</dt>
+              <dd className="mt-1 text-base text-white">{formatDuration(slot.durationMinutes)}</dd>
             </div>
 
             {/* Lock Level */}
             <div className="mb-4">
-              <dt className="text-sm font-medium text-neutral-500">Lock Level</dt>
+              <dt className="text-sm font-medium text-neutral-400">Lock Level</dt>
               <dd className="mt-1 flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-sm font-medium ${lockConfig.color}`}>
                   <span className={`h-2 w-2 rounded-full ${lockConfig.bgColor}`} />
                   {lockConfig.label}
                 </span>
                 {slot.temporaryLock && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-info-50 px-2 py-0.5 text-xs text-info-600">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-info-900/40 px-2 py-0.5 text-xs text-info-300">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
@@ -130,8 +130,8 @@ export default function SlotDetailModal({
             {/* Constraints */}
             {slot.pendingConstraintSuggestion && (
               <div>
-                <dt className="text-sm font-medium text-neutral-500">Pending Constraints</dt>
-                <dd className="mt-1 rounded-md bg-neutral-50 p-3 font-mono text-sm text-neutral-700">
+                <dt className="text-sm font-medium text-neutral-400">Pending Constraints</dt>
+                <dd className="mt-1 rounded-md bg-neutral-700 p-3 font-mono text-sm text-neutral-200">
                   {JSON.stringify(slot.pendingConstraintSuggestion, null, 2)}
                 </dd>
               </div>
@@ -139,7 +139,7 @@ export default function SlotDetailModal({
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end border-t border-neutral-200 px-6 py-3">
+          <div className="flex justify-end border-t border-neutral-700 px-6 py-3">
             <button
               type="button"
               className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"

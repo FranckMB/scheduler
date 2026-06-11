@@ -35,13 +35,13 @@ export default function PreferredSlotStep() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Creneaux preferes</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Creneaux preferes</h2>
+          <p className="text-sm text-fg-muted">
             Selectionnez les creneaux preferes pour chaque equipe
           </p>
         </div>
-        <div className="rounded-lg border-2 border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
-          <p className="text-neutral-500">Ajoutez d&apos;abord des equipes (etape 2) avant de definir des creneaux preferes.</p>
+        <div className="glass rounded-lg border-2 border-dashed border-border-subtle p-8 text-center">
+          <p className="text-fg-muted">Ajoutez d&apos;abord des equipes (etape 2) avant de definir des creneaux preferes.</p>
         </div>
       </div>
     )
@@ -51,8 +51,8 @@ export default function PreferredSlotStep() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Creneaux preferes</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Creneaux preferes</h2>
+          <p className="text-sm text-fg-muted">
             Pour chaque equipe, selectionnez un jour, une heure et une salle preferes
           </p>
         </div>
@@ -93,14 +93,14 @@ function TeamPreferredSlots({
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+    <div className="glass rounded-lg border border-border-subtle shadow-sm">
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="font-medium text-neutral-900">
-            {team.name || <span className="text-neutral-400 italic">Sans nom</span>}
+          <span className="font-medium text-fg-primary">
+            {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
           </span>
           {preferredSlots.length > 0 && (
-            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary-600">
+            <span className="rounded-full bg-primary-900/40 px-2 py-0.5 text-xs text-primary-300">
               {preferredSlots.length} creneau{preferredSlots.length > 1 ? 'x' : ''}
             </span>
           )}
@@ -109,14 +109,14 @@ function TeamPreferredSlots({
           <button
             type="button"
             onClick={onAdd}
-            className="rounded bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-200"
+            className="rounded bg-surface px-2 py-1 text-xs font-medium text-fg-muted transition hover:bg-surface-hover"
           >
             + Ajouter
           </button>
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-sm text-primary-600 hover:text-primary-700"
+            className="text-sm text-primary-400 hover:text-primary-300"
           >
             {expanded ? 'Reduire' : 'Details'}
           </button>
@@ -124,17 +124,17 @@ function TeamPreferredSlots({
       </div>
 
       {expanded && preferredSlots.length > 0 && (
-        <div className="border-t border-neutral-100 px-4 py-3">
+        <div className="border-t border-border-subtle px-4 py-3">
           <div className="space-y-2">
             {preferredSlots.map((slot) => (
               <div
                 key={slot.id}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2"
+                className="glass flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-bg-elevated px-3 py-2"
               >
                 <select
                   value={slot.day}
                   onChange={(e) => onUpdate(slot.id, { day: e.target.value as DayKey })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                  className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                 >
                   {DAYS.map((d) => (
                     <option key={d} value={d}>
@@ -146,7 +146,7 @@ function TeamPreferredSlots({
                 <select
                   value={slot.hour}
                   onChange={(e) => onUpdate(slot.id, { hour: parseInt(e.target.value, 10) })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                  className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                 >
                   {HOURS.map((h) => (
                     <option key={h} value={h}>
@@ -158,7 +158,7 @@ function TeamPreferredSlots({
                 <select
                   value={slot.minute}
                   onChange={(e) => onUpdate(slot.id, { minute: parseInt(e.target.value, 10) })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                  className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                 >
                   {MINUTES.map((m) => (
                     <option key={m} value={m}>
@@ -170,7 +170,7 @@ function TeamPreferredSlots({
                 <select
                   value={slot.venueId}
                   onChange={(e) => onUpdate(slot.id, { venueId: e.target.value })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                  className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                 >
                   <option value="">-- Salle --</option>
                   {venues.map((v) => (
@@ -183,7 +183,7 @@ function TeamPreferredSlots({
                 <select
                   value={slot.severity}
                   onChange={(e) => onUpdate(slot.id, { severity: e.target.value as PreferredSlotSeverity })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-sm"
+                  className="rounded border border-border-subtle bg-surface px-2 py-1 text-sm text-fg-primary"
                 >
                   {SEVERITIES.map((severity) => (
                     <option key={severity} value={severity}>

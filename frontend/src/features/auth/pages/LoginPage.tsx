@@ -22,10 +22,15 @@ export default function LoginPage() {
         })
         .json<{ token: string }>()
 
-      // Fetch user info after authentication
-      const user = await apiClient.get('me').json<{ id: string; email: string; roles: string[] }>()
+      useAuthStore.getState().setToken(data.token)
 
-      setAuth(data.token, user, { id: '1', name: 'Default Club', slug: 'default' })
+      // Fetch user info after authentication
+      const me = await apiClient.get('me').json<{ id: string; email: string; firstName: string; lastName: string; club?: { id: string; name: string } }>()
+
+      const user = { id: me.id, email: me.email, roles: ['ROLE_USER'] }
+      const club = me.club ? { id: me.club.id, name: me.club.name, slug: me.club.id } : { id: '1', name: 'Default Club', slug: 'default' }
+
+      setAuth(data.token, user, club)
       window.location.href = '/'
     } catch {
       setError('Invalid credentials. Please try again.')
@@ -36,18 +41,18 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
-        <h2 className="mb-6 text-center text-2xl font-bold text-neutral-900">Sign in</h2>
+      <div className="glass-strong w-full max-w-md rounded-2xl p-8 shadow-lg">
+        <h2 className="mb-6 text-center text-2xl font-bold text-fg-primary">Sign in</h2>
 
         {error && (
-          <div className="mb-4 rounded-md bg-error-50 p-3 text-sm text-error-600" role="alert">
+          <div className="mb-4 rounded-md border border-error-700/50 bg-error-900/40 p-3 text-sm text-error-400" role="alert">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-neutral-700">
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-fg-muted">
               Email
             </label>
             <input
@@ -55,14 +60,14 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               required
               autoComplete="email"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-neutral-700">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-fg-muted">
               Password
             </label>
             <input
@@ -70,7 +75,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               required
               autoComplete="current-password"
             />
@@ -79,14 +84,14 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-md bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            className="w-full rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition hover:bg-primary-700 hover:shadow-lg disabled:opacity-50"
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </button>
 
           <div className="mt-4 text-center">
-            <span className="text-sm text-neutral-600">Pas encore de compte ? </span>
-            <Link to="/register" className="text-sm text-primary-600 hover:text-primary-700" role="link">
+            <span className="text-sm text-fg-muted">Pas encore de compte ? </span>
+            <Link to="/register" className="text-sm text-primary-400 transition hover:text-primary-300" role="link">
               Créer un compte
             </Link>
           </div>

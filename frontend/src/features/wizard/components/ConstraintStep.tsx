@@ -48,28 +48,28 @@ export default function ConstraintStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-neutral-900">Contraintes</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-xl font-bold text-fg-primary">Contraintes</h2>
+        <p className="text-sm text-fg-muted">
           Centralisez les indisponibilites coachs et les contraintes equipes
         </p>
       </div>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <section className="glass rounded-lg border border-border-subtle p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-neutral-800">Coach Constraints</h3>
-            <p className="text-xs text-neutral-500">Indisponibilites recurrentes et preference de salle</p>
+            <h3 className="text-sm font-semibold text-fg-primary">Coach Constraints</h3>
+            <p className="text-xs text-fg-muted">Indisponibilites recurrentes et preference de salle</p>
           </div>
           <button
             type="button"
             onClick={addCoachConstraint}
-            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
           >
             + Ajouter
           </button>
         </div>
         {data.coachConstraints.length === 0 ? (
-          <p className="rounded-md bg-neutral-50 p-3 text-sm text-neutral-400">Aucune contrainte coach.</p>
+          <p className="glass rounded-md bg-bg-elevated p-3 text-sm text-fg-disabled">Aucune contrainte coach.</p>
         ) : (
           <div className="space-y-2">
             {data.coachConstraints.map((constraint) => (
@@ -86,22 +86,22 @@ export default function ConstraintStep() {
         )}
       </section>
 
-      <section className="rounded-lg border border-neutral-200 bg-white p-4">
+      <section className="glass rounded-lg border border-border-subtle p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-neutral-800">Team Constraints</h3>
-            <p className="text-xs text-neutral-500">Creneaux preferes, salle preferee et severite</p>
+            <h3 className="text-sm font-semibold text-fg-primary">Team Constraints</h3>
+            <p className="text-xs text-fg-muted">Creneaux preferes, salle preferee et severite</p>
           </div>
           <button
             type="button"
             onClick={addConstraint}
-            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
           >
             + Ajouter
           </button>
         </div>
         {data.constraints.length === 0 ? (
-          <p className="rounded-md bg-neutral-50 p-3 text-sm text-neutral-400">Aucune contrainte equipe.</p>
+          <p className="glass rounded-md bg-bg-elevated p-3 text-sm text-fg-disabled">Aucune contrainte equipe.</p>
         ) : (
           <div className="space-y-2">
             {data.constraints.map((constraint) => (
@@ -131,11 +131,11 @@ interface CoachConstraintRowProps {
 
 function CoachConstraintRow({ constraint, coaches, venues, onUpdate, onRemove }: CoachConstraintRowProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning-200 bg-warning-50 px-3 py-2 text-warning-700">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning-700 bg-warning-900/30 px-3 py-2 text-warning-300">
       <select
         value={constraint.coachId || ''}
         onChange={(e) => onUpdate({ coachId: e.target.value || undefined })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         <option value="">-- Coach --</option>
         {coaches.map((coach) => (
@@ -148,7 +148,7 @@ function CoachConstraintRow({ constraint, coaches, venues, onUpdate, onRemove }:
       <select
         value={constraint.venueId || ''}
         onChange={(e) => onUpdate({ venueId: e.target.value || undefined })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         <option value="">Preference de salle</option>
         {venues.map((venue) => (
@@ -174,11 +174,11 @@ interface TeamConstraintRowProps {
 
 function TeamConstraintRow({ constraint, teams, venues, onUpdate, onRemove }: TeamConstraintRowProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-success-200 bg-success-50 px-3 py-2 text-success-700">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-success-700 bg-success-900/30 px-3 py-2 text-success-300">
       <select
         value={constraint.teamId || ''}
         onChange={(e) => onUpdate({ teamId: e.target.value || undefined })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         <option value="">-- Equipe --</option>
         {teams.map((team) => (
@@ -190,7 +190,7 @@ function TeamConstraintRow({ constraint, teams, venues, onUpdate, onRemove }: Te
       <select
         value={constraint.type}
         onChange={(e) => onUpdate({ type: e.target.value as ConstraintType })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         {Object.entries(CONSTRAINT_LABELS).map(([key, label]) => (
           <option key={key} value={key}>
@@ -202,7 +202,7 @@ function TeamConstraintRow({ constraint, teams, venues, onUpdate, onRemove }: Te
       <select
         value={constraint.venueId || ''}
         onChange={(e) => onUpdate({ venueId: e.target.value || undefined })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         <option value="">Salle preferee</option>
         {venues.map((venue) => (
@@ -214,7 +214,7 @@ function TeamConstraintRow({ constraint, teams, venues, onUpdate, onRemove }: Te
       <select
         value={constraint.severity || 'Flexible'}
         onChange={(e) => onUpdate({ severity: e.target.value as PreferredSlotSeverity })}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         {SEVERITIES.map((severity) => (
           <option key={severity} value={severity}>
@@ -248,7 +248,7 @@ function TimeRangeFields<T extends TimeRangeConstraint>({ constraint, onUpdate }
       <select
         value={constraint.day || 'mon'}
         onChange={(e) => onUpdate({ day: e.target.value as DayKey } as Partial<T>)}
-        className="rounded border border-current/20 bg-white px-2 py-1 text-sm"
+        className="rounded border border-current/20 bg-neutral-700 px-2 py-1 text-sm text-neutral-100"
       >
         {DAYS.map((day) => (
           <option key={day} value={day}>

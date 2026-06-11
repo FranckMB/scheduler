@@ -56,9 +56,9 @@ export interface ApiCollection<T> {
 export type LockLevel = ScheduleSlot['lockLevel']
 
 export const LOCK_LEVEL_CONFIG: Record<LockLevel, { label: string; color: string; bgColor: string }> = {
-  NONE: { label: 'NONE', color: 'text-neutral-500', bgColor: 'bg-neutral-400' },
-  SOFT: { label: 'SOFT', color: 'text-warning-600', bgColor: 'bg-warning-500' },
-  HARD: { label: 'HARD', color: 'text-error-600', bgColor: 'bg-error-500' },
+  NONE: { label: 'NONE', color: 'text-neutral-400', bgColor: 'bg-neutral-500' },
+  SOFT: { label: 'SOFT', color: 'text-warning-400', bgColor: 'bg-warning-500' },
+  HARD: { label: 'HARD', color: 'text-error-400', bgColor: 'bg-error-500' },
 }
 
 export const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']

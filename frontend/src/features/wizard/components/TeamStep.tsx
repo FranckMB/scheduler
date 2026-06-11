@@ -28,23 +28,23 @@ export default function TeamStep() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Equipes</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Equipes</h2>
+          <p className="text-sm text-fg-muted">
             Ajoutez les equipes avec leur niveau, genre et effectif
           </p>
         </div>
         <button
           type="button"
           onClick={addTeam}
-          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
         >
           + Ajouter une equipe
         </button>
       </div>
 
       {data.teams.length === 0 && (
-        <div className="rounded-lg border-2 border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
-          <p className="text-neutral-500">Aucune equipe ajoutee. Cliquez sur le bouton ci-dessus pour commencer.</p>
+        <div className="glass rounded-lg border-2 border-dashed border-border-subtle p-8 text-center">
+          <p className="text-fg-muted">Aucune equipe ajoutee. Cliquez sur le bouton ci-dessus pour commencer.</p>
         </div>
       )}
 
@@ -72,28 +72,28 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <div className="glass rounded-lg border border-border-subtle shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-900/50 text-sm font-bold text-primary-300">
             {index + 1}
           </span>
-          <span className="font-medium text-neutral-900">
-            {team.name || <span className="text-neutral-400 italic">Sans nom</span>}
+          <span className="font-medium text-fg-primary">
+            {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
           </span>
           {team.gender && (
-            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
+            <span className="rounded bg-surface px-1.5 py-0.5 text-xs text-fg-muted">
               {team.gender === 'M' ? 'Masculin' : 'Feminin'}
             </span>
           )}
           {team.level && (
-            <span className="rounded-full bg-info-50 px-2 py-0.5 text-xs text-info-600">
+            <span className="rounded-full bg-info-900/40 px-2 py-0.5 text-xs text-info-300">
               {team.level}
             </span>
           )}
           {team.is_competition && (
-            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-600">
+            <span className="rounded-full bg-rose-900/40 px-2 py-0.5 text-xs text-rose-300">
               Competition
             </span>
           )}
@@ -102,14 +102,14 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-sm text-primary-600 hover:text-primary-700"
+            className="text-sm text-primary-400 hover:text-primary-300"
           >
             {expanded ? 'Reduire' : 'Details'}
           </button>
           <button
             type="button"
             onClick={onRemove}
-            className="rounded p-1 text-error-500 hover:bg-error-50"
+            className="rounded p-1 text-error-400 hover:bg-error-900/40"
             aria-label="Remove team"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -128,21 +128,21 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
       <div className="px-4 py-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Nom de l&apos;equipe</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Nom de l&apos;equipe</label>
             <input
               type="text"
               value={team.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               placeholder="Ex: U15 Elite"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Niveau</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Niveau</label>
             <select
               value={team.level}
               onChange={(e) => onUpdate({ level: e.target.value })}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="">-- Selectionner --</option>
               {LEVEL_OPTIONS.map((level) => (
@@ -153,11 +153,11 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Genre</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Genre</label>
             <select
               value={team.gender}
               onChange={(e) => onUpdate({ gender: e.target.value as TeamData['gender'] })}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="">-- Selectionner --</option>
               <option value="M">Masculin</option>
@@ -165,14 +165,14 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Effectif</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Effectif</label>
             <input
               type="number"
               min={0}
               value={team.size || ''}
               onChange={(e) => onUpdate({ size: parseInt(e.target.value, 10) || 0 })}
               placeholder="0"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
         </div>
@@ -180,28 +180,28 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
 
       {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-neutral-100 px-4 py-3">
+        <div className="border-t border-border-subtle px-4 py-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={team.is_competition}
                 onChange={(e) => onUpdate({ is_competition: e.target.checked })}
-                className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                className="h-4 w-4 rounded border-border-subtle bg-surface text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-sm text-neutral-700">Competition</span>
+              <span className="text-sm text-fg-muted">Competition</span>
             </label>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={team.is_junior}
                 onChange={(e) => onUpdate({ is_junior: e.target.checked })}
-                className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                className="h-4 w-4 rounded border-border-subtle bg-surface text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-sm text-neutral-700">Jeunes (Junior)</span>
+              <span className="text-sm text-fg-muted">Jeunes (Junior)</span>
             </label>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600">Sessions par semaine</label>
+              <label className="mb-1 block text-xs font-medium text-fg-muted">Sessions par semaine</label>
               <input
                 type="number"
                 min={1}
@@ -210,7 +210,7 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
                 onChange={(e) =>
                   onUpdate({ sessions_count: Math.max(1, parseInt(e.target.value, 10) || 1) })
                 }
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
           </div>

@@ -17,4 +17,17 @@ final class SeasonRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Season::class);
     }
+
+    public function findActiveByClubId(string $clubId): ?Season
+    {
+        return $this->createQueryBuilder('s')
+            ->andWhere('s.clubId = :clubId')
+            ->andWhere('s.status = :status')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('status', 'active')
+            ->orderBy('s.startDate', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

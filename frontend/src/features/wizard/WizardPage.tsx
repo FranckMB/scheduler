@@ -43,8 +43,8 @@ export default function WizardPage() {
     <div className="mx-auto max-w-5xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-neutral-900">Assistant de configuration</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-2xl font-bold text-fg-primary">Assistant de configuration</h1>
+        <p className="text-sm text-fg-muted">
           Configurez votre planning en 8 etapes simples
         </p>
       </div>
@@ -55,7 +55,7 @@ export default function WizardPage() {
       {/* Save status */}
       <div className="mt-4 flex items-center justify-between">
         {isSaving && (
-          <div className="flex items-center gap-2 text-sm text-neutral-500">
+          <div className="flex items-center gap-2 text-sm text-fg-muted">
             <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -64,7 +64,7 @@ export default function WizardPage() {
           </div>
         )}
         {saveError && (
-          <div className="text-sm text-error-600" role="alert">
+          <div className="rounded-md border border-error-700/50 bg-error-900/40 p-3 text-sm text-error-400" role="alert">
             Erreur de sauvegarde : {saveError}
           </div>
         )}
@@ -73,8 +73,8 @@ export default function WizardPage() {
 
       {/* Validation errors */}
       {errors.length > 0 && (
-        <div className="mt-4 rounded-md bg-error-50 p-3" role="alert">
-          <ul className="list-inside list-disc text-sm text-error-600">
+        <div className="mt-4 rounded-md border border-error-700/50 bg-error-900/40 p-3" role="alert">
+          <ul className="list-inside list-disc text-sm text-error-400">
             {errors.map((error, i) => (
               <li key={i}>{error}</li>
             ))}
@@ -88,12 +88,12 @@ export default function WizardPage() {
       </div>
 
       {/* Navigation */}
-      <div className="mt-8 flex items-center justify-between border-t border-neutral-200 pt-6">
+        <div className="mt-8 flex items-center justify-between border-t border-border-subtle pt-6">
         <button
           type="button"
           onClick={prevStep}
           disabled={isFirst}
-          className="rounded-md border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          className="rounded-md border border-border-subtle bg-surface px-5 py-2.5 text-sm font-medium text-fg-primary transition hover:bg-surface-hover disabled:opacity-50"
         >
           Precedent
         </button>
@@ -102,7 +102,7 @@ export default function WizardPage() {
           <button
             type="button"
             onClick={handleNext}
-            className="rounded-md bg-primary-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-700"
+            className="rounded-md bg-primary-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
           >
             Suivant
           </button>

@@ -26,23 +26,23 @@ export default function CoachStep() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Coachs</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Coachs</h2>
+          <p className="text-sm text-fg-muted">
             Ajoutez les coachs, assignez-les aux equipes et indiquez s'ils jouent aussi
           </p>
         </div>
         <button
           type="button"
           onClick={addCoach}
-          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
         >
           + Ajouter un coach
         </button>
       </div>
 
       {data.coaches.length === 0 && (
-        <div className="rounded-lg border-2 border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
-          <p className="text-neutral-500">Aucun coach ajoute. Cliquez sur le bouton ci-dessus pour commencer.</p>
+        <div className="glass rounded-lg border-2 border-dashed border-border-subtle p-8 text-center">
+          <p className="text-fg-muted">Aucun coach ajoute. Cliquez sur le bouton ci-dessus pour commencer.</p>
         </div>
       )}
 
@@ -84,22 +84,22 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
   }
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+    <div className="glass rounded-lg border border-border-subtle shadow-sm">
+      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-900/50 text-sm font-bold text-primary-300">
             {index + 1}
           </span>
-          <span className="font-medium text-neutral-900">
-            {coach.name || <span className="text-neutral-400 italic">Sans nom</span>}
+          <span className="font-medium text-fg-primary">
+            {coach.name || <span className="text-fg-disabled italic">Sans nom</span>}
           </span>
           {coach.is_player && (
-            <span className="rounded-full bg-success-50 px-2 py-0.5 text-xs text-success-600">
+            <span className="rounded-full bg-success-900/40 px-2 py-0.5 text-xs text-success-300">
               Joueur
             </span>
           )}
           {coach.teamIds.length > 0 && (
-            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+            <span className="rounded-full bg-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
               {coach.teamIds.length} equipe{coach.teamIds.length > 1 ? 's' : ''}
             </span>
           )}
@@ -108,14 +108,14 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-sm text-primary-600 hover:text-primary-700"
+            className="text-sm text-primary-400 hover:text-primary-300"
           >
             {expanded ? 'Reduire' : 'Details'}
           </button>
           <button
             type="button"
             onClick={onRemove}
-            className="rounded p-1 text-error-500 hover:bg-error-50"
+            className="rounded p-1 text-error-400 hover:bg-error-900/40"
             aria-label="Remove coach"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -133,13 +133,13 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
       <div className="px-4 py-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600">Nom</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Nom</label>
             <input
               type="text"
               value={coach.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               placeholder="Nom du coach"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary placeholder:text-fg-muted focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div className="flex items-end gap-3">
@@ -150,15 +150,15 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
                 onChange={(e) => updateIsPlayer(e.target.checked)}
                 className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-sm text-neutral-700">Est joueur</span>
+              <span className="text-sm text-neutral-300">Est joueur</span>
             </label>
             {coach.is_player && (
               <div className="flex-1">
-                <label className="mb-1 block text-xs font-medium text-neutral-600">Equipe joueur</label>
+                <label className="mb-1 block text-xs font-medium text-neutral-400">Equipe joueur</label>
                 <select
                   value={coach.player_team_id}
                   onChange={(e) => onUpdate({ player_team_id: e.target.value })}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="w-full rounded-md border border-neutral-600 bg-neutral-700 px-3 py-2 text-sm text-neutral-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 >
                   <option value="">-- Selectionner --</option>
                   {teams.map((team) => (
@@ -174,10 +174,10 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
       </div>
 
       {expanded && (
-        <div className="border-t border-neutral-100 px-4 py-3">
-          <h4 className="mb-2 text-sm font-semibold text-neutral-700">Assigner aux equipes</h4>
+        <div className="border-t border-border-subtle px-4 py-3">
+          <h4 className="mb-2 text-sm font-semibold text-fg-primary">Assigner aux equipes</h4>
           {teams.length === 0 ? (
-            <p className="text-xs text-neutral-400">Aucune equipe disponible. Ajoutez d&apos;abord des equipes.</p>
+            <p className="text-xs text-fg-disabled">Aucune equipe disponible. Ajoutez d&apos;abord des equipes.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {teams.map((team) => {
@@ -190,7 +190,7 @@ function CoachCard({ coach, index, teams, onUpdate, onRemove }: CoachCardProps) 
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                       isAssigned
                         ? 'bg-primary-600 text-white'
-                        : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                        : 'bg-surface text-fg-muted hover:bg-surface-hover'
                     }`}
                   >
                     {team.name || 'Sans nom'}

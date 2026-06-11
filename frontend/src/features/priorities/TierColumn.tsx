@@ -14,13 +14,13 @@ export function TierColumn({ tier, teams }: TierColumnProps) {
     id: `tier-${tier.id}`,
   })
 
-  const colorClass = TIER_COLORS[tier.label] ?? 'bg-neutral-100 text-neutral-800 border-neutral-300'
+  const colorClass = TIER_COLORS[tier.label] ?? 'bg-neutral-800 text-neutral-200 border-neutral-600'
   const badgeClass = TIER_BADGE_COLORS[tier.label] ?? 'bg-neutral-500'
 
   return (
-    <div className="flex flex-col rounded-xl border border-neutral-200 bg-neutral-50 overflow-hidden">
+    <div className="glass flex flex-col rounded-xl border border-border-subtle overflow-hidden">
       {/* Column header */}
-      <div className={`flex items-center gap-2 border-b border-neutral-200 px-4 py-3 ${colorClass}`}>
+      <div className={`flex items-center gap-2 border-b border-border-subtle px-4 py-3 ${colorClass}`}>
         <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white ${badgeClass}`}>
           {tier.label}
         </span>
@@ -40,7 +40,7 @@ export function TierColumn({ tier, teams }: TierColumnProps) {
         </SortableContext>
 
         {teams.length === 0 && (
-          <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 text-sm text-neutral-400">
+          <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-border-subtle text-sm text-fg-disabled">
             Drop teams here
           </div>
         )}

@@ -13,10 +13,6 @@ export interface AuthClub {
   slug: string
 }
 
-interface AuthMeResponse {
-  user?: AuthUser
-}
-
 interface AuthState {
   token: string | null
   user: AuthUser | null
@@ -61,9 +57,37 @@ const extractAuthUser = (value: unknown): AuthUser | null => {
     return null
   }
 
-  const candidate = value as AuthMeResponse
+  const candidate = value as Record<string, unknown>
 
   return isAuthUser(candidate.user) ? candidate.user : null
+}
+
+const isAuthClub = (value: unknown): value is AuthClub => {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.slug === 'string'
+  )
+}
+
+const extractAuthClub = (value: unknown): AuthClub | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  const candidate = value as Record<string, unknown>
+
+  if (isAuthClub(candidate.club)) {
+    return candidate.club
+  }
+
+  return null
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -115,10 +139,12 @@ export const useAuthStore = create<AuthState>()(
 
         const data: unknown = await response.json()
         const user = extractAuthUser(data)
+        const club = extractAuthClub(data)
 
         if (user) {
           set({
             user,
+            club,
             isAuthenticated: true,
           })
         }

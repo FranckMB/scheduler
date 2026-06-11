@@ -56,26 +56,26 @@ export function TeamCard({ team }: TeamCardProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+      className="glass rounded-lg border border-border-subtle p-3 shadow-sm hover:border-border-strong hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       {...attributes}
       {...listeners}
     >
       <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-neutral-900 text-sm leading-tight">{team.name}</h4>
+        <h4 className="font-semibold text-fg-primary text-sm leading-tight">{team.name}</h4>
         {team.gender && (
-          <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
+          <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-xs text-fg-muted">
             {team.gender}
           </span>
         )}
       </div>
 
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-fg-muted">
           {team.sessionsPerWeek} session{team.sessionsPerWeek !== 1 ? 's' : ''}/wk
         </span>
 
         <div className="flex items-center gap-1">
-          <span className="text-xs text-neutral-400">min:</span>
+          <span className="text-xs text-fg-disabled">min:</span>
           {editingSessions ? (
             <input
               ref={inputRef}
@@ -85,7 +85,7 @@ export function TeamCard({ team }: TeamCardProps) {
               onChange={(e) => setDraftValue(e.target.value === '' ? '' : Number(e.target.value))}
               onBlur={handleSessionsBlur}
               onKeyDown={handleSessionsKeyDown}
-              className="w-10 rounded border border-neutral-300 px-1 py-0.5 text-xs text-center focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-10 rounded border border-border-subtle bg-surface px-1 py-0.5 text-xs text-center text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             />
@@ -93,7 +93,7 @@ export function TeamCard({ team }: TeamCardProps) {
             <button
               type="button"
               onClick={startEditing}
-              className="w-10 rounded border border-dashed border-neutral-300 px-1 py-0.5 text-xs text-center text-neutral-600 hover:border-primary-400 hover:text-primary-600 transition-colors"
+              className="w-10 rounded border border-dashed border-border-subtle px-1 py-0.5 text-xs text-center text-neutral-300 hover:border-primary-400 hover:text-primary-400 transition-colors"
             >
               {team.minSessionsOverride ?? '—'}
             </button>

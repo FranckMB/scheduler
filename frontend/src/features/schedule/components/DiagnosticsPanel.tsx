@@ -18,7 +18,7 @@ const SEVERITY_CONFIG: Record<
   }
 > = {
   error: {
-    bg: 'bg-error-50',
+    bg: 'bg-error-900/40',
     border: 'border-error-500',
     badge: 'bg-error-500 text-white',
     label: 'Erreur',
@@ -35,7 +35,7 @@ const SEVERITY_CONFIG: Record<
     ),
   },
   warning: {
-    bg: 'bg-warning-50',
+    bg: 'bg-warning-900/40',
     border: 'border-warning-500',
     badge: 'bg-warning-500 text-white',
     label: 'Avertissement',
@@ -52,7 +52,7 @@ const SEVERITY_CONFIG: Record<
     ),
   },
   info: {
-    bg: 'bg-info-50',
+    bg: 'bg-info-900/40',
     border: 'border-info-500',
     badge: 'bg-info-500 text-white',
     label: 'Information',
@@ -176,7 +176,7 @@ function EntityLink({
   return (
     <Link
       to={routes[type]}
-      className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-medium text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"
+      className="inline-flex items-center gap-1 rounded-md bg-neutral-700 px-2 py-1 text-xs font-medium text-primary-400 ring-1 ring-inset ring-primary-700 hover:bg-neutral-600"
     >
       {labels[type]} #{id.slice(0, 8)}
       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -204,21 +204,21 @@ function DiagnosticCard({ diagnostic }: { diagnostic: ScheduleDiagnostic }) {
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${config.badge}`}>
               {config.label}
             </span>
-            <span className="text-sm font-medium text-neutral-700">
+              <span className="text-sm font-medium text-neutral-200">
               {TYPE_LABELS[diagnostic.type]}
             </span>
           </div>
 
-          <p className="text-sm text-neutral-800">{copy.summary}</p>
+          <p className="text-sm text-neutral-200">{copy.summary}</p>
 
           <div className="mt-2 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
               Actions recommandées
             </p>
             <ul className="space-y-2">
               {suggestions.map((suggestion, index) => (
-                <li key={index} className="space-y-2 rounded-md bg-white/70 px-3 py-2">
-                  <p className="flex items-start gap-2 text-sm text-neutral-700">
+                <li key={index} className="space-y-2 rounded-md bg-neutral-700/70 px-3 py-2">
+                  <p className="flex items-start gap-2 text-sm text-neutral-200">
                     <svg
                       className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary-500"
                       fill="none"
@@ -255,9 +255,9 @@ function DiagnosticCard({ diagnostic }: { diagnostic: ScheduleDiagnostic }) {
 export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
   if (diagnostics.length === 0) {
     return (
-      <div className="rounded-lg bg-white p-8 text-center shadow-sm">
+      <div className="rounded-lg bg-neutral-800 p-8 text-center shadow-sm">
         <svg
-          className="mx-auto h-12 w-12 text-success-500"
+          className="mx-auto h-12 w-12 text-success-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -269,8 +269,8 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <h3 className="mt-3 text-lg font-medium text-neutral-900">Aucun diagnostic</h3>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h3 className="mt-3 text-lg font-medium text-white">Aucun diagnostic</h3>
+        <p className="mt-1 text-sm text-neutral-400">
           L&apos;emploi du temps ne présente aucun problème détecté.
         </p>
       </div>
@@ -294,7 +294,7 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
               className={`flex items-center gap-2 rounded-lg ${config.bg} px-4 py-2`}
             >
               {config.icon}
-              <span className="text-sm font-medium text-neutral-700">
+            <span className="text-sm font-medium text-neutral-200">
                 {count} {count > 1 ? config.pluralLabel.toLowerCase() : config.label.toLowerCase()}
               </span>
             </div>
@@ -310,7 +310,7 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
 
         return (
           <section key={severity} aria-label={config.label}>
-            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-neutral-900">
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
               {config.icon}
               {config.pluralLabel} ({items.length})
             </h3>

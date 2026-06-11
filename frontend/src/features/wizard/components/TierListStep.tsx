@@ -23,11 +23,11 @@ import {
 } from '@/features/wizard/wizardStore'
 
 const TIER_COLORS: Record<TierLabel, string> = {
-  S: 'bg-rose-100 text-rose-800 border-rose-300',
-  A: 'bg-orange-100 text-orange-800 border-orange-300',
-  B: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  C: 'bg-green-100 text-green-800 border-green-300',
-  D: 'bg-blue-100 text-blue-800 border-blue-300',
+  S: 'bg-rose-900/40 text-rose-300 border-rose-700',
+  A: 'bg-orange-900/40 text-orange-300 border-orange-700',
+  B: 'bg-yellow-900/40 text-yellow-300 border-yellow-700',
+  C: 'bg-green-900/40 text-green-300 border-green-700',
+  D: 'bg-blue-900/40 text-blue-300 border-blue-700',
 }
 
 const TIER_BADGE_COLORS: Record<TierLabel, string> = {
@@ -110,13 +110,13 @@ export default function TierListStep() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-neutral-900">Tier List</h2>
-          <p className="text-sm text-neutral-500">
+          <h2 className="text-xl font-bold text-fg-primary">Tier List</h2>
+          <p className="text-sm text-fg-muted">
             Classez les equipes par priorite de planification
           </p>
         </div>
-        <div className="rounded-lg border-2 border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
-          <p className="text-neutral-500">Ajoutez d&apos;abord des equipes (etape 2) avant de les classer.</p>
+        <div className="glass rounded-lg border-2 border-dashed border-border-subtle p-8 text-center">
+          <p className="text-fg-muted">Ajoutez d&apos;abord des equipes (etape 2) avant de les classer.</p>
         </div>
       </div>
     )
@@ -127,10 +127,10 @@ export default function TierListStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-neutral-900">Tier List</h2>
-        <p className="text-sm text-neutral-500">
-          Glissez-deposez les equipes entre les tiers pour ajuster leur priorite
-        </p>
+          <h2 className="text-xl font-bold text-fg-primary">Tier List</h2>
+          <p className="text-sm text-fg-muted">
+            Glissez-deposez les equipes entre les tiers pour ajuster leur priorite
+          </p>
       </div>
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -146,7 +146,7 @@ export default function TierListStep() {
 
         <DragOverlay>
           {activeTeam ? (
-            <div className="rounded-lg border border-primary-300 bg-white p-3 shadow-lg rotate-2">
+            <div className="glass-strong rounded-lg border border-primary-600/50 p-3 shadow-lg rotate-2">
               <TeamCard team={activeTeam} />
             </div>
           ) : null}
@@ -170,8 +170,8 @@ function TierColumn({ tier, teams }: TierColumnProps) {
   const badgeClass = TIER_BADGE_COLORS[tier]
 
   return (
-    <div className="flex flex-col rounded-xl border border-neutral-200 bg-neutral-50 overflow-hidden">
-      <div className={`flex items-center gap-2 border-b border-neutral-200 px-4 py-3 ${colorClass}`}>
+    <div className="glass flex flex-col rounded-xl border border-border-subtle overflow-hidden">
+      <div className={`flex items-center gap-2 border-b border-border-subtle px-4 py-3 ${colorClass}`}>
         <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white ${badgeClass}`}>
           {tier}
         </span>
@@ -189,7 +189,7 @@ function TierColumn({ tier, teams }: TierColumnProps) {
         </SortableContext>
 
         {teams.length === 0 && (
-          <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 text-sm text-neutral-400">
+          <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-border-subtle text-sm text-fg-disabled">
             Deposer ici
           </div>
         )}
@@ -217,26 +217,26 @@ function TeamCard({ team }: TeamCardProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+      className="glass rounded-lg border border-border-subtle p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       {...attributes}
       {...listeners}
     >
       <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-neutral-900 text-sm leading-tight">
-          {team.name || <span className="text-neutral-400 italic">Sans nom</span>}
+        <h4 className="font-semibold text-fg-primary text-sm leading-tight">
+          {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
         </h4>
         {team.gender && (
-          <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
+          <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-xs text-fg-muted">
             {team.gender}
           </span>
         )}
       </div>
 
-      <div className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
+        <div className="mt-2 flex items-center gap-2 text-xs text-fg-muted">
         {team.level && <span>{team.level}</span>}
         {team.size > 0 && <span>{team.size} joueurs</span>}
         {team.is_competition && (
-          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-600">Competition</span>
+          <span className="rounded bg-rose-900/40 px-1.5 py-0.5 text-rose-300">Competition</span>
         )}
       </div>
     </div>

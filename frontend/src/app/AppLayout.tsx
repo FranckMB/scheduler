@@ -20,16 +20,16 @@ export default function AppLayout() {
   }, [])
 
   return (
-    <div className="flex min-h-screen bg-neutral-50">
+    <div className="flex min-h-screen bg-bg-deep">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform bg-white shadow-lg transition-transform duration-200 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 transform glass-strong shadow-lg transition-transform duration-200 ease-in-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:relative lg:translate-x-0`}
       >
         <nav className="flex h-full flex-col p-4">
           <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-xl font-bold text-primary-600">Scheduler</h1>
+            <h1 className="text-xl font-bold text-primary-400 glow-accent">Scheduler</h1>
             <button
               type="button"
               className="lg:hidden"
@@ -45,7 +45,7 @@ export default function AppLayout() {
             <li>
               <a
                 href="/"
-                className="block rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100"
+                className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
               >
                 Home
               </a>
@@ -53,7 +53,7 @@ export default function AppLayout() {
             <li>
               <a
                 href="/wizard"
-                className="block rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100"
+                className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
               >
                 Wizard
               </a>
@@ -65,7 +65,7 @@ export default function AppLayout() {
       {/* Main content */}
       <div className="flex flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 shadow-sm">
+        <header className="glass-strong sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-border-subtle px-4 py-3 shadow-sm">
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -77,7 +77,7 @@ export default function AppLayout() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <span className="text-lg font-semibold text-neutral-800">Club Scheduler</span>
+            <span className="text-lg font-semibold text-fg-primary">Club Scheduler</span>
           </div>
 
           {/* Profile menu */}
@@ -86,7 +86,7 @@ export default function AppLayout() {
               <>
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100"
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-300 hover:bg-surface-hover"
                   onClick={() => setDropdownOpen((prev) => !prev)}
                   aria-expanded={dropdownOpen}
                   aria-haspopup="true"
@@ -103,17 +103,17 @@ export default function AppLayout() {
                 </button>
 
                 {dropdownOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+                  <div className="glass-strong absolute right-0 z-50 mt-2 w-48 rounded-md border border-border-subtle py-1 shadow-lg">
                     <Link
                       to="/profile"
-                      className="block px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100"
+                      className="block px-4 py-2 text-sm text-neutral-300 hover:bg-surface-hover"
                       onClick={() => setDropdownOpen(false)}
                     >
                       Profil
                     </Link>
                     <button
                       type="button"
-                      className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-neutral-100"
+                      className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-surface-hover"
                       onClick={() => {
                         setDropdownOpen(false)
                         logout()
@@ -127,7 +127,7 @@ export default function AppLayout() {
             ) : (
               <Link
                 to="/login"
-                className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 hover:shadow-lg"
               >
                 Se connecter
               </Link>

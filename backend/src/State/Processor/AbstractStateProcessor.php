@@ -8,6 +8,7 @@ use ApiPlatform\Metadata\DeleteOperationInterface;
 use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
+use App\Repository\SeasonRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -25,6 +26,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     public function __construct(
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
+        protected readonly SeasonRepository $seasonRepository,
     ) {
     }
 
@@ -77,6 +79,21 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         return $data;
     }
 
+    protected function resolveSeasonId(?string $clubId, ?string $seasonId): ?string
+    {
+        if (null !== $seasonId) {
+            return $seasonId;
+        }
+
+        if (null === $clubId) {
+            return null;
+        }
+
+        $season = $this->seasonRepository->findActiveByClubId($clubId);
+
+        return $season?->getId();
+    }
+
     /**
      * @param TInput $input
      *
@@ -85,12 +102,13 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
         $entity = $this->createEntityFromInput($input);
+        $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
 
         if (null !== $clubId && method_exists($entity, 'setClubId')) {
             $entity->setClubId($clubId);
         }
-        if (null !== $seasonId && method_exists($entity, 'setSeasonId')) {
-            $entity->setSeasonId($seasonId);
+        if (null !== $resolvedSeasonId && method_exists($entity, 'setSeasonId')) {
+            $entity->setSeasonId($resolvedSeasonId);
         }
 
         $this->entityManager->persist($entity);
@@ -116,6 +134,11 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
         if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
             throw new AccessDeniedHttpException('Access denied');
+        }
+
+        $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
+        if (null !== $resolvedSeasonId && method_exists($entity, 'setSeasonId')) {
+            $entity->setSeasonId($resolvedSeasonId);
         }
 
         $this->updateEntityFromInput($entity, $input);

@@ -349,16 +349,16 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} aria-hidden="true" />
 
-      <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-neutral-200 px-6 py-4">
+      <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-800 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-neutral-700 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Import Excel FFBB</h2>
-            <p className="mt-1 text-sm text-neutral-500">Déposez un fichier .xlsx pour prévisualiser les équipes avant import.</p>
+            <h2 className="text-lg font-semibold text-white">Import Excel FFBB</h2>
+            <p className="mt-1 text-sm text-neutral-400">Déposez un fichier .xlsx pour prévisualiser les équipes avant import.</p>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            className="rounded-md p-1 text-neutral-500 hover:bg-neutral-700 hover:text-neutral-300"
             aria-label="Fermer"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -371,7 +371,7 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
           <div
             onDragOver={(event) => event.preventDefault()}
             onDrop={handleDrop}
-            className="rounded-xl border-2 border-dashed border-primary-200 bg-primary-50/60 p-6 text-center transition hover:border-primary-300"
+            className="rounded-xl border-2 border-dashed border-primary-700 bg-primary-900/20 p-6 text-center transition hover:border-primary-600"
           >
             <input
               ref={fileInputRef}
@@ -382,15 +382,15 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
             />
 
             <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-primary-600 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-700 text-primary-400 shadow-sm">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 16a4 4 0 01-.88-7.902A5 5 0 1116.9 6L17 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v8" />
                 </svg>
               </div>
 
               <div>
-                <p className="text-sm font-medium text-neutral-900">Glissez un fichier Excel ici</p>
-                <p className="text-sm text-neutral-500">Colonnes requises : Nom, Catégorie, Numéro, Organisme</p>
+                <p className="text-sm font-medium text-white">Glissez un fichier Excel ici</p>
+                <p className="text-sm text-neutral-400">Colonnes requises : Nom, Catégorie, Numéro, Organisme</p>
               </div>
 
               <button
@@ -402,67 +402,67 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
               </button>
 
               {selectedFile && (
-                <p className="text-xs text-neutral-500">Fichier sélectionné : {selectedFile.name}</p>
+                <p className="text-xs text-neutral-400">Fichier sélectionné : {selectedFile.name}</p>
               )}
             </div>
           </div>
 
           {errorMessage && (
-            <div className="rounded-lg bg-error-50 px-4 py-3 text-sm text-error-700" role="alert">
+            <div className="rounded-lg bg-error-900/40 px-4 py-3 text-sm text-error-400" role="alert">
               {errorMessage}
             </div>
           )}
 
           {successMessage && (
-            <div className="rounded-lg bg-success-50 px-4 py-3 text-sm text-success-700" role="status">
+            <div className="rounded-lg bg-success-900/40 px-4 py-3 text-sm text-success-400" role="status">
               {successMessage}
             </div>
           )}
 
           {isParsing && (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+            <div className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-3 text-sm text-neutral-300">
               Lecture du fichier Excel…
             </div>
           )}
 
           {previewWithDuplicates.length > 0 && (
-            <div className="rounded-xl border border-neutral-200 bg-white">
-              <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+            <div className="rounded-xl border border-neutral-700 bg-neutral-800">
+              <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-neutral-900">Prévisualisation</h3>
-                  <p className="text-xs text-neutral-500">
+                  <h3 className="text-sm font-semibold text-white">Prévisualisation</h3>
+                  <p className="text-xs text-neutral-400">
                     {previewWithDuplicates.length} équipe{previewWithDuplicates.length > 1 ? 's' : ''} détectée
                     {previewWithDuplicates.length > 1 ? 's' : ''}
                   </p>
                 </div>
                 {duplicateCount > 0 && (
-                  <span className="rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
+                  <span className="rounded-full bg-warning-900/40 px-2.5 py-1 text-xs font-medium text-warning-300">
                     {duplicateCount} doublon{duplicateCount > 1 ? 's' : ''} détecté{duplicateCount > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
 
               <div className="max-h-80 overflow-auto">
-                <table className="min-w-full divide-y divide-neutral-200 text-left text-sm">
-                  <thead className="sticky top-0 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                <table className="min-w-full divide-y divide-neutral-700 text-left text-sm">
+                  <thead className="sticky top-0 bg-neutral-800 text-xs uppercase tracking-wide text-neutral-400">
                     <tr>
                       <th className="px-4 py-3 font-medium">Nom</th>
                       <th className="px-4 py-3 font-medium">Catégorie</th>
                       <th className="px-4 py-3 font-medium">Statut</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-100 bg-white">
+                  <tbody className="divide-y divide-neutral-700 bg-neutral-800">
                     {previewWithDuplicates.map((row) => (
                       <tr key={`${row.number}-${row.name}-${row.category}`}>
-                        <td className="px-4 py-3 font-medium text-neutral-900">{row.name}</td>
-                        <td className="px-4 py-3 text-neutral-600">{row.category}</td>
+                        <td className="px-4 py-3 font-medium text-white">{row.name}</td>
+                        <td className="px-4 py-3 text-neutral-300">{row.category}</td>
                         <td className="px-4 py-3">
                           {row.duplicate ? (
-                            <span className="rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
+                            <span className="rounded-full bg-warning-900/40 px-2.5 py-1 text-xs font-medium text-warning-300">
                               Doublon — ignorée
                             </span>
                           ) : (
-                            <span className="rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
+                            <span className="rounded-full bg-success-900/40 px-2.5 py-1 text-xs font-medium text-success-300">
                               Nouvelle équipe
                             </span>
                           )}
@@ -475,8 +475,8 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
             </div>
           )}
 
-          <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
-            <p className="text-sm text-neutral-500">
+          <div className="flex items-center justify-between border-t border-neutral-700 pt-4">
+            <p className="text-sm text-neutral-400">
               {previewWithDuplicates.length > 0
                 ? `${importCount} équipe${1 === importCount ? '' : 's'} importable${1 === importCount ? '' : 's'}`
                 : 'Aucun fichier importé'}
@@ -486,7 +486,7 @@ export default function ImportExcelDialog({ isOpen, onClose }: ImportExcelDialog
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                className="rounded-lg border border-neutral-600 bg-neutral-700 px-4 py-2 text-sm font-medium text-neutral-200 hover:bg-neutral-600"
               >
                 Annuler
               </button>

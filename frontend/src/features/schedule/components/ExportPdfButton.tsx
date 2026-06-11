@@ -100,10 +100,10 @@ export function ExportPdfButton({ scheduleId }: ExportPdfButtonProps) {
 
   if (status === 'failed') {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="inline-flex items-center gap-2 text-sm font-medium text-error-600">
-          <span>Export PDF failed</span>
-          <span className="rounded-full bg-error-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-700">
+        <div className="flex flex-col gap-2">
+          <div className="inline-flex items-center gap-2 text-sm font-medium text-error-400">
+            <span>Export PDF failed</span>
+            <span className="rounded-full bg-error-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-error-300">
             {statusLabel}
           </span>
         </div>
@@ -114,7 +114,7 @@ export function ExportPdfButton({ scheduleId }: ExportPdfButtonProps) {
             queryClient.removeQueries({ queryKey: ['schedule', scheduleId] })
             exportMutation.mutate()
           }}
-          className="inline-flex items-center gap-2 rounded-md border border-error-600 px-3 py-1.5 text-sm font-medium text-error-600 transition-colors hover:bg-error-50"
+          className="inline-flex items-center gap-2 rounded-md border border-error-600 px-3 py-1.5 text-sm font-medium text-error-400 transition-colors hover:bg-error-900/40"
         >
           Réessayer
         </button>
@@ -127,11 +127,11 @@ export function ExportPdfButton({ scheduleId }: ExportPdfButtonProps) {
       <button
         type="button"
         disabled
-        className="inline-flex items-center gap-2 rounded-md bg-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 cursor-not-allowed"
+        className="inline-flex items-center gap-2 rounded-md bg-neutral-700 px-4 py-2 text-sm font-medium text-neutral-200 cursor-not-allowed"
       >
         <LoadingSpinner size="sm" />
         Export PDF
-        <span className="rounded-full bg-neutral-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-700">
+        <span className="rounded-full bg-neutral-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-200">
           {statusLabel}
         </span>
       </button>

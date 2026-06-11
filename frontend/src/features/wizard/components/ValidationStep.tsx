@@ -178,9 +178,9 @@ export default function ValidationStep() {
   const infoCount = issues.filter((i) => i.severity === 'info').length
 
   const SEVERITY_STYLES = {
-    error: 'bg-error-50 border-error-200 text-error-700',
-    warning: 'bg-warning-50 border-warning-200 text-warning-700',
-    info: 'bg-info-50 border-info-200 text-info-700',
+    error: 'bg-error-900/40 border-error-700 text-error-300',
+    warning: 'bg-warning-900/40 border-warning-700 text-warning-300',
+    info: 'bg-info-900/40 border-info-700 text-info-300',
   }
 
   const SEVERITY_ICONS = {
@@ -204,8 +204,8 @@ export default function ValidationStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-neutral-900">Validation</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-xl font-bold text-fg-primary">Validation</h2>
+        <p className="text-sm text-fg-muted">
           Verification de la coherence des contraintes et des donnees
         </p>
       </div>
@@ -213,17 +213,17 @@ export default function ValidationStep() {
       {/* Summary badges */}
       <div className="flex gap-4">
         {errorCount > 0 && (
-          <span className="rounded-full bg-error-100 px-3 py-1 text-sm font-medium text-error-700">
+          <span className="rounded-full bg-error-900/40 px-3 py-1 text-sm font-medium text-error-300">
             {errorCount} erreur{errorCount > 1 ? 's' : ''}
           </span>
         )}
         {warningCount > 0 && (
-          <span className="rounded-full bg-warning-100 px-3 py-1 text-sm font-medium text-warning-700">
+          <span className="rounded-full bg-warning-900/40 px-3 py-1 text-sm font-medium text-warning-300">
             {warningCount} avertissement{warningCount > 1 ? 's' : ''}
           </span>
         )}
         {infoCount > 0 && (
-          <span className="rounded-full bg-info-100 px-3 py-1 text-sm font-medium text-info-700">
+          <span className="rounded-full bg-info-900/40 px-3 py-1 text-sm font-medium text-info-300">
             {infoCount} info{infoCount > 1 ? 's' : ''}
           </span>
         )}
@@ -248,24 +248,24 @@ export default function ValidationStep() {
       </div>
 
       {/* Stats summary */}
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-neutral-700">Resume des donnees</h3>
+      <div className="glass rounded-lg border border-border-subtle p-4">
+        <h3 className="mb-3 text-sm font-semibold text-fg-primary">Resume des donnees</h3>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-md bg-neutral-50 p-3 text-center">
-            <p className="text-2xl font-bold text-primary-600">{data.venues.length}</p>
-            <p className="text-xs text-neutral-500">Salle{data.venues.length > 1 ? 's' : ''}</p>
+          <div className="glass rounded-md bg-bg-elevated p-3 text-center">
+            <p className="text-2xl font-bold text-primary-400">{data.venues.length}</p>
+            <p className="text-xs text-fg-muted">Salle{data.venues.length > 1 ? 's' : ''}</p>
           </div>
-          <div className="rounded-md bg-neutral-50 p-3 text-center">
-            <p className="text-2xl font-bold text-primary-600">{data.teams.length}</p>
-            <p className="text-xs text-neutral-500">Equipe{data.teams.length > 1 ? 's' : ''}</p>
+          <div className="glass rounded-md bg-bg-elevated p-3 text-center">
+            <p className="text-2xl font-bold text-primary-400">{data.teams.length}</p>
+            <p className="text-xs text-fg-muted">Equipe{data.teams.length > 1 ? 's' : ''}</p>
           </div>
-          <div className="rounded-md bg-neutral-50 p-3 text-center">
-            <p className="text-2xl font-bold text-primary-600">{data.coaches.length}</p>
-            <p className="text-xs text-neutral-500">Coach{data.coaches.length > 1 ? 's' : ''}</p>
+          <div className="glass rounded-md bg-bg-elevated p-3 text-center">
+            <p className="text-2xl font-bold text-primary-400">{data.coaches.length}</p>
+            <p className="text-xs text-fg-muted">Coach{data.coaches.length > 1 ? 's' : ''}</p>
           </div>
-          <div className="rounded-md bg-neutral-50 p-3 text-center">
-            <p className="text-2xl font-bold text-primary-600">{data.constraints.length + data.coachConstraints.length}</p>
-            <p className="text-xs text-neutral-500">Contrainte{data.constraints.length + data.coachConstraints.length > 1 ? 's' : ''}</p>
+          <div className="glass rounded-md bg-bg-elevated p-3 text-center">
+            <p className="text-2xl font-bold text-primary-400">{data.constraints.length + data.coachConstraints.length}</p>
+            <p className="text-xs text-fg-muted">Contrainte{data.constraints.length + data.coachConstraints.length > 1 ? 's' : ''}</p>
           </div>
         </div>
       </div>

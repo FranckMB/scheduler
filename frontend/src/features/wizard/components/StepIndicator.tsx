@@ -22,7 +22,7 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
   return (
     <div className="w-full">
       {/* Progress bar */}
-      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+      <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
         <div
           className="h-full rounded-full bg-primary-600 transition-all duration-500 ease-out"
           style={{ width: `${progress}%` }}
@@ -43,10 +43,10 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
               onClick={() => onStepClick?.(step)}
               className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium transition-colors sm:gap-2 sm:px-3 sm:py-2 sm:text-sm ${
                 isActive
-                  ? 'bg-primary-50 text-primary-700'
+                  ? 'bg-surface text-primary-400'
                   : isCompleted
-                    ? 'text-success-600 hover:bg-neutral-50'
-                    : 'text-neutral-400'
+                    ? 'text-success-400 hover:bg-surface'
+                    : 'text-fg-disabled'
               }`}
               disabled={!onStepClick}
             >
@@ -55,8 +55,8 @@ export default function StepIndicator({ currentStep, onStepClick }: StepIndicato
                   isActive
                     ? 'bg-primary-600 text-white'
                     : isCompleted
-                      ? 'bg-success-500 text-white'
-                      : 'bg-neutral-200 text-neutral-500'
+                      ? 'bg-success-600 text-white'
+                      : 'bg-neutral-800 text-fg-disabled'
                 }`}
               >
                 {isCompleted ? (

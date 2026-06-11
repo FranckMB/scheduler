@@ -1,0 +1,7 @@
+# Test environment: disable authentication on the api firewall for integration tests
+# that test business logic without needing real JWT tokens.
+# The login firewall remains active to allow testing the json_login authenticator.
+security:
+    firewalls:
+        api:
+            security: false
