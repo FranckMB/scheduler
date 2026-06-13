@@ -82,7 +82,6 @@ final class FfbbExcelImporterTest extends TestCase
         $teamA = $teams[0];
         self::assertSame('Team A', $teamA->getName());
         self::assertSame('cat-1', $teamA->getSportCategoryId());
-        self::assertSame('1001', $teamA->getFfbbTeamId());
         self::assertTrue($teamA->getIsCompetition());
         self::assertTrue($teamA->getIsActive());
         self::assertSame(5, $teamA->getPriorityTierId());
@@ -105,8 +104,7 @@ final class FfbbExcelImporterTest extends TestCase
             ->setSportCategoryId('cat-1')
             ->setPriorityTierId(5)
             ->setName('Existing')
-            ->setSessionsPerWeek(2)
-            ->setFfbbTeamId('1001');
+            ->setSessionsPerWeek(2);
 
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $repositories = $this->buildRepositories([

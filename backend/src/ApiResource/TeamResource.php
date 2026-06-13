@@ -72,9 +72,6 @@ class TeamResource
     #[Groups(['read'])]
     public ?string $parentTeamId = null;
 
-    #[Groups(['read'])]
-    public ?string $ffbbTeamId = null;
-
     public static function fromEntity(Team $entity): self
     {
         $dto = new self();
@@ -92,7 +89,6 @@ class TeamResource
         $dto->forcedVenueId = $entity->getForcedVenueId();
         $dto->isActive = $entity->getIsActive();
         $dto->parentTeamId = $entity->getParentTeamId();
-        $dto->ffbbTeamId = $entity->getFfbbTeamId();
 
         return $dto;
     }

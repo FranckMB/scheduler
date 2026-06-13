@@ -49,6 +49,9 @@ class SportCategory
     #[ORM\Column(type: 'integer')]
     private int $sortOrder = 0;
 
+    #[ORM\Column(type: 'string', length: 1, nullable: true)]
+    private ?string $gender = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -196,6 +199,18 @@ class SportCategory
     public function setSortOrder(int $sortOrder): self
     {
         $this->sortOrder = $sortOrder;
+
+        return $this;
+    }
+
+    public function getGender(): ?string
+    {
+        return $this->gender;
+    }
+
+    public function setGender(?string $gender): self
+    {
+        $this->gender = $gender;
 
         return $this;
     }

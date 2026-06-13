@@ -261,7 +261,6 @@ final class ScheduleConstraintBuilder
             'forcedVenueId' => $team->getForcedVenueId(),
             'isActive' => $team->getIsActive(),
             'parentTeamId' => $team->getParentTeamId(),
-            'ffbbTeamId' => $team->getFfbbTeamId(),
         ];
     }
 

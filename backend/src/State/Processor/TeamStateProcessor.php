@@ -38,7 +38,6 @@ class TeamStateProcessor extends AbstractStateProcessor
         $entity->setForcedVenueId($input->forcedVenueId);
         $entity->setIsActive($input->isActive ?? true);
         $entity->setParentTeamId($input->parentTeamId);
-        $entity->setFfbbTeamId($input->ffbbTeamId);
 
         return $entity;
     }
@@ -63,7 +62,6 @@ class TeamStateProcessor extends AbstractStateProcessor
         $entity->setForcedVenueId($input->forcedVenueId);
         $entity->setIsActive($input->isActive ?? $entity->getIsActive());
         $entity->setParentTeamId($input->parentTeamId);
-        $entity->setFfbbTeamId($input->ffbbTeamId);
     }
 
     /**

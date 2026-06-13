@@ -20,6 +20,7 @@ return (new PhpCsFixer\Config())
             "less_and_greater" => null,
         ],
         "strict_comparison" => true,
+        "no_superfluous_phpdoc_tags" => true,
     ])
     ->setFinder($finder)
 ;

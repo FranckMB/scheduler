@@ -59,7 +59,7 @@ class Team
     private ?string $size = null;
 
     #[ORM\Column(type: 'smallint')]
-    private int $sessionsPerWeek;
+    private int $sessionsPerWeek = 2;
 
     #[ORM\Column(type: 'smallint', nullable: true)]
     private ?int $minSessionsOverride = null;
@@ -75,9 +75,6 @@ class Team
 
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $parentTeamId = null;
-
-    #[ORM\Column(type: 'string', length: 80, nullable: true)]
-    private ?string $ffbbTeamId = null;
 
     public function __construct()
     {
@@ -320,18 +317,6 @@ class Team
     public function setParentTeamId(?string $parentTeamId): self
     {
         $this->parentTeamId = $parentTeamId;
-
-        return $this;
-    }
-
-    public function getFfbbTeamId(): ?string
-    {
-        return $this->ffbbTeamId;
-    }
-
-    public function setFfbbTeamId(?string $ffbbTeamId): self
-    {
-        $this->ffbbTeamId = $ffbbTeamId;
 
         return $this;
     }

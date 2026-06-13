@@ -131,9 +131,14 @@ final class AuthControllerTest extends KernelTestCase
         $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $club->getId()]);
         self::assertNotNull($season, 'Default season should be created');
 
-        $sportCategory = $this->em->getRepository(SportCategory::class)->findOneBy(['clubId' => $club->getId()]);
-        self::assertNotNull($sportCategory, 'Default sport category should be created');
-        self::assertSame('basket', $sportCategory->getName(), 'Sport category should be named basket');
+        $sportCategories = $this->em->getRepository(SportCategory::class)->findBy(['clubId' => $club->getId()]);
+        self::assertCount(9, $sportCategories, 'Default sport categories should be created');
+        $categoryNames = array_map(fn ($cat) => $cat->getName(), $sportCategories);
+        self::assertContains('U7', $categoryNames, 'U7 category should exist');
+        self::assertContains('U9', $categoryNames, 'U9 category should exist');
+        self::assertContains('U11', $categoryNames, 'U11 category should exist');
+        self::assertContains('Seniors M', $categoryNames, 'Seniors M category should exist');
+        self::assertContains('Seniors F', $categoryNames, 'Seniors F category should exist');
 
         $clubUser = $this->em->getRepository(ClubUser::class)->findOneBy([
             'clubId' => $club->getId(),

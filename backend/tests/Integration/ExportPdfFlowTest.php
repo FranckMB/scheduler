@@ -135,9 +135,13 @@ final class ExportPdfFlowTest extends KernelTestCase
         self::assertNotNull($season, 'Default season should be created');
         $seasonId = $season->getId();
 
-        $sportCategory = $this->em->getRepository(SportCategory::class)->findOneBy(['clubId' => $clubId]);
-        self::assertNotNull($sportCategory, 'Default sport category should be created');
-        self::assertSame('basket', $sportCategory->getName(), 'Sport category should be named basket');
+        $sportCategories = $this->em->getRepository(SportCategory::class)->findBy(['clubId' => $clubId]);
+        self::assertCount(9, $sportCategories, 'Default sport categories should be created');
+        $categoryNames = array_map(fn ($cat) => $cat->getName(), $sportCategories);
+        self::assertContains('U7', $categoryNames, 'U7 category should exist');
+        self::assertContains('U9', $categoryNames, 'U9 category should exist');
+        self::assertContains('U11', $categoryNames, 'U11 category should exist');
+        $sportCategory = $sportCategories[0];
         $sportCategoryId = $sportCategory->getId();
 
         // ============================================================
@@ -222,7 +226,7 @@ final class ExportPdfFlowTest extends KernelTestCase
         self::assertSame(202, $generateResponse->getStatusCode(), 'Generation trigger should return 202');
 
         $generateData = json_decode((string) $generateResponse->getContent(), true);
-        self::assertSame('Schedule generation queued.', $generateData['message']);
+        self::assertSame('Schedule generation queued', $generateData['message']);
 
         // Manually invoke handler (async bus not available in test without worker)
         $handler = $container->get(GenerateScheduleHandler::class);

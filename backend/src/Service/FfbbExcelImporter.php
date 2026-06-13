@@ -83,7 +83,6 @@ final class FfbbExcelImporter
             $existingTeam = $this->entityManager->getRepository(Team::class)->findOneBy([
                 'clubId' => $clubId,
                 'seasonId' => $seasonId,
-                'ffbbTeamId' => $numero,
             ]);
 
             if ($existingTeam instanceof Team) {
@@ -101,8 +100,7 @@ final class FfbbExcelImporter
                 ->setName($nom)
                 ->setSessionsPerWeek(self::DEFAULT_SESSIONS_PER_WEEK)
                 ->setIsCompetition(true)
-                ->setIsActive(true)
-                ->setFfbbTeamId($numero);
+                ->setIsActive(true);
 
             $this->entityManager->persist($team);
             ++$created;
