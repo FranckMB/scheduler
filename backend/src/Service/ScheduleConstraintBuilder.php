@@ -31,12 +31,12 @@ final class ScheduleConstraintBuilder
 
     /** @var array<int, array{dayOfWeek: int, startTime: string, endTime: string}> */
     private const DEFAULT_VENUE_AVAILABILITY = [
-        ['dayOfWeek' => 1, 'startTime' => '08:00', 'endTime' => '22:00'],
-        ['dayOfWeek' => 2, 'startTime' => '08:00', 'endTime' => '22:00'],
-        ['dayOfWeek' => 3, 'startTime' => '08:00', 'endTime' => '22:00'],
-        ['dayOfWeek' => 4, 'startTime' => '08:00', 'endTime' => '22:00'],
-        ['dayOfWeek' => 5, 'startTime' => '08:00', 'endTime' => '22:00'],
-        ['dayOfWeek' => 6, 'startTime' => '08:00', 'endTime' => '22:00'],
+        ['dayOfWeek' => 1, 'startTime' => '16:00', 'endTime' => '22:30'],
+        ['dayOfWeek' => 2, 'startTime' => '16:00', 'endTime' => '22:30'],
+        ['dayOfWeek' => 3, 'startTime' => '08:00', 'endTime' => '22:30'],
+        ['dayOfWeek' => 4, 'startTime' => '16:00', 'endTime' => '22:30'],
+        ['dayOfWeek' => 5, 'startTime' => '16:00', 'endTime' => '22:30'],
+        ['dayOfWeek' => 6, 'startTime' => '08:00', 'endTime' => '14:00'],
     ];
 
     public function __construct(
