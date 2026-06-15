@@ -17,6 +17,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
+use App\Entity\VenueAvailability;
 use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
@@ -220,6 +221,38 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $venue->setIsActive(true);
                 $manager->persist($venue);
                 $venues[$vd['var']] = $venue;
+            }
+        }
+        $manager->flush();
+
+        // ============================================================
+        // SECTION — VENUE AVAILABILITIES (default hours)
+        // ============================================================
+        $defaultAvailabilities = [
+            ['day' => 1, 'start' => '16:00', 'end' => '22:30'],
+            ['day' => 2, 'start' => '16:00', 'end' => '22:30'],
+            ['day' => 3, 'start' => '08:00', 'end' => '22:30'],
+            ['day' => 4, 'start' => '16:00', 'end' => '22:30'],
+            ['day' => 5, 'start' => '16:00', 'end' => '22:30'],
+            ['day' => 6, 'start' => '08:00', 'end' => '14:00'],
+        ];
+
+        foreach ($venues as $venue) {
+            foreach ($defaultAvailabilities as $avail) {
+                $existing = $manager->getRepository(VenueAvailability::class)->findOneBy([
+                    'venueId' => $venue->getId(),
+                    'dayOfWeek' => $avail['day'],
+                ]);
+                if (null === $existing) {
+                    $va = new VenueAvailability();
+                    $va->setClubId($club->getId());
+                    $va->setSeasonId($season->getId());
+                    $va->setVenueId($venue->getId());
+                    $va->setDayOfWeek($avail['day']);
+                    $va->setStartTime(new DateTimeImmutable($avail['start']));
+                    $va->setEndTime(new DateTimeImmutable($avail['end']));
+                    $manager->persist($va);
+                }
             }
         }
         $manager->flush();

@@ -14,7 +14,9 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenueAvailability;
 use App\Enum\ConstraintScope;
+use App\Repository\VenueAvailabilityRepository;
 use App\Enum\LockLevel;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -39,11 +41,15 @@ final class ScheduleConstraintBuilder
         ['dayOfWeek' => 6, 'startTime' => '08:00', 'endTime' => '14:00'],
     ];
 
+    /** @var array<string, array<VenueAvailability>> */
+    private array $currentAvailabilitiesByVenue = [];
+
     public function __construct(
         private readonly ?EntityManagerInterface $entityManager = null,
         #[Autowire(service: 'cache.schedule')]
         private readonly ?CacheItemPoolInterface $scheduleCachePool = null,
         private readonly ?TeamTagService $teamTagService = null,
+        private readonly ?VenueAvailabilityRepository $venueAvailabilityRepository = null,
     ) {}
 
     public static function cacheKey(string $clubId): string
@@ -77,6 +83,17 @@ final class ScheduleConstraintBuilder
 
         $constraints = $em->getRepository(\App\Entity\Constraint::class)->findByClubSeason($clubId, $seasonId);
 
+        // Pre-load venue availabilities to avoid N+1 queries in serializeVenue()
+        $availabilitiesByVenue = [];
+        if ($this->venueAvailabilityRepository instanceof VenueAvailabilityRepository) {
+            $rows = $this->venueAvailabilityRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+            foreach ($rows as $row) {
+                $availabilitiesByVenue[$row->getVenueId()][] = $row;
+            }
+        }
+
+        $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
+
         $payload = $this->buildPayload(
             clubId: $clubId,
             seasonId: $seasonId,
@@ -90,6 +107,8 @@ final class ScheduleConstraintBuilder
             solverSeed: $solverSeed,
             constraints: $constraints,
         );
+
+        $this->currentAvailabilitiesByVenue = [];
 
         if ($cacheItem instanceof \Psr\Cache\CacheItemInterface) {
             $cacheItem->set($payload);
@@ -226,8 +245,32 @@ final class ScheduleConstraintBuilder
             'externalRef' => $venue->getExternalRef(),
             'isActive' => $venue->getIsActive(),
             'parentVenueId' => $venue->getParentVenueId(),
-            'availability' => self::DEFAULT_VENUE_AVAILABILITY,
+            'availability' => $this->buildAvailability($this->currentAvailabilitiesByVenue[$venue->getId()] ?? []),
         ];
+    }
+
+    /**
+     * @param array<VenueAvailability> $availabilities
+     * @return array<int, array{dayOfWeek: int, startTime: string, endTime: string}>
+     */
+    private function buildAvailability(array $availabilities): array
+    {
+        if ([] === $availabilities) {
+            return self::DEFAULT_VENUE_AVAILABILITY;
+        }
+
+        $result = [];
+        foreach ($availabilities as $va) {
+            $result[] = [
+                'dayOfWeek' => $va->getDayOfWeek(),
+                'startTime' => $va->getStartTime()->format('H:i'),
+                'endTime' => $va->getEndTime()->format('H:i'),
+            ];
+        }
+
+        usort($result, static fn (array $a, array $b): int => $a['dayOfWeek'] <=> $b['dayOfWeek'] ?: strcmp($a['startTime'], $b['startTime']));
+
+        return $result;
     }
 
     /** @return array<string, mixed> */
