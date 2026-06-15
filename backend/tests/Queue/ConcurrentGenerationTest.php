@@ -4,47 +4,66 @@ declare(strict_types=1);
 
 namespace App\Tests\Queue;
 
-use PHPUnit\Framework\TestCase;
+use App\Service\ClubGenerationLock;
+use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
-/**
- * Phase 1 skeleton — will be enriched in Phase 2 with real entities.
- *
- * Tests concurrent schedule generation queue behavior:
- * 1. Club A launches generation → status=generating, job in Redis queue
- * 2. Club A relaunches immediately → status=queued, no 2nd active job
- * 3. Two different clubs simultaneously → 2 independent jobs
- * 4. Worker crash → status=failed, other club not impacted
- * 5. Same message dispatched twice (retry) → idempotence
- */
-final class ConcurrentGenerationTest extends TestCase
+#[Group('phase1')]
+#[Group('integration')]
+final class ConcurrentGenerationTest extends WebTestCase
 {
-    /** @group phase1 */
-    public function testClubALaunchesGenerationStatusGenerating(): void
+    private ?ClubGenerationLock $lock = null;
+
+    protected function setUp(): void
     {
-        self::markTestSkipped('Phase 2: requires real entities and Messenger queue');
+        $this->lock = static::getContainer()->get(ClubGenerationLock::class);
     }
 
-    /** @group phase1 */
-    public function testClubARelaunchesImmediatelyStatusQueued(): void
+    public function testAcquireLockForSameClubPreventsConcurrentGeneration(): void
     {
-        self::markTestSkipped('Phase 2: requires real entities and Messenger queue');
+        $clubId = 'club-' . uniqid();
+
+        $token = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($token, 'First acquire should return a token');
+
+        $secondToken = $this->lock->acquire($clubId, 60);
+        self::assertNull($secondToken, 'Second acquire for same club should fail');
+
+        $this->lock->release($clubId, $token);
+
+        $thirdToken = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($thirdToken, 'Acquire after release should succeed');
+
+        $this->lock->release($clubId, $thirdToken);
     }
 
-    /** @group phase1 */
-    public function testTwoClubsSimultaneouslyTwoIndependentJobs(): void
+    public function testDifferentClubsCanAcquireLocksConcurrently(): void
     {
-        self::markTestSkipped('Phase 2: requires real entities and Messenger queue');
+        $clubA = 'club-a-' . uniqid();
+        $clubB = 'club-b-' . uniqid();
+
+        $tokenA = $this->lock->acquire($clubA, 60);
+        self::assertNotNull($tokenA, 'Club A should acquire lock');
+
+        $tokenB = $this->lock->acquire($clubB, 60);
+        self::assertNotNull($tokenB, 'Club B should acquire lock concurrently');
+
+        $this->lock->release($clubA, $tokenA);
+        $this->lock->release($clubB, $tokenB);
     }
 
-    /** @group phase1 */
-    public function testWorkerCrashStatusFailedOtherClubNotImpacted(): void
+    public function testReleaseWithWrongTokenDoesNotRemoveLock(): void
     {
-        self::markTestSkipped('Phase 2: requires real entities and Messenger queue');
-    }
+        $clubId = 'club-' . uniqid();
 
-    /** @group phase1 */
-    public function testSameMessageDispatchedTwiceIdempotence(): void
-    {
-        self::markTestSkipped('Phase 2: requires real entities and Messenger queue');
+        $token = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($token);
+
+        $this->lock->release($clubId, 'wrong-token');
+
+        $secondToken = $this->lock->acquire($clubId, 60);
+        self::assertNull($secondToken, 'Lock should still be held after release with wrong token');
+
+        $this->lock->release($clubId, $token);
     }
 }

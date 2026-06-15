@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Repository\SeasonRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: SeasonRepository::class)]
@@ -22,10 +23,10 @@ class Season
     private int $version = 1;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $updatedAt;
+    private DateTimeImmutable $updatedAt;
 
     #[ORM\Column(type: 'guid')]
     private string $clubId;
@@ -34,10 +35,10 @@ class Season
     private string $name;
 
     #[ORM\Column(type: 'date_immutable')]
-    private \DateTimeImmutable $startDate;
+    private DateTimeImmutable $startDate;
 
     #[ORM\Column(type: 'date_immutable')]
-    private \DateTimeImmutable $endDate;
+    private DateTimeImmutable $endDate;
 
     #[ORM\Column(type: 'string', length: 20)]
     private string $status;
@@ -52,7 +53,7 @@ class Season
     public function __construct()
     {
         $this->id = $this->newUuid();
-        $now = new \DateTimeImmutable();
+        $now = new DateTimeImmutable;
         $this->createdAt = $now;
         $this->updatedAt = $now;
     }
@@ -74,24 +75,24 @@ class Season
         return $this->version;
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $createdAt): self
+    public function setCreatedAt(DateTimeImmutable $createdAt): self
     {
         $this->createdAt = $createdAt;
 
         return $this;
     }
 
-    public function getUpdatedAt(): \DateTimeImmutable
+    public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
     }
 
-    public function setUpdatedAt(\DateTimeImmutable $updatedAt): self
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
 
@@ -101,7 +102,7 @@ class Season
     #[ORM\PreUpdate]
     public function touchUpdatedAt(): void
     {
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable;
     }
 
     public function getClubId(): string
@@ -128,24 +129,24 @@ class Season
         return $this;
     }
 
-    public function getStartDate(): \DateTimeImmutable
+    public function getStartDate(): DateTimeImmutable
     {
         return $this->startDate;
     }
 
-    public function setStartDate(\DateTimeImmutable $startDate): self
+    public function setStartDate(DateTimeImmutable $startDate): self
     {
         $this->startDate = $startDate;
 
         return $this;
     }
 
-    public function getEndDate(): \DateTimeImmutable
+    public function getEndDate(): DateTimeImmutable
     {
         return $this->endDate;
     }
 
-    public function setEndDate(\DateTimeImmutable $endDate): self
+    public function setEndDate(DateTimeImmutable $endDate): self
     {
         $this->endDate = $endDate;
 
@@ -193,8 +194,8 @@ class Season
     private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

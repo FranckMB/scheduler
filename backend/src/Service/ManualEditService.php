@@ -4,36 +4,45 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Constraint;
 use App\Entity\ScheduleSlotTemplate;
-use App\Entity\TeamConstraint;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
 
 final class ManualEditService
 {
-    public function __construct(private readonly EntityManagerInterface $entityManager)
-    {
-    }
+    public function __construct(private readonly EntityManagerInterface $entityManager) {}
 
     public function applyPermanentConstraint(
         ScheduleSlotTemplate $slot,
         string $type,
         ?string $reason = null,
         ?string $createdBy = null,
-    ): TeamConstraint {
-        $constraint = new TeamConstraint();
+    ): Constraint {
+        $constraint = new Constraint;
         $constraint
             ->setClubId($slot->getClubId())
             ->setSeasonId($slot->getSeasonId())
-            ->setTeamId($slot->getTeamId())
-            ->setType($type)
-            ->setDayOfWeek($slot->getDayOfWeek())
-            ->setStartTime($slot->getStartTime())
-            ->setEndTime($this->calculateEndTime($slot->getStartTime(), $slot->getDurationMinutes()))
-            ->setVenueId($slot->getVenueId())
-            ->setReason($reason)
-            ->setCreatedBy($createdBy)
-            ->setSource('manual_edit');
+            ->setName($reason ?? 'Manual edit constraint')
+            ->setScope(ConstraintScope::TEAM)
+            ->setScopeTargetId($slot->getTeamId())
+            ->setFamily(ConstraintFamily::TIME)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig([
+                'dayOfWeek' => $slot->getDayOfWeek(),
+                'startTime' => $slot->getStartTime()->format('H:i:s'),
+                'endTime' => $this->calculateEndTime($slot->getStartTime(), $slot->getDurationMinutes())->format('H:i:s'),
+                'venueId' => $slot->getVenueId(),
+                'type' => $type,
+                'reason' => $reason,
+            ])
+            ->setSource('manual_edit')
+            ->setCreatedBy($createdBy);
 
         $this->entityManager->persist($constraint);
         $this->entityManager->flush();
@@ -53,17 +62,17 @@ final class ManualEditService
     public function applyOneTimeUpdate(ScheduleSlotTemplate $slot, array $data): void
     {
         $dayOfWeek = isset($data['dayOfWeek']) ? (int) $data['dayOfWeek'] : $slot->getDayOfWeek();
-        $startTime = isset($data['startTime']) && $data['startTime'] instanceof \DateTimeImmutable
+        $startTime = isset($data['startTime']) && $data['startTime'] instanceof DateTimeImmutable
             ? $data['startTime']
             : $slot->getStartTime();
         $durationMinutes = isset($data['durationMinutes']) ? (int) $data['durationMinutes'] : $slot->getDurationMinutes();
         $venueId = isset($data['venueId']) ? (string) $data['venueId'] : $slot->getVenueId();
-        $coachId = array_key_exists('coachId', $data) ? $data['coachId'] : $slot->getCoachId();
+        $coachId = \array_key_exists('coachId', $data) ? $data['coachId'] : $slot->getCoachId();
 
         $conflicts = $this->findConflicts($slot, $dayOfWeek, $startTime, $durationMinutes, $venueId, $coachId);
 
         if ([] !== $conflicts) {
-            throw new \InvalidArgumentException(sprintf('Conflict detected with slot(s): %s.', implode(', ', array_map(static fn (ScheduleSlotTemplate $s): string => $s->getId(), $conflicts))));
+            throw new InvalidArgumentException(\sprintf('Conflict detected with slot(s): %s.', implode(', ', array_map(static fn (ScheduleSlotTemplate $s): string => $s->getId(), $conflicts))));
         }
 
         $slot
@@ -82,7 +91,7 @@ final class ManualEditService
     private function findConflicts(
         ScheduleSlotTemplate $slot,
         int $dayOfWeek,
-        \DateTimeImmutable $startTime,
+        DateTimeImmutable $startTime,
         int $durationMinutes,
         string $venueId,
         ?string $coachId,
@@ -125,8 +134,8 @@ final class ManualEditService
         return $conflicts;
     }
 
-    private function calculateEndTime(\DateTimeImmutable $startTime, int $durationMinutes): \DateTimeImmutable
+    private function calculateEndTime(DateTimeImmutable $startTime, int $durationMinutes): DateTimeImmutable
     {
-        return $startTime->modify(sprintf('+%d minutes', $durationMinutes));
+        return $startTime->modify(\sprintf('+%d minutes', $durationMinutes));
     }
 }

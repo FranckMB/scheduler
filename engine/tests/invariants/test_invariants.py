@@ -125,13 +125,13 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
                 }
             )
 
-    availabilities = []
+    venue_avail_map: dict[str, list[dict[str, Any]]] = {v["id"]: [] for v in venues}
     for v in venues:
         for d in draw(st.lists(day_st, min_size=1, max_size=3, unique=True)):
             start = draw(slot_start_st)
             end = start + draw(st.sampled_from([60, 120, 180]))
-            availabilities.append(
-                {"venueId": v["id"], "dayOfWeek": d, "startTime": _time_str(start), "endTime": _time_str(end)}
+            venue_avail_map[v["id"]].append(
+                {"dayOfWeek": d, "startTime": _time_str(start), "endTime": _time_str(end)}
             )
 
     templates = []
@@ -167,15 +167,18 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
                 }
             )
 
+    # Inject availability windows into venue objects
+    for v in venues:
+        v["availability"] = venue_avail_map.get(v["id"], [])
+
     return {
         "clubId": "club-hypothesis",
         "seasonId": "season-2024",
-        "version": "1.0",
+        "version": "2.0",
         "solverSeed": 42,
         "venues": venues,
         "teams": teams,
         "coaches": coaches,
-        "venueAvailabilities": availabilities,
         "slotTemplates": templates,
         "constraints": [],
         "priorityTiers": [
@@ -283,17 +286,14 @@ class TestInvariants:
         data = {
             "clubId": "club-priority",
             "seasonId": "season-2024",
-            "version": "1.0",
+            "version": "2.0",
             "solverSeed": 42,
-            "venues": [{"id": "gym-a", "name": "Gym A", "isActive": True}],
+            "venues": [{"id": "gym-a", "name": "Gym A", "isActive": True, "availability": [{"dayOfWeek": 1, "startTime": "18:00", "endTime": "18:15"}]}],
             "teams": [
                 {"id": "team-s", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team S", "sessionsPerWeek": 1, "isActive": True},
                 {"id": "team-d", "sportCategoryId": "sc-1", "priorityTierId": 5, "name": "Team D", "sessionsPerWeek": 0, "isActive": True},
             ],
             "coaches": [],
-            "venueAvailabilities": [
-                {"venueId": "gym-a", "dayOfWeek": 1, "startTime": "18:00", "endTime": "18:15"},
-            ],
             "slotTemplates": [],
             "constraints": [],
             "priorityTiers": [

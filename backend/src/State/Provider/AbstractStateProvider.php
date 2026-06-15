@@ -22,20 +22,7 @@ abstract class AbstractStateProvider implements ProviderInterface
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
         protected readonly Pagination $pagination,
-    ) {
-    }
-
-    /**
-     * @return class-string<TEntity>
-     */
-    abstract protected function getEntityClass(): string;
-
-    /**
-     * @param TEntity $entity
-     *
-     * @return TOutput
-     */
-    abstract protected function mapEntityToOutput(object $entity): object;
+    ) {}
 
     /**
      * @return TOutput|array<int, TOutput>|null
@@ -51,6 +38,18 @@ abstract class AbstractStateProvider implements ProviderInterface
 
         return $this->provideItem($uriVariables, $clubId);
     }
+
+    /**
+     * @return class-string<TEntity>
+     */
+    abstract protected function getEntityClass(): string;
+
+    /**
+     * @param TEntity $entity
+     *
+     * @return TOutput
+     */
+    abstract protected function mapEntityToOutput(object $entity): object;
 
     /**
      * @param array<string, mixed> $context

@@ -14,14 +14,15 @@ use App\Dto\UserInput;
 use App\Entity\User;
 use App\State\Processor\UserStateProcessor;
 use App\State\Provider\UserStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'User', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: UserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: UserStateProvider::class, processor: UserStateProcessor::class)]
 class UserResource
 {
@@ -32,10 +33,10 @@ class UserResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $email = '';
@@ -47,11 +48,11 @@ class UserResource
     public string $lastName = '';
 
     #[Groups(['read'])]
-    public ?\DateTimeImmutable $emailVerifiedAt = null;
+    public ?DateTimeImmutable $emailVerifiedAt = null;
 
     public static function fromEntity(User $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

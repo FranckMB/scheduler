@@ -14,14 +14,15 @@ use App\Dto\CoachPlayerMembershipInput;
 use App\Entity\CoachPlayerMembership;
 use App\State\Processor\CoachPlayerMembershipStateProcessor;
 use App\State\Provider\CoachPlayerMembershipStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'CoachPlayerMembership', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: CoachPlayerMembershipInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: CoachPlayerMembershipStateProvider::class, processor: CoachPlayerMembershipStateProcessor::class)]
 class CoachPlayerMembershipResource
 {
@@ -32,10 +33,10 @@ class CoachPlayerMembershipResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $coachId = '';
@@ -51,7 +52,7 @@ class CoachPlayerMembershipResource
 
     public static function fromEntity(CoachPlayerMembership $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

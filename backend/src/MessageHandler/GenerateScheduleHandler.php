@@ -5,29 +5,26 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\Coach;
-use App\Entity\CoachPlayerMembership;
-use App\Entity\CoachUnavailability;
-use App\Entity\PriorityTier;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
-use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
-use App\Entity\TeamCoach;
-use App\Entity\TeamConstraint;
 use App\Entity\Venue;
-use App\Entity\VenueAvailability;
+use App\Enum\ScheduleDiagnosticSeverity;
+use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleResultImporter;
 use Doctrine\ORM\EntityManagerInterface;
+use LogicException;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Messenger\Exception\RecoverableMessageHandlingException;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Throwable;
 
 #[AsMessageHandler]
 final class GenerateScheduleHandler
@@ -42,8 +39,7 @@ final class GenerateScheduleHandler
         private HubInterface $hub,
         private ClubGenerationLock $clubGenerationLock,
         private DiagnosticMessageBuilder $diagnosticMessageBuilder,
-    ) {
-    }
+    ) {}
 
     public function __invoke(GenerateScheduleMessage $message): void
     {
@@ -62,10 +58,10 @@ final class GenerateScheduleHandler
 
         $lockToken = $this->clubGenerationLock->acquire($message->getClubId(), $message->getTimeoutSeconds() + 60);
         if (null === $lockToken) {
-            $schedule->setStatus('queued');
+            $schedule->setStatus(ScheduleStatus::PENDING);
             $this->entityManager->flush();
 
-            throw new RecoverableMessageHandlingException(sprintf('Schedule generation already running for club %s.', $message->getClubId()));
+            throw new RecoverableMessageHandlingException(\sprintf('Schedule generation already running for club %s.', $message->getClubId()));
         }
 
         try {
@@ -79,7 +75,7 @@ final class GenerateScheduleHandler
     {
         $scheduleInput = $this->buildFrozenSnapshot($schedule);
         $schedule
-            ->setStatus('generating')
+            ->setStatus(ScheduleStatus::GENERATING)
             ->setSolverTimeoutSeconds($message->getTimeoutSeconds())
             ->setSnapshotData($scheduleInput)
             ->setSnapshotHash($this->hashSnapshot($scheduleInput));
@@ -94,13 +90,13 @@ final class GenerateScheduleHandler
 
             $result = $response->toArray(false);
         } catch (TransportExceptionInterface) {
-            $schedule->setStatus('timeout');
-            $this->persistDiagnostic($schedule, 'engine_timeout', 'error', 'Schedule generation timed out.');
+            $schedule->setStatus(ScheduleStatus::FAILED);
+            $this->persistDiagnostic($schedule, 'engine_timeout', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation timed out.');
             $this->publishProgress($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->entityManager->flush();
 
             return;
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $this->failSchedule($schedule, 'engine_error', $exception->getMessage());
             $this->publishProgress($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->entityManager->flush();
@@ -123,22 +119,9 @@ final class GenerateScheduleHandler
     /** @return array<string, mixed> */
     private function buildFrozenSnapshot(Schedule $schedule): array
     {
-        $criteria = [
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-        ];
-
-        return $this->constraintBuilder->build(
-            $this->entityManager->getRepository(Venue::class)->findBy($criteria),
-            $this->entityManager->getRepository(Team::class)->findBy($criteria),
-            $this->entityManager->getRepository(Coach::class)->findBy($criteria),
-            $this->entityManager->getRepository(TeamConstraint::class)->findBy($criteria),
-            $this->entityManager->getRepository(VenueAvailability::class)->findBy($criteria),
-            $this->entityManager->getRepository(CoachUnavailability::class)->findBy($criteria),
-            $this->entityManager->getRepository(TeamCoach::class)->findBy($criteria),
-            $this->entityManager->getRepository(CoachPlayerMembership::class)->findBy($criteria),
-            $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy($criteria),
-            $this->entityManager->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
+        return $this->constraintBuilder->buildForClubSeason(
+            $schedule->getClubId(),
+            $schedule->getSeasonId(),
         );
     }
 
@@ -147,28 +130,28 @@ final class GenerateScheduleHandler
     {
         $engineStatus = strtolower((string) ($result['status'] ?? 'failed'));
         $metrics = $result['metrics'] ?? $result['solver_metrics'] ?? null;
-        if (is_array($metrics)) {
+        if (\is_array($metrics)) {
             $this->applyScoreAndMetrics($schedule, $result);
         } elseif (isset($result['score']) && is_numeric($result['score'])) {
             $schedule->setScore((int) $result['score']);
         }
 
-        if (in_array($engineStatus, ['failed', 'infeasible'], true)) {
-            $schedule->setStatus('failed');
+        if (\in_array($engineStatus, ['failed', 'infeasible'], true)) {
+            $schedule->setStatus(ScheduleStatus::FAILED);
             $this->persistDiagnostics($schedule, $result);
 
             return;
         }
 
         if ('completed' !== $engineStatus) {
-            $schedule->setStatus('failed');
-            $this->persistDiagnostic($schedule, 'engine_status', 'error', sprintf('Unsupported engine status "%s".', $engineStatus));
+            $schedule->setStatus(ScheduleStatus::FAILED);
+            $this->persistDiagnostic($schedule, 'engine_status', ScheduleDiagnosticSeverity::ERROR, \sprintf('Unsupported engine status "%s".', $engineStatus));
 
             return;
         }
 
         $this->resultImporter->import($schedule, $result);
-        $schedule->setStatus($this->countUnplacedTeams($result) > 0 ? 'partial' : 'done');
+        $schedule->setStatus(ScheduleStatus::COMPLETED);
     }
 
     /** @param array<string, mixed> $result */
@@ -179,7 +162,7 @@ final class GenerateScheduleHandler
         }
 
         $metrics = $result['metrics'] ?? $result['solver_metrics'] ?? [];
-        if (!is_array($metrics)) {
+        if (!\is_array($metrics)) {
             return;
         }
 
@@ -208,18 +191,18 @@ final class GenerateScheduleHandler
 
     private function failSchedule(Schedule $schedule, string $type, string $message): void
     {
-        $schedule->setStatus('failed');
-        $this->persistDiagnostic($schedule, $type, 'error', $message);
+        $schedule->setStatus(ScheduleStatus::FAILED);
+        $this->persistDiagnostic($schedule, $type, ScheduleDiagnosticSeverity::ERROR, $message);
     }
 
     /** @param array<string, mixed> $result */
     private function persistDiagnostics(Schedule $schedule, array $result): void
     {
         $diagnostics = $result['diagnostics'] ?? [];
-        if (!is_array($diagnostics) || [] === $diagnostics) {
+        if (!\is_array($diagnostics) || [] === $diagnostics) {
             $diagnostics = $this->buildFallbackDiagnostics($result);
             if ([] === $diagnostics) {
-                $this->persistDiagnostic($schedule, 'engine_failed', 'error', (string) ($result['message'] ?? 'Schedule generation failed.'));
+                $this->persistDiagnostic($schedule, 'engine_failed', ScheduleDiagnosticSeverity::ERROR, (string) ($result['message'] ?? 'Schedule generation failed.'));
 
                 return;
             }
@@ -228,21 +211,21 @@ final class GenerateScheduleHandler
         [$teamNames, $coachNames, $venueNames] = $this->buildNameMaps($schedule);
 
         foreach ($diagnostics as $diagnostic) {
-            if (!is_array($diagnostic)) {
-                $this->persistDiagnostic($schedule, 'engine_failed', 'error', (string) $diagnostic);
+            if (!\is_array($diagnostic)) {
+                $this->persistDiagnostic($schedule, 'engine_failed', ScheduleDiagnosticSeverity::ERROR, (string) $diagnostic);
                 continue;
             }
 
             $message = $this->diagnosticMessageBuilder->build($diagnostic, $teamNames, $coachNames, $venueNames);
 
-            $entity = (new ScheduleDiagnostic())
+            $entity = (new ScheduleDiagnostic)
                 ->setClubId($schedule->getClubId())
                 ->setSeasonId($schedule->getSeasonId())
                 ->setScheduleId($schedule->getId())
                 ->setType((string) ($diagnostic['type'] ?? 'engine_failed'))
-                ->setSeverity((string) ($diagnostic['severity'] ?? 'error'))
+                ->setSeverity(ScheduleDiagnosticSeverity::tryFrom((string) ($diagnostic['severity'] ?? 'ERROR')) ?? ScheduleDiagnosticSeverity::ERROR)
                 ->setMessage($message)
-                ->setSuggestions(is_array($diagnostic['suggestions'] ?? null) ? $diagnostic['suggestions'] : []);
+                ->setSuggestions(\is_array($diagnostic['suggestions'] ?? null) ? $diagnostic['suggestions'] : []);
 
             if (isset($diagnostic['team_id']) || isset($diagnostic['teamId'])) {
                 $entity->setTeamId((string) ($diagnostic['team_id'] ?? $diagnostic['teamId']));
@@ -266,16 +249,16 @@ final class GenerateScheduleHandler
     private function buildFallbackDiagnostics(array $result): array
     {
         $unplaced = $result['unplaced'] ?? [];
-        if (!is_array($unplaced) || [] === $unplaced) {
+        if (!\is_array($unplaced) || [] === $unplaced) {
             return [];
         }
 
         $diagnostics = [];
         foreach ($unplaced as $item) {
             $teamId = null;
-            if (is_array($item)) {
+            if (\is_array($item)) {
                 $teamId = isset($item['teamId']) ? (string) $item['teamId'] : (isset($item['team_id']) ? (string) $item['team_id'] : null);
-            } elseif (is_string($item) || is_int($item)) {
+            } elseif (\is_string($item) || \is_int($item)) {
                 $teamId = (string) $item;
             }
 
@@ -285,9 +268,9 @@ final class GenerateScheduleHandler
 
             $diagnostics[] = [
                 'type' => 'unplaced',
-                'severity' => 'high',
+                'severity' => 'WARNING',
                 'teamId' => $teamId,
-                'message' => sprintf('Team %s could not be placed in the schedule.', $teamId),
+                'message' => \sprintf('Team %s could not be placed in the schedule.', $teamId),
                 'suggestions' => [
                     'Add more venue availability or relax hard constraints.',
                     'Check that the team has at least one feasible time slot.',
@@ -315,7 +298,7 @@ final class GenerateScheduleHandler
 
         $coachNames = [];
         foreach ($this->entityManager->getRepository(Coach::class)->findBy($criteria) as $coach) {
-            $coachNames[$coach->getId()] = trim($coach->getFirstName().' '.$coach->getLastName());
+            $coachNames[$coach->getId()] = trim($coach->getFirstName() . ' ' . $coach->getLastName());
         }
 
         $venueNames = [];
@@ -326,10 +309,10 @@ final class GenerateScheduleHandler
         return [$teamNames, $coachNames, $venueNames];
     }
 
-    private function persistDiagnostic(Schedule $schedule, string $type, string $severity, string $message): void
+    private function persistDiagnostic(Schedule $schedule, string $type, ScheduleDiagnosticSeverity $severity, string $message): void
     {
         $this->entityManager->persist(
-            (new ScheduleDiagnostic())
+            (new ScheduleDiagnostic)
                 ->setClubId($schedule->getClubId())
                 ->setSeasonId($schedule->getSeasonId())
                 ->setScheduleId($schedule->getId())
@@ -343,23 +326,23 @@ final class GenerateScheduleHandler
     /** @param array<string, mixed> $result */
     private function publishProgress(Schedule $schedule, array $result): void
     {
-        $topic = sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
+        $topic = \sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
         if ('club::schedule:' === $topic) {
-            throw new \LogicException('Schedule Mercure topic cannot be empty.');
+            throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 
         $this->hub->publish(new Update($topic, json_encode([
             'status' => $schedule->getStatus(),
             'score' => $schedule->getScore(),
             'unplaced' => $this->countUnplacedTeams($result),
-            'warnings' => array_values(is_array($result['warnings'] ?? null) ? $result['warnings'] : []),
-        ], JSON_THROW_ON_ERROR)));
+            'warnings' => array_values(\is_array($result['warnings'] ?? null) ? $result['warnings'] : []),
+        ], \JSON_THROW_ON_ERROR)));
     }
 
     /** @param array<string, mixed> $snapshot */
     private function hashSnapshot(array $snapshot): string
     {
-        return hash('sha256', json_encode($snapshot, JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode($snapshot, \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -368,18 +351,18 @@ final class GenerateScheduleHandler
     private function countUnplacedTeams(array $result): int
     {
         $unplaced = $result['unplaced'] ?? null;
-        if (is_array($unplaced)) {
-            return count($unplaced);
+        if (\is_array($unplaced)) {
+            return \count($unplaced);
         }
 
         $diagnostics = $result['diagnostics'] ?? null;
-        if (!is_array($diagnostics)) {
+        if (!\is_array($diagnostics)) {
             return 0;
         }
 
         $count = 0;
         foreach ($diagnostics as $diagnostic) {
-            if (is_array($diagnostic) && 'unplaced' === ($diagnostic['type'] ?? null)) {
+            if (\is_array($diagnostic) && 'unplaced' === ($diagnostic['type'] ?? null)) {
                 ++$count;
             }
         }

@@ -14,14 +14,15 @@ use App\Dto\ClubUserInput;
 use App\Entity\ClubUser;
 use App\State\Processor\ClubUserStateProcessor;
 use App\State\Provider\ClubUserStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'ClubUser', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: ClubUserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubUserStateProvider::class, processor: ClubUserStateProcessor::class)]
 class ClubUserResource
 {
@@ -32,10 +33,10 @@ class ClubUserResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $userId = '';
@@ -44,14 +45,14 @@ class ClubUserResource
     public string $role = '';
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $joinedAt;
+    public DateTimeImmutable $joinedAt;
 
     #[Groups(['read'])]
     public bool $isActive = false;
 
     public static function fromEntity(ClubUser $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

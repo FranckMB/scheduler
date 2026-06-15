@@ -15,28 +15,30 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
 use App\Dto\ScheduleInput;
 use App\Entity\Schedule;
+use App\Enum\ScheduleStatus;
 use App\State\Processor\ScheduleStateProcessor;
 use App\State\Provider\ScheduleStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Schedule', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
     new Post(
         uriTemplate: '/schedules/{id}/export-pdf',
         controller: 'App\Controller\ExportPdfController',
         read: false,
-        name: 'export_pdf'
+        name: 'export_pdf',
     ),
     new Post(
         uriTemplate: '/schedules/{id}/generate',
         controller: 'App\Controller\GenerateScheduleController',
         input: false,
         read: false,
-        name: 'generate_schedule'
+        name: 'generate_schedule',
     ),
 ], mercure: true, input: ScheduleInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleStateProvider::class, processor: ScheduleStateProcessor::class)]
 #[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
@@ -50,16 +52,16 @@ class ScheduleResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
 
     #[Groups(['read'])]
-    public string $status = '';
+    public ScheduleStatus $status;
 
     #[Groups(['read'])]
     public ?int $score = null;
@@ -102,7 +104,7 @@ class ScheduleResource
 
     public static function fromEntity(Schedule $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

@@ -421,4 +421,4 @@ def _coach_threshold(model_data: Mapping[str, Any] | Any, coach_id: str) -> int:
             override = _get(coach, "max_days_override", "maxDaysOverride")
             if override is not None:
                 return max(1, int(override))
-    return 5
+    return 10**9

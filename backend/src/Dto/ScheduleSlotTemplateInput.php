@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Dto;
 
 use App\Enum\LockLevel;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -30,7 +31,7 @@ class ScheduleSlotTemplateInput
     public ?int $dayOfWeek = null;
 
     #[Groups(['write'])]
-    public \DateTimeImmutable $startTime;
+    public DateTimeImmutable $startTime;
 
     #[Groups(['write'])]
     public ?int $durationMinutes = null;

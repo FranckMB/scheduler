@@ -19,8 +19,7 @@ final class ExportPdfController extends AbstractController
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
-    ) {
-    }
+    ) {}
 
     public function __invoke(string $id): JsonResponse
     {
@@ -36,7 +35,7 @@ final class ExportPdfController extends AbstractController
         $this->messageBus->dispatch(
             new ExportPdfMessage(
                 scheduleId: $schedule->getId(),
-            )
+            ),
         );
 
         return $this->json(['message' => 'PDF export queued.'], Response::HTTP_ACCEPTED);

@@ -6,17 +6,13 @@ namespace App\Controller;
 
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
-use App\Entity\CoachUnavailability;
+use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
-use App\Entity\TeamConstraint;
 use App\Entity\Venue;
-use App\Entity\VenueAvailability;
-use App\Entity\VenueClosure;
-use App\Entity\VenueConstraint;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -32,8 +28,7 @@ final class ResetSeasonController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-    ) {
-    }
+    ) {}
 
     public function __invoke(): JsonResponse
     {
@@ -49,12 +44,8 @@ final class ResetSeasonController extends AbstractController
         foreach ([
             ScheduleDiagnostic::class,
             ScheduleSlotTemplate::class,
-            VenueConstraint::class,
-            VenueClosure::class,
-            VenueAvailability::class,
-            TeamConstraint::class,
+            Constraint::class,
             TeamCoach::class,
-            CoachUnavailability::class,
             CoachPlayerMembership::class,
             Schedule::class,
             Team::class,

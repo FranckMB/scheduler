@@ -22,12 +22,9 @@ class ResultBuilderTest(unittest.TestCase):
             "clubId": "club-1",
             "seasonId": "season-1",
             "teams": [{"id": "team-1", "priorityTierId": 3, "sportCategoryId": "sc-1", "name": "Team 1"}],
-            "venues": [{"id": "venue-1", "name": "Court A"}],
+            "venues": [{"id": "venue-1", "name": "Court A", "availability": [{"dayOfWeek": 1, "startTime": "09:00", "endTime": "10:00"}]}],
             "coaches": [],
             "slotTemplates": [],
-            "venueAvailabilities": [
-                {"venueId": "venue-1", "dayOfWeek": 1, "startTime": "09:00", "endTime": "10:00"},
-            ],
         }
 
     def test_feasible_solution_produces_slots_and_empty_diagnostics(self):
@@ -171,9 +168,7 @@ class ResultBuilderTest(unittest.TestCase):
             },
         ]
         # Expand availability to cover both slots.
-        data["venueAvailabilities"] = [
-            {"venueId": "venue-1", "dayOfWeek": 1, "startTime": "09:00", "endTime": "09:30"},
-        ]
+        data["venues"][0]["availability"] = [{"dayOfWeek": 1, "startTime": "09:00", "endTime": "09:30"}]
         model = build_model(data)
         for var in model.x.values():
             model.Add(var == 1)

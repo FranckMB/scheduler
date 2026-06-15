@@ -23,7 +23,7 @@ class CoachStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Coach
     {
-        $entity = new Coach();
+        $entity = new Coach;
         if (null !== $input->firstName) {
             $entity->setFirstName($input->firstName);
         }

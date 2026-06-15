@@ -17,7 +17,7 @@ class TeamCoachInput
     #[Groups(['write'])]
     public ?string $coachId = null;
 
-    #[Assert\Choice(choices: ['head', 'assistant', 'trainer'])]
+    #[Assert\Choice(choices: ['MAIN', 'ASSISTANT'])]
     #[Groups(['write'])]
     public ?string $role = null;
 

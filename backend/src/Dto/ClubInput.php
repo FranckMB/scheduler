@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -25,7 +26,7 @@ class ClubInput
     public ?string $billingCycle = null;
 
     #[Groups(['write'])]
-    public ?\DateTimeImmutable $planExpiresAt = null;
+    public ?DateTimeImmutable $planExpiresAt = null;
 
     #[Groups(['write'])]
     public ?int $generationCountSeason = null;

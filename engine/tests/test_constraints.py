@@ -5,8 +5,8 @@ from ortools.sat.python import cp_model
 from app.solver.constraints import (
     AssignmentVariable,
     add_level_1_hard_constraints,
-    add_required_bridge_stub,
-    add_travel_feasibility_stub,
+    add_team_no_overlap,
+    parse_v2_constraints,
 )
 
 
@@ -97,15 +97,41 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
         self.assertEqual(stats.coach_player_non_overlap, 1)
         self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
 
-    def test_travel_and_required_bridge_are_satisfied_mvp_stubs(self):
+    def test_team_no_overlap_prevents_double_booking(self):
         model = cp_model.CpModel()
-        assignment = self.assignment(model, "kept")
+        first = self.assignment(model, "first", team_id="team-1", slot_id="slot-1", venue_id="venue-1")
+        second = self.assignment(model, "second", team_id="team-1", slot_id="slot-1", venue_id="venue-2")
 
-        self.assertEqual(0, add_travel_feasibility_stub(model, [assignment]))
-        self.assertEqual(0, add_required_bridge_stub(model, [assignment]))
-        model.Add(assignment.var == 1)
+        stats = add_level_1_hard_constraints(model, [first, second])
+        model.Add(first.var == 1)
+        model.Add(second.var == 1)
 
+        self.assertEqual(stats.team_no_overlap, 1)
+        self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
+
+    def test_team_no_overlap_allows_different_slots(self):
+        model = cp_model.CpModel()
+        first = self.assignment(model, "first", team_id="team-1", slot_id="slot-1", venue_id="venue-1")
+        second = self.assignment(model, "second", team_id="team-1", slot_id="slot-2", venue_id="venue-1")
+
+        stats = add_level_1_hard_constraints(model, [first, second])
+        model.Add(first.var == 1)
+        model.Add(second.var == 1)
+
+        self.assertEqual(stats.team_no_overlap, 0)
         self.assertIn(self.solve(model), (cp_model.FEASIBLE, cp_model.OPTIMAL))
+
+    def test_team_no_overlap_direct_call(self):
+        model = cp_model.CpModel()
+        first = self.assignment(model, "first", team_id="team-1", slot_id="slot-1")
+        second = self.assignment(model, "second", team_id="team-1", slot_id="slot-1")
+
+        added = add_team_no_overlap(model, [first, second])
+        model.Add(first.var == 1)
+        model.Add(second.var == 1)
+
+        self.assertEqual(added, 1)
+        self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
 
     def test_fixed_slot_is_forced_to_one(self):
         model = cp_model.CpModel()
@@ -185,6 +211,138 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
 
         self.assertEqual(stats.forced_venues, 1)
         self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
+
+
+class ParseV2ConstraintsTest(unittest.TestCase):
+    def test_empty_constraints_returns_defaults(self):
+        result = parse_v2_constraints([])
+        assert result["fixed_slots"] == []
+        assert result["forbidden_assignments"] == []
+        assert result["coach_unavailability"] == {}
+        assert result["venue_closures"] == {}
+        assert result["forced_venues"] == {}
+        assert result["time_windows"] == []
+
+    def test_inactive_constraints_are_skipped(self):
+        constraints = [
+            {"id": "c1", "isActive": False, "ruleType": "LOCK"},
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["fixed_slots"] == []
+
+    def test_lock_rule_type_produces_fixed_slot(self):
+        constraints = [
+            {"id": "c1", "isActive": True, "ruleType": "LOCK"},
+            {"id": "c2", "isActive": True, "ruleType": "LOCK"},
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["fixed_slots"] == ["c1", "c2"]
+
+    def test_coach_availability_family(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "COACH_AVAILABILITY",
+                "scopeTargetId": "coach-1",
+                "config": {"unavailableDays": ["monday", "wednesday"]},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["coach_unavailability"] == {"coach-1": ["monday", "wednesday"]}
+
+    def test_facility_with_date_range_produces_venue_closure(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "FACILITY",
+                "scopeTargetId": "venue-1",
+                "config": {"dateStart": "2026-01-01", "dateEnd": "2026-01-05"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert "venue-1" in result["venue_closures"]
+
+    def test_facility_with_preferred_venue_produces_forced_venue(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "FACILITY",
+                "scope": "TEAM",
+                "scopeTargetId": "team-1",
+                "ruleType": "HARD",
+                "config": {"preferredVenueId": "venue-1"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["forced_venues"] == {"team-1": "venue-1"}
+
+    def test_facility_with_forbidden_venue_produces_forbidden_assignment(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "FACILITY",
+                "scopeTargetId": "team-1",
+                "config": {"forbiddenVenueId": "venue-2"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert len(result["forbidden_assignments"]) == 1
+        assert result["forbidden_assignments"][0]["scope_target_id"] == "team-1"
+        assert result["forbidden_assignments"][0]["venue_id"] == "venue-2"
+
+    def test_time_family_produces_time_window(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "TIME",
+                "scopeTargetId": "team-1",
+                "config": {"preferredStart": "18:00"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert len(result["time_windows"]) == 1
+
+    def test_day_family_produces_time_window(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "DAY",
+                "scopeTargetId": "team-1",
+                "config": {"preferredDays": [1, 3]},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert len(result["time_windows"]) == 1
+
+    def test_snake_case_aliases(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "rule_type": "LOCK",
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["fixed_slots"] == ["c1"]
+
+    def test_scope_target_id_snake_case(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "COACH_AVAILABILITY",
+                "scope_target_id": "coach-2",
+                "config": {"unavailableDays": ["friday"]},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["coach_unavailability"] == {"coach-2": ["friday"]}
 
 
 if __name__ == "__main__":

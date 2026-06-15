@@ -33,7 +33,6 @@ services:
     volumes:
       - ./:/app:cached
     env_file:
-      - ./backend/.env
       - ./.env
     expose:
       - "9000"
@@ -120,7 +119,6 @@ services:
     volumes:
       - ./:/app:cached
     env_file:
-      - ./backend/.env
       - ./.env
     command: >-
       sh -lc 'if [ -f bin/console ]; then

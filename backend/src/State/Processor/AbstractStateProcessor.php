@@ -27,7 +27,30 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
         protected readonly SeasonRepository $seasonRepository,
-    ) {
+    ) {}
+
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
+    {
+        $request = $this->requestStack->getCurrentRequest();
+        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+        $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+
+        if ($operation instanceof DeleteOperationInterface) {
+            $this->processDelete($uriVariables, $clubId);
+
+            return null;
+        }
+
+        $method = $operation instanceof HttpOperation ? $operation->getMethod() : '';
+        if ('POST' === $method) {
+            return $this->processPost($data, $clubId, $seasonId);
+        }
+
+        if (\in_array($method, ['PUT', 'PATCH'], true)) {
+            return $this->processPut($data, $uriVariables, $clubId, $seasonId);
+        }
+
+        return $data;
     }
 
     /**
@@ -54,30 +77,6 @@ abstract class AbstractStateProcessor implements ProcessorInterface
      * @return TOutput
      */
     abstract protected function mapEntityToOutput(object $entity): object;
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
-    {
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
-        $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
-
-        if ($operation instanceof DeleteOperationInterface) {
-            $this->processDelete($uriVariables, $clubId);
-
-            return null;
-        }
-
-        $method = $operation instanceof HttpOperation ? $operation->getMethod() : '';
-        if ('POST' === $method) {
-            return $this->processPost($data, $clubId, $seasonId);
-        }
-
-        if (in_array($method, ['PUT', 'PATCH'], true)) {
-            return $this->processPut($data, $uriVariables, $clubId, $seasonId);
-        }
-
-        return $data;
-    }
 
     protected function resolveSeasonId(?string $clubId, ?string $seasonId): ?string
     {

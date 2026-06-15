@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -31,8 +32,7 @@ final class AuthController extends AbstractController
         private readonly ClubRepository $clubRepository,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SportRepository $sportRepository,
-    ) {
-    }
+    ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
@@ -65,7 +65,7 @@ final class AuthController extends AbstractController
         }
 
         // Validate email format
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if (!filter_var($email, \FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'Invalid email address'], 400);
         }
 
@@ -96,10 +96,10 @@ final class AuthController extends AbstractController
             $slug = (string) $slugger->slug($clubName)->lower();
 
             // Append random suffix to ensure uniqueness
-            $slug .= '-'.bin2hex(random_bytes(4));
+            $slug .= '-' . bin2hex(random_bytes(4));
 
             // Create user
-            $user = new User();
+            $user = new User;
             $user->setEmail($email);
             $user->setFirstName('Admin');
             $user->setLastName('User');
@@ -107,7 +107,7 @@ final class AuthController extends AbstractController
             $this->entityManager->persist($user);
 
             // Create club
-            $club = new Club();
+            $club = new Club;
             $club->setName($clubName);
             $club->setSlug($slug);
             $club->setTimezone('Europe/Paris');
@@ -117,7 +117,7 @@ final class AuthController extends AbstractController
             $this->entityManager->persist($club);
 
             // Create club-user membership
-            $clubUser = new ClubUser();
+            $clubUser = new ClubUser;
             $clubUser->setClubId($club->getId());
             $clubUser->setUserId($user->getId());
             $clubUser->setRole('admin');
@@ -125,12 +125,12 @@ final class AuthController extends AbstractController
             $this->entityManager->persist($clubUser);
 
             // Create default season (current year)
-            $currentYear = (int) (new \DateTimeImmutable())->format('Y');
-            $season = new Season();
+            $currentYear = (int) (new DateTimeImmutable)->format('Y');
+            $season = new Season;
             $season->setClubId($club->getId());
             $season->setName((string) $currentYear);
-            $season->setStartDate(new \DateTimeImmutable($currentYear.'-08-01'));
-            $season->setEndDate(new \DateTimeImmutable($currentYear.'-07-15'));
+            $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
+            $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
             $season->setStatus('active');
             $season->setTransitionData([]);
             $this->entityManager->persist($season);
@@ -138,7 +138,7 @@ final class AuthController extends AbstractController
             // Create default sport (basketball) if not exists
             $sport = $this->sportRepository->findOneBy(['slug' => 'basketball']);
             if (null === $sport) {
-                $sport = new Sport();
+                $sport = new Sport;
                 $sport->setName('Basketball');
                 $sport->setSlug('basketball');
                 $sport->setIsActive(true);
@@ -168,7 +168,7 @@ final class AuthController extends AbstractController
                     continue;
                 }
 
-                $sportCategory = new SportCategory();
+                $sportCategory = new SportCategory;
                 $sportCategory->setClubId($club->getId());
                 $sportCategory->setSportId($sport->getId());
                 $sportCategory->setName($categoryData['name']);

@@ -15,14 +15,15 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
 use App\State\Processor\ScheduleSlotTemplateStateProcessor;
 use App\State\Provider\ScheduleSlotTemplateStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'ScheduleSlotTemplate', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: ScheduleSlotTemplateInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleSlotTemplateStateProvider::class, processor: ScheduleSlotTemplateStateProcessor::class)]
 class ScheduleSlotTemplateResource
 {
@@ -33,10 +34,10 @@ class ScheduleSlotTemplateResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $scheduleId = '';
@@ -54,7 +55,7 @@ class ScheduleSlotTemplateResource
     public int $dayOfWeek = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $startTime;
+    public DateTimeImmutable $startTime;
 
     #[Groups(['read'])]
     public int $durationMinutes = 0;
@@ -77,7 +78,7 @@ class ScheduleSlotTemplateResource
 
     public static function fromEntity(ScheduleSlotTemplate $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

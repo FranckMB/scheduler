@@ -9,16 +9,16 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use RuntimeException;
 
 final class FfbbExcelImporter
 {
     private const DEFAULT_PRIORITY_TIER_ID = 5;
     private const DEFAULT_SESSIONS_PER_WEEK = 2;
 
-    public function __construct(private readonly EntityManagerInterface $entityManager)
-    {
-    }
+    public function __construct(private readonly EntityManagerInterface $entityManager) {}
 
     /**
      * @return array{created: int, skipped: int, errors: list<string>}
@@ -27,12 +27,12 @@ final class FfbbExcelImporter
     {
         $club = $this->entityManager->getRepository(Club::class)->find($clubId);
         if (!$club instanceof Club) {
-            throw new \InvalidArgumentException('Club not found.');
+            throw new InvalidArgumentException('Club not found.');
         }
 
         $expectedClubCode = $club->getFfbbClubCode();
         if (null === $expectedClubCode || '' === $expectedClubCode) {
-            throw new \InvalidArgumentException('Club does not have an FFBB club code configured.');
+            throw new InvalidArgumentException('Club does not have an FFBB club code configured.');
         }
 
         $spreadsheet = IOFactory::load($filePath);
@@ -47,12 +47,12 @@ final class FfbbExcelImporter
         $columnMap = $this->buildColumnMap($header);
 
         if (!isset($columnMap['nom'], $columnMap['catégorie'], $columnMap['numéro'], $columnMap['organisme'])) {
-            throw new \InvalidArgumentException('Required columns missing: Nom, Catégorie, Numéro, Organisme.');
+            throw new InvalidArgumentException('Required columns missing: Nom, Catégorie, Numéro, Organisme.');
         }
 
         $sport = $this->findDefaultSport();
         if (!$sport instanceof Sport) {
-            throw new \RuntimeException('No default sport found for category creation.');
+            throw new RuntimeException('No default sport found for category creation.');
         }
 
         $created = 0;
@@ -66,18 +66,18 @@ final class FfbbExcelImporter
             $numero = $this->stringValue($row[$columnMap['numéro']] ?? null);
             $organisme = $this->stringValue($row[$columnMap['organisme']] ?? null);
 
-            if (in_array('', [$nom, $categorie, $numero, $organisme], true)) {
+            if (\in_array('', [$nom, $categorie, $numero, $organisme], true)) {
                 continue;
             }
 
             $extractedClubCode = $this->extractClubCode($organisme);
             if (null === $extractedClubCode) {
-                $errors[] = sprintf('Row %d: unable to extract club code from Organisme.', $rowIndex + 2);
+                $errors[] = \sprintf('Row %d: unable to extract club code from Organisme.', $rowIndex + 2);
                 continue;
             }
 
             if ($extractedClubCode !== $expectedClubCode) {
-                throw new \RuntimeException(sprintf('Identity theft prevention: extracted club code "%s" does not match club code "%s".', $extractedClubCode, $expectedClubCode));
+                throw new RuntimeException(\sprintf('Identity theft prevention: extracted club code "%s" does not match club code "%s".', $extractedClubCode, $expectedClubCode));
             }
 
             $existingTeam = $this->entityManager->getRepository(Team::class)->findOneBy([
@@ -92,14 +92,13 @@ final class FfbbExcelImporter
 
             $sportCategory = $this->findOrCreateSportCategory($categorie, $clubId, $sport->getId());
 
-            $team = (new Team())
+            $team = (new Team)
                 ->setClubId($clubId)
                 ->setSeasonId($seasonId)
                 ->setSportCategoryId($sportCategory->getId())
                 ->setPriorityTierId(self::DEFAULT_PRIORITY_TIER_ID)
                 ->setName($nom)
                 ->setSessionsPerWeek(self::DEFAULT_SESSIONS_PER_WEEK)
-                ->setIsCompetition(true)
                 ->setIsActive(true);
 
             $this->entityManager->persist($team);
@@ -139,7 +138,7 @@ final class FfbbExcelImporter
             return '';
         }
 
-        if (is_string($value)) {
+        if (\is_string($value)) {
             return trim($value);
         }
 
@@ -187,7 +186,7 @@ final class FfbbExcelImporter
             return $category;
         }
 
-        $category = (new SportCategory())
+        $category = (new SportCategory)
             ->setName($name)
             ->setClubId($clubId)
             ->setSportId($sportId)

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -14,10 +15,10 @@ class SeasonInput
     public ?string $name = null;
 
     #[Groups(['write'])]
-    public \DateTimeImmutable $startDate;
+    public DateTimeImmutable $startDate;
 
     #[Groups(['write'])]
-    public \DateTimeImmutable $endDate;
+    public DateTimeImmutable $endDate;
 
     #[Assert\Choice(choices: ['draft', 'active', 'archived', 'closed'])]
     #[Groups(['write'])]

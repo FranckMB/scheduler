@@ -1,8 +1,15 @@
 """Level-1 hard constraints for the OR-Tools CP-SAT scheduler model.
 
-The MVP solver treats these rules as hard constraints only: no relaxation
-variables and no penalties are introduced in this module. Travel feasibility
-and required-bridge non-overlap are explicit MVP stubs until real data exists.
+The solver treats these rules as hard constraints only: no relaxation
+variables and no penalties are introduced in this module.
+
+Implicit rules (always applied):
+  VENUE_AT_MOST_ONE, COACH_NO_OVERLAP, COACH_PLAYER_NO_OVERLAP,
+  TEAM_NO_OVERLAP, MIN_SESSIONS
+
+Derived rules (parsed from v2 constraints[] payload):
+  fixed_slots, forbidden_assignments, coach_unavailability,
+  venue_closures, forced_venues
 """
 
 from __future__ import annotations
@@ -51,6 +58,7 @@ class HardConstraintStats:
     room_at_most_one: int = 0
     coach_at_most_one: int = 0
     coach_player_non_overlap: int = 0
+    team_no_overlap: int = 0
     travel_feasibility_stub: int = 0
     fixed_slots: int = 0
     forbidden_assignments: int = 0
@@ -62,20 +70,19 @@ class HardConstraintStats:
 
     @property
     def total_constraints_added(self) -> int:
-        """Return the number of concrete CP-SAT constraints added.
-
-        MVP stubs are tracked separately as implemented rules but they add no
-        CP-SAT constraint because they are always satisfied without real data.
-        """
+        """Return the number of concrete CP-SAT constraints added."""
 
         return (
             self.room_at_most_one
             + self.coach_at_most_one
             + self.coach_player_non_overlap
+            + self.team_no_overlap
+            + self.travel_feasibility_stub
             + self.fixed_slots
             + self.forbidden_assignments
             + self.coach_unavailability
             + self.venue_closures
+            + self.required_bridge_stub
             + self.min_sessions
             + self.forced_venues
         )
@@ -93,7 +100,22 @@ def add_level_1_hard_constraints(
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
 ) -> HardConstraintStats:
-    """Add the 11 MVP level-1 hard constraints to an existing CP-SAT model."""
+    """Add the 5 implicit + 5 derived level-1 hard constraints to a CP-SAT model.
+
+    Implicit (always applied):
+      1. VENUE_AT_MOST_ONE  — one venue hosts at most one team per time slot
+      2. COACH_NO_OVERLAP   — one coach coaches at most one team per time slot
+      3. COACH_PLAYER_NO_OVERLAP — a coach-player cannot be in two roles at once
+      4. TEAM_NO_OVERLAP    — a team cannot have two sessions at the same time
+      5. MIN_SESSIONS        — every team receives at least its effective minimum
+
+    Derived (fed from parse_v2_constraints or direct arguments):
+      6. fixed_slots          — pre-placed slots forced to 1
+      7. forbidden_assignments — forbidden variables forced to 0
+      8. coach_unavailability — unavailable coach slots forced to 0
+      9. venue_closures       — closed venue slots forced to 0
+     10. forced_venues        — forced venue excludes alternatives
+    """
 
     if assignments is None:
         assignments = getattr(model, "x", ())
@@ -110,8 +132,8 @@ def add_level_1_hard_constraints(
     # 3. A person cannot coach and play at the same time.
     stats.coach_player_non_overlap = add_coach_player_non_overlap(model, assignment_list)
 
-    # 4. MVP stub: no travel feasibility data yet, so always satisfied.
-    stats.travel_feasibility_stub = add_travel_feasibility_stub(model, assignment_list)
+    # 4. A team cannot have two sessions at the same time slot.
+    stats.team_no_overlap = add_team_no_overlap(model, assignment_list)
 
     # 5. Pre-placed slots are fixed and excluded from optimization choices.
     stats.fixed_slots = add_fixed_slots(model, assignment_list, fixed_assignments)
@@ -131,44 +153,17 @@ def add_level_1_hard_constraints(
         model, assignment_list, venue_closures
     )
 
-    # 9. MVP stub: no required bridge data yet, so always satisfied.
-    stats.required_bridge_stub = add_required_bridge_stub(model, assignment_list)
-
-    # 10. Effective minimum sessions are guaranteed by a hard linear bound.
+    # 9. Effective minimum sessions are guaranteed by a hard linear bound.
     stats.min_sessions = add_min_sessions_constraints(
         model, assignment_list, teams=teams, min_sessions_by_team=min_sessions_by_team
     )
 
-    # 11. If a venue is forced, every other venue option is forced to 0.
+    # 10. If a venue is forced, every other venue option is forced to 0.
     stats.forced_venues = add_forced_venue_constraints(
         model, assignment_list, forced_venues=forced_venues
     )
 
     return stats
-
-
-def add_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
-    """Compatibility alias for level-1 hard constraints."""
-
-    return add_level_1_hard_constraints(*args, **kwargs)
-
-
-def apply_level_1_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
-    """Compatibility alias for callers that use an apply_* naming style."""
-
-    return add_level_1_hard_constraints(*args, **kwargs)
-
-
-def add_hard_constraints_level_1(*args: Any, **kwargs: Any) -> HardConstraintStats:
-    """Compatibility alias for T23 naming."""
-
-    return add_level_1_hard_constraints(*args, **kwargs)
-
-
-def add_mvp_hard_constraints(*args: Any, **kwargs: Any) -> HardConstraintStats:
-    """Compatibility alias for the MVP solver entry point."""
-
-    return add_level_1_hard_constraints(*args, **kwargs)
 
 
 def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
@@ -224,13 +219,17 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
     return _add_at_most_one_groups(model, overlap_groups)
 
 
-def add_travel_feasibility_stub(
-    model: Any, assignments: Iterable[AssignmentLike] | None = None
-) -> int:
-    """Constraint 4 MVP stub: travel feasibility is always satisfied for now."""
+def add_team_no_overlap(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+    """A team cannot have two sessions at the same time slot."""
 
-    _ = model, assignments
-    return 0
+    groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        time_key = _time_key(assignment)
+        if team_id is None or time_key is None:
+            continue
+        groups[(team_id, time_key)].append(_var(assignment))
+    return _add_at_most_one_groups(model, groups.values())
 
 
 def add_fixed_slots(
@@ -299,15 +298,6 @@ def add_venue_closure_constraints(
             model.Add(_var(assignment) == 0)
             added += 1
     return added
-
-
-def add_required_bridge_stub(
-    model: Any, assignments: Iterable[AssignmentLike] | None = None
-) -> int:
-    """Constraint 9 MVP stub: required bridge non-overlap is always satisfied."""
-
-    _ = model, assignments
-    return 0
 
 
 def add_min_sessions_constraints(
@@ -649,6 +639,61 @@ def _forced_venue_id(
     return None
 
 
+def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
+    """Parse v2 constraints[] array into solver-ready rule collections.
+
+    Returns dict with keys: fixed_slots, forbidden_assignments,
+    coach_unavailability, venue_closures, forced_venues, time_windows
+    """
+
+    result: dict[str, Any] = {
+        "fixed_slots": [],
+        "forbidden_assignments": [],
+        "coach_unavailability": {},
+        "venue_closures": {},
+        "forced_venues": {},
+        "time_windows": [],
+    }
+
+    for c in constraints:
+        if not c.get("isActive", True):
+            continue
+        rule_type = c.get("ruleType") or c.get("rule_type")
+        family = c.get("family")
+        scope = c.get("scope")
+        scope_target_id = c.get("scopeTargetId") or c.get("scope_target_id")
+        config = c.get("config") or {}
+
+        if rule_type == "LOCK":
+            result["fixed_slots"].append(c.get("id"))
+
+        elif family == "COACH_AVAILABILITY" and scope_target_id:
+            unavail = config.get("unavailableDays") or []
+            result["coach_unavailability"][scope_target_id] = unavail
+
+        elif family == "FACILITY" and config.get("dateStart") and scope_target_id:
+            result["venue_closures"][scope_target_id] = config
+
+        elif (
+            family == "FACILITY"
+            and config.get("preferredVenueId")
+            and rule_type == "HARD"
+            and scope == "TEAM"
+            and scope_target_id
+        ):
+            result["forced_venues"][scope_target_id] = config["preferredVenueId"]
+
+        elif family == "FACILITY" and config.get("forbiddenVenueId"):
+            result["forbidden_assignments"].append(
+                {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
+            )
+
+        elif family in ("TIME", "DAY"):
+            result["time_windows"].append(c)
+
+    return result
+
+
 __all__ = [
     "AssignmentVariable",
     "HardConstraintStats",
@@ -658,14 +703,10 @@ __all__ = [
     "add_fixed_slots",
     "add_forbidden_assignments",
     "add_forced_venue_constraints",
-    "add_hard_constraints",
-    "add_hard_constraints_level_1",
     "add_level_1_hard_constraints",
     "add_min_sessions_constraints",
-    "add_mvp_hard_constraints",
-    "add_required_bridge_stub",
     "add_room_at_most_one",
-    "add_travel_feasibility_stub",
+    "add_team_no_overlap",
     "add_venue_closure_constraints",
-    "apply_level_1_hard_constraints",
+    "parse_v2_constraints",
 ]

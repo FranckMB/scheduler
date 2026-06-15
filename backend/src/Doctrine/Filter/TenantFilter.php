@@ -23,7 +23,7 @@ class TenantFilter extends SQLFilter
         }
 
         // getParameter() returns the SQL-escaped literal (e.g. '550e8400-…').
-        return sprintf('%s.club_id = %s', $targetTableAlias, $this->getParameter('club_id'));
+        return \sprintf('%s.club_id = %s', $targetTableAlias, $this->getParameter('club_id'));
     }
 
     /** @phpstan-ignore missingType.generics */

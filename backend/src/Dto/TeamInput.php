@@ -19,7 +19,7 @@ class TeamInput
     #[Groups(['write'])]
     public ?string $name = null;
 
-    #[Assert\Choice(choices: ['M', 'F', 'mixed'])]
+    #[Assert\Choice(choices: ['M', 'F', 'MIXTE'])]
     #[Groups(['write'])]
     public ?string $gender = null;
 

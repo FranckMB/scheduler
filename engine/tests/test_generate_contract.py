@@ -89,7 +89,7 @@ class TestGenerateContract:
                     {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True},
+                    {"id": "venue-1", "name": "Court A", "isActive": True, "availability": [{"dayOfWeek": 2, "startTime": "14:00", "endTime": "15:00"}]},
                 ],
                 "slotTemplates": [
                     {
@@ -122,7 +122,7 @@ class TestGenerateContract:
         assert result.metrics.nb_constraints >= 0
 
     def test_build_schedule_with_venue_availabilities_produces_slots(self) -> None:
-        """When venue availability is provided via constraints, solver should produce slots."""
+        """When venue availability is provided, solver should produce slots."""
         input_data = ScheduleInputSchema.model_validate(
             {
                 "clubId": "club-slots",
@@ -131,7 +131,7 @@ class TestGenerateContract:
                     {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True},
+                    {"id": "venue-1", "name": "Court A", "isActive": True, "availability": [{"dayOfWeek": 1, "startTime": "18:00", "endTime": "19:00"}]},
                 ],
                 "slotTemplates": [
                     {
@@ -148,9 +148,6 @@ class TestGenerateContract:
         )
 
         data: dict[str, Any] = input_data.model_dump(by_alias=True)
-        data["venueAvailabilities"] = [
-            {"venueId": "venue-1", "dayOfWeek": 1, "startTime": "18:00", "endTime": "19:00"},
-        ]
 
         from app.solver.model import build_model
         from app.solver.constraints import add_level_1_hard_constraints
@@ -181,7 +178,7 @@ class TestGenerateContract:
 
     @pytest.mark.timeout(60)
     def test_build_schedule_medium_club_fixture_produces_non_trivial_output(self) -> None:
-        """Load the medium_club fixture, inject venueAvailabilities, and verify contract."""
+        """Load the medium_club fixture and verify contract."""
         import json
         import pathlib
 

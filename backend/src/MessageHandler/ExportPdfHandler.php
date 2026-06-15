@@ -8,9 +8,11 @@ use App\Entity\Schedule;
 use App\Message\ExportPdfMessage;
 use App\Service\PdfGenerator;
 use Doctrine\ORM\EntityManagerInterface;
+use LogicException;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Throwable;
 
 #[AsMessageHandler]
 final readonly class ExportPdfHandler
@@ -19,8 +21,7 @@ final readonly class ExportPdfHandler
         private EntityManagerInterface $entityManager,
         private PdfGenerator $pdfGenerator,
         private HubInterface $hub,
-    ) {
-    }
+    ) {}
 
     public function __invoke(ExportPdfMessage $message): void
     {
@@ -36,7 +37,7 @@ final readonly class ExportPdfHandler
             $pdfUrl = $this->pdfGenerator->generate($schedule);
             $schedule->setPdfExportStatus('completed');
             $schedule->setPdfExportUrl($pdfUrl);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $schedule->setPdfExportStatus('failed');
             $schedule->setPdfExportUrl(null);
         }
@@ -54,14 +55,14 @@ final readonly class ExportPdfHandler
 
     private function publishProgress(Schedule $schedule): void
     {
-        $topic = sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
+        $topic = \sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
         if ('club::schedule:' === $topic) {
-            throw new \LogicException('Schedule Mercure topic cannot be empty.');
+            throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 
         $this->hub->publish(new Update($topic, json_encode([
             'pdfExportStatus' => $schedule->getPdfExportStatus(),
             'pdfExportUrl' => $schedule->getPdfExportUrl(),
-        ], JSON_THROW_ON_ERROR)));
+        ], \JSON_THROW_ON_ERROR)));
     }
 }

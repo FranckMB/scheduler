@@ -10,6 +10,9 @@ use Doctrine\ORM\Event\PostRemoveEventArgs;
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Events;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\HttpKernel\Event\TerminateEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
  * Purges Redis cache keys prefixed with club:{club_id}: when business entities
@@ -29,8 +32,7 @@ class CacheInvalidationListener
     public function __construct(
         private readonly CacheItemPoolInterface $tenantCachePool,
         private readonly CacheItemPoolInterface $scheduleCachePool,
-    ) {
-    }
+    ) {}
 
     public function postUpdate(PostUpdateEventArgs $args): void
     {
@@ -47,18 +49,10 @@ class CacheInvalidationListener
         $this->collectInvalidation($args->getObject());
     }
 
-    private function collectInvalidation(object $entity): void
+    #[AsEventListener(event: KernelEvents::TERMINATE)]
+    public function onKernelTerminate(TerminateEvent $event): void
     {
-        $clubId = $this->resolveClubId($entity);
-        if (null === $clubId) {
-            return;
-        }
-
-        $this->pendingInvalidations[$clubId] = [
-            sprintf('club:%s:schedule_input', $clubId),
-            sprintf('club:%s:tenant_data', $clubId),
-            sprintf('club:%s:schedule_snapshot', $clubId),
-        ];
+        $this->flushInvalidations();
     }
 
     /**
@@ -77,6 +71,20 @@ class CacheInvalidationListener
         $this->pendingInvalidations = [];
     }
 
+    private function collectInvalidation(object $entity): void
+    {
+        $clubId = $this->resolveClubId($entity);
+        if (null === $clubId) {
+            return;
+        }
+
+        $this->pendingInvalidations[$clubId] = [
+            \sprintf('club.%s.schedule_input', $clubId),
+            \sprintf('club.%s.tenant_data', $clubId),
+            \sprintf('club.%s.schedule_snapshot', $clubId),
+        ];
+    }
+
     private function resolveClubId(object $entity): ?string
     {
         $method = 'getClubId';
@@ -86,6 +94,6 @@ class CacheInvalidationListener
 
         $clubId = $entity->$method();
 
-        return is_string($clubId) && '' !== $clubId ? $clubId : null;
+        return \is_string($clubId) && '' !== $clubId ? $clubId : null;
     }
 }

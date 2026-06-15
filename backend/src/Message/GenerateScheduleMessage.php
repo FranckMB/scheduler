@@ -10,8 +10,7 @@ final readonly class GenerateScheduleMessage
         private string $scheduleId,
         private string $clubId,
         private int $timeoutSeconds = 180,
-    ) {
-    }
+    ) {}
 
     public function getScheduleId(): string
     {
@@ -30,6 +29,6 @@ final readonly class GenerateScheduleMessage
 
     public function getClubRoutingKey(): string
     {
-        return 'club_id:'.$this->clubId;
+        return 'club_id:' . $this->clubId;
     }
 }

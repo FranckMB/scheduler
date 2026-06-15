@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\TeamCoachResource;
 use App\Dto\TeamCoachInput;
 use App\Entity\TeamCoach;
+use App\Enum\TeamCoachRole;
 
 /**
  * @extends AbstractStateProcessor<TeamCoach, TeamCoachInput, TeamCoachResource>
@@ -23,7 +24,7 @@ class TeamCoachStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): TeamCoach
     {
-        $entity = new TeamCoach();
+        $entity = new TeamCoach;
         if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
@@ -31,7 +32,10 @@ class TeamCoachStateProcessor extends AbstractStateProcessor
             $entity->setCoachId($input->coachId);
         }
         if (null !== $input->role) {
-            $entity->setRole($input->role);
+            $role = TeamCoachRole::tryFrom($input->role);
+            if (null !== $role) {
+                $entity->setRole($role);
+            }
         }
         if (null !== $input->isRequired) {
             $entity->setIsRequired($input->isRequired);
@@ -53,7 +57,10 @@ class TeamCoachStateProcessor extends AbstractStateProcessor
             $entity->setCoachId($input->coachId);
         }
         if (null !== $input->role) {
-            $entity->setRole($input->role);
+            $role = TeamCoachRole::tryFrom($input->role);
+            if (null !== $role) {
+                $entity->setRole($role);
+            }
         }
         if (null !== $input->isRequired) {
             $entity->setIsRequired($input->isRequired);

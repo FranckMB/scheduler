@@ -17,14 +17,15 @@ use App\Dto\CoachInput;
 use App\Entity\Coach;
 use App\State\Processor\CoachStateProcessor;
 use App\State\Provider\CoachStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Coach', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: CoachInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: CoachStateProvider::class, processor: CoachStateProcessor::class)]
 #[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
 #[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
@@ -37,10 +38,10 @@ class CoachResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $firstName = '';
@@ -71,7 +72,7 @@ class CoachResource
 
     public static function fromEntity(Coach $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

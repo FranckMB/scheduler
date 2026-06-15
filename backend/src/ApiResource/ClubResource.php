@@ -14,14 +14,15 @@ use App\Dto\ClubInput;
 use App\Entity\Club;
 use App\State\Processor\ClubStateProcessor;
 use App\State\Provider\ClubStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Club', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
     new Post(
         uriTemplate: '/clubs/{id}/import-teams',
         controller: 'App\Controller\ImportController',
@@ -38,10 +39,10 @@ class ClubResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
@@ -56,7 +57,7 @@ class ClubResource
     public ?string $billingCycle = null;
 
     #[Groups(['read'])]
-    public ?\DateTimeImmutable $planExpiresAt = null;
+    public ?DateTimeImmutable $planExpiresAt = null;
 
     #[Groups(['read'])]
     public int $generationCountSeason = 0;
@@ -78,7 +79,7 @@ class ClubResource
 
     public static function fromEntity(Club $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

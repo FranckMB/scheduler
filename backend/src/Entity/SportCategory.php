@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\Gender;
 use App\Repository\SportCategoryRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: SportCategoryRepository::class)]
@@ -23,10 +25,10 @@ class SportCategory
     private int $version = 1;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $updatedAt;
+    private DateTimeImmutable $updatedAt;
 
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $clubId = null;
@@ -49,13 +51,13 @@ class SportCategory
     #[ORM\Column(type: 'integer')]
     private int $sortOrder = 0;
 
-    #[ORM\Column(type: 'string', length: 1, nullable: true)]
-    private ?string $gender = null;
+    #[ORM\Column(length: 10, nullable: true, enumType: Gender::class)]
+    private ?Gender $gender = null;
 
     public function __construct()
     {
         $this->id = $this->newUuid();
-        $now = new \DateTimeImmutable();
+        $now = new DateTimeImmutable;
         $this->createdAt = $now;
         $this->updatedAt = $now;
     }
@@ -77,24 +79,24 @@ class SportCategory
         return $this->version;
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $createdAt): self
+    public function setCreatedAt(DateTimeImmutable $createdAt): self
     {
         $this->createdAt = $createdAt;
 
         return $this;
     }
 
-    public function getUpdatedAt(): \DateTimeImmutable
+    public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
     }
 
-    public function setUpdatedAt(\DateTimeImmutable $updatedAt): self
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
 
@@ -104,7 +106,7 @@ class SportCategory
     #[ORM\PreUpdate]
     public function touchUpdatedAt(): void
     {
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable;
     }
 
     public function getClubId(): ?string
@@ -203,12 +205,12 @@ class SportCategory
         return $this;
     }
 
-    public function getGender(): ?string
+    public function getGender(): ?Gender
     {
         return $this->gender;
     }
 
-    public function setGender(?string $gender): self
+    public function setGender(?Gender $gender): self
     {
         $this->gender = $gender;
 
@@ -218,8 +220,8 @@ class SportCategory
     private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

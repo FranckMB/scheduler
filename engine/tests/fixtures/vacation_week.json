@@ -1,11 +1,29 @@
 {
   "clubId": "club-vacation",
   "seasonId": "season-2024",
-  "version": "1.0",
+  "version": "2.0",
   "solverSeed": 42,
   "venues": [
-    {"id": "gym-a", "name": "Gymnasium A", "isActive": true},
-    {"id": "gym-b", "name": "Gymnasium B", "isActive": true}
+    {
+      "id": "gym-a",
+      "name": "Gymnasium A",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      ]
+    },
+    {
+      "id": "gym-b",
+      "name": "Gymnasium B",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      ]
+    }
   ],
   "teams": [
     {"id": "sm1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 1", "sessionsPerWeek": 2, "isActive": true},
@@ -25,14 +43,6 @@
     {"id": "coach-3", "firstName": "Charlie", "lastName": "Bernard", "isActive": true},
     {"id": "coach-4", "firstName": "Diana", "lastName": "Petit", "isActive": true},
     {"id": "coach-5", "firstName": "Eric", "lastName": "Moreau", "isActive": true}
-  ],
-  "venueAvailabilities": [
-    {"venueId": "gym-a", "dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "gym-a", "dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "gym-a", "dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "gym-b", "dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "gym-b", "dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "gym-b", "dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
   ],
   "slotTemplates": [
     {"id": "tpl-sm1-1", "teamId": "sm1", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},

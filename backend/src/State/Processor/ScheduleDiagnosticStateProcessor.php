@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\ScheduleDiagnosticResource;
 use App\Dto\ScheduleDiagnosticInput;
 use App\Entity\ScheduleDiagnostic;
+use App\Enum\ScheduleDiagnosticSeverity;
 
 /**
  * @extends AbstractStateProcessor<ScheduleDiagnostic, ScheduleDiagnosticInput, ScheduleDiagnosticResource>
@@ -23,7 +24,7 @@ class ScheduleDiagnosticStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): ScheduleDiagnostic
     {
-        $entity = new ScheduleDiagnostic();
+        $entity = new ScheduleDiagnostic;
         if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
         }
@@ -31,7 +32,10 @@ class ScheduleDiagnosticStateProcessor extends AbstractStateProcessor
             $entity->setType($input->type);
         }
         if (null !== $input->severity) {
-            $entity->setSeverity($input->severity);
+            $severity = ScheduleDiagnosticSeverity::tryFrom($input->severity);
+            if (null !== $severity) {
+                $entity->setSeverity($severity);
+            }
         }
         if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
@@ -65,7 +69,10 @@ class ScheduleDiagnosticStateProcessor extends AbstractStateProcessor
             $entity->setType($input->type);
         }
         if (null !== $input->severity) {
-            $entity->setSeverity($input->severity);
+            $severity = ScheduleDiagnosticSeverity::tryFrom($input->severity);
+            if (null !== $severity) {
+                $entity->setSeverity($severity);
+            }
         }
         if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);

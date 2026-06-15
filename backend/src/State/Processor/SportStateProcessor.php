@@ -23,7 +23,7 @@ class SportStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Sport
     {
-        $entity = new Sport();
+        $entity = new Sport;
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

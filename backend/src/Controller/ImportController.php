@@ -7,6 +7,8 @@ namespace App\Controller;
 use App\Entity\Club;
 use App\Service\FfbbExcelImporter;
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
+use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -20,8 +22,7 @@ final class ImportController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly FfbbExcelImporter $importer,
-    ) {
-    }
+    ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
     {
@@ -43,15 +44,15 @@ final class ImportController extends AbstractController
         }
 
         $seasonId = $request->request->get('seasonId');
-        if (!is_string($seasonId) || '' === $seasonId) {
+        if (!\is_string($seasonId) || '' === $seasonId) {
             return $this->json(['error' => 'seasonId is required.'], Response::HTTP_BAD_REQUEST);
         }
 
         try {
             $result = $this->importer->import($file->getRealPath(), $id, $seasonId);
-        } catch (\InvalidArgumentException $e) {
+        } catch (InvalidArgumentException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 

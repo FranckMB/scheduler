@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -13,6 +14,7 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Throwable;
 
 #[AsController]
 final class GenerateScheduleController extends AbstractController
@@ -21,14 +23,13 @@ final class GenerateScheduleController extends AbstractController
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
         private RequestStack $requestStack,
-    ) {
-    }
+    ) {}
 
     public function __invoke(string $id): JsonResponse
     {
         try {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $schedule = null;
         }
 
@@ -41,11 +42,14 @@ final class GenerateScheduleController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
+        $schedule->setStatus(ScheduleStatus::PENDING);
+        $this->entityManager->flush();
+
         $this->messageBus->dispatch(
             new GenerateScheduleMessage(
                 scheduleId: $schedule->getId(),
                 clubId: $schedule->getClubId(),
-            )
+            ),
         );
 
         return $this->json(['message' => 'Schedule generation queued'], Response::HTTP_ACCEPTED);

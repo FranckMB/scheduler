@@ -9,6 +9,12 @@ class SerializableModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
+class VenueAvailabilityWindowSchema(SerializableModel):
+    day_of_week: int = Field(alias="dayOfWeek")
+    start_time: str = Field(alias="startTime")  # "08:00"
+    end_time: str = Field(alias="endTime")  # "22:00"
+
+
 class VenueSchema(SerializableModel):
     id: str
     name: str
@@ -20,13 +26,7 @@ class VenueSchema(SerializableModel):
     external_ref: str | None = Field(default=None, alias="externalRef")
     is_active: bool = Field(default=False, alias="isActive")
     parent_venue_id: str | None = Field(default=None, alias="parentVenueId")
-
-
-class VenueAvailabilitySchema(SerializableModel):
-    venue_id: str = Field(alias="venueId")
-    day_of_week: int = Field(alias="dayOfWeek")
-    start_time: time = Field(alias="startTime")
-    end_time: time = Field(alias="endTime")
+    availability: list[VenueAvailabilityWindowSchema] = Field(default_factory=list)
 
 
 class PriorityTierSchema(SerializableModel):
@@ -42,6 +42,7 @@ class TeamSchema(SerializableModel):
     priority_tier_id: int = Field(alias="priorityTierId")
     name: str
     gender: str | None = None
+    level: str | None = None
     sessions_per_week: int = Field(alias="sessionsPerWeek")
     min_sessions_override: int | None = Field(default=None, alias="minSessionsOverride")
     match_day: int | None = Field(default=None, alias="matchDay")
@@ -49,6 +50,7 @@ class TeamSchema(SerializableModel):
     is_active: bool = Field(default=False, alias="isActive")
     parent_team_id: str | None = Field(default=None, alias="parentTeamId")
     ffbb_team_id: str | None = Field(default=None, alias="ffbbTeamId")
+    tags: list[str] = Field(default_factory=list)
 
 
 class CoachSchema(SerializableModel):
@@ -64,10 +66,30 @@ class CoachSchema(SerializableModel):
     parent_coach_id: str | None = Field(default=None, alias="parentCoachId")
 
 
-class ConstraintSchema(SerializableModel):
+class ConstraintV2Schema(BaseModel):
+    """Unified v2 constraint schema that accepts both v2 and legacy v1 formats.
+
+    V2 constraints use scope/family/ruleType/config.
+    Legacy v1 constraints (TEAM_COACH, COACH_PLAYER_UNAVAILABILITY, PRIORITY_TIER)
+    use teamId/type/severity/value/metadata.
+    Both formats are accepted so the engine can handle mixed constraint arrays.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
     id: str
-    team_id: str = Field(alias="teamId")
-    type: str
+    # V2 unified fields
+    scope: str | None = None
+    scope_target_id: str | None = Field(default=None, alias="scopeTargetId")
+    family: str | None = None
+    rule_type: str | None = Field(default=None, alias="ruleType")
+    name: str | None = None
+    config: dict[str, object] = Field(default_factory=dict)
+    sort_order: int = Field(default=0, alias="sortOrder")
+    is_active: bool = Field(default=True, alias="isActive")
+    # Legacy v1 fields (still sent by backend for TEAM_COACH, etc.)
+    team_id: str | None = Field(default=None, alias="teamId")
+    type: str | None = None
     severity: str | None = None
     value: str | int | float | bool | None = None
     metadata: dict[str, object] = Field(default_factory=dict)
@@ -95,7 +117,7 @@ class ScheduleSlotTemplateSchema(SerializableModel):
 
 
 class ScheduleInputSchema(SerializableModel):
-    version: str = "1.0"
+    version: str = "2.0"
     club_id: str = Field(alias="clubId")
     season_id: str = Field(alias="seasonId")
     schedule_name: str | None = Field(default=None, alias="scheduleName")
@@ -103,7 +125,6 @@ class ScheduleInputSchema(SerializableModel):
     venues: list[VenueSchema] = Field(default_factory=list)
     teams: list[TeamSchema] = Field(default_factory=list)
     coaches: list[CoachSchema] = Field(default_factory=list)
-    constraints: list[ConstraintSchema] = Field(default_factory=list)
-    venue_availabilities: list[VenueAvailabilitySchema] = Field(default_factory=list, alias="venueAvailabilities")
+    constraints: list[ConstraintV2Schema] = Field(default_factory=list)
     slot_templates: list[ScheduleSlotTemplateSchema] = Field(default_factory=list, alias="slotTemplates")
     priority_tiers: list[PriorityTierSchema] = Field(default_factory=list, alias="priorityTiers")

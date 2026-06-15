@@ -23,7 +23,7 @@ class UserStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): User
     {
-        $entity = new User();
+        $entity = new User;
         if (null !== $input->email) {
             $entity->setEmail($input->email);
         }

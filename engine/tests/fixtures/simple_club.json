@@ -1,11 +1,27 @@
 {
   "clubId": "club-simple",
   "seasonId": "season-2024",
-  "version": "1.0",
+  "version": "2.0",
   "solverSeed": 42,
   "venues": [
-    {"id": "gym-a", "name": "Gymnasium A", "isActive": true},
-    {"id": "gym-b", "name": "Gymnasium B", "isActive": true}
+    {
+      "id": "gym-a",
+      "name": "Gymnasium A",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "20:00"},
+        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "20:00"}
+      ]
+    },
+    {
+      "id": "gym-b",
+      "name": "Gymnasium B",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "20:00"},
+        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "20:00"}
+      ]
+    }
   ],
   "teams": [
     {"id": "senior-m", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men", "sessionsPerWeek": 2, "isActive": true},
@@ -18,12 +34,6 @@
     {"id": "coach-1", "firstName": "Alice", "lastName": "Martin", "isActive": true},
     {"id": "coach-2", "firstName": "Bob", "lastName": "Dupont", "isActive": true},
     {"id": "coach-3", "firstName": "Charlie", "lastName": "Bernard", "isActive": true}
-  ],
-  "venueAvailabilities": [
-    {"venueId": "gym-a", "dayOfWeek": 1, "startTime": "18:00", "endTime": "20:00"},
-    {"venueId": "gym-a", "dayOfWeek": 3, "startTime": "18:00", "endTime": "20:00"},
-    {"venueId": "gym-b", "dayOfWeek": 2, "startTime": "18:00", "endTime": "20:00"},
-    {"venueId": "gym-b", "dayOfWeek": 4, "startTime": "18:00", "endTime": "20:00"}
   ],
   "slotTemplates": [
     {"id": "tpl-senior-1", "teamId": "senior-m", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 90, "lockLevel": "NONE"},

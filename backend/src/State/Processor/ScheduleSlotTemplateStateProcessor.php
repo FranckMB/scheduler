@@ -23,7 +23,7 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): ScheduleSlotTemplate
     {
-        $entity = new ScheduleSlotTemplate();
+        $entity = new ScheduleSlotTemplate;
         if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
         }

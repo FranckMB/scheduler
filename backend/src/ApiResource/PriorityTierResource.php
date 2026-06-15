@@ -14,14 +14,15 @@ use App\Dto\PriorityTierInput;
 use App\Entity\PriorityTier;
 use App\State\Processor\PriorityTierStateProcessor;
 use App\State\Provider\PriorityTierStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'PriorityTier', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: PriorityTierInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PriorityTierStateProvider::class, processor: PriorityTierStateProcessor::class)]
 class PriorityTierResource
 {
@@ -32,10 +33,10 @@ class PriorityTierResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $label = '';
@@ -54,7 +55,7 @@ class PriorityTierResource
 
     public static function fromEntity(PriorityTier $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

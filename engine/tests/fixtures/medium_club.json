@@ -1,13 +1,57 @@
 {
   "clubId": "club-medium",
   "seasonId": "season-2024",
-  "version": "1.0",
+  "version": "2.0",
   "solverSeed": 42,
   "venues": [
-    {"id": "gym-1", "name": "Main Gym", "isActive": true},
-    {"id": "gym-2", "name": "Secondary Gym", "isActive": true},
-    {"id": "court-1", "name": "Court A", "isActive": true},
-    {"id": "court-2", "name": "Court B", "isActive": true}
+    {
+      "id": "gym-1",
+      "name": "Main Gym",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      ]
+    },
+    {
+      "id": "gym-2",
+      "name": "Secondary Gym",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
+        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      ]
+    },
+    {
+      "id": "court-1",
+      "name": "Court A",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      ]
+    },
+    {
+      "id": "court-2",
+      "name": "Court B",
+      "isActive": true,
+      "availability": [
+        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
+        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      ]
+    }
   ],
   "teams": [
     {"id": "sm1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 1", "sessionsPerWeek": 2, "isActive": true},
@@ -40,28 +84,6 @@
     {"id": "c6", "firstName": "Fiona", "lastName": "Leroy", "isActive": true},
     {"id": "c7", "firstName": "George", "lastName": "Roux", "isActive": true},
     {"id": "c8", "firstName": "Hannah", "lastName": "Garcia", "isActive": true}
-  ],
-  "venueAvailabilities": [
-    {"venueId": "gym-1", "dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-1", "dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-1", "dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-1", "dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-1", "dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-2", "dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-2", "dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-2", "dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-2", "dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "gym-2", "dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"},
-    {"venueId": "court-1", "dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-1", "dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-1", "dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-1", "dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-1", "dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-2", "dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-2", "dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-2", "dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-2", "dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-    {"venueId": "court-2", "dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
   ],
   "slotTemplates": [
     {"id": "tpl-sm1-1", "teamId": "sm1", "venueId": "gym-1", "coachId": "c1", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},

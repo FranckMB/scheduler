@@ -14,14 +14,15 @@ use App\Dto\SeasonInput;
 use App\Entity\Season;
 use App\State\Processor\SeasonStateProcessor;
 use App\State\Provider\SeasonStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Season', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: SeasonInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SeasonStateProvider::class, processor: SeasonStateProcessor::class)]
 class SeasonResource
 {
@@ -32,19 +33,19 @@ class SeasonResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $startDate;
+    public DateTimeImmutable $startDate;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $endDate;
+    public DateTimeImmutable $endDate;
 
     #[Groups(['read'])]
     public string $status = '';
@@ -58,7 +59,7 @@ class SeasonResource
 
     public static function fromEntity(Season $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

@@ -17,14 +17,15 @@ use App\Dto\VenueInput;
 use App\Entity\Venue;
 use App\State\Processor\VenueStateProcessor;
 use App\State\Provider\VenueStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Venue', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: VenueInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: VenueStateProvider::class, processor: VenueStateProcessor::class)]
 #[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
 #[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
@@ -37,10 +38,10 @@ class VenueResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
@@ -71,7 +72,7 @@ class VenueResource
 
     public static function fromEntity(Venue $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

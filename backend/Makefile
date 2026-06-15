@@ -1,64 +1,98 @@
 .DEFAULT_GOAL := help
 
 FIG := docker compose -f ../docker-compose.yml
-APP_ENV ?= $(shell awk -F= '$$1=="APP_ENV" {print $$2}' .env 2>/dev/null | tail -n 1)
-APP_ENV ?= dev
 USERID := $(shell id -u)
 GROUPID := $(shell id -g)
-EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm
-RUN := $(FIG) exec php-fpm
+APP_ENV ?= $(shell awk -F= '$$1=="APP_ENV" {print $$2}' .env 2>/dev/null | tail -n 1)
+APP_ENV ?= dev
 
-exec: ## Enter the backend container shell (auto-start if needed)
-	@$(FIG) ps php-fpm | grep -q "Up" || ($(FIG) up -d php-fpm && echo "Container started")
-	$(EXEC) bash || $(EXEC) sh
+ifdef APP_ENV
+	ifeq ($(shell uname),Darwin)
+		EXECROOT := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+		EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+	else
+		EXECROOT := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+		EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm
+	endif
+else
+	EXECROOT :=
+	EXEC :=
+endif
 
-install: ## Install PHP dependencies
-	$(RUN) composer install --no-interaction
+.PHONY: help ## Display this help
+help:
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_.@%-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-test: ## Run lint + PHPUnit tests
-	$(MAKE) lint
-	$(MAKE) phpunit
+.PHONY: install ## Install PHP dependencies
+install:
+	$(EXEC) composer install --no-interaction
 
-phpstan: ## Run PHPStan level 8
-	$(RUN) composer phpstan
+.PHONY: test ## Run PHPStan, CS, and unit tests
+test: APP_ENV = test
+test:
+	$(MAKE) APP_ENV=$(APP_ENV) phpstan
+	$(MAKE) APP_ENV=$(APP_ENV) cs
+	$(EXEC) php vendor/bin/phpunit --testsuite Unit
 
-phpunit: ## Run PHPStan level 8
-	$(RUN) php -d memory_limit=-1 vendor/bin/.phpunit/phpunit-9.6-0/phpunit --group phase1
+.PHONY: tests-complete ## Run unit and integration test suites
+tests-complete: APP_ENV = test
+tests-complete: db-init-test
+	$(MAKE) APP_ENV=$(APP_ENV) test
+	$(EXEC) php vendor/bin/phpunit --testsuite Integration
 
-cs-fix: ## Run PHP-CS-Fixer
-	$(RUN) composer cs-fix
+.PHONY: phpunit ## Run blocking PHPUnit group
+phpunit: APP_ENV = test
+phpunit:
+	$(EXEC) php vendor/bin/phpunit --group phase1
 
-cs: ## Run PHP-CS
-	$(RUN) composer cs-fix -- --dry-run --diff
+.PHONY: db-init-test ## Create and migrate the test database
+db-init-test: APP_ENV = test
+db-init-test:
+	$(EXEC) php bin/console doctrine:database:create --if-not-exists -e test
+	$(EXEC) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
-phpcs-fix: ## Run PHP-CS-Fixer
-	$(RUN) composer cs-fix
+.PHONY: db-reset ## Drop, recreate, and migrate the test database
+db-reset: APP_ENV = dev
+db-reset:
+	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists
+	$(EXECROOT) php bin/console doctrine:database:create
+	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction
 
-rector: ## Run Rector
-	$(RUN) composer rector -- --dry-run
+.PHONY: db-reset-test ## Drop, recreate, and migrate the test database
+db-reset-test: APP_ENV = test
+db-reset-test:
+	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists -e test
+	$(EXECROOT) php bin/console doctrine:database:create -e test
+	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
-lint: ## Run all PHP linters
+.PHONY: fixtures ## Load backend fixtures
+fixtures: APP_ENV = dev
+fixtures:
+	$(EXEC) php bin/console doctrine:fixtures:load --no-interaction
+
+.PHONY: phpstan ## Run PHPStan
+phpstan:
+	$(EXEC) composer phpstan
+
+.PHONY: cs ## Run PHP-CS-Fixer in dry-run mode
+cs:
+	$(EXEC) composer cs-fix -- --dry-run --diff
+
+.PHONY: cs-fix ## Fix code style with PHP-CS-Fixer
+cs-fix:
+	$(EXEC) composer cs-fix
+
+.PHONY: rector ## Run Rector in dry-run mode
+rector:
+	$(EXEC) composer rector -- --dry-run
+
+.PHONY: lint ## Run PHPStan, CS, and Rector
+lint:
 	$(MAKE) phpstan
 	$(MAKE) cs
 	$(MAKE) rector
 
-schema-validate: ## Validate Doctrine schema
-	$(RUN) php bin/console doctrine:schema:validate
-
-migration-diff: ## Generate Doctrine migration
-	$(RUN) php bin/console doctrine:migrations:diff
-
-migration-migrate: ## Run Doctrine migrations
-	$(RUN) php bin/console doctrine:migrations:migrate --no-interaction
-
-db-init: ## Initialize database (drop, migrate, fixtures)
-	$(RUN) php bin/console doctrine:schema:drop --force --full-database
-	$(RUN) php bin/console doctrine:migrations:migrate --no-interaction
-	$(RUN) php bin/console doctrine:fixtures:load --no-interaction --append
-
-cache-clear: ## Clear Symfony cache and remove cache files
-	$(RUN) php bin/console cache:clear
-	$(RUN) rm -rf var/cache/*
-
-help: ## Display this help
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+.PHONY: exec ## Enter the php-fpm container
+exec:
+	@$(FIG) ps php-fpm | grep -q "Up" || $(FIG) up -d php-fpm >/dev/null
+	$(EXEC) bash || $(EXEC) sh

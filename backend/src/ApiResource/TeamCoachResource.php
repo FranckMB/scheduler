@@ -12,16 +12,18 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
 use App\Dto\TeamCoachInput;
 use App\Entity\TeamCoach;
+use App\Enum\TeamCoachRole;
 use App\State\Processor\TeamCoachStateProcessor;
 use App\State\Provider\TeamCoachStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'TeamCoach', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: TeamCoachInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamCoachStateProvider::class, processor: TeamCoachStateProcessor::class)]
 class TeamCoachResource
 {
@@ -32,10 +34,10 @@ class TeamCoachResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $teamId = '';
@@ -44,14 +46,14 @@ class TeamCoachResource
     public string $coachId = '';
 
     #[Groups(['read'])]
-    public string $role = '';
+    public TeamCoachRole $role;
 
     #[Groups(['read'])]
     public bool $isRequired = false;
 
     public static function fromEntity(TeamCoach $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

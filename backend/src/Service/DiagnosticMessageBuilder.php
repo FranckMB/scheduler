@@ -38,7 +38,7 @@ final class DiagnosticMessageBuilder
         $teamId = $this->extractId($diagnostic, 'teamId', 'team_id');
         $teamName = null !== $teamId ? ($teamNames[$teamId] ?? $teamId) : 'L\'équipe';
 
-        return sprintf(
+        return \sprintf(
             '%s n\'a pas pu être placée dans le planning : aucun créneau ne correspondait à ses contraintes.',
             $teamName,
         );
@@ -62,7 +62,7 @@ final class DiagnosticMessageBuilder
         if (null !== $venueId) {
             $venueName = $venueNames[$venueId] ?? $venueId;
 
-            return sprintf(
+            return \sprintf(
                 '%s accueille plusieurs équipes simultanément. Veuillez déplacer l\'une des séances.',
                 $venueName,
             );
@@ -71,7 +71,7 @@ final class DiagnosticMessageBuilder
         if (null !== $coachId) {
             $coachName = $coachNames[$coachId] ?? $coachId;
 
-            return sprintf(
+            return \sprintf(
                 '%s est assigné(e) à plusieurs équipes simultanément. Veuillez réattribuer l\'une des séances.',
                 $coachName,
             );
@@ -92,7 +92,7 @@ final class DiagnosticMessageBuilder
         $threshold = (int) ($diagnostic['threshold'] ?? 0);
 
         if ($count > 0 && $threshold > 0) {
-            return sprintf(
+            return \sprintf(
                 '%s est surchargé(e) avec %d séances (limite recommandée : %d).',
                 $coachName,
                 $count,
@@ -100,7 +100,7 @@ final class DiagnosticMessageBuilder
             );
         }
 
-        return sprintf(
+        return \sprintf(
             '%s est surchargé(e). Veuillez réduire son nombre de séances.',
             $coachName,
         );
@@ -119,14 +119,14 @@ final class DiagnosticMessageBuilder
         $venueName = null !== $venueId ? ($venueNames[$venueId] ?? $venueId) : null;
 
         if (null !== $venueName) {
-            return sprintf(
+            return \sprintf(
                 'Le créneau préféré de %s (%s) a été déplacé par le solveur pour un meilleur ajustement global.',
                 $teamName,
                 $venueName,
             );
         }
 
-        return sprintf(
+        return \sprintf(
             'Le créneau préféré de %s a été déplacé par le solveur pour un meilleur ajustement global.',
             $teamName,
         );

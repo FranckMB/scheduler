@@ -7,20 +7,22 @@ namespace App\Controller;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
 use App\Service\ManualEditService;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Throwable;
 
 final class ManualEditController extends AbstractController
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ManualEditService $manualEditService,
-    ) {
-    }
+    ) {}
 
     #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
     public function applyConstraint(string $id, Request $request): JsonResponse
@@ -33,7 +35,7 @@ final class ManualEditController extends AbstractController
 
         $data = json_decode($request->getContent(), true);
 
-        if (!is_array($data)) {
+        if (!\is_array($data)) {
             return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
         }
 
@@ -50,7 +52,7 @@ final class ManualEditController extends AbstractController
                 isset($data['reason']) ? (string) $data['reason'] : null,
                 isset($data['createdBy']) ? (string) $data['createdBy'] : null,
             );
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         }
 
@@ -71,7 +73,7 @@ final class ManualEditController extends AbstractController
 
         $data = json_decode($request->getContent(), true);
 
-        if (!is_array($data)) {
+        if (!\is_array($data)) {
             return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
         }
 
@@ -103,24 +105,24 @@ final class ManualEditController extends AbstractController
 
         $data = json_decode($request->getContent(), true);
 
-        if (!is_array($data)) {
+        if (!\is_array($data)) {
             return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (isset($data['startTime']) && is_string($data['startTime'])) {
-            $time = \DateTimeImmutable::createFromFormat('!H:i', $data['startTime'])
-                ?: \DateTimeImmutable::createFromFormat('!H:i:s', $data['startTime']);
+        if (isset($data['startTime']) && \is_string($data['startTime'])) {
+            $time = DateTimeImmutable::createFromFormat('!H:i', $data['startTime'])
+                ?: DateTimeImmutable::createFromFormat('!H:i:s', $data['startTime']);
 
-            if ($time instanceof \DateTimeImmutable) {
+            if ($time instanceof DateTimeImmutable) {
                 $data['startTime'] = $time;
             }
         }
 
         try {
             $this->manualEditService->applyOneTimeUpdate($slot, $data);
-        } catch (\InvalidArgumentException $e) {
+        } catch (InvalidArgumentException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         }
 
@@ -131,7 +133,7 @@ final class ManualEditController extends AbstractController
     {
         try {
             $slot = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->find($id);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $slot = null;
         }
 

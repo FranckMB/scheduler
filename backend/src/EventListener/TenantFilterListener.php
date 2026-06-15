@@ -20,8 +20,7 @@ class TenantFilterListener implements EventSubscriberInterface
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly TokenStorageInterface $tokenStorage,
-    ) {
-    }
+    ) {}
 
     public static function getSubscribedEvents(): array
     {
@@ -64,7 +63,7 @@ class TenantFilterListener implements EventSubscriberInterface
                 if (null === $membership) {
                     $event->setResponse(new JsonResponse(
                         ['error' => 'You do not have access to this club'],
-                        403
+                        403,
                     ));
 
                     return;
@@ -80,7 +79,7 @@ class TenantFilterListener implements EventSubscriberInterface
 
         $connection = $this->entityManager->getConnection();
         $connection->executeStatement(
-            'SET LOCAL app.club_id = '.$connection->quote($clubId)
+            'SET LOCAL app.club_id = ' . $connection->quote($clubId),
         );
     }
 

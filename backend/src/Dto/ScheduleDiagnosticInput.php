@@ -17,7 +17,7 @@ class ScheduleDiagnosticInput
     #[Groups(['write'])]
     public ?string $type = null;
 
-    #[Assert\Choice(choices: ['info', 'warning', 'error', 'critical'])]
+    #[Assert\Choice(choices: ['ERROR', 'WARNING', 'INFO', 'SUCCESS'])]
     #[Groups(['write'])]
     public ?string $severity = null;
 

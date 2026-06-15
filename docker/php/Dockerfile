@@ -26,6 +26,8 @@ RUN apt-get update \
         zip \
     && pecl install redis \
     && docker-php-ext-enable redis \
+    && echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/zz-memory.ini \
+    && echo "max_execution_time = 0" >> /usr/local/etc/php/conf.d/zz-memory.ini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

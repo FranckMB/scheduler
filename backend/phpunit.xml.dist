@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-         bootstrap="vendor/autoload.php"
-         colors="true"
->
+          xsi:noNamespaceSchemaLocation="vendor/bin/.phpunit/phpunit-11.5-0/phpunit.xsd"
+          bootstrap="tests/bootstrap.php"
+          colors="true"
+ >
+    <extensions>
+        <bootstrap class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitExtension"/>
+    </extensions>
     <testsuites>
-        <testsuite name="Project Test Suite">
-            <directory>tests</directory>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+            <directory>tests/Security</directory>
+            <directory>tests/Queue</directory>
+        </testsuite>
+        <testsuite name="Contract">
+            <directory>tests/CrossStack</directory>
         </testsuite>
     </testsuites>
     <php>

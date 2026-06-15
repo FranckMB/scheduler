@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\Gender;
+use App\Enum\TeamLevel;
 use App\Repository\TeamRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: TeamRepository::class)]
@@ -26,10 +29,10 @@ class Team
     private int $version = 1;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     #[ORM\Column(type: 'datetimetz_immutable')]
-    private \DateTimeImmutable $updatedAt;
+    private DateTimeImmutable $updatedAt;
 
     #[ORM\Column(type: 'guid')]
     private string $clubId;
@@ -46,14 +49,11 @@ class Team
     #[ORM\Column(type: 'string', length: 180)]
     private string $name;
 
-    #[ORM\Column(type: 'string', length: 20, nullable: true)]
-    private ?string $level = null;
+    #[ORM\Column(length: 20, nullable: true, enumType: TeamLevel::class)]
+    private ?TeamLevel $level = null;
 
-    #[ORM\Column(type: 'string', length: 20, nullable: true)]
-    private ?string $gender = null;
-
-    #[ORM\Column(type: 'boolean', options: ['default' => false])]
-    private bool $isCompetition = false;
+    #[ORM\Column(length: 10, nullable: true, enumType: Gender::class)]
+    private ?Gender $gender = null;
 
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $size = null;
@@ -79,7 +79,7 @@ class Team
     public function __construct()
     {
         $this->id = $this->newUuid();
-        $now = new \DateTimeImmutable();
+        $now = new DateTimeImmutable;
         $this->createdAt = $now;
         $this->updatedAt = $now;
     }
@@ -101,24 +101,24 @@ class Team
         return $this->version;
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function setCreatedAt(\DateTimeImmutable $createdAt): self
+    public function setCreatedAt(DateTimeImmutable $createdAt): self
     {
         $this->createdAt = $createdAt;
 
         return $this;
     }
 
-    public function getUpdatedAt(): \DateTimeImmutable
+    public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
     }
 
-    public function setUpdatedAt(\DateTimeImmutable $updatedAt): self
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
 
@@ -128,7 +128,7 @@ class Team
     #[ORM\PreUpdate]
     public function touchUpdatedAt(): void
     {
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable;
     }
 
     public function getClubId(): string
@@ -191,43 +191,26 @@ class Team
         return $this;
     }
 
-    public function getLevel(): ?string
+    public function getLevel(): ?TeamLevel
     {
         return $this->level;
     }
 
-    public function setLevel(?string $level): self
+    public function setLevel(?TeamLevel $level): self
     {
         $this->level = $level;
 
         return $this;
     }
 
-    public function getGender(): ?string
+    public function getGender(): ?Gender
     {
         return $this->gender;
     }
 
-    public function setGender(?string $gender): self
+    public function setGender(?Gender $gender): self
     {
         $this->gender = $gender;
-
-        return $this;
-    }
-
-    public function getIsCompetition(): bool
-    {
-        return $this->isCompetition;
-    }
-
-    public function isIsCompetition(): bool
-    {
-        return $this->isCompetition;
-    }
-
-    public function setIsCompetition(bool $isCompetition): self
-    {
-        $this->isCompetition = $isCompetition;
 
         return $this;
     }
@@ -324,8 +307,8 @@ class Team
     private function newUuid(): string
     {
         $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0F) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3F) | 0x80);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
 
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }

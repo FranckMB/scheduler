@@ -1,0 +1,10 @@
+{
+  "version": "2.0",
+  "rules": [
+    {"name": "VENUE_AT_MOST_ONE", "enabled": true, "description": "One venue hosts max one team per time slot"},
+    {"name": "COACH_NO_OVERLAP", "enabled": true, "description": "One coach coaches max one team per time slot"},
+    {"name": "COACH_PLAYER_NO_OVERLAP", "enabled": true, "description": "A coach-player cannot be in two roles simultaneously"},
+    {"name": "TEAM_NO_OVERLAP", "enabled": true, "description": "A team cannot have two sessions at the same time"},
+    {"name": "MIN_SESSIONS", "enabled": true, "description": "Each team gets at least its effective minimum sessions"}
+  ]
+}

@@ -23,7 +23,7 @@ class SeasonStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Season
     {
-        $entity = new Season();
+        $entity = new Season;
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

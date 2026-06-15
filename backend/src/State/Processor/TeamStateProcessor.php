@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\TeamResource;
 use App\Dto\TeamInput;
 use App\Entity\Team;
+use App\Enum\Gender;
 
 /**
  * @extends AbstractStateProcessor<Team, TeamInput, TeamResource>
@@ -23,13 +24,18 @@ class TeamStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Team
     {
-        $entity = new Team();
+        $entity = new Team;
         $entity->setSportCategoryId($input->sportCategoryId ?? '33333333-3333-3333-3333-333333333333');
         $entity->setPriorityTierId($input->priorityTierId ?? 1);
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        $entity->setGender($input->gender);
+        if (null !== $input->gender) {
+            $gender = Gender::tryFrom($input->gender);
+            if (null !== $gender) {
+                $entity->setGender($gender);
+            }
+        }
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }
@@ -53,7 +59,12 @@ class TeamStateProcessor extends AbstractStateProcessor
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        $entity->setGender($input->gender);
+        if (null !== $input->gender) {
+            $gender = Gender::tryFrom($input->gender);
+            if (null !== $gender) {
+                $entity->setGender($gender);
+            }
+        }
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }

@@ -14,14 +14,15 @@ use App\Dto\SportInput;
 use App\Entity\Sport;
 use App\State\Processor\SportStateProcessor;
 use App\State\Provider\SportStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Sport', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: SportInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SportStateProvider::class, processor: SportStateProcessor::class)]
 class SportResource
 {
@@ -32,10 +33,10 @@ class SportResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
@@ -51,7 +52,7 @@ class SportResource
 
     public static function fromEntity(Sport $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

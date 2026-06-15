@@ -1,6 +1,6 @@
 from .input_schema import (
     CoachSchema,
-    ConstraintSchema,
+    ConstraintV2Schema,
     ScheduleInputSchema,
     ScheduleSlotTemplateSchema,
     TeamSchema,
@@ -10,7 +10,7 @@ from .output_schema import DiagnosticSchema, ScheduleOutputSchema, ScheduleSlotS
 
 __all__ = [
     "CoachSchema",
-    "ConstraintSchema",
+    "ConstraintV2Schema",
     "DiagnosticSchema",
     "ScheduleInputSchema",
     "ScheduleOutputSchema",

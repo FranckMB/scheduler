@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
 use App\Entity\Schedule;
+use App\Enum\ScheduleStatus;
 
 /**
  * @extends AbstractStateProcessor<Schedule, ScheduleInput, ScheduleResource>
@@ -23,12 +24,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Schedule
     {
-        $entity = new Schedule();
+        $entity = new Schedule;
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
         if (null !== $input->status) {
-            $entity->setStatus($input->status);
+            $status = ScheduleStatus::tryFrom($input->status);
+            if (null !== $status) {
+                $entity->setStatus($status);
+            }
         }
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);
@@ -47,7 +51,10 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             $entity->setName($input->name);
         }
         if (null !== $input->status) {
-            $entity->setStatus($input->status);
+            $status = ScheduleStatus::tryFrom($input->status);
+            if (null !== $status) {
+                $entity->setStatus($status);
+            }
         }
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);

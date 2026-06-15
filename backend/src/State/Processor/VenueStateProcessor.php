@@ -23,7 +23,7 @@ class VenueStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Venue
     {
-        $entity = new Venue();
+        $entity = new Venue;
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

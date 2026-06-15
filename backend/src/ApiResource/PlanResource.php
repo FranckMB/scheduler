@@ -14,14 +14,15 @@ use App\Dto\PlanInput;
 use App\Entity\Plan;
 use App\State\Processor\PlanStateProcessor;
 use App\State\Provider\PlanStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Plan', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: PlanInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PlanStateProvider::class, processor: PlanStateProcessor::class)]
 class PlanResource
 {
@@ -32,10 +33,10 @@ class PlanResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $name = '';
@@ -61,7 +62,7 @@ class PlanResource
 
     public static function fromEntity(Plan $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

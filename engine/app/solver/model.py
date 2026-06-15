@@ -57,20 +57,34 @@ def _team_ids(data: Mapping[str, Any] | Any) -> tuple[str, ...]:
     return tuple(str(_required(team, "id")) for team in _collection(data, "teams"))
 
 
+DEFAULT_START_MINUTES = 8 * 60  # 08:00
+DEFAULT_END_MINUTES = 22 * 60  # 22:00
+DEFAULT_DAYS_OF_WEEK = (1, 2, 3, 4, 5)  # Mon-Fri
+
+
 def _derive_available_slots(data: Mapping[str, Any] | Any) -> tuple[VenueSlotKey, ...]:
     slots: set[VenueSlotKey] = set()
 
-    for availability in _venue_availabilities(data):
-        venue_id = str(_required(availability, "venue_id", "venueId"))
-        day_of_week = int(_required(availability, "day_of_week", "dayOfWeek"))
-        start_minutes = _time_to_minutes(_required(availability, "start_time", "startTime"))
-        end_minutes = _time_to_minutes(_required(availability, "end_time", "endTime"))
+    for venue in _collection(data, "venues"):
+        venue_id = str(_required(venue, "id"))
+        availability_windows = _collection(venue, "availability", "availabilities")
 
-        if end_minutes <= start_minutes:
-            raise ValueError(f"availability for venue {venue_id} ends before it starts")
+        if availability_windows:
+            for window in availability_windows:
+                day_of_week = int(_required(window, "day_of_week", "dayOfWeek"))
+                start_minutes = _time_to_minutes(_required(window, "start_time", "startTime"))
+                end_minutes = _time_to_minutes(_required(window, "end_time", "endTime"))
 
-        for slot_minutes in range(start_minutes, end_minutes, SLOT_MINUTES):
-            slots.add((venue_id, day_of_week, _format_time(slot_minutes)))
+                if end_minutes <= start_minutes:
+                    raise ValueError(f"availability for venue {venue_id} ends before it starts")
+
+                for slot_minutes in range(start_minutes, end_minutes, SLOT_MINUTES):
+                    slots.add((venue_id, day_of_week, _format_time(slot_minutes)))
+        else:
+            # Default: all standard weekdays, 08:00-22:00
+            for day_of_week in DEFAULT_DAYS_OF_WEEK:
+                for slot_minutes in range(DEFAULT_START_MINUTES, DEFAULT_END_MINUTES, SLOT_MINUTES):
+                    slots.add((venue_id, day_of_week, _format_time(slot_minutes)))
 
     return tuple(sorted(slots, key=_sort_venue_slot))
 
@@ -115,29 +129,6 @@ def _extract_hard_locks(
             blocked_venue_slots.add((venue_id, day_of_week, normalized_start))
 
     return tuple(locked_slots), frozenset(hard_slot_keys), frozenset(blocked_venue_slots)
-
-
-def _venue_availabilities(data: Mapping[str, Any] | Any) -> Iterable[Mapping[str, Any] | Any]:
-    yield from _collection(data, "venue_availabilities", "venueAvailabilities")
-
-    for venue in _collection(data, "venues"):
-        venue_id = _value(venue, "id")
-        for availability in _collection(venue, "venue_availabilities", "venueAvailabilities", "availabilities"):
-            if _value(availability, "venue_id", "venueId") is not None or venue_id is None:
-                yield availability
-                continue
-
-            merged = dict(availability) if isinstance(availability, Mapping) else {}
-            merged["venue_id"] = venue_id
-            if not isinstance(availability, Mapping):
-                merged.update(
-                    {
-                        "day_of_week": _value(availability, "day_of_week", "dayOfWeek"),
-                        "start_time": _value(availability, "start_time", "startTime"),
-                        "end_time": _value(availability, "end_time", "endTime"),
-                    }
-                )
-            yield merged
 
 
 def _slot_templates(data: Mapping[str, Any] | Any) -> Iterable[Mapping[str, Any] | Any]:

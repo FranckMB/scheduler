@@ -9,7 +9,9 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\Venue;
+use DateInterval;
 use Doctrine\ORM\EntityManagerInterface;
+use RuntimeException;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -22,8 +24,7 @@ class PdfGenerator
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly HttpClientInterface $httpClient,
-    ) {
-    }
+    ) {}
 
     public function generate(Schedule $schedule): string
     {
@@ -32,10 +33,10 @@ class PdfGenerator
         ]);
 
         $html = $this->buildHtml($schedule, $slots);
-        $filename = sprintf('schedule-%s.pdf', $schedule->getId());
+        $filename = \sprintf('schedule-%s.pdf', $schedule->getId());
 
         if (!is_dir(self::OUTPUT_DIR)) {
-            mkdir(self::OUTPUT_DIR, 0755, true);
+            mkdir(self::OUTPUT_DIR, 0o755, true);
         }
 
         try {
@@ -50,13 +51,13 @@ class PdfGenerator
             $result = $response->toArray(false);
 
             if (!($result['success'] ?? false)) {
-                throw new \RuntimeException($result['error'] ?? 'PDF generation failed.');
+                throw new RuntimeException($result['error'] ?? 'PDF generation failed.');
             }
         } catch (TransportExceptionInterface $e) {
-            throw new \RuntimeException('PDF worker unreachable: '.$e->getMessage(), $e->getCode(), $e);
+            throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        return self::PUBLIC_PATH.'/'.$filename;
+        return self::PUBLIC_PATH . '/' . $filename;
     }
 
     /**
@@ -100,11 +101,11 @@ class PdfGenerator
                 $coachName = null !== $slot->getCoachId() ? ($coachNames[$slot->getCoachId()] ?? 'Entraîneur inconnu') : null;
 
                 $startTime = $slot->getStartTime()->format('H:i');
-                $endTime = $slot->getStartTime()->add(new \DateInterval('PT'.$slot->getDurationMinutes().'M'))->format('H:i');
+                $endTime = $slot->getStartTime()->add(new DateInterval('PT' . $slot->getDurationMinutes() . 'M'))->format('H:i');
 
-                $coachInfo = null !== $coachName ? sprintf('<div class="coach">%s</div>', htmlspecialchars($coachName)) : '';
+                $coachInfo = null !== $coachName ? \sprintf('<div class="coach">%s</div>', htmlspecialchars($coachName)) : '';
 
-                $slotList .= sprintf(
+                $slotList .= \sprintf(
                     '<div class="slot">
                         <div class="time">%s - %s</div>
                         <div class="team">%s</div>
@@ -115,17 +116,17 @@ class PdfGenerator
                     $endTime,
                     htmlspecialchars($teamName),
                     htmlspecialchars($venueName),
-                    $coachInfo
+                    $coachInfo,
                 );
             }
 
-            $rows .= sprintf(
+            $rows .= \sprintf(
                 '<div class="day-section">
                     <h3>%s</h3>
                     <div class="slots">%s</div>
                 </div>',
                 $dayName,
-                $slotList
+                $slotList,
             );
         }
 
@@ -133,7 +134,7 @@ class PdfGenerator
             $rows = '<p class="empty">Aucun créneau planifié.</p>';
         }
 
-        return sprintf(
+        return \sprintf(
             '<!DOCTYPE html>
             <html>
             <head>
@@ -159,7 +160,7 @@ class PdfGenerator
             </body>
             </html>',
             htmlspecialchars($schedule->getName()),
-            $rows
+            $rows,
         );
     }
 
@@ -211,7 +212,7 @@ class PdfGenerator
 
         $names = [];
         foreach ($coaches as $coach) {
-            $names[$coach->getId()] = sprintf('%s %s', $coach->getFirstName(), $coach->getLastName());
+            $names[$coach->getId()] = \sprintf('%s %s', $coach->getFirstName(), $coach->getLastName());
         }
 
         return $names;

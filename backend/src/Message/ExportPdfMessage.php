@@ -8,8 +8,7 @@ final readonly class ExportPdfMessage
 {
     public function __construct(
         private string $scheduleId,
-    ) {
-    }
+    ) {}
 
     public function getScheduleId(): string
     {

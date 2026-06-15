@@ -23,7 +23,7 @@ class ClubUserStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): ClubUser
     {
-        $entity = new ClubUser();
+        $entity = new ClubUser;
         if (null !== $input->userId) {
             $entity->setUserId($input->userId);
         }

@@ -7,7 +7,7 @@ declare(strict_types=1);
  * for all 20 ClubScheduler entities.
  */
 $projectDir = dirname(__DIR__);
-$srcDir = $projectDir.'/src';
+$srcDir = $projectDir . '/src';
 
 $entities = [
     'Club' => [
@@ -374,197 +374,197 @@ $entities = [
 ];
 
 // Create directories
-@mkdir($srcDir.'/Dto', 0755, true);
-@mkdir($srcDir.'/State/Provider', 0755, true);
-@mkdir($srcDir.'/State/Processor', 0755, true);
+@mkdir($srcDir . '/Dto', 0o755, true);
+@mkdir($srcDir . '/State/Provider', 0o755, true);
+@mkdir($srcDir . '/State/Processor', 0o755, true);
 
 // Generate AbstractStateProvider
 $abstractProvider = <<<'PHP'
-<?php
+    <?php
 
-declare(strict_types=1);
+    declare(strict_types=1);
 
-namespace App\State\Provider;
+    namespace App\State\Provider;
 
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProviderInterface;
-use ApiPlatform\State\Pagination\Pagination;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
+    use ApiPlatform\Metadata\Operation;
+    use ApiPlatform\State\ProviderInterface;
+    use ApiPlatform\State\Pagination\Pagination;
+    use Doctrine\ORM\EntityManagerInterface;
+    use Symfony\Component\HttpFoundation\RequestStack;
 
-abstract class AbstractStateProvider implements ProviderInterface
-{
-    public function __construct(
-        protected readonly EntityManagerInterface $entityManager,
-        protected readonly RequestStack $requestStack,
-        protected readonly Pagination $pagination,
-    ) {
-    }
-
-    abstract protected function getEntityClass(): string;
-    abstract protected function mapEntityToOutput(object $entity): object;
-
-    public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
+    abstract class AbstractStateProvider implements ProviderInterface
     {
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
-
-        if ($operation instanceof \ApiPlatform\Metadata\GetCollection) {
-            return $this->provideCollection($operation, $context, $clubId);
+        public function __construct(
+            protected readonly EntityManagerInterface $entityManager,
+            protected readonly RequestStack $requestStack,
+            protected readonly Pagination $pagination,
+        ) {
         }
 
-        return $this->provideItem($uriVariables, $clubId);
+        abstract protected function getEntityClass(): string;
+        abstract protected function mapEntityToOutput(object $entity): object;
+
+        public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
+        {
+            $request = $this->requestStack->getCurrentRequest();
+            $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+
+            if ($operation instanceof \ApiPlatform\Metadata\GetCollection) {
+                return $this->provideCollection($operation, $context, $clubId);
+            }
+
+            return $this->provideItem($uriVariables, $clubId);
+        }
+
+        protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
+        {
+            $qb = $this->entityManager->createQueryBuilder()
+                ->select('e')
+                ->from($this->getEntityClass(), 'e');
+
+            if ($this->pagination->isEnabled($operation, $context)) {
+                $offset = $this->pagination->getOffset($operation, $context);
+                $limit = $this->pagination->getLimit($operation, $context);
+                $qb->setFirstResult($offset)
+                   ->setMaxResults($limit);
+            }
+
+            $query = $qb->getQuery();
+            $results = $query->getResult();
+
+            return array_map([$this, 'mapEntityToOutput'], $results);
+        }
+
+        protected function provideItem(array $uriVariables, ?string $clubId): ?object
+        {
+            $id = $uriVariables['id'] ?? null;
+            if (!$id) {
+                return null;
+            }
+
+            $entity = $this->entityManager->find($this->getEntityClass(), $id);
+            if (!$entity) {
+                return null;
+            }
+
+            if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+                return null;
+            }
+
+            return $this->mapEntityToOutput($entity);
+        }
     }
+    PHP;
 
-    protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
-    {
-        $qb = $this->entityManager->createQueryBuilder()
-            ->select('e')
-            ->from($this->getEntityClass(), 'e');
-
-        if ($this->pagination->isEnabled($operation, $context)) {
-            $offset = $this->pagination->getOffset($operation, $context);
-            $limit = $this->pagination->getLimit($operation, $context);
-            $qb->setFirstResult($offset)
-               ->setMaxResults($limit);
-        }
-
-        $query = $qb->getQuery();
-        $results = $query->getResult();
-
-        return array_map([$this, 'mapEntityToOutput'], $results);
-    }
-
-    protected function provideItem(array $uriVariables, ?string $clubId): ?object
-    {
-        $id = $uriVariables['id'] ?? null;
-        if (!$id) {
-            return null;
-        }
-
-        $entity = $this->entityManager->find($this->getEntityClass(), $id);
-        if (!$entity) {
-            return null;
-        }
-
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
-            return null;
-        }
-
-        return $this->mapEntityToOutput($entity);
-    }
-}
-PHP;
-
-file_put_contents($srcDir.'/State/Provider/AbstractStateProvider.php', $abstractProvider);
+file_put_contents($srcDir . '/State/Provider/AbstractStateProvider.php', $abstractProvider);
 
 // Generate AbstractStateProcessor
 $abstractProcessor = <<<'PHP'
-<?php
+    <?php
 
-declare(strict_types=1);
+    declare(strict_types=1);
 
-namespace App\State\Processor;
+    namespace App\State\Processor;
 
-use ApiPlatform\Metadata\DeleteOperationInterface;
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+    use ApiPlatform\Metadata\DeleteOperationInterface;
+    use ApiPlatform\Metadata\Operation;
+    use ApiPlatform\State\ProcessorInterface;
+    use Doctrine\ORM\EntityManagerInterface;
+    use Symfony\Component\HttpFoundation\RequestStack;
+    use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+    use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-abstract class AbstractStateProcessor implements ProcessorInterface
-{
-    public function __construct(
-        protected readonly EntityManagerInterface $entityManager,
-        protected readonly RequestStack $requestStack,
-    ) {
-    }
-
-    abstract protected function getEntityClass(): string;
-    abstract protected function createEntityFromInput(object $input): object;
-    abstract protected function updateEntityFromInput(object $entity, object $input): void;
-    abstract protected function mapEntityToOutput(object $entity): object;
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): object|void
+    abstract class AbstractStateProcessor implements ProcessorInterface
     {
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
-        $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
-
-        if ($operation instanceof DeleteOperationInterface) {
-            return $this->processDelete($uriVariables, $clubId);
+        public function __construct(
+            protected readonly EntityManagerInterface $entityManager,
+            protected readonly RequestStack $requestStack,
+        ) {
         }
 
-        $method = $operation->getMethod() ?? '';
-        if ($method === 'POST') {
-            return $this->processPost($data, $clubId, $seasonId);
+        abstract protected function getEntityClass(): string;
+        abstract protected function createEntityFromInput(object $input): object;
+        abstract protected function updateEntityFromInput(object $entity, object $input): void;
+        abstract protected function mapEntityToOutput(object $entity): object;
+
+        public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): object|void
+        {
+            $request = $this->requestStack->getCurrentRequest();
+            $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+            $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+
+            if ($operation instanceof DeleteOperationInterface) {
+                return $this->processDelete($uriVariables, $clubId);
+            }
+
+            $method = $operation->getMethod() ?? '';
+            if ($method === 'POST') {
+                return $this->processPost($data, $clubId, $seasonId);
+            }
+
+            if (in_array($method, ['PUT', 'PATCH'], true)) {
+                return $this->processPut($data, $uriVariables, $clubId, $seasonId);
+            }
+
+            return $data;
         }
 
-        if (in_array($method, ['PUT', 'PATCH'], true)) {
-            return $this->processPut($data, $uriVariables, $clubId, $seasonId);
+        protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+        {
+            $entity = $this->createEntityFromInput($input);
+
+            if ($clubId !== null && method_exists($entity, 'setClubId')) {
+                $entity->setClubId($clubId);
+            }
+            if ($seasonId !== null && method_exists($entity, 'setSeasonId')) {
+                $entity->setSeasonId($seasonId);
+            }
+
+            $this->entityManager->persist($entity);
+            $this->entityManager->flush();
+
+            return $this->mapEntityToOutput($entity);
         }
 
-        return $data;
+        protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+        {
+            $id = $uriVariables['id'] ?? null;
+            $entity = $this->entityManager->find($this->getEntityClass(), $id);
+
+            if (!$entity) {
+                throw new NotFoundHttpException('Resource not found');
+            }
+
+            if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+                throw new AccessDeniedHttpException('Access denied');
+            }
+
+            $this->updateEntityFromInput($entity, $input);
+            $this->entityManager->flush();
+
+            return $this->mapEntityToOutput($entity);
+        }
+
+        protected function processDelete(array $uriVariables, ?string $clubId): void
+        {
+            $id = $uriVariables['id'] ?? null;
+            $entity = $this->entityManager->find($this->getEntityClass(), $id);
+
+            if (!$entity) {
+                throw new NotFoundHttpException('Resource not found');
+            }
+
+            if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+                throw new AccessDeniedHttpException('Access denied');
+            }
+
+            $this->entityManager->remove($entity);
+            $this->entityManager->flush();
+        }
     }
+    PHP;
 
-    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
-    {
-        $entity = $this->createEntityFromInput($input);
-
-        if ($clubId !== null && method_exists($entity, 'setClubId')) {
-            $entity->setClubId($clubId);
-        }
-        if ($seasonId !== null && method_exists($entity, 'setSeasonId')) {
-            $entity->setSeasonId($seasonId);
-        }
-
-        $this->entityManager->persist($entity);
-        $this->entityManager->flush();
-
-        return $this->mapEntityToOutput($entity);
-    }
-
-    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
-    {
-        $id = $uriVariables['id'] ?? null;
-        $entity = $this->entityManager->find($this->getEntityClass(), $id);
-
-        if (!$entity) {
-            throw new NotFoundHttpException('Resource not found');
-        }
-
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
-            throw new AccessDeniedHttpException('Access denied');
-        }
-
-        $this->updateEntityFromInput($entity, $input);
-        $this->entityManager->flush();
-
-        return $this->mapEntityToOutput($entity);
-    }
-
-    protected function processDelete(array $uriVariables, ?string $clubId): void
-    {
-        $id = $uriVariables['id'] ?? null;
-        $entity = $this->entityManager->find($this->getEntityClass(), $id);
-
-        if (!$entity) {
-            throw new NotFoundHttpException('Resource not found');
-        }
-
-        if ($clubId !== null && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
-            throw new AccessDeniedHttpException('Access denied');
-        }
-
-        $this->entityManager->remove($entity);
-        $this->entityManager->flush();
-    }
-}
-PHP;
-
-file_put_contents($srcDir.'/State/Processor/AbstractStateProcessor.php', $abstractProcessor);
+file_put_contents($srcDir . '/State/Processor/AbstractStateProcessor.php', $abstractProcessor);
 
 foreach ($entities as $entityName => $meta) {
     $entityClass = "App\\Entity\\{$entityName}";
@@ -601,14 +601,14 @@ foreach ($entities as $entityName => $meta) {
         } elseif ('int' === $field['type']) {
             $prop .= ' = 0';
         } elseif ('string' === $field['type']) {
-            $prop .= " = ''";
+            $prop .= ' = \'\'';
         }
         $prop .= ";\n";
         $resourceProps[] = $prop;
     }
 
     $resourceCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\ApiResource;\n\n";
-    $resourceCode .= implode("\n", $resourceImports)."\n\n";
+    $resourceCode .= implode("\n", $resourceImports) . "\n\n";
     $resourceCode .= "#[ApiResource(\n";
     $resourceCode .= "    operations: [\n";
     $resourceCode .= "        new GetCollection(),\n";
@@ -624,20 +624,20 @@ foreach ($entities as $entityName => $meta) {
     $resourceCode .= "    paginationItemsPerPage: 30,\n";
     $resourceCode .= ")]\n";
     $resourceCode .= "class {$entityName}Resource\n{\n";
-    $resourceCode .= implode("\n", $resourceProps)."\n";
+    $resourceCode .= implode("\n", $resourceProps) . "\n";
     $resourceCode .= "\n    public static function fromEntity({$entityName} \$entity): self\n    {\n";
     $resourceCode .= "        \$dto = new self();\n";
     foreach ($meta['fields'] as $field) {
-        $getter = 'get'.ucfirst($field['name']);
+        $getter = 'get' . ucfirst($field['name']);
         if ('bool' === $field['type']) {
-            $getter = 'get'.ucfirst($field['name']);
+            $getter = 'get' . ucfirst($field['name']);
         }
         $resourceCode .= "        \$dto->{$field['name']} = \$entity->{$getter}();\n";
     }
     $resourceCode .= "        return \$dto;\n";
     $resourceCode .= "    }\n}\n";
 
-    file_put_contents($srcDir."/ApiResource/{$entityName}Resource.php", $resourceCode);
+    file_put_contents($srcDir . "/ApiResource/{$entityName}Resource.php", $resourceCode);
 
     // --- Generate Input DTO ---
     $inputProps = [];
@@ -682,18 +682,18 @@ foreach ($entities as $entityName => $meta) {
         } elseif ('int' === $field['type']) {
             $prop .= ' = 0';
         } elseif ('string' === $field['type']) {
-            $prop .= " = ''";
+            $prop .= ' = \'\'';
         }
         $prop .= ";\n";
         $inputProps[] = $prop;
     }
 
     $inputCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Dto;\n\n";
-    $inputCode .= implode("\n", $inputImports)."\n\n";
+    $inputCode .= implode("\n", $inputImports) . "\n\n";
     $inputCode .= "class {$entityName}Input\n{\n";
-    $inputCode .= implode("\n", $inputProps)."\n}\n";
+    $inputCode .= implode("\n", $inputProps) . "\n}\n";
 
-    file_put_contents($srcDir."/Dto/{$entityName}Input.php", $inputCode);
+    file_put_contents($srcDir . "/Dto/{$entityName}Input.php", $inputCode);
 
     // --- Generate StateProvider ---
     $providerCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\State\\Provider;\n\n";
@@ -707,7 +707,7 @@ foreach ($entities as $entityName => $meta) {
     $providerCode .= "        return {$entityName}Resource::fromEntity(\$entity);\n";
     $providerCode .= "    }\n}\n";
 
-    file_put_contents($srcDir."/State/Provider/{$entityName}StateProvider.php", $providerCode);
+    file_put_contents($srcDir . "/State/Provider/{$entityName}StateProvider.php", $providerCode);
 
     // --- Generate StateProcessor ---
     $processorCode = "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\State\\Processor;\n\n";
@@ -726,8 +726,8 @@ foreach ($entities as $entityName => $meta) {
         if (($field['readOnly'] ?? false) || ($field['isId'] ?? false)) {
             continue;
         }
-        $setter = 'set'.ucfirst($field['name']);
-        $processorCode .= "        if (\$input->{$field['name']} !== null || !".(($field['nullable'] ?? false) ? 'true' : 'false').") {\n";
+        $setter = 'set' . ucfirst($field['name']);
+        $processorCode .= "        if (\$input->{$field['name']} !== null || !" . (($field['nullable'] ?? false) ? 'true' : 'false') . ") {\n";
         $processorCode .= "            \$entity->{$setter}(\$input->{$field['name']});\n";
         $processorCode .= "        }\n";
     }
@@ -740,7 +740,7 @@ foreach ($entities as $entityName => $meta) {
         if (($field['readOnly'] ?? false) || ($field['isId'] ?? false)) {
             continue;
         }
-        $setter = 'set'.ucfirst($field['name']);
+        $setter = 'set' . ucfirst($field['name']);
         $processorCode .= "        \$entity->{$setter}(\$input->{$field['name']});\n";
     }
     $processorCode .= "    }\n\n";
@@ -750,7 +750,7 @@ foreach ($entities as $entityName => $meta) {
     $processorCode .= "        return {$entityName}Resource::fromEntity(\$entity);\n";
     $processorCode .= "    }\n}\n";
 
-    file_put_contents($srcDir."/State/Processor/{$entityName}StateProcessor.php", $processorCode);
+    file_put_contents($srcDir . "/State/Processor/{$entityName}StateProcessor.php", $processorCode);
 }
 
-echo 'Generated '.count($entities)." entities with DTOs, providers and processors.\n";
+echo 'Generated ' . count($entities) . " entities with DTOs, providers and processors.\n";

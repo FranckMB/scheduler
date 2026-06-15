@@ -15,16 +15,18 @@ use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
 use App\Dto\TeamInput;
 use App\Entity\Team;
+use App\Enum\Gender;
 use App\State\Processor\TeamStateProcessor;
 use App\State\Provider\TeamStateProvider;
+use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ApiResource(shortName: 'Team', operations: [
-    new GetCollection(),
-    new Get(),
-    new Post(),
-    new Put(),
-    new Delete(),
+    new GetCollection,
+    new Get,
+    new Post,
+    new Put,
+    new Delete,
 ], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
 #[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
 #[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
@@ -37,10 +39,10 @@ class TeamResource
     public int $version = 0;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $createdAt;
+    public DateTimeImmutable $createdAt;
 
     #[Groups(['read'])]
-    public \DateTimeImmutable $updatedAt;
+    public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
     public string $sportCategoryId = '';
@@ -52,7 +54,7 @@ class TeamResource
     public string $name = '';
 
     #[Groups(['read'])]
-    public ?string $gender = null;
+    public ?Gender $gender = null;
 
     #[Groups(['read'])]
     public int $sessionsPerWeek = 0;
@@ -74,7 +76,7 @@ class TeamResource
 
     public static function fromEntity(Team $entity): self
     {
-        $dto = new self();
+        $dto = new self;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

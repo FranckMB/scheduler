@@ -7,13 +7,13 @@ namespace App\Service;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
 
 final class ScheduleResultImporter
 {
-    public function __construct(private readonly EntityManagerInterface $entityManager)
-    {
-    }
+    public function __construct(private readonly EntityManagerInterface $entityManager) {}
 
     /** @param array<string, mixed> $solverOutput */
     public function import(Schedule $schedule, array $solverOutput): void
@@ -42,7 +42,7 @@ final class ScheduleResultImporter
                 continue;
             }
 
-            $slot = $existingSlot ?? (new ScheduleSlotTemplate())->setId($slotId);
+            $slot = $existingSlot ?? (new ScheduleSlotTemplate)->setId($slotId);
             $this->hydrateSlot($slot, $schedule, $slotData);
 
             if (null === $existingSlot) {
@@ -56,13 +56,13 @@ final class ScheduleResultImporter
     /** @return array<string, mixed> */
     private function deduplicateNoneSlots(mixed $rawSlots): array
     {
-        if (!is_array($rawSlots)) {
+        if (!\is_array($rawSlots)) {
             return [];
         }
 
         $slots = [];
         foreach ($rawSlots as $slot) {
-            if (!is_array($slot) || ($slot['lockLevel'] ?? 'NONE') !== 'NONE') {
+            if (!\is_array($slot) || ($slot['lockLevel'] ?? 'NONE') !== 'NONE') {
                 continue;
             }
 
@@ -93,13 +93,13 @@ final class ScheduleResultImporter
             ->setLockLevel(LockLevel::NONE);
     }
 
-    private function parseStartTime(string $startTime): \DateTimeImmutable
+    private function parseStartTime(string $startTime): DateTimeImmutable
     {
-        $time = \DateTimeImmutable::createFromFormat('!H:i', $startTime)
-            ?: \DateTimeImmutable::createFromFormat('!H:i:s', $startTime);
+        $time = DateTimeImmutable::createFromFormat('!H:i', $startTime)
+            ?: DateTimeImmutable::createFromFormat('!H:i:s', $startTime);
 
-        if (!$time instanceof \DateTimeImmutable) {
-            throw new \InvalidArgumentException(sprintf('Invalid solver slot startTime "%s".', $startTime));
+        if (!$time instanceof DateTimeImmutable) {
+            throw new InvalidArgumentException(\sprintf('Invalid solver slot startTime "%s".', $startTime));
         }
 
         return $time;

@@ -23,7 +23,7 @@ class PriorityTierStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): PriorityTier
     {
-        $entity = new PriorityTier();
+        $entity = new PriorityTier;
         if (null !== $input->label) {
             $entity->setLabel($input->label);
         }

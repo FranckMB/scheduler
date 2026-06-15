@@ -23,7 +23,7 @@ class PlanStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Plan
     {
-        $entity = new Plan();
+        $entity = new Plan;
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

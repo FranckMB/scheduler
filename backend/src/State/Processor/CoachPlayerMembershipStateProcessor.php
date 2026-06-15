@@ -23,7 +23,7 @@ class CoachPlayerMembershipStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): CoachPlayerMembership
     {
-        $entity = new CoachPlayerMembership();
+        $entity = new CoachPlayerMembership;
         if (null !== $input->coachId) {
             $entity->setCoachId($input->coachId);
         }
