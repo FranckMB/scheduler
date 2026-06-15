@@ -6,6 +6,11 @@ import { MemoryRouter } from 'react-router-dom'
 import CoachStep from './CoachStep'
 import { useWizardStore, type WizardData } from '@/features/wizard/wizardStore'
 
+const createMockWizardState = (data: WizardData) => ({
+  data,
+  autoSave: vi.fn().mockResolvedValue(undefined),
+})
+
 function renderCoachStep() {
   return render(
     <MemoryRouter>
@@ -18,8 +23,8 @@ function createWizardData(): WizardData {
   return {
     venues: [],
     teams: [
-      { id: 'team-1', name: 'U15 A', level: 'Regional', gender: 'M', is_competition: true, size: 12, sessions_count: 2, tier: 'C', is_junior: false },
-      { id: 'team-2', name: 'U18 A', level: 'Depart', gender: 'F', is_competition: true, size: 14, sessions_count: 2, tier: 'B', is_junior: false },
+      { id: 'team-1', name: 'U15 A', level: 'Regional', sportCategoryId: null, gender: 'M', is_competition: true, size: 12, sessions_count: 2, tier: 'C', is_junior: false },
+      { id: 'team-2', name: 'U18 A', level: 'Depart', sportCategoryId: null, gender: 'F', is_competition: true, size: 14, sessions_count: 2, tier: 'B', is_junior: false },
     ],
     preferredSlots: [],
     coaches: [
@@ -27,15 +32,13 @@ function createWizardData(): WizardData {
     ],
     constraints: [],
     coachConstraints: [],
+    venueConstraints: [],
   }
 }
 
 beforeEach(() => {
   localStorage.clear()
-  useWizardStore.setState({
-    data: createWizardData(),
-    autoSave: vi.fn().mockResolvedValue(undefined),
-  } as any)
+  useWizardStore.setState(createMockWizardState(createWizardData()))
 })
 
 afterEach(() => {

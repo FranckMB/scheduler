@@ -34,6 +34,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post(
         uriTemplate: '/schedules/{id}/generate',
         controller: 'App\Controller\GenerateScheduleController',
+        input: false,
         read: false,
         name: 'generate_schedule'
     ),

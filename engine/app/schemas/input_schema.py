@@ -22,6 +22,20 @@ class VenueSchema(SerializableModel):
     parent_venue_id: str | None = Field(default=None, alias="parentVenueId")
 
 
+class VenueAvailabilitySchema(SerializableModel):
+    venue_id: str = Field(alias="venueId")
+    day_of_week: int = Field(alias="dayOfWeek")
+    start_time: time = Field(alias="startTime")
+    end_time: time = Field(alias="endTime")
+
+
+class PriorityTierSchema(SerializableModel):
+    id: int
+    label: str
+    or_tools_weight: int = Field(alias="orToolsWeight")
+    default_min_sessions: int = Field(alias="defaultMinSessions")
+
+
 class TeamSchema(SerializableModel):
     id: str
     sport_category_id: str = Field(alias="sportCategoryId")
@@ -90,4 +104,6 @@ class ScheduleInputSchema(SerializableModel):
     teams: list[TeamSchema] = Field(default_factory=list)
     coaches: list[CoachSchema] = Field(default_factory=list)
     constraints: list[ConstraintSchema] = Field(default_factory=list)
+    venue_availabilities: list[VenueAvailabilitySchema] = Field(default_factory=list, alias="venueAvailabilities")
     slot_templates: list[ScheduleSlotTemplateSchema] = Field(default_factory=list, alias="slotTemplates")
+    priority_tiers: list[PriorityTierSchema] = Field(default_factory=list, alias="priorityTiers")

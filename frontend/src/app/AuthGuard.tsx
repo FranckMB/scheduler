@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuthStore } from '@/features/auth/authStore'
@@ -11,35 +11,19 @@ type AuthStoreWithInit = ReturnType<typeof useAuthStore.getState> & {
 export default function AuthGuard() {
   const location = useLocation()
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const [isCheckingAuth, setIsCheckingAuth] = useState(() => Boolean((useAuthStore.getState() as AuthStoreWithInit).initAuth))
+  const isAuthInitialized = useAuthStore((state) => state.isAuthInitialized)
 
   useEffect(() => {
     const { initAuth } = useAuthStore.getState() as AuthStoreWithInit
 
     if (!initAuth) {
-      setIsCheckingAuth(false)
-
       return
     }
 
-    let isMounted = true
-
-    void (async () => {
-      try {
-        await initAuth()
-      } finally {
-        if (isMounted) {
-          setIsCheckingAuth(false)
-        }
-      }
-    })()
-
-    return () => {
-      isMounted = false
-    }
+    void initAuth()
   }, [])
 
-  if (isCheckingAuth) {
+  if (!isAuthInitialized) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <LoadingSpinner size="lg" />

@@ -8,6 +8,7 @@ export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
 export type TierLabel = 'S' | 'A' | 'B' | 'C' | 'D'
 export type Gender = 'M' | 'F' | ''
 export type ConstraintType = 'fixed' | 'forbidden' | 'preferred'
+export type VenueConstraintType = 'gender_restriction' | 'level_preference'
 export type PreferredSlotSeverity = 'Obligatoire' | 'Fortement préféré' | 'Préféré' | 'Flexible'
 
 export const TIER_ORDER: TierLabel[] = ['S', 'A', 'B', 'C', 'D']
@@ -43,7 +44,8 @@ export interface CoachData {
 export interface TeamData {
   id: string
   name: string
-  level: string // Regional/Depart/Loisir/National/Elite
+  level: string // Regional/Depart/Loisir/National/Elite (legacy, kept for backward compat)
+  sportCategoryId: string | null
   gender: Gender
   is_competition: boolean
   size: number
@@ -86,6 +88,13 @@ export interface CoachConstraint {
   venueId?: string
 }
 
+export interface VenueConstraint {
+  id: string
+  venueId: string
+  constraintType: VenueConstraintType
+  constraintValue: string
+}
+
 export interface WizardData {
   venues: VenueData[]
   teams: TeamData[]
@@ -93,9 +102,10 @@ export interface WizardData {
   coaches: CoachData[]
   constraints: TeamConstraint[]
   coachConstraints: CoachConstraint[]
+  venueConstraints: VenueConstraint[]
 }
 
-export type WizardStep = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type WizardStep = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
 interface WizardState {
   currentStep: WizardStep
@@ -147,10 +157,15 @@ interface WizardState {
   removeCoachConstraint: (id: string) => void
   updateCoachConstraint: (id: string, updates: Partial<CoachConstraint>) => void
 
+  addVenueConstraint: () => void
+  updateVenueConstraint: (id: string, updates: Partial<VenueConstraint>) => void
+  removeVenueConstraint: (id: string) => void
+
   // General
   autoSave: () => Promise<void>
   validateStep: (step: WizardStep) => string[]
   resetWizard: () => void
+  clearSaveError: () => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -229,10 +244,11 @@ function createEmptyTeam(): TeamData {
     id: generateId(),
     name: '',
     level: '',
+    sportCategoryId: null,
     gender: '',
     is_competition: true,
     size: 0,
-    sessions_count: 1,
+    sessions_count: 2,
     tier: 'C',
     is_junior: false,
   }
@@ -272,6 +288,15 @@ function createEmptyCoachConstraint(): CoachConstraint {
   }
 }
 
+function createEmptyVenueConstraint(venueId = ''): VenueConstraint {
+  return {
+    id: generateId(),
+    venueId,
+    constraintType: 'gender_restriction',
+    constraintValue: 'M',
+  }
+}
+
 function createEmptyPreferredSlot(teamId: string): PreferredSlot {
   return {
     id: generateId(),
@@ -292,6 +317,7 @@ function createInitialWizardData(): WizardData {
     coaches: [],
     constraints: [],
     coachConstraints: [],
+    venueConstraints: [],
   }
 }
 
@@ -313,27 +339,29 @@ function isValidWizardState(persistedState: unknown): persistedState is Partial<
   const state = persistedState as { currentStep?: unknown; data?: unknown }
   const currentStep = state.currentStep
   const data = state.data as
-    | {
-        venues?: unknown
-        teams?: unknown
-        coaches?: unknown
-        constraints?: unknown
-        coachConstraints?: unknown
-        preferredSlots?: unknown
-      }
+      | {
+          venues?: unknown
+          teams?: unknown
+          coaches?: unknown
+          constraints?: unknown
+          coachConstraints?: unknown
+          venueConstraints?: unknown
+          preferredSlots?: unknown
+        }
     | undefined
 
   return (
     typeof currentStep === 'number' &&
     Number.isInteger(currentStep) &&
     currentStep >= 0 &&
-    currentStep <= 7 &&
+    currentStep <= 8 &&
     !!data &&
     Array.isArray(data.venues) &&
     Array.isArray(data.teams) &&
     Array.isArray(data.coaches) &&
     Array.isArray(data.constraints) &&
     Array.isArray(data.coachConstraints) &&
+    (data.venueConstraints === undefined || Array.isArray(data.venueConstraints)) &&
     Array.isArray(data.preferredSlots)
   )
 }
@@ -357,8 +385,9 @@ export const useWizardStore = create<WizardState>()(
           return false
         }
         set((state) => ({
-          currentStep: Math.min(state.currentStep + 1, 7) as WizardStep,
+          currentStep: Math.min(state.currentStep + 1, 8) as WizardStep,
           validationErrors: { ...state.validationErrors, [state.currentStep]: [] },
+          saveError: null,
         }))
         return true
       },
@@ -366,6 +395,7 @@ export const useWizardStore = create<WizardState>()(
       prevStep: () =>
         set((state) => ({
           currentStep: Math.max(state.currentStep - 1, 0) as WizardStep,
+          saveError: null,
         })),
 
       // ── Venue actions ──
@@ -387,6 +417,7 @@ export const useWizardStore = create<WizardState>()(
           data: {
             ...state.data,
             venues: state.data.venues.filter((v) => v.id !== id),
+            venueConstraints: state.data.venueConstraints.filter((constraint) => constraint.venueId !== id),
           },
         })),
 
@@ -629,6 +660,35 @@ export const useWizardStore = create<WizardState>()(
           },
         })),
 
+      addVenueConstraint: () =>
+        set((state) => ({
+          data: {
+            ...state.data,
+            venueConstraints: [
+              ...state.data.venueConstraints,
+              createEmptyVenueConstraint(state.data.venues[0]?.id || ''),
+            ],
+          },
+        })),
+
+      updateVenueConstraint: (id, updates) =>
+        set((state) => ({
+          data: {
+            ...state.data,
+            venueConstraints: state.data.venueConstraints.map((constraint) =>
+              constraint.id === id ? { ...constraint, ...updates } : constraint
+            ),
+          },
+        })),
+
+      removeVenueConstraint: (id) =>
+        set((state) => ({
+          data: {
+            ...state.data,
+            venueConstraints: state.data.venueConstraints.filter((constraint) => constraint.id !== id),
+          },
+        })),
+
       // ── Auto-save ──
       autoSave: async () => {
         const { data } = get()
@@ -649,16 +709,24 @@ export const useWizardStore = create<WizardState>()(
             })
           }
 
+          for (const constraint of data.venueConstraints) {
+            await apiClient.post('venue_constraints', {
+              json: {
+                venueId: constraint.venueId,
+                constraintType: constraint.constraintType,
+                constraintValue: constraint.constraintValue,
+              },
+            })
+          }
+
           // Save coaches
           for (const coach of data.coaches) {
             await apiClient.post('coaches', {
               json: {
-                name: coach.name,
+                firstName: coach.name,
+                lastName: '',
                 email: null,
                 phone: null,
-                team_ids: coach.teamIds,
-                is_player: coach.is_player,
-                player_team_id: coach.is_player ? coach.player_team_id : null,
               },
             })
           }
@@ -668,7 +736,7 @@ export const useWizardStore = create<WizardState>()(
             const teamResult = await apiClient.post('teams', {
               json: {
                 name: team.name,
-                level: team.level,
+                sportCategoryId: team.sportCategoryId,
                 gender: team.gender,
                 is_competition: team.is_competition,
                 size: team.size,
@@ -713,23 +781,24 @@ export const useWizardStore = create<WizardState>()(
             })
           }
 
-          for (const constraint of data.coachConstraints) {
-            await apiClient.post('coach_unavailabilities', {
-              json: {
-                coach_id: constraint.coachId,
+            for (const constraint of data.coachConstraints) {
+              await apiClient.post('coach_unavailabilities', {
+                json: {
+                  coach_id: constraint.coachId,
                 day: constraint.day,
                 start_hour: constraint.startHour,
                 start_minute: constraint.startMinute,
                 end_hour: constraint.endHour,
                 end_minute: constraint.endMinute,
-                venue_id: constraint.venueId,
-              },
+                  venue_id: constraint.venueId,
+                },
+              })
+            }
+
+          } catch (err) {
+            set({
+              saveError: err instanceof Error ? err.message : 'Save failed',
             })
-          }
-        } catch (err) {
-          set({
-            saveError: err instanceof Error ? err.message : 'Save failed',
-          })
         } finally {
           set({ isSaving: false })
         }
@@ -759,24 +828,40 @@ export const useWizardStore = create<WizardState>()(
             break
           }
           case 1: {
-            // Teams: at least one team with name
-            if (data.teams.length === 0) {
-              errors.push('Ajoutez au moins une équipe')
-            }
-            for (const team of data.teams) {
-              if (!team.name.trim()) {
-                errors.push('Chaque équipe doit avoir un nom')
+            for (const constraint of data.venueConstraints) {
+              if (!constraint.venueId) {
+                errors.push('Chaque contrainte de salle doit cibler une salle')
+                break
+              }
+
+              if (!constraint.constraintValue.trim()) {
+                errors.push('Chaque contrainte de salle doit avoir une valeur')
                 break
               }
             }
             break
           }
           case 2: {
-            // Preferred slots: no required validation
+            // Teams: at least one team with name
+            if (data.teams.length === 0) {
+              errors.push('Ajoutez au moins une equipe')
+            }
+            for (const team of data.teams) {
+              if (!team.name.trim()) {
+                errors.push('Chaque equipe doit avoir un nom')
+                break
+              }
+            }
             break
           }
           case 3: {
-            // Tier list: all teams should have a tier (default is C)
+            // Team constraints: validate coherence
+            for (const constraint of data.constraints) {
+              if (!constraint.teamId) {
+                errors.push('Chaque contrainte equipe doit cibler une equipe')
+                break
+              }
+            }
             break
           }
           case 4: {
@@ -790,13 +875,7 @@ export const useWizardStore = create<WizardState>()(
             break
           }
           case 5: {
-            // Constraints: validate coherence
-            for (const constraint of data.constraints) {
-              if (!constraint.teamId) {
-                errors.push('Chaque contrainte equipe doit cibler une équipe')
-                break
-              }
-            }
+            // Coach constraints: validate coherence
             for (const constraint of data.coachConstraints) {
               if (!constraint.coachId) {
                 errors.push('Chaque contrainte coach doit cibler un coach')
@@ -805,12 +884,18 @@ export const useWizardStore = create<WizardState>()(
             }
             break
           }
-          case 6:
+          case 6: {
+            // Tier list: all teams should have a tier (default is C)
+            break
+          }
+          case 7: {
             // Validation: no required validation
             break
-          case 7:
+          }
+          case 8: {
             // Summary: no validation needed
             break
+          }
         }
 
         return errors
@@ -818,10 +903,13 @@ export const useWizardStore = create<WizardState>()(
 
       resetWizard: () =>
         set(createInitialWizardState()),
+
+      clearSaveError: () =>
+        set({ saveError: null }),
     }),
     {
       name: 'wizard-storage',
-      version: 1,
+      version: 2,
       migrate: (persistedState: unknown, version: number) => {
         void version
 
@@ -829,7 +917,17 @@ export const useWizardStore = create<WizardState>()(
           return createInitialWizardState() as WizardState
         }
 
-        return persistedState as WizardState
+        const state = persistedState as Partial<WizardState> & { data?: Partial<WizardData> }
+
+        return {
+          ...createInitialWizardState(),
+          ...state,
+          data: {
+            ...createInitialWizardData(),
+            ...state.data,
+            venueConstraints: Array.isArray(state.data?.venueConstraints) ? state.data.venueConstraints : [],
+          },
+        } as WizardState
       },
     }
   )

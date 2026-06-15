@@ -207,6 +207,11 @@ function TeamCard({ team }: TeamCardProps) {
     id: team.id,
   })
 
+  const coaches = useWizardStore((s) => s.data.coaches)
+  const firstCoach = coaches.find((c) => c.teamIds.includes(team.id))
+
+  const genderLabel = team.gender === 'M' ? 'Masculin' : team.gender === 'F' ? 'Féminin' : ''
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -221,23 +226,14 @@ function TeamCard({ team }: TeamCardProps) {
       {...attributes}
       {...listeners}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-fg-primary text-sm leading-tight">
-          {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
-        </h4>
-        {team.gender && (
-          <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-xs text-fg-muted">
-            {team.gender}
-          </span>
-        )}
-      </div>
+      <h4 className="font-semibold text-fg-primary text-sm leading-tight">
+        {team.name || <span className="text-fg-disabled italic">Sans nom</span>}
+      </h4>
 
-        <div className="mt-2 flex items-center gap-2 text-xs text-fg-muted">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+        {genderLabel && <span>{genderLabel}</span>}
         {team.level && <span>{team.level}</span>}
-        {team.size > 0 && <span>{team.size} joueurs</span>}
-        {team.is_competition && (
-          <span className="rounded bg-rose-900/40 px-1.5 py-0.5 text-rose-300">Competition</span>
-        )}
+        <span>{firstCoach ? firstCoach.name : 'Aucun coach'}</span>
       </div>
     </div>
   )

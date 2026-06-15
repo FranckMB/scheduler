@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "cwd": "/home/franck/Projets/scheduler",
+      "type": "stdio"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless"
+      ],
+      "cwd": "/home/franck/Projets/scheduler",
+      "type": "stdio"
+    }
+  }
+}

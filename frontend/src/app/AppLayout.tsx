@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import { useUIStore } from '@/features/ui/uiStore'
 import { useAuthStore } from '@/features/auth/authStore'
+import { LoadingSpinner } from '@/shared/components/LoadingSpinner'
 
 export default function AppLayout() {
   const { sidebarOpen, toggleSidebar } = useUIStore()
-  const { user, isAuthenticated, logout } = useAuthStore()
+  const { user, isAuthenticated, logout, hasGenerated } = useAuthStore()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -50,14 +51,51 @@ export default function AppLayout() {
                 Home
               </a>
             </li>
-            <li>
-              <a
-                href="/wizard"
-                className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
-              >
-                Wizard
-              </a>
-            </li>
+            {hasGenerated ? (
+              <>
+                <li>
+                  <Link
+                    to="/entities"
+                    className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
+                  >
+                    Entités
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/dashboard"
+                    className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
+                  >
+                    Planning
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/dashboard"
+                    className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
+                  >
+                    Exporter
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/profile"
+                    className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
+                  >
+                    Profil
+                  </Link>
+                </li>
+              </>
+            ) : (
+              <li>
+                <Link
+                  to="/wizard"
+                  className="block rounded-md px-3 py-2 text-neutral-300 hover:bg-surface-hover hover:text-fg-primary"
+                >
+                  Wizard
+                </Link>
+              </li>
+            )}
           </ul>
         </nav>
       </aside>
@@ -137,7 +175,9 @@ export default function AppLayout() {
 
         {/* Page content */}
         <main className="flex-1 p-4">
-          <Outlet />
+          <Suspense fallback={<LoadingSpinner size="lg" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

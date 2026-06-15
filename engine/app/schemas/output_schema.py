@@ -43,8 +43,17 @@ class DiagnosticSchema(SerializableModel):
     created_at: datetime | None = Field(default=None, alias="createdAt")
 
 
+class SolverMetricsSchema(SerializableModel):
+    solver_version: str
+    nb_variables: int
+    nb_constraints: int
+    wall_time_ms: int
+
+
 class ScheduleOutputSchema(SerializableModel):
     status: Literal["queued", "generating", "completed", "failed"]
     score: int | None = None
+    metrics: SolverMetricsSchema
+    unplaced: list[str] = Field(default_factory=list)
     slots: list[ScheduleSlotSchema] = Field(default_factory=list)
     diagnostics: list[DiagnosticSchema] = Field(default_factory=list)

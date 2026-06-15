@@ -129,8 +129,8 @@ final class AuthController extends AbstractController
             $season = new Season();
             $season->setClubId($club->getId());
             $season->setName((string) $currentYear);
-            $season->setStartDate(new \DateTimeImmutable($currentYear.'-01-01'));
-            $season->setEndDate(new \DateTimeImmutable($currentYear.'-12-31'));
+            $season->setStartDate(new \DateTimeImmutable($currentYear.'-08-01'));
+            $season->setEndDate(new \DateTimeImmutable($currentYear.'-07-15'));
             $season->setStatus('active');
             $season->setTransitionData([]);
             $this->entityManager->persist($season);
@@ -145,14 +145,39 @@ final class AuthController extends AbstractController
                 $this->entityManager->persist($sport);
             }
 
-            // Create default sport category (basket)
-            $sportCategory = new SportCategory();
-            $sportCategory->setClubId($club->getId());
-            $sportCategory->setSportId($sport->getId());
-            $sportCategory->setName('basket');
-            $sportCategory->setIsCustom(false);
-            $sportCategory->setSortOrder(0);
-            $this->entityManager->persist($sportCategory);
+            // Create default sport categories for basketball
+            $categories = [
+                ['name' => 'U7', 'ageMin' => 6, 'ageMax' => 7, 'sortOrder' => 0],
+                ['name' => 'U9', 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 1],
+                ['name' => 'U11', 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 2],
+                ['name' => 'U13', 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 3],
+                ['name' => 'U15', 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 4],
+                ['name' => 'U18', 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 5],
+                ['name' => 'U21', 'ageMin' => 19, 'ageMax' => 21, 'sortOrder' => 6],
+                ['name' => 'Seniors M', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 7],
+                ['name' => 'Seniors F', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 8],
+            ];
+
+            foreach ($categories as $categoryData) {
+                $existingCategory = $this->entityManager->getRepository(SportCategory::class)->findOneBy([
+                    'clubId' => $club->getId(),
+                    'name' => $categoryData['name'],
+                ]);
+
+                if (null !== $existingCategory) {
+                    continue;
+                }
+
+                $sportCategory = new SportCategory();
+                $sportCategory->setClubId($club->getId());
+                $sportCategory->setSportId($sport->getId());
+                $sportCategory->setName($categoryData['name']);
+                $sportCategory->setAgeMin($categoryData['ageMin']);
+                $sportCategory->setAgeMax($categoryData['ageMax']);
+                $sportCategory->setIsCustom(false);
+                $sportCategory->setSortOrder($categoryData['sortOrder']);
+                $this->entityManager->persist($sportCategory);
+            }
         });
 
         // Reload user to ensure it has an ID for JWT generation
@@ -182,6 +207,7 @@ final class AuthController extends AbstractController
 
         $clubUser = $this->clubUserRepository->findOneBy(['userId' => $user->getId(), 'isActive' => true]);
         $club = null;
+        $clubEntity = null;
         if (null !== $clubUser) {
             $clubEntity = $this->clubRepository->find($clubUser->getClubId());
             if (null !== $clubEntity) {
@@ -195,6 +221,7 @@ final class AuthController extends AbstractController
             'firstName' => $user->getFirstName(),
             'lastName' => $user->getLastName(),
             'club' => $club,
+            'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
         ]);
     }
 }

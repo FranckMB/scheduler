@@ -4,7 +4,7 @@ import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import listPlugin from '@fullcalendar/list'
-import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core'
+import type { EventClickArg, EventContentArg, EventDropArg, EventApi } from '@fullcalendar/core'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useSchedule, useScheduleSlots, invalidateScheduleQueries, useManualEditLock, useManualEditOneTime } from '@/features/schedule/useSchedule'
 import { ExportPdfButton } from '@/features/schedule/components/ExportPdfButton'
@@ -86,11 +86,22 @@ export default function ScheduleViewPage() {
     newVenueId: string
   } | null>(null)
 
+  const [warningDialog, setWarningDialog] = useState<{
+    slot: ScheduleSlot
+    originalSlot: ScheduleSlot
+    newDayOfWeek: number
+    newStartTime: string
+    newVenueId: string
+    kind: 'move' | 'resize'
+  } | null>(null)
+
   const lockMutation = useManualEditLock()
   const oneTimeMutation = useManualEditOneTime()
+  type CalendarEventResizeInfo = { event: EventApi; revert: () => void }
 
   const { data: schedule, isLoading: scheduleLoading } = useSchedule(id || '')
   const { data: slots, isLoading: slotsLoading } = useScheduleSlots(id || '')
+  const scheduleIsValidated = schedule?.status === 'done' || schedule?.status === 'validated'
 
   const handleRefetch = useCallback(() => {
     if (id) invalidateScheduleQueries(id)
@@ -198,6 +209,20 @@ export default function ScheduleViewPage() {
     const dayChanged = slot.dayOfWeek !== newDayOfWeek
     const timeDiff = timeDiffMinutes(slot.startTime, newStartTime)
 
+    if (scheduleIsValidated) {
+      info.revert()
+      setWarningDialog({
+        slot,
+        originalSlot: slot,
+        newDayOfWeek,
+        newStartTime,
+        newVenueId: slot.venueId,
+        kind: 'move',
+      })
+
+      return
+    }
+
     if (!dayChanged && timeDiff <= 30) {
       // Silent SOFT lock + one-time update
       lockMutation.mutate({ slotId: slot.id, lockLevel: 'SOFT' })
@@ -215,16 +240,31 @@ export default function ScheduleViewPage() {
         newVenueId: slot.venueId,
       })
     }
-  }, [lockMutation, oneTimeMutation])
+  }, [lockMutation, oneTimeMutation, scheduleIsValidated])
 
   // Resize handler — duration change
-  const handleEventResize = useCallback((info: any) => {
+  const handleEventResize = useCallback((info: CalendarEventResizeInfo) => {
     const slot = info.event.extendedProps.slot as ScheduleSlot
     const newEnd = info.event.end
     if (!newEnd) return
 
     const newDuration = Math.round((newEnd.getTime() - info.event.start!.getTime()) / 60000)
     const durationDiff = Math.abs(newDuration - slot.durationMinutes)
+
+    if (scheduleIsValidated) {
+      info.revert()
+      const newStart = info.event.start!
+      setWarningDialog({
+        slot,
+        originalSlot: slot,
+        newDayOfWeek: dateToDayOfWeek(newStart),
+        newStartTime: dateToTimeString(newStart),
+        newVenueId: slot.venueId,
+        kind: 'resize',
+      })
+
+      return
+    }
 
     if (durationDiff <= 30) {
       // Silent SOFT lock + one-time update
@@ -244,7 +284,7 @@ export default function ScheduleViewPage() {
         newVenueId: slot.venueId,
       })
     }
-  }, [lockMutation, oneTimeMutation])
+  }, [lockMutation, oneTimeMutation, scheduleIsValidated])
 
   // Custom event content renderer
   const renderEventContent = useCallback((eventInfo: EventContentArg) => {
@@ -370,6 +410,19 @@ export default function ScheduleViewPage() {
             slotDuration: '00:30:00',
             allDaySlot: false,
             weekends: true,
+            hiddenDays: [0],
+            visibleRange(currentDate) {
+              const start = new Date(currentDate.valueOf())
+              const dayOfWeek = start.getDay()
+              const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+
+              start.setDate(start.getDate() + mondayOffset)
+
+              const end = new Date(start.valueOf())
+              end.setDate(end.getDate() + 6)
+
+              return { start, end }
+            },
             events: calendarEvents,
             eventClick: handleEventClick,
             eventContent: renderEventContent,
@@ -380,11 +433,11 @@ export default function ScheduleViewPage() {
             eventDrop: handleEventDrop,
             eventResize: handleEventResize,
             selectable: false,
-            dayHeaderFormat: { weekday: 'long', day: 'numeric', month: 'short' },
+            dayHeaderFormat: { weekday: 'long' },
             slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
             locale: 'fr',
             firstDay: 1,
-          } as any)}
+          })}
         />
       </div>
 
@@ -393,6 +446,43 @@ export default function ScheduleViewPage() {
         slot={selectedSlot}
         onClose={() => setSelectedSlot(null)}
       />
+
+      {warningDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-warning-700 bg-bg-deep p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold text-fg-primary">Planning validé</h3>
+            <p className="mt-3 text-sm text-fg-muted">
+              Cette modification va déclencher une nouvelle phase d&apos;ajustement sur un planning déjà validé.
+            </p>
+
+            <div className="mt-4 rounded-lg border border-warning-700 bg-warning-900/30 p-4 text-sm text-warning-300">
+              {warningDialog.kind === 'move'
+                ? `Déplacement prévu vers le jour ${warningDialog.newDayOfWeek} à ${warningDialog.newStartTime}.`
+                : `Redimensionnement prévu pour la séance à ${warningDialog.newStartTime}.`}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setWarningDialog(null)}
+                className="rounded-md border border-border-subtle bg-surface px-4 py-2 text-sm font-medium text-fg-primary"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDialogSlot(warningDialog)
+                  setWarningDialog(null)
+                }}
+                className="rounded-md bg-warning-600 px-4 py-2 text-sm font-medium text-white"
+              >
+                Continuer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual Edit Dialog */}
       {editDialogSlot && (

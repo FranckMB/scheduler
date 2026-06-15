@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/features/auth/authStore'
 import {
   useWizardStore,
   DAY_LABELS,
@@ -9,20 +10,34 @@ import { apiClient } from '@/shared/api/client'
 
 export default function SummaryStep() {
   const { data, resetWizard } = useWizardStore()
+  const setHasGenerated = useAuthStore((state) => state.setHasGenerated)
   const navigate = useNavigate()
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [showTransition, setShowTransition] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generateSuccess, setGenerateSuccess] = useState(false)
+  const redirectTimeoutRef = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current)
+      }
+    },
+    []
+  )
 
   const handleGenerate = useCallback(async () => {
     setIsGenerating(true)
     setGenerateError(null)
     setGenerateSuccess(false)
+    setShowTransition(false)
 
     try {
       // 1. Create the schedule first
       const schedule = await apiClient
-        .post('schedules', { json: { name: 'Planning' } })
+        .post('schedules', { json: { name: 'Planning', status: 'draft' } })
         .json<{ id: string }>()
       const scheduleId = schedule.id
 
@@ -49,12 +64,10 @@ export default function SummaryStep() {
       }))
 
       const coachPayloads = data.coaches.map((coach) => ({
-        name: coach.name,
+        firstName: coach.name,
+        lastName: '',
         email: null,
         phone: null,
-        team_ids: coach.teamIds,
-        is_player: coach.is_player,
-        player_team_id: coach.is_player ? coach.player_team_id : null,
         unavailabilities: data.coachConstraints.filter((constraint) => constraint.coachId === coach.id),
       }))
 
@@ -91,16 +104,27 @@ export default function SummaryStep() {
         },
       })
 
+      setHasGenerated(true)
       setGenerateSuccess(true)
+      setShowPreview(false)
+      setShowTransition(true)
 
-      // 4. Redirect to the schedule view
-      navigate(`/schedules/${scheduleId}`)
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        navigate('/dashboard')
+      }, 900)
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Echec de la generation')
     } finally {
       setIsGenerating(false)
     }
-  }, [data, navigate])
+  }, [data, navigate, setHasGenerated])
+
+  const generationSummary = {
+    venues: data.venues.length,
+    teams: data.teams.length,
+    coaches: data.coaches.length,
+    constraints: data.constraints.length + data.coachConstraints.length + data.preferredSlots.length,
+  }
 
   return (
     <div className="space-y-6">
@@ -290,8 +314,8 @@ export default function SummaryStep() {
 
         <button
           type="button"
-          onClick={handleGenerate}
-          disabled={isGenerating}
+          onClick={() => setShowPreview(true)}
+          disabled={isGenerating || showTransition}
           className="rounded-lg bg-primary-600 px-8 py-3 text-base font-bold text-white shadow-md transition hover:bg-primary-700 hover:shadow-lg disabled:opacity-50"
         >
           {isGenerating ? (
@@ -302,6 +326,8 @@ export default function SummaryStep() {
               </svg>
               Generation en cours...
             </span>
+          ) : showTransition ? (
+            'Redirection...'
           ) : (
             'Generer le planning'
           )}
@@ -310,11 +336,76 @@ export default function SummaryStep() {
         <button
           type="button"
           onClick={resetWizard}
+          disabled={isGenerating || showTransition}
           className="text-sm text-fg-muted transition hover:text-fg-primary"
         >
           Recommencer depuis le debut
         </button>
       </div>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-border-subtle bg-bg-deep p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold text-fg-primary">Prévisualisation de la génération</h3>
+            <p className="mt-2 text-sm text-fg-muted">
+              Vérifiez les éléments qui vont être envoyés au moteur avant de lancer le calcul.
+            </p>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg bg-bg-elevated p-3">
+                <p className="text-fg-muted">Salles</p>
+                <p className="mt-1 text-lg font-semibold text-fg-primary">{generationSummary.venues}</p>
+              </div>
+              <div className="rounded-lg bg-bg-elevated p-3">
+                <p className="text-fg-muted">Équipes</p>
+                <p className="mt-1 text-lg font-semibold text-fg-primary">{generationSummary.teams}</p>
+              </div>
+              <div className="rounded-lg bg-bg-elevated p-3">
+                <p className="text-fg-muted">Coachs</p>
+                <p className="mt-1 text-lg font-semibold text-fg-primary">{generationSummary.coaches}</p>
+              </div>
+              <div className="rounded-lg bg-bg-elevated p-3">
+                <p className="text-fg-muted">Contraintes</p>
+                <p className="mt-1 text-lg font-semibold text-fg-primary">{generationSummary.constraints}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 max-h-40 overflow-auto rounded-lg border border-border-subtle bg-surface p-3 text-sm text-fg-muted">
+              <p>{data.venues.map((venue) => venue.name || 'Sans nom').join(' · ') || 'Aucune salle'}</p>
+              <p className="mt-2">{data.teams.map((team) => team.name || 'Sans nom').join(' · ') || 'Aucune equipe'}</p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                disabled={isGenerating}
+                className="rounded-md border border-border-subtle bg-surface px-4 py-2 text-sm font-medium text-fg-primary"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {isGenerating ? 'Génération...' : 'Lancer la génération'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTransition && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="rounded-2xl border border-border-subtle bg-bg-deep px-8 py-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 h-12 w-12 animate-pulse rounded-full bg-primary-500/30" />
+            <h3 className="text-xl font-semibold text-fg-primary">Planning généré</h3>
+            <p className="mt-2 text-sm text-fg-muted">Ouverture du tableau de bord…</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,11 +2,12 @@ import type { WizardStep } from '@/features/wizard/wizardStore'
 
 const STEP_LABELS = [
   'Salles',
+  'Contraintes salles',
   'Equipes',
-  'Creneaux',
-  'Tiers',
+  'Contraintes equipes',
   'Coachs',
-  'Contraintes',
+  'Contraintes coachs',
+  'Tiers',
   'Validation',
   'Resume',
 ]

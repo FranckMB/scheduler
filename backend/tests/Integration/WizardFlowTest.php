@@ -380,7 +380,7 @@ final class WizardFlowTest extends ApiTestCase
         $generateResponse = $client->request('POST', sprintf('/api/schedules/%s/generate', $scheduleId));
         self::assertSame(202, $generateResponse->getStatusCode(), 'Generation trigger should return 202');
         $generateData = $generateResponse->toArray();
-        self::assertSame('Schedule generation queued.', $generateData['message']);
+        self::assertSame('Schedule generation queued', $generateData['message']);
 
         // Directly invoke the handler with a mock HTTP client (container service is already initialized)
         $container = self::getContainer();

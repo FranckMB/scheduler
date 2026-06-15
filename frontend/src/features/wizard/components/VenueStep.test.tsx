@@ -6,6 +6,11 @@ import { MemoryRouter } from 'react-router-dom'
 import VenueStep from './VenueStep'
 import { useWizardStore, type WizardData } from '@/features/wizard/wizardStore'
 
+const createMockWizardState = (data: WizardData) => ({
+  data,
+  autoSave: vi.fn().mockResolvedValue(undefined),
+})
+
 function renderVenueStep() {
   return render(
     <MemoryRouter>
@@ -37,15 +42,13 @@ function createWizardData(): WizardData {
     coaches: [],
     constraints: [],
     coachConstraints: [],
+    venueConstraints: [],
   }
 }
 
 beforeEach(() => {
   localStorage.clear()
-  useWizardStore.setState({
-    data: createWizardData(),
-    autoSave: vi.fn().mockResolvedValue(undefined),
-  } as any)
+  useWizardStore.setState(createMockWizardState(createWizardData()))
 })
 
 afterEach(() => {

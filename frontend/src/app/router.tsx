@@ -1,18 +1,17 @@
-import { Navigate, createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import AppLayout from '@/app/AppLayout'
 import AuthGuard from '@/app/AuthGuard'
-import { HomePage, LoginPage, RegisterPage, WizardPage, ScheduleViewPage, DiagnosticsPage } from '@/app/routes'
-import { useAuthStore } from '@/features/auth/authStore'
-
-function LoginRoute() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-
-  if (isAuthenticated) {
-    return <Navigate replace to="/" />
-  }
-
-  return <LoginPage />
-}
+import LoginRoute from '@/app/LoginRoute'
+import WizardGuard from '@/app/WizardGuard'
+import {
+  HomePage,
+  RegisterPage,
+  ScheduleViewPage,
+  DiagnosticsPage,
+  DashboardPage,
+  EntityPage,
+  ProfilePage,
+} from '@/app/routes'
 
 export const router = createBrowserRouter([
   {
@@ -36,7 +35,19 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'wizard',
-            element: <WizardPage />,
+            element: <WizardGuard />,
+          },
+          {
+            path: 'dashboard',
+            element: <DashboardPage />,
+          },
+          {
+            path: 'entities',
+            element: <EntityPage />,
+          },
+          {
+            path: 'profile',
+            element: <ProfilePage />,
           },
           {
             path: 'schedules/:id',

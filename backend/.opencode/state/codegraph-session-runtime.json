@@ -1,0 +1,15 @@
+{
+  "projectId": "",
+  "defaultAgentId": "opencode",
+  "stateFilePath": "/home/franck/Projets/scheduler/backend/.opencode/state/codegraph-session-runtime.json",
+  "lastWorkflowState": null,
+  "pendingReviewCommit": null,
+  "lastContextSessionId": null,
+  "lastContextSessionState": null,
+  "lastContextAccessMode": null,
+  "lastContextOwnerUserKey": null,
+  "activeScenario": null,
+  "recentUsedContextItems": [],
+  "lastCommitFingerprint": null,
+  "lastCommitStatus": null
+}

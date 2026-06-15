@@ -13,8 +13,8 @@ export function useTeams() {
     queryFn: async () => {
       const json = await apiClient
         .get('teams?isActive=true')
-        .json<ApiPlatformCollection<Team>>()
-      return json['hydra:member']
+        .json<Team[] | ApiPlatformCollection<Team>>()
+      return Array.isArray(json) ? json : json['hydra:member'] ?? []
     },
   })
 }
@@ -25,8 +25,8 @@ export function usePriorityTiers() {
     queryFn: async () => {
       const json = await apiClient
         .get('priority_tiers')
-        .json<ApiPlatformCollection<PriorityTier>>()
-      return json['hydra:member']
+        .json<PriorityTier[] | ApiPlatformCollection<PriorityTier>>()
+      return Array.isArray(json) ? json : json['hydra:member'] ?? []
     },
   })
 }

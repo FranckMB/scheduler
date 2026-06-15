@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
@@ -32,8 +32,9 @@ beforeEach(() => {
     user: null,
     club: null,
     isAuthenticated: false,
-  } as any)
-  useAuthStore.setState({ initAuth: undefined } as any)
+    isAuthInitialized: true,
+    initAuth: vi.fn().mockResolvedValue(undefined),
+  })
 })
 
 afterEach(() => {
@@ -47,6 +48,7 @@ describe('AuthGuard', () => {
       user: { id: 'user-1', email: 'captain@example.com', roles: ['ROLE_USER'] },
       club: { id: 'club-1', name: 'North Stars', slug: 'north-stars' },
       isAuthenticated: true,
+      isAuthInitialized: true,
     })
 
     renderGuard()

@@ -9,6 +9,7 @@ use App\Message\GenerateScheduleMessage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -19,6 +20,7 @@ final class GenerateScheduleController extends AbstractController
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
+        private RequestStack $requestStack,
     ) {
     }
 
@@ -34,6 +36,11 @@ final class GenerateScheduleController extends AbstractController
             return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
         }
 
+        $currentClubId = $this->resolveCurrentClubId();
+        if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
+            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+        }
+
         $this->messageBus->dispatch(
             new GenerateScheduleMessage(
                 scheduleId: $schedule->getId(),
@@ -41,6 +48,23 @@ final class GenerateScheduleController extends AbstractController
             )
         );
 
-        return $this->json(['message' => 'Schedule generation queued.'], Response::HTTP_ACCEPTED);
+        return $this->json(['message' => 'Schedule generation queued'], Response::HTTP_ACCEPTED);
+    }
+
+    private function resolveCurrentClubId(): ?string
+    {
+        $request = $this->requestStack->getCurrentRequest();
+
+        $clubId = $request?->attributes->get('_club_id');
+        if (\is_string($clubId) && '' !== $clubId) {
+            return $clubId;
+        }
+
+        $clubId = $request?->headers->get('X-Club-Id');
+        if (\is_string($clubId) && '' !== $clubId) {
+            return $clubId;
+        }
+
+        return null;
     }
 }

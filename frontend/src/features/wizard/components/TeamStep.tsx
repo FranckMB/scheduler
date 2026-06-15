@@ -3,11 +3,11 @@ import {
   useWizardStore,
   type TeamData,
 } from '@/features/wizard/wizardStore'
-
-const LEVEL_OPTIONS = ['Regional', 'Depart', 'Loisir', 'National', 'Elite']
+import { useSportCategories } from '@/features/wizard/api/useSportCategories'
 
 export default function TeamStep() {
   const { data, addTeam, updateTeam, removeTeam, autoSave } = useWizardStore()
+  const { data: categories } = useSportCategories()
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const triggerSave = useCallback(() => {
@@ -53,6 +53,7 @@ export default function TeamStep() {
           key={team.id}
           team={team}
           index={index}
+          categories={categories ?? []}
           onUpdate={(updates) => updateTeam(team.id, updates)}
           onRemove={() => removeTeam(team.id)}
         />
@@ -64,11 +65,12 @@ export default function TeamStep() {
 interface TeamCardProps {
   team: TeamData
   index: number
+  categories: { id: string; name: string }[]
   onUpdate: (updates: Partial<TeamData>) => void
   onRemove: () => void
 }
 
-function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
+function TeamCard({ team, index, categories, onUpdate, onRemove }: TeamCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -87,11 +89,14 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
               {team.gender === 'M' ? 'Masculin' : 'Feminin'}
             </span>
           )}
-          {team.level && (
-            <span className="rounded-full bg-info-900/40 px-2 py-0.5 text-xs text-info-300">
-              {team.level}
-            </span>
-          )}
+          {team.sportCategoryId && (() => {
+            const cat = categories.find((c) => c.id === team.sportCategoryId)
+            return cat ? (
+              <span className="rounded-full bg-info-900/40 px-2 py-0.5 text-xs text-info-300">
+                {cat.name}
+              </span>
+            ) : null
+          })()}
           {team.is_competition && (
             <span className="rounded-full bg-rose-900/40 px-2 py-0.5 text-xs text-rose-300">
               Competition
@@ -138,16 +143,16 @@ function TeamCard({ team, index, onUpdate, onRemove }: TeamCardProps) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-fg-muted">Niveau</label>
+            <label className="mb-1 block text-xs font-medium text-fg-muted">Categorie sportive</label>
             <select
-              value={team.level}
-              onChange={(e) => onUpdate({ level: e.target.value })}
+              value={team.sportCategoryId ?? ''}
+              onChange={(e) => onUpdate({ sportCategoryId: e.target.value || null })}
               className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-fg-primary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="">-- Selectionner --</option>
-              {LEVEL_OPTIONS.map((level) => (
-                <option key={level} value={level}>
-                  {level}
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
                 </option>
               ))}
             </select>

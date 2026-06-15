@@ -5,15 +5,21 @@ declare(strict_types=1);
 namespace App\EventListener;
 
 use App\Doctrine\Filter\TenantFilter;
+use App\Entity\User;
+use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 
 class TenantFilterListener implements EventSubscriberInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly ClubUserRepository $clubUserRepository,
+        private readonly TokenStorageInterface $tokenStorage,
     ) {
     }
 
@@ -43,6 +49,27 @@ class TenantFilterListener implements EventSubscriberInterface
 
         if (null === $clubId) {
             return;
+        }
+
+        // Validate that the authenticated user belongs to the requested club
+        $token = $this->tokenStorage->getToken();
+        if ($token instanceof \Symfony\Component\Security\Core\Authentication\Token\TokenInterface) {
+            $user = $token->getUser();
+            if ($user instanceof User) {
+                $membership = $this->clubUserRepository->findOneBy([
+                    'userId' => $user->getId(),
+                    'clubId' => $clubId,
+                    'isActive' => true,
+                ]);
+                if (null === $membership) {
+                    $event->setResponse(new JsonResponse(
+                        ['error' => 'You do not have access to this club'],
+                        403
+                    ));
+
+                    return;
+                }
+            }
         }
 
         $filterCollection = $this->entityManager->getFilters();

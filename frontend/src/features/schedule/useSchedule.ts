@@ -25,8 +25,8 @@ export function useScheduleSlots(scheduleId: string) {
         .get(`schedule_slot_templates`, {
           searchParams: { schedule: scheduleId },
         })
-        .json<ApiCollection<ScheduleSlot>>()
-      return json['hydra:member']
+        .json<ApiCollection<ScheduleSlot> & { member?: ScheduleSlot[] } | ScheduleSlot[]>()
+      return Array.isArray(json) ? json : json['hydra:member'] ?? json.member ?? []
     },
     enabled: !!scheduleId,
   })

@@ -13,7 +13,6 @@ class CoachInput
     #[Groups(['write'])]
     public ?string $firstName = null;
 
-    #[Assert\NotBlank]
     #[Groups(['write'])]
     public ?string $lastName = null;
 

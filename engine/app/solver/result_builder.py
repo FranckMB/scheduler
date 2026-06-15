@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+from importlib.metadata import version
+import uuid
 from typing import Any, Mapping
 
 from ortools.sat.python import cp_model
@@ -61,13 +63,24 @@ def build_result(
     # Always run diagnostic checks.
     diagnostics.extend(_generate_diagnostics(model_data, solver_status, slots))
 
+    unplaced = _unplaced_team_ids(model_data, slots)
+
     score: int | None = None
     if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         score = int(solver.ObjectiveValue())
 
+    metrics = {
+        "solver_version": version("ortools"),
+        "nb_variables": int(model.NumVariables()),
+        "nb_constraints": int(len(model.Proto().constraints)),
+        "wall_time_ms": int(round(solver.WallTime() * 1000)),
+    }
+
     return {
         "status": schema_status,
         "score": score,
+        "metrics": metrics,
+        "unplaced": unplaced,
         "slots": slots,
         "diagnostics": diagnostics,
     }
@@ -91,7 +104,7 @@ def _locked_slot_to_dict(locked: Mapping[str, Any] | Any) -> dict[str, Any]:
     )
 
     return {
-        "id": f"slot-{team_id}-{venue_id}-{day_of_week}-{start_time}",
+        "id": _slot_id(team_id, venue_id, day_of_week, start_time),
         "teamId": team_id,
         "venueId": venue_id,
         "coachId": coach_id,
@@ -120,7 +133,7 @@ def _build_solver_slots(
         coach_id = _find_coach_for_team(model_data, team_id)
 
         slots.append({
-            "id": f"slot-{team_id}-{venue_id}-{day_of_week}-{slot_start}",
+            "id": _slot_id(team_id, venue_id, day_of_week, slot_start),
             "teamId": team_id,
             "venueId": venue_id,
             "coachId": coach_id,
@@ -134,6 +147,10 @@ def _build_solver_slots(
             "pendingConstraintSuggestion": None,
         })
     return slots
+
+
+def _slot_id(team_id: str, venue_id: str, day_of_week: int, start_time: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"clubscheduler-slot:{team_id}:{venue_id}:{day_of_week}:{start_time}"))
 
 
 def _generate_diagnostics(
@@ -177,6 +194,11 @@ def _diagnose_unplaced(
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
     return diagnostics
+
+
+def _unplaced_team_ids(model_data: Mapping[str, Any] | Any, slots: list[dict[str, Any]]) -> list[str]:
+    placed_team_ids = {slot["teamId"] for slot in slots}
+    return [team_id for team_id in sorted(_team_ids(model_data)) if team_id not in placed_team_ids]
 
 
 def _diagnose_soft_lock_moved(

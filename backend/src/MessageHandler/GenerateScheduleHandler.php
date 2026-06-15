@@ -30,7 +30,7 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 #[AsMessageHandler]
-final readonly class GenerateScheduleHandler
+final class GenerateScheduleHandler
 {
     private const ENGINE_URL = 'http://engine:8000/generate';
 
@@ -146,7 +146,12 @@ final readonly class GenerateScheduleHandler
     private function applyEngineResult(Schedule $schedule, array $result): void
     {
         $engineStatus = strtolower((string) ($result['status'] ?? 'failed'));
-        $this->applyScoreAndMetrics($schedule, $result);
+        $metrics = $result['metrics'] ?? $result['solver_metrics'] ?? null;
+        if (is_array($metrics)) {
+            $this->applyScoreAndMetrics($schedule, $result);
+        } elseif (isset($result['score']) && is_numeric($result['score'])) {
+            $schedule->setScore((int) $result['score']);
+        }
 
         if (in_array($engineStatus, ['failed', 'infeasible'], true)) {
             $schedule->setStatus('failed');
@@ -163,7 +168,7 @@ final readonly class GenerateScheduleHandler
         }
 
         $this->resultImporter->import($schedule, $result);
-        $schedule->setStatus($this->countList($result['unplaced'] ?? []) > 0 ? 'partial' : 'done');
+        $schedule->setStatus($this->countUnplacedTeams($result) > 0 ? 'partial' : 'done');
     }
 
     /** @param array<string, mixed> $result */
@@ -178,26 +183,26 @@ final readonly class GenerateScheduleHandler
             return;
         }
 
-        if (isset($metrics['solver_version'])) {
-            $schedule->setSolverVersion((string) $metrics['solver_version']);
+        if (isset($metrics['solver_version']) || isset($metrics['solverVersion'])) {
+            $schedule->setSolverVersion((string) ($metrics['solver_version'] ?? $metrics['solverVersion']));
         }
-        if (isset($metrics['constraint_version'])) {
-            $schedule->setConstraintVersion((string) $metrics['constraint_version']);
+        if (isset($metrics['constraint_version']) || isset($metrics['constraintVersion'])) {
+            $schedule->setConstraintVersion((string) ($metrics['constraint_version'] ?? $metrics['constraintVersion']));
         }
-        if (isset($metrics['score_formula_version'])) {
-            $schedule->setScoreFormulaVersion((string) $metrics['score_formula_version']);
+        if (isset($metrics['score_formula_version']) || isset($metrics['scoreFormulaVersion'])) {
+            $schedule->setScoreFormulaVersion((string) ($metrics['score_formula_version'] ?? $metrics['scoreFormulaVersion']));
         }
-        if (isset($metrics['nb_variables']) && is_numeric($metrics['nb_variables'])) {
-            $schedule->setSolverNbVariables((int) $metrics['nb_variables']);
+        if ((isset($metrics['nb_variables']) && is_numeric($metrics['nb_variables'])) || (isset($metrics['nbVariables']) && is_numeric($metrics['nbVariables']))) {
+            $schedule->setSolverNbVariables((int) ($metrics['nb_variables'] ?? $metrics['nbVariables']));
         }
-        if (isset($metrics['nb_constraints']) && is_numeric($metrics['nb_constraints'])) {
-            $schedule->setSolverNbConstraints((int) $metrics['nb_constraints']);
+        if ((isset($metrics['nb_constraints']) && is_numeric($metrics['nb_constraints'])) || (isset($metrics['nbConstraints']) && is_numeric($metrics['nbConstraints']))) {
+            $schedule->setSolverNbConstraints((int) ($metrics['nb_constraints'] ?? $metrics['nbConstraints']));
         }
-        if (isset($metrics['nb_conflicts']) && is_numeric($metrics['nb_conflicts'])) {
-            $schedule->setSolverNbConflicts((int) $metrics['nb_conflicts']);
+        if ((isset($metrics['nb_conflicts']) && is_numeric($metrics['nb_conflicts'])) || (isset($metrics['nbConflicts']) && is_numeric($metrics['nbConflicts']))) {
+            $schedule->setSolverNbConflicts((int) ($metrics['nb_conflicts'] ?? $metrics['nbConflicts']));
         }
-        if (isset($metrics['wall_time_ms']) && is_numeric($metrics['wall_time_ms'])) {
-            $schedule->setSolverWallTimeMs((int) $metrics['wall_time_ms']);
+        if ((isset($metrics['wall_time_ms']) && is_numeric($metrics['wall_time_ms'])) || (isset($metrics['wallTimeMs']) && is_numeric($metrics['wallTimeMs']))) {
+            $schedule->setSolverWallTimeMs((int) ($metrics['wall_time_ms'] ?? $metrics['wallTimeMs']));
         }
     }
 
@@ -212,9 +217,12 @@ final readonly class GenerateScheduleHandler
     {
         $diagnostics = $result['diagnostics'] ?? [];
         if (!is_array($diagnostics) || [] === $diagnostics) {
-            $this->persistDiagnostic($schedule, 'engine_failed', 'error', (string) ($result['message'] ?? 'Schedule generation failed.'));
+            $diagnostics = $this->buildFallbackDiagnostics($result);
+            if ([] === $diagnostics) {
+                $this->persistDiagnostic($schedule, 'engine_failed', 'error', (string) ($result['message'] ?? 'Schedule generation failed.'));
 
-            return;
+                return;
+            }
         }
 
         [$teamNames, $coachNames, $venueNames] = $this->buildNameMaps($schedule);
@@ -236,18 +244,58 @@ final readonly class GenerateScheduleHandler
                 ->setMessage($message)
                 ->setSuggestions(is_array($diagnostic['suggestions'] ?? null) ? $diagnostic['suggestions'] : []);
 
-            if (isset($diagnostic['team_id'])) {
-                $entity->setTeamId((string) $diagnostic['team_id']);
+            if (isset($diagnostic['team_id']) || isset($diagnostic['teamId'])) {
+                $entity->setTeamId((string) ($diagnostic['team_id'] ?? $diagnostic['teamId']));
             }
-            if (isset($diagnostic['coach_id'])) {
-                $entity->setCoachId((string) $diagnostic['coach_id']);
+            if (isset($diagnostic['coach_id']) || isset($diagnostic['coachId'])) {
+                $entity->setCoachId((string) ($diagnostic['coach_id'] ?? $diagnostic['coachId']));
             }
-            if (isset($diagnostic['venue_id'])) {
-                $entity->setVenueId((string) $diagnostic['venue_id']);
+            if (isset($diagnostic['venue_id']) || isset($diagnostic['venueId'])) {
+                $entity->setVenueId((string) ($diagnostic['venue_id'] ?? $diagnostic['venueId']));
             }
 
             $this->entityManager->persist($entity);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     *
+     * @return array<int, array{type: string, severity: string, teamId: string, message: string, suggestions: list<string>}>
+     */
+    private function buildFallbackDiagnostics(array $result): array
+    {
+        $unplaced = $result['unplaced'] ?? [];
+        if (!is_array($unplaced) || [] === $unplaced) {
+            return [];
+        }
+
+        $diagnostics = [];
+        foreach ($unplaced as $item) {
+            $teamId = null;
+            if (is_array($item)) {
+                $teamId = isset($item['teamId']) ? (string) $item['teamId'] : (isset($item['team_id']) ? (string) $item['team_id'] : null);
+            } elseif (is_string($item) || is_int($item)) {
+                $teamId = (string) $item;
+            }
+
+            if (null === $teamId || '' === $teamId) {
+                continue;
+            }
+
+            $diagnostics[] = [
+                'type' => 'unplaced',
+                'severity' => 'high',
+                'teamId' => $teamId,
+                'message' => sprintf('Team %s could not be placed in the schedule.', $teamId),
+                'suggestions' => [
+                    'Add more venue availability or relax hard constraints.',
+                    'Check that the team has at least one feasible time slot.',
+                ],
+            ];
+        }
+
+        return $diagnostics;
     }
 
     /**
@@ -303,7 +351,7 @@ final readonly class GenerateScheduleHandler
         $this->hub->publish(new Update($topic, json_encode([
             'status' => $schedule->getStatus(),
             'score' => $schedule->getScore(),
-            'unplaced' => $this->countList($result['unplaced'] ?? []),
+            'unplaced' => $this->countUnplacedTeams($result),
             'warnings' => array_values(is_array($result['warnings'] ?? null) ? $result['warnings'] : []),
         ], JSON_THROW_ON_ERROR)));
     }
@@ -314,8 +362,28 @@ final readonly class GenerateScheduleHandler
         return hash('sha256', json_encode($snapshot, JSON_THROW_ON_ERROR));
     }
 
-    private function countList(mixed $value): int
+    /**
+     * @param array<string, mixed> $result
+     */
+    private function countUnplacedTeams(array $result): int
     {
-        return is_array($value) ? count($value) : 0;
+        $unplaced = $result['unplaced'] ?? null;
+        if (is_array($unplaced)) {
+            return count($unplaced);
+        }
+
+        $diagnostics = $result['diagnostics'] ?? null;
+        if (!is_array($diagnostics)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($diagnostics as $diagnostic) {
+            if (is_array($diagnostic) && 'unplaced' === ($diagnostic['type'] ?? null)) {
+                ++$count;
+            }
+        }
+
+        return $count;
     }
 }
