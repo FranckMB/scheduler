@@ -26,38 +26,52 @@ class PdfGenerator
         private readonly HttpClientInterface $httpClient,
     ) {}
 
-    public function generate(Schedule $schedule): string
+    /**
+     * @return array{pdf: string, png: ?string}
+     */
+    public function generate(Schedule $schedule): array
     {
         $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([
             'scheduleId' => $schedule->getId(),
         ]);
 
         $html = $this->buildHtml($schedule, $slots);
-        $filename = \sprintf('schedule-%s.pdf', $schedule->getId());
+        $pdfFilename = \sprintf('schedule-%s.pdf', $schedule->getId());
+        $pngFilename = \sprintf('schedule-%s.png', $schedule->getId());
 
         if (!is_dir(self::OUTPUT_DIR)) {
             mkdir(self::OUTPUT_DIR, 0o755, true);
         }
 
         try {
-            $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [
-                'json' => [
-                    'html' => $html,
-                    'filename' => $filename,
-                ],
-                'timeout' => 30,
-            ]);
-
-            $result = $response->toArray(false);
-
-            if (!($result['success'] ?? false)) {
-                throw new RuntimeException($result['error'] ?? 'PDF generation failed.');
-            }
+            $this->callWorker($html, $pdfFilename);
         } catch (TransportExceptionInterface $e) {
             throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        return self::PUBLIC_PATH . '/' . $filename;
+        $pngPath = self::OUTPUT_DIR . '/' . $pngFilename;
+
+        return [
+            'pdf' => self::PUBLIC_PATH . '/' . $pdfFilename,
+            'png' => is_file($pngPath) ? self::PUBLIC_PATH . '/' . $pngFilename : null,
+        ];
+    }
+
+    private function callWorker(string $html, string $filename): void
+    {
+        $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [
+            'json' => [
+                'html' => $html,
+                'filename' => $filename,
+            ],
+            'timeout' => 30,
+        ]);
+
+        $result = $response->toArray(false);
+
+        if (!($result['success'] ?? false)) {
+            throw new RuntimeException($result['error'] ?? 'Worker generation failed.');
+        }
     }
 
     /**

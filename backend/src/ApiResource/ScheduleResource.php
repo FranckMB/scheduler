@@ -102,6 +102,9 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?string $pdfExportUrl = null;
 
+    #[Groups(['read'])]
+    public ?string $pngExportUrl = null;
+
     public static function fromEntity(Schedule $entity): self
     {
         $dto = new self;
@@ -124,6 +127,7 @@ class ScheduleResource
         $dto->solverWallTimeMs = $entity->getSolverWallTimeMs();
         $dto->pdfExportStatus = $entity->getPdfExportStatus();
         $dto->pdfExportUrl = $entity->getPdfExportUrl();
+        $dto->pngExportUrl = $entity->getPngExportUrl();
 
         return $dto;
     }

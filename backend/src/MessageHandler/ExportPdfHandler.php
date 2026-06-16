@@ -34,9 +34,12 @@ final readonly class ExportPdfHandler
         $this->entityManager->flush();
 
         try {
-            $pdfUrl = $this->pdfGenerator->generate($schedule);
+            $result = $this->pdfGenerator->generate($schedule);
             $schedule->setPdfExportStatus('completed');
-            $schedule->setPdfExportUrl($pdfUrl);
+            $schedule->setPdfExportUrl($result['pdf']);
+            if (null !== $result['png']) {
+                $schedule->setPngExportUrl($result['png']);
+            }
         } catch (Throwable) {
             $schedule->setPdfExportStatus('failed');
             $schedule->setPdfExportUrl(null);
@@ -63,6 +66,7 @@ final readonly class ExportPdfHandler
         $this->hub->publish(new Update($topic, json_encode([
             'pdfExportStatus' => $schedule->getPdfExportStatus(),
             'pdfExportUrl' => $schedule->getPdfExportUrl(),
+            'pngExportUrl' => $schedule->getPngExportUrl(),
         ], \JSON_THROW_ON_ERROR)));
     }
 }
