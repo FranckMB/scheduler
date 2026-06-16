@@ -46,7 +46,24 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             throw new RuntimeException('Expected EntityManagerInterface');
         }
 
-        $manager->getConnection()->executeStatement('SET LOCAL app.club_id = \'11111111-1111-1111-1111-111111111111\'');
+        // --- Club ---
+        $existingClub = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'ARA0069036']);
+        if ($existingClub instanceof Club) {
+            $club = $existingClub;
+        } else {
+            $club = new Club;
+            $club->setName('B CHARPENNES CROIX LUIZET');
+            $club->setSlug('b-charpennes-croix-luizet');
+            $club->setFfbbClubCode('ARA0069036');
+            $club->setTimezone('Europe/Paris');
+            $club->setLocale('fr');
+            $club->setOnboardingCompleted(false);
+            $manager->persist($club);
+        }
+        $manager->flush();
+
+        $clubId = $club->getId();
+        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '{$clubId}'");
 
         // --- Sport ---
         $existingSport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basket']);
@@ -97,7 +114,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $entity->setSortOrder($cat['sortOrder']);
                 $entity->setSport($sport);
                 $entity->setIsCustom(false);
-                $entity->setClubId('11111111-1111-1111-1111-111111111111');
+                $entity->setClubId($clubId);
                 $manager->persist($entity);
             }
         }
@@ -118,22 +135,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         \assert($u11F instanceof SportCategory);
         $u13M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13M']);
         \assert($u13M instanceof SportCategory);
-
-        // --- Club ---
-        $existingClub = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'ARA0069036']);
-        if ($existingClub instanceof Club) {
-            $club = $existingClub;
-        } else {
-            $club = new Club;
-            $club->setName('B CHARPENNES CROIX LUIZET');
-            $club->setSlug('b-charpennes-croix-luizet');
-            $club->setFfbbClubCode('ARA0069036');
-            $club->setTimezone('Europe/Paris');
-            $club->setLocale('fr');
-            $club->setOnboardingCompleted(false);
-            $manager->persist($club);
-        }
-        $manager->flush();
 
         // ============================================================
         // SECTION 1 — PRIORITY TIERS
@@ -383,7 +384,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'SF1', 'sportCategory' => $seniorF, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 3, 'priorityTierId' => 1, 'gender' => Gender::F],
             ['name' => 'SF2', 'sportCategory' => $seniorF, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 2, 'gender' => Gender::F],
             ['name' => 'SM3', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M],
-            ['name' => 'SM4', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M],
+            ['name' => 'SM4', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 5, 'gender' => Gender::M],
             ['name' => 'Veterans', 'sportCategory' => $veteran, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
             ['name' => 'U21M1', 'sportCategory' => $u21M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M],
             ['name' => 'U21M2', 'sportCategory' => $u21M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M],
@@ -461,50 +462,32 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $sf2 = $teams['SF2'];
         $sm3 = $teams['SM3'];
         $sm4 = $teams['SM4'];
-        $veterans = $teams['Veterans'];
         $u21m1 = $teams['U21M1'];
         $u21m2 = $teams['U21M2'];
         $sf3 = $teams['SF3'];
         $u18m1 = $teams['U18M1'];
         $u18m2 = $teams['U18M2'];
         $u18f1 = $teams['U18F1'];
-        $u18f2 = $teams['U18F2'];
         $u18f3 = $teams['U18F3'];
         $u15m1 = $teams['U15M1'];
         $u15m2 = $teams['U15M2'];
-        $u15f1 = $teams['U15F1'];
-        $u15f2 = $teams['U15F2'];
         $u15f3 = $teams['U15F3'];
         $u13f1 = $teams['U13F1'];
-        $u13f2 = $teams['U13F2'];
-        $u13f3 = $teams['U13F3'];
-        $u13m1 = $teams['U13M1'];
-        $u13m2 = $teams['U13M2'];
-        $u11f1 = $teams['U11F1'];
-        $u11f2 = $teams['U11F2'];
-        $u9m1 = $teams['U9M1'];
-        $u9m2 = $teams['U9M2'];
         $baby1 = $teams['Baby 1'];
         $baby2 = $teams['Baby 2'];
         $microBasket = $teams['Micro Basket'];
         $academieU9U11 = $teams['Academie U9-U11'];
         $academieU13U15 = $teams['Academie U13-U15'];
         $academieU18 = $teams['Academie U18'];
-        $mercredShark = $teams['Mercredi Shark U9-U11'];
-        $loisir1 = $teams['Loisir 1'];
-        $loisir2 = $teams['Loisir 2'];
-        $loisir3 = $teams['Loisir 3'];
         $loisirFeminine = $teams['Loisir Feminine'];
         $team3x3 = $teams['3x3'];
         $cecGroupe1 = $teams['CEC Groupe 1'];
-        $cecGroupe2 = $teams['CEC Groupe 2'];
-        $cecGroupe3 = $teams['CEC Groupe 3'];
 
         // ============================================================
         // SECTION 5 — NEW COACHES
         // ============================================================
         $newCoachesData = [
-            ['firstName' => 'Maxime', 'lastName' => 'Dionnet'],
+            ['firstName' => 'Maxime', 'lastName' => ''],
             ['firstName' => 'Mara', 'lastName' => ''],
             ['firstName' => 'Emerick', 'lastName' => ''],
             ['firstName' => 'Nico', 'lastName' => 'Patin'],
@@ -543,8 +526,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         // Extract typed coach references for PHPStan level 8
-        /** @var array{'Maxime Dionnet': Coach, Mara: Coach, Emerick: Coach, 'Nico Patin': Coach, Enzo: Coach, Thomas: Coach, 'Flo Tapaunat': Coach, Chris: Coach, Marlon: Coach, 'Lionel Lacroute': Coach, 'Nicolas Barilleau': Coach, Ines: Coach, Florian: Coach, 'Luca Blanchini': Coach, Thalie: Coach} $coaches */
-        $coachMaxime = $coaches['Maxime Dionnet'];
+        /** @var array{Maxime: Coach, Mara: Coach, Emerick: Coach, 'Nico Patin': Coach, Enzo: Coach, Thomas: Coach, 'Flo Tapaunat': Coach, Chris: Coach, Marlon: Coach, 'Lionel Lacroute': Coach, 'Nicolas Barilleau': Coach, Ines: Coach, Florian: Coach, 'Luca Blanchini': Coach, Thalie: Coach} $coaches */
+        $coachMaxime = $coaches['Maxime'];
         $coachMara = $coaches['Mara'];
         $coachEmerick = $coaches['Emerick'];
         $coachNicoPatin = $coaches['Nico Patin'];
