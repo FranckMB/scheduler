@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Coach;
+use App\Entity\CoachPlayerMembership;
+use App\Entity\Constraint;
+use App\Entity\PriorityTier;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\Venue;
+use App\Entity\VenueAvailability;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -54,61 +58,140 @@ final class DevScheduleReportWriter
             json_encode($scheduleInput, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR),
         );
 
-        // payload-summary.txt
-        $constraints = $scheduleInput['constraints'] ?? [];
-        $hardCount = 0;
-        $preferredCount = 0;
-        $constraintGroups = [];
-        foreach ($constraints as $c) {
-            $ruleType = $c['ruleType'] ?? $c['severity'] ?? $c['rule_type'] ?? '';
-            $name = $c['name'] ?? null;
+        // payload-summary.txt — version BDD simplifiée
+        $clubId = $schedule->getClubId();
+        $seasonId = $schedule->getSeasonId();
 
-            if ('HARD' === $ruleType) {
-                ++$hardCount;
-                if (null !== $name) {
-                    $constraintGroups['HARD'][$name] = ($constraintGroups['HARD'][$name] ?? 0) + 1;
-                }
-            } elseif ('PREFERRED' === $ruleType || 'SOFT' === $ruleType) {
-                ++$preferredCount;
-                if (null !== $name) {
-                    $constraintGroups['PREFERRED'][$name] = ($constraintGroups['PREFERRED'][$name] ?? 0) + 1;
-                }
-            }
+        // Name maps for readable output
+        $teamNames = [];
+        foreach ($this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+            $teamNames[$team->getId()] = $team->getName();
         }
-
-        if ([] !== ($constraintGroups['HARD'] ?? [])) {
-            ksort($constraintGroups['HARD']);
+        $venueNames = [];
+        foreach ($this->entityManager->getRepository(Venue::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $venue) {
+            $venueNames[$venue->getId()] = $venue->getName();
         }
-
-        if ([] !== ($constraintGroups['PREFERRED'] ?? [])) {
-            ksort($constraintGroups['PREFERRED']);
+        $coachNames = [];
+        foreach ($this->entityManager->getRepository(Coach::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $coach) {
+            $coachNames[$coach->getId()] = trim($coach->getFirstName() . ' ' . $coach->getLastName());
         }
 
         $summaryLines = [
             \sprintf('Schedule : %s', $schedule->getName()),
-            \sprintf('Club     : %s', $schedule->getClubId()),
-            \sprintf('Saison   : %s', $schedule->getSeasonId()),
+            \sprintf('Club     : %s', $clubId),
+            \sprintf('Saison   : %s', $seasonId),
             '',
             \sprintf('Équipes          : %d', \count($scheduleInput['teams'] ?? [])),
             \sprintf('Venues           : %d', \count($scheduleInput['venues'] ?? [])),
-            \sprintf('Contraintes      : %d  (HARD: %d, PREFERRED: %d)', \count($constraints), $hardCount, $preferredCount),
             \sprintf('Slot templates   : %d', \count($scheduleInput['slotTemplates'] ?? [])),
             \sprintf('Coaches          : %d', \count($scheduleInput['coaches'] ?? [])),
             '',
         ];
 
-        if ([] !== ($constraintGroups['HARD'] ?? [])) {
-            $summaryLines[] = 'Contraintes HARD :';
-            foreach ($constraintGroups['HARD'] as $name => $count) {
-                $summaryLines[] = \sprintf('  %-3s %s', $count > 1 ? "×{$count}" : '   ', $name);
+        // 1. Contraintes métier (Constraint entity)
+        $constraints = $this->entityManager->getRepository(Constraint::class)->findByClubSeason($clubId, $seasonId);
+        $activeConstraints = array_filter($constraints, static fn (Constraint $c): bool => $c->getIsActive());
+        if ([] !== $activeConstraints) {
+            // Sort by ruleType (HARD first), then sortOrder
+            usort($activeConstraints, static function (Constraint $a, Constraint $b): int {
+                $typeOrder = ['HARD' => 0, 'PREFERRED' => 1, 'BONUS' => 2, 'LOCK' => 3];
+                $aType = $typeOrder[$a->getRuleType()->value];
+                $bType = $typeOrder[$b->getRuleType()->value];
+                if ($aType !== $bType) {
+                    return $aType <=> $bType;
+                }
+
+                return $a->getSortOrder() <=> $b->getSortOrder();
+            });
+
+            $summaryLines[] = \sprintf('Contraintes métier (%d actives) :', \count($activeConstraints));
+            foreach ($activeConstraints as $c) {
+                $summaryLines[] = \sprintf('  [%s] [%s] %s', $c->getRuleType()->value, $c->getFamily()->value, $c->getName());
+
+                $scopeTargetId = $c->getScopeTargetId();
+                $scopeStr = $c->getScope()->value;
+                if (null !== $scopeTargetId && '' !== $scopeTargetId && 'CLUB' !== $c->getScope()->value) {
+                    $targetName = $scopeTargetId;
+                    if ('TEAM' === $c->getScope()->value) {
+                        $targetName = $teamNames[$scopeTargetId] ?? $scopeTargetId;
+                    } elseif ('FACILITY' === $c->getScope()->value) {
+                        $targetName = $venueNames[$scopeTargetId] ?? $scopeTargetId;
+                    } elseif ('COACH' === $c->getScope()->value) {
+                        $targetName = $coachNames[$scopeTargetId] ?? $scopeTargetId;
+                    }
+                    $scopeStr .= ': ' . $targetName;
+                }
+
+                $configParts = [];
+                foreach ($c->getConfig() as $key => $val) {
+                    if (\is_array($val)) {
+                        $configParts[] = $key . '=[' . implode(',', $val) . ']';
+                    } else {
+                        $configParts[] = $key . '=' . $val;
+                    }
+                }
+                $detailParts = ['scope: ' . $scopeStr];
+                if ([] !== $configParts) {
+                    $detailParts[] = 'config: ' . implode(', ', $configParts);
+                }
+                $summaryLines[] = '      ' . implode(' | ', $detailParts);
             }
             $summaryLines[] = '';
         }
 
-        if ([] !== ($constraintGroups['PREFERRED'] ?? [])) {
-            $summaryLines[] = 'Contraintes PREFERRED :';
-            foreach ($constraintGroups['PREFERRED'] as $name => $count) {
-                $summaryLines[] = \sprintf('  %-3s %s', $count > 1 ? "×{$count}" : '   ', $name);
+        // 2. TeamCoach
+        $teamCoaches = $this->entityManager->getRepository(TeamCoach::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ([] !== $teamCoaches) {
+            $summaryLines[] = \sprintf('TeamCoach (%d) :', \count($teamCoaches));
+            foreach ($teamCoaches as $tc) {
+                $teamName = $teamNames[$tc->getTeamId()] ?? $tc->getTeamId();
+                $coachName = $coachNames[$tc->getCoachId()] ?? $tc->getCoachId();
+                $required = $tc->getIsRequired() ? 'obligatoire' : 'optionnel';
+                $summaryLines[] = \sprintf('  %s — %s (%s)', $teamName, $coachName, $required);
+            }
+            $summaryLines[] = '';
+        }
+
+        // 3. CoachPlayerMembership
+        $memberships = $this->entityManager->getRepository(CoachPlayerMembership::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ([] !== $memberships) {
+            $summaryLines[] = \sprintf('CoachPlayerMembership (%d) :', \count($memberships));
+            foreach ($memberships as $m) {
+                $teamName = $teamNames[$m->getTeamId()] ?? $m->getTeamId();
+                $coachName = $coachNames[$m->getCoachId()] ?? $m->getCoachId();
+                $pos = $m->getPosition() ? ' (' . $m->getPosition() . ')' : '';
+                $summaryLines[] = \sprintf('  %s — %s%s', $coachName, $teamName, $pos);
+            }
+            $summaryLines[] = '';
+        }
+
+        // 4. PriorityTiers
+        $priorityTiers = $this->entityManager->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']);
+        if ([] !== $priorityTiers) {
+            $summaryLines[] = \sprintf('PriorityTiers (%d) :', \count($priorityTiers));
+            foreach ($priorityTiers as $pt) {
+                $summaryLines[] = \sprintf('  %s — poids %d (min %d séances)', $pt->getLabel(), $pt->getOrToolsWeight(), $pt->getDefaultMinSessions());
+            }
+            $summaryLines[] = '';
+        }
+
+        // 5. VenueAvailability
+        $availabilities = $this->entityManager->getRepository(VenueAvailability::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ([] !== $availabilities) {
+            $summaryLines[] = \sprintf('Disponibilités salles (%d) :', \count($availabilities));
+            $byVenue = [];
+            foreach ($availabilities as $va) {
+                $byVenue[$va->getVenueId()][] = $va;
+            }
+            foreach ($byVenue as $venueId => $vas) {
+                $venueName = $venueNames[$venueId] ?? $venueId;
+                usort($vas, static fn (VenueAvailability $a, VenueAvailability $b): int => $a->getDayOfWeek() <=> $b->getDayOfWeek() ?: $a->getStartTime() <=> $b->getStartTime());
+                $slots = [];
+                foreach ($vas as $va) {
+                    $dayName = self::DAYS[$va->getDayOfWeek()] ?? (string) $va->getDayOfWeek();
+                    $slots[] = \sprintf('%s %s-%s', $dayName, $va->getStartTime()->format('H:i'), $va->getEndTime()->format('H:i'));
+                }
+                $summaryLines[] = \sprintf('  %s : %s', $venueName, implode(', ', $slots));
             }
             $summaryLines[] = '';
         }
