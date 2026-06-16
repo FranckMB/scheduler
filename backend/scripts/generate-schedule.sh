@@ -3,6 +3,9 @@ set -euo pipefail
 
 API_BASE="http://localhost:8080/api"
 CLUB_ID="11111111-1111-1111-1111-111111111111"
+TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3ODE1NjI0MDMsImV4cCI6MTgxMzA5ODQwMywicm9sZXMiOlsiUk9MRV9BRE1JTiJdLCJ1c2VybmFtZSI6Im1hcmEubWJAYmNjbC5mciJ9.H-2HFRT1GS8EhZrjeI-QYpiOaRXCyU5fT2qW-7XJ20OQjSRmhX9drQCq7iyqzShLSVOFVZsIM193Dy98uRXlkUVSKRiZc1JW2GAT0nGxOsUHf1vqaZMDQTWyrlEjd70ArsJirYFyMzu83xAHWVUu1GF4DURw1PLD3d5X-H7YR5S2UNii8OCO8k8MvtUCTe_vU82tlqR5CeFMUcsYFNLsTF4-dcyE23eFHTF9r0ZJAzwwvyrnTaJuejYZd4NEQ74MACcmxELV5AZ9SRsdkWeBaC_P86cYFmsB2y4rN8oBNF5j4Yk90o11hIyR9ILyoPhxRLnYpjZJP1YA7_VG_HbWxA"
+SCHEDULE_ID=""
+CLUB_ID_ARG=""
 POLL_INTERVAL=5
 TIMEOUT_SECONDS=300
 
@@ -16,14 +19,18 @@ SCHEDULE_NAME="Planning Test $(date +%Y-%m-%d_%H:%M:%S)"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--name "Schedule name"]
+Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  --name NAME   Set the schedule name
-  --help, -h    Show this help
+  --schedule-id ID   Utilise un schedule existant (skip la création)
+  --club-id ID       Crée un nouveau schedule pour ce club
+  --name NAME        Nom du schedule (avec --club-id uniquement)
+  --token TOKEN      JWT Bearer token (surcharge la variable TOKEN hardcodée)
+  --help, -h         Show this help
 
-Example:
-  $(basename "$0") --name "Planning BCCL 2025-2026"
+Exemples:
+  $(basename "$0") --schedule-id a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  $(basename "$0") --club-id 11111111-1111-1111-1111-111111111111 --name "Planning 2025-26"
 EOF
 }
 
@@ -44,24 +51,29 @@ http_request() {
   local method="$1"
   local url="$2"
   local data="${3-}"
+  local extra_headers="${4-}"
   local body_file err_file
   body_file=$(mktemp)
   err_file=$(mktemp)
 
+  local curl_opts=(-sS -o "$body_file" -w '%{http_code}' -X "$method")
+  if [[ -n "${TOKEN-}" ]]; then
+    curl_opts+=(-H "Authorization: Bearer $TOKEN")
+  fi
+  if [[ -n "${extra_headers-}" ]]; then
+    while IFS= read -r h; do
+      [[ -n "$h" ]] && curl_opts+=(-H "$h")
+    done <<<"$extra_headers"
+  fi
   if [[ -n "${data-}" ]]; then
-    if ! HTTP_STATUS=$(curl -sS -o "$body_file" -w '%{http_code}' -X "$method" -H 'Content-Type: application/json' --data "$data" "$url" 2>"$err_file"); then
-      local err_msg
-      err_msg=$(<"$err_file")
-      rm -f "$body_file" "$err_file"
-      die "Backend unreachable while calling $method $url: ${err_msg:-curl failed}"
-    fi
-  else
-    if ! HTTP_STATUS=$(curl -sS -o "$body_file" -w '%{http_code}' -X "$method" "$url" 2>"$err_file"); then
-      local err_msg
-      err_msg=$(<"$err_file")
-      rm -f "$body_file" "$err_file"
-      die "Backend unreachable while calling $method $url: ${err_msg:-curl failed}"
-    fi
+    curl_opts+=(-H 'Content-Type: application/json' --data "$data")
+  fi
+
+  if ! HTTP_STATUS=$(curl "${curl_opts[@]}" "$url" 2>"$err_file"); then
+    local err_msg
+    err_msg=$(<"$err_file")
+    rm -f "$body_file" "$err_file"
+    die "Backend unreachable while calling $method $url: ${err_msg:-curl failed}"
   fi
 
   HTTP_BODY=$(<"$body_file")
@@ -85,7 +97,7 @@ if value in (None, ""):
     raise SystemExit(1)
 
 print(value)
-' 
+'
 }
 
 extract_items() {
@@ -107,7 +119,7 @@ if not isinstance(items, list):
 for item in items:
     if isinstance(item, (dict, list)):
         print(json.dumps(item, ensure_ascii=False))
-' 
+'
 }
 
 day_label() {
@@ -206,6 +218,24 @@ print(value)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --schedule-id)
+      [[ $# -ge 2 ]] || die "--schedule-id requires a value"
+      SCHEDULE_ID="$2"
+      shift 2
+      ;;
+    --schedule-id=*)
+      SCHEDULE_ID="${1#*=}"
+      shift
+      ;;
+    --club-id)
+      [[ $# -ge 2 ]] || die "--club-id requires a value"
+      CLUB_ID_ARG="$2"
+      shift 2
+      ;;
+    --club-id=*)
+      CLUB_ID_ARG="${1#*=}"
+      shift
+      ;;
     --name)
       [[ $# -ge 2 ]] || die "--name requires a value"
       SCHEDULE_NAME="$2"
@@ -213,6 +243,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --name=*)
       SCHEDULE_NAME="${1#*=}"
+      shift
+      ;;
+    --token)
+      [[ $# -ge 2 ]] || die "--token requires a value"
+      TOKEN="$2"
+      shift 2
+      ;;
+    --token=*)
+      TOKEN="${1#*=}"
       shift
       ;;
     --help|-h)
@@ -225,38 +264,36 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-schedule_payload=$(python3 -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "status": "DRAFT"}, ensure_ascii=False))' "$SCHEDULE_NAME")
-
-info "Création du schedule: $SCHEDULE_NAME"
-http_request POST "$API_BASE/schedules" "$schedule_payload"
-case "$HTTP_STATUS" in
-  200|201)
-    ;;
-  404)
-    die "Endpoint /schedules introuvable (HTTP 404). Le backend est-il bien démarré ?"
-    ;;
-  *)
-    die "Échec de création du schedule (HTTP $HTTP_STATUS): $HTTP_BODY"
-    ;;
-esac
-
-if ! SCHEDULE_ID=$(extract_id <<<"$HTTP_BODY"); then
-  die "Réponse JSON invalide lors de la création du schedule"
+if [[ -n "$SCHEDULE_ID" && -n "$CLUB_ID_ARG" ]]; then
+  die "--schedule-id et --club-id sont mutuellement exclusifs"
 fi
 
-info "Schedule créé: $SCHEDULE_ID"
+if [[ -n "$SCHEDULE_ID" ]]; then
+  info "Utilisation du schedule existant: $SCHEDULE_ID"
+else
+  local_club_id="${CLUB_ID_ARG:-$CLUB_ID}"
+  schedule_payload=$(python3 -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "status": "DRAFT"}, ensure_ascii=False))' "$SCHEDULE_NAME")
+
+  info "Création du schedule: $SCHEDULE_NAME"
+  http_request POST "$API_BASE/schedules" "$schedule_payload" "X-Club-Id: $local_club_id"
+  case "$HTTP_STATUS" in
+    200|201) ;;
+    404) die "Endpoint /schedules introuvable (HTTP 404). Le backend est-il bien démarré ?" ;;
+    *) die "Échec de création du schedule (HTTP $HTTP_STATUS): $HTTP_BODY" ;;
+  esac
+
+  if ! SCHEDULE_ID=$(extract_id <<<"$HTTP_BODY"); then
+    die "Réponse JSON invalide lors de la création du schedule"
+  fi
+  info "Schedule créé: $SCHEDULE_ID"
+fi
 
 info "Déclenchement de la génération"
 http_request POST "$API_BASE/schedules/$SCHEDULE_ID/generate"
 case "$HTTP_STATUS" in
-  200|202)
-    ;;
-  404)
-    die "Endpoint /schedules/$SCHEDULE_ID/generate introuvable (HTTP 404)"
-    ;;
-  *)
-    die "Échec du déclenchement (HTTP $HTTP_STATUS): $HTTP_BODY"
-    ;;
+  200|202) ;;
+  404) die "Endpoint /schedules/$SCHEDULE_ID/generate introuvable (HTTP 404)" ;;
+  *) die "Échec du déclenchement (HTTP $HTTP_STATUS): $HTTP_BODY" ;;
 esac
 
 info "Génération lancée"
