@@ -18,11 +18,6 @@ final class ConstraintSerializerTest extends TestCase
 {
     private ConstraintSerializer $serializer;
 
-    protected function setUp(): void
-    {
-        $this->serializer = new ConstraintSerializer;
-    }
-
     public function testSerializeTimeFamily(): void
     {
         $constraint = $this->createMock(Constraint::class);
@@ -113,5 +108,10 @@ final class ConstraintSerializerTest extends TestCase
         self::assertArrayNotHasKey('maxStartTime', $result);
         self::assertArrayNotHasKey('targetTag', $result);
         self::assertArrayNotHasKey('scopeTargetId', $result);
+    }
+
+    protected function setUp(): void
+    {
+        $this->serializer = new ConstraintSerializer;
     }
 }

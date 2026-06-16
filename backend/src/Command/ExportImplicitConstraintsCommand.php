@@ -41,7 +41,7 @@ final class ExportImplicitConstraintsCommand extends Command
             $decodedBody = $this->decodeResponseBody($responseBody);
         } catch (TransportExceptionInterface $exception) {
             $output->writeln(
-                \sprintf('✗ Implicit constraints sync failed: %s', $exception->getMessage())
+                \sprintf('✗ Implicit constraints sync failed: %s', $exception->getMessage()),
             );
 
             return Command::FAILURE;
@@ -62,7 +62,7 @@ final class ExportImplicitConstraintsCommand extends Command
             }
 
             $output->writeln(
-                \sprintf('✓ Implicit constraints synchronized (%d rules)', \count($payload['rules']))
+                \sprintf('✓ Implicit constraints synchronized (%d rules)', \count($payload['rules'])),
             );
 
             return Command::SUCCESS;

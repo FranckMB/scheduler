@@ -6,6 +6,7 @@ namespace App\Tests\Unit\Enum;
 
 use App\Enum\TeamLevel;
 use PHPUnit\Framework\TestCase;
+use ValueError;
 
 /**
  * @group unit
@@ -33,7 +34,7 @@ final class TeamLevelTest extends TestCase
 
     public function testFromInvalidValueThrows(): void
     {
-        $this->expectException(\ValueError::class);
+        $this->expectException(ValueError::class);
         TeamLevel::from('UNKNOWN');
     }
 }

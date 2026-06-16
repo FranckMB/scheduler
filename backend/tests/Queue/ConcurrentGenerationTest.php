@@ -14,11 +14,6 @@ final class ConcurrentGenerationTest extends WebTestCase
 {
     private ?ClubGenerationLock $lock = null;
 
-    protected function setUp(): void
-    {
-        $this->lock = static::getContainer()->get(ClubGenerationLock::class);
-    }
-
     public function testAcquireLockForSameClubPreventsConcurrentGeneration(): void
     {
         $clubId = 'club-' . uniqid();
@@ -65,5 +60,10 @@ final class ConcurrentGenerationTest extends WebTestCase
         self::assertNull($secondToken, 'Lock should still be held after release with wrong token');
 
         $this->lock->release($clubId, $token);
+    }
+
+    protected function setUp(): void
+    {
+        $this->lock = self::getContainer()->get(ClubGenerationLock::class);
     }
 }

@@ -14,33 +14,24 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-
-use PHPUnit\Framework\Attributes\Group;
 
 #[Group('integration')]
 final class ConstraintApiTest extends WebTestCase
 {
     private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
+
     private EntityManagerInterface $em;
+
     private UserPasswordHasherInterface $passwordHasher;
+
     private Club $club;
+
     private User $user;
+
     private Season $season;
-
-    protected function setUp(): void
-    {
-        $this->client = static::createClient();
-        $container = static::getContainer();
-        $this->em = $container->get(EntityManagerInterface::class);
-        $this->passwordHasher = $container->get('security.user_password_hasher');
-
-        $this->club = $this->createClub();
-        $this->user = $this->createUser();
-        $this->createClubUser($this->club, $this->user);
-        $this->season = $this->createSeason($this->club);
-    }
 
     public function testCreateConstraint(): void
     {
@@ -164,6 +155,19 @@ final class ConstraintApiTest extends WebTestCase
         ]);
 
         self::assertResponseStatusCodeSame(401);
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $container = self::getContainer();
+        $this->em = $container->get(EntityManagerInterface::class);
+        $this->passwordHasher = $container->get('security.user_password_hasher');
+
+        $this->club = $this->createClub();
+        $this->user = $this->createUser();
+        $this->createClubUser($this->club, $this->user);
+        $this->season = $this->createSeason($this->club);
     }
 
     private function createClub(): Club

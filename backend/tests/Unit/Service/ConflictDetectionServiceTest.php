@@ -18,11 +18,6 @@ final class ConflictDetectionServiceTest extends TestCase
 {
     private ConstraintValidationService $service;
 
-    protected function setUp(): void
-    {
-        $this->service = new ConstraintValidationService;
-    }
-
     public function testNoConflictsWithCompatibleConstraints(): void
     {
         $c1 = new Constraint;
@@ -170,5 +165,10 @@ final class ConflictDetectionServiceTest extends TestCase
 
         $conflicts = $this->service->detectConflicts([$c1]);
         self::assertCount(0, $conflicts);
+    }
+
+    protected function setUp(): void
+    {
+        $this->service = new ConstraintValidationService;
     }
 }

@@ -17,13 +17,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 final class TenantIsolationTest extends WebTestCase
 {
     private KernelBrowser $client;
-    private EntityManagerInterface $em;
 
-    protected function setUp(): void
-    {
-        $this->client = static::createClient();
-        $this->em = static::getContainer()->get(EntityManagerInterface::class);
-    }
+    private EntityManagerInterface $em;
 
     public function testUserCannotAccessOtherClubData(): void
     {
@@ -74,13 +69,19 @@ final class TenantIsolationTest extends WebTestCase
         self::assertResponseIsSuccessful();
     }
 
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
     /** @return array{0: Club, 1: Club, 2: User} */
     private function createTwoClubs(): array
     {
         $uid = uniqid('', true);
-        $hasher = static::getContainer()->get('security.user_password_hasher');
+        $hasher = self::getContainer()->get('security.user_password_hasher');
 
-        $clubA = new Club();
+        $clubA = new Club;
         $clubA->setName('Club A');
         $clubA->setSlug('club-a-' . $uid);
         $clubA->setTimezone('Europe/Paris');
@@ -89,7 +90,7 @@ final class TenantIsolationTest extends WebTestCase
         $clubA->setFfbbClubCode('AAA' . strtoupper(substr(md5($uid), 0, 10)));
         $this->em->persist($clubA);
 
-        $clubB = new Club();
+        $clubB = new Club;
         $clubB->setName('Club B');
         $clubB->setSlug('club-b-' . $uid);
         $clubB->setTimezone('Europe/Paris');
@@ -98,7 +99,7 @@ final class TenantIsolationTest extends WebTestCase
         $clubB->setFfbbClubCode('BBB' . strtoupper(substr(md5($uid . 'b'), 0, 10)));
         $this->em->persist($clubB);
 
-        $userA = new User();
+        $userA = new User;
         $userA->setEmail('a' . $uid . '@test.com');
         $userA->setFirstName('A');
         $userA->setLastName('User');
@@ -107,7 +108,7 @@ final class TenantIsolationTest extends WebTestCase
 
         $this->em->flush();
 
-        $cu = new ClubUser();
+        $cu = new ClubUser;
         $cu->setClubId($clubA->getId());
         $cu->setUserId($userA->getId());
         $cu->setRole('admin');

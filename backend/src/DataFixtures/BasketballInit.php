@@ -17,8 +17,8 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
-use App\Entity\VenueAvailability;
 use App\Entity\Venue;
+use App\Entity\VenueAvailability;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -244,7 +244,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                     'dayOfWeek' => $avail['day'],
                 ]);
                 if (null === $existing) {
-                    $va = new VenueAvailability();
+                    $va = new VenueAvailability;
                     $va->setClubId($club->getId());
                     $va->setSeasonId($season->getId());
                     $va->setVenueId($venue->getId());

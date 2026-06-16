@@ -6,6 +6,7 @@ namespace App\Tests\Unit\Enum;
 
 use App\Enum\Gender;
 use PHPUnit\Framework\TestCase;
+use ValueError;
 
 /**
  * @group unit
@@ -28,7 +29,7 @@ final class GenderTest extends TestCase
 
     public function testFromInvalidValueThrows(): void
     {
-        $this->expectException(\ValueError::class);
+        $this->expectException(ValueError::class);
         Gender::from('X');
     }
 }

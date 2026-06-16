@@ -16,8 +16,8 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueAvailability;
 use App\Enum\ConstraintScope;
-use App\Repository\VenueAvailabilityRepository;
 use App\Enum\LockLevel;
+use App\Repository\VenueAvailabilityRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
@@ -81,7 +81,7 @@ final class ScheduleConstraintBuilder
             }
         }
 
-        $constraints = $em->getRepository(\App\Entity\Constraint::class)->findByClubSeason($clubId, $seasonId);
+        $constraints = $em->getRepository(Constraint::class)->findByClubSeason($clubId, $seasonId);
 
         // Pre-load venue availabilities to avoid N+1 queries in serializeVenue()
         $availabilitiesByVenue = [];
@@ -122,14 +122,14 @@ final class ScheduleConstraintBuilder
     /**
      * In-memory builder kept for existing cross-stack contract coverage.
      *
-     * @param array<Venue>                  $venues
-     * @param array<Team>                   $teams
-     * @param array<Coach>                  $coaches
-     * @param array<TeamCoach>              $teamCoaches
-     * @param array<CoachPlayerMembership>  $coachPlayerMemberships
-     * @param array<ScheduleSlotTemplate>   $slotTemplates
-     * @param array<PriorityTier>           $priorityTiers
-     * @param array<\App\Entity\Constraint> $constraints
+     * @param array<Venue>                 $venues
+     * @param array<Team>                  $teams
+     * @param array<Coach>                 $coaches
+     * @param array<TeamCoach>             $teamCoaches
+     * @param array<CoachPlayerMembership> $coachPlayerMemberships
+     * @param array<ScheduleSlotTemplate>  $slotTemplates
+     * @param array<PriorityTier>          $priorityTiers
+     * @param array<Constraint>            $constraints
      *
      * @return array<string, mixed>
      */
@@ -164,14 +164,14 @@ final class ScheduleConstraintBuilder
     }
 
     /**
-     * @param array<Venue>                  $venues
-     * @param array<Team>                   $teams
-     * @param array<Coach>                  $coaches
-     * @param array<TeamCoach>              $teamCoaches
-     * @param array<CoachPlayerMembership>  $coachPlayerMemberships
-     * @param array<ScheduleSlotTemplate>   $slotTemplates
-     * @param array<PriorityTier>           $priorityTiers
-     * @param array<\App\Entity\Constraint> $constraints
+     * @param array<Venue>                 $venues
+     * @param array<Team>                  $teams
+     * @param array<Coach>                 $coaches
+     * @param array<TeamCoach>             $teamCoaches
+     * @param array<CoachPlayerMembership> $coachPlayerMemberships
+     * @param array<ScheduleSlotTemplate>  $slotTemplates
+     * @param array<PriorityTier>          $priorityTiers
+     * @param array<Constraint>            $constraints
      *
      * @return array<string, mixed>
      */
@@ -251,6 +251,7 @@ final class ScheduleConstraintBuilder
 
     /**
      * @param array<VenueAvailability> $availabilities
+     *
      * @return array<int, array{dayOfWeek: int, startTime: string, endTime: string}>
      */
     private function buildAvailability(array $availabilities): array
@@ -280,14 +281,14 @@ final class ScheduleConstraintBuilder
         if ($this->teamTagService instanceof TeamTagService && $this->entityManager instanceof EntityManagerInterface) {
             $this->teamTagService->syncTeamTags($team, $seasonId);
             // Get tags from database
-            $tagAssignments = $this->entityManager->getRepository(\App\Entity\TeamTagAssignment::class)->findBy([
+            $tagAssignments = $this->entityManager->getRepository(TeamTagAssignment::class)->findBy([
                 'teamId' => $team->getId(),
                 'seasonId' => $seasonId,
             ]);
 
             foreach ($tagAssignments as $assignment) {
-                $tag = $this->entityManager->getRepository(\App\Entity\TeamTag::class)->find($assignment->getTagId());
-                if ($tag instanceof \App\Entity\TeamTag) {
+                $tag = $this->entityManager->getRepository(TeamTag::class)->find($assignment->getTagId());
+                if ($tag instanceof TeamTag) {
                     $tags[] = $tag->getName();
                 }
             }

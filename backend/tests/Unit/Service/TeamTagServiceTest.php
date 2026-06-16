@@ -21,30 +21,17 @@ use PHPUnit\Framework\TestCase;
 final class TeamTagServiceTest extends TestCase
 {
     private TeamTagService $service;
+
     private EntityManagerInterface $entityManager;
+
     /** @var EntityRepository<TeamTagAssignment>&\PHPUnit\Framework\MockObject\MockObject */
     private EntityRepository $assignmentRepository;
+
     /** @var EntityRepository<TeamTag>&\PHPUnit\Framework\MockObject\MockObject */
     private EntityRepository $teamTagRepository;
+
     /** @var EntityRepository<SportCategory>&\PHPUnit\Framework\MockObject\MockObject */
     private EntityRepository $sportCategoryRepository;
-
-    protected function setUp(): void
-    {
-        $this->entityManager = $this->createMock(EntityManagerInterface::class);
-        $this->assignmentRepository = $this->createMock(EntityRepository::class);
-        $this->teamTagRepository = $this->createMock(EntityRepository::class);
-        $this->sportCategoryRepository = $this->createMock(EntityRepository::class);
-
-        $this->entityManager->method('getRepository')
-            ->willReturnMap([
-                [TeamTagAssignment::class, $this->assignmentRepository],
-                [TeamTag::class, $this->teamTagRepository],
-                [SportCategory::class, $this->sportCategoryRepository],
-            ]);
-
-        $this->service = new TeamTagService($this->entityManager);
-    }
 
     public function testSyncTeamTagsForU15F(): void
     {
@@ -204,5 +191,22 @@ final class TeamTagServiceTest extends TestCase
         self::assertContains('SENIOR', $tagNames);
         self::assertContains('MASCULINE', $tagNames);
         self::assertContains('LOISIR', $tagNames);
+    }
+
+    protected function setUp(): void
+    {
+        $this->entityManager = $this->createMock(EntityManagerInterface::class);
+        $this->assignmentRepository = $this->createMock(EntityRepository::class);
+        $this->teamTagRepository = $this->createMock(EntityRepository::class);
+        $this->sportCategoryRepository = $this->createMock(EntityRepository::class);
+
+        $this->entityManager->method('getRepository')
+            ->willReturnMap([
+                [TeamTagAssignment::class, $this->assignmentRepository],
+                [TeamTag::class, $this->teamTagRepository],
+                [SportCategory::class, $this->sportCategoryRepository],
+            ]);
+
+        $this->service = new TeamTagService($this->entityManager);
     }
 }

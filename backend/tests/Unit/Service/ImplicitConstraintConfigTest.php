@@ -13,11 +13,6 @@ final class ImplicitConstraintConfigTest extends TestCase
 {
     private ImplicitConstraintConfig $config;
 
-    protected function setUp(): void
-    {
-        $this->config = new ImplicitConstraintConfig();
-    }
-
     public function testGetConfigReturnsFiveImplicitConstraints(): void
     {
         $result = $this->config->getConfig();
@@ -81,5 +76,10 @@ final class ImplicitConstraintConfigTest extends TestCase
 
         self::assertCount(5, $result);
         self::assertSame('VENUE_AT_MOST_ONE', $result[0]['type']);
+    }
+
+    protected function setUp(): void
+    {
+        $this->config = new ImplicitConstraintConfig;
     }
 }

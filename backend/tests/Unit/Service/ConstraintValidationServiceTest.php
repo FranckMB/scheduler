@@ -18,11 +18,6 @@ final class ConstraintValidationServiceTest extends TestCase
 {
     private ConstraintValidationService $service;
 
-    protected function setUp(): void
-    {
-        $this->service = new ConstraintValidationService;
-    }
-
     public function testTeamScopeRequiresScopeTargetId(): void
     {
         $constraint = new Constraint;
@@ -196,5 +191,10 @@ final class ConstraintValidationServiceTest extends TestCase
         $errors = $this->service->validate($constraint);
 
         self::assertNotContains('LOCK rule type is only valid for TIME or DAY family.', $errors);
+    }
+
+    protected function setUp(): void
+    {
+        $this->service = new ConstraintValidationService;
     }
 }

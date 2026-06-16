@@ -14,96 +14,30 @@ use App\Entity\Team;
 use App\Entity\User;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[Group('integration')]
 final class TeamApiTest extends WebTestCase
 {
     private EntityManagerInterface $em;
+
     private UserPasswordHasherInterface $passwordHasher;
+
     private Club $club;
+
     private User $user;
+
     private Season $season;
+
     private Sport $sport;
+
     private SportCategory $sportCategory;
+
     private PriorityTier $priorityTier;
 
     private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
-
-    protected function setUp(): void
-    {
-        $this->client = static::createClient();
-        $container = static::getContainer();
-        $this->em = $container->get(EntityManagerInterface::class);
-        $this->passwordHasher = $container->get('security.user_password_hasher');
-
-        $uid = uniqid('', true);
-
-        $this->club = new Club();
-        $this->club->setName('Team Test Club');
-        $this->club->setSlug('team-test-' . $uid);
-        $this->club->setTimezone('Europe/Paris');
-        $this->club->setLocale('fr');
-        $this->club->setOnboardingCompleted(true);
-        $this->club->setFfbbClubCode('TMT' . strtoupper(substr(md5($uid), 0, 10)));
-        $this->em->persist($this->club);
-
-        $this->sport = new Sport();
-        $this->sport->setName('Basketball');
-        $this->sport->setSlug('bball-' . $uid);
-        $this->sport->setIsActive(true);
-        $this->em->persist($this->sport);
-
-        $this->user = new User();
-        $this->user->setEmail('team' . $uid . '@test.com');
-        $this->user->setFirstName('Team');
-        $this->user->setLastName('Tester');
-        $this->user->setPasswordHash($this->passwordHasher->hashPassword($this->user, 'pass'));
-        $this->em->persist($this->user);
-
-        $this->em->flush();
-
-        $cu = new ClubUser();
-        $cu->setClubId($this->club->getId());
-        $cu->setUserId($this->user->getId());
-        $cu->setRole('admin');
-        $cu->setIsActive(true);
-        $this->em->persist($cu);
-
-        $this->season = new Season();
-        $this->season->setClubId($this->club->getId());
-        $this->season->setName('2025-2026');
-        $this->season->setStartDate(new DateTimeImmutable('2025-09-01'));
-        $this->season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $this->season->setStatus('active');
-        $this->em->persist($this->season);
-
-        $this->sportCategory = new SportCategory();
-        $this->sportCategory->setClubId($this->club->getId());
-        $this->sportCategory->setSportId($this->sport->getId());
-        $this->sportCategory->setName('U11');
-        $this->sportCategory->setIsCustom(false);
-        $this->sportCategory->setSortOrder(0);
-        $this->em->persist($this->sportCategory);
-
-        $existing = $this->em->getRepository(PriorityTier::class)->find(1);
-        if ($existing instanceof PriorityTier) {
-            $this->priorityTier = $existing;
-        } else {
-            $this->priorityTier = new PriorityTier();
-            $this->priorityTier->setId(1);
-            $this->priorityTier->setLabel('S');
-            $this->priorityTier->setName('Senior');
-            $this->priorityTier->setColor('#FF0000');
-            $this->priorityTier->setOrToolsWeight(100);
-            $this->priorityTier->setDefaultMinSessions(2);
-            $this->em->persist($this->priorityTier);
-        }
-
-        $this->em->flush();
-    }
 
     public function testCreateTeam(): void
     {
@@ -241,6 +175,79 @@ final class TeamApiTest extends WebTestCase
         self::assertArrayHasKey('member', $data);
         self::assertCount(1, $data['member']);
         self::assertSame($ownTeam->getId(), $data['member'][0]['id']);
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $container = self::getContainer();
+        $this->em = $container->get(EntityManagerInterface::class);
+        $this->passwordHasher = $container->get('security.user_password_hasher');
+
+        $uid = uniqid('', true);
+
+        $this->club = new Club;
+        $this->club->setName('Team Test Club');
+        $this->club->setSlug('team-test-' . $uid);
+        $this->club->setTimezone('Europe/Paris');
+        $this->club->setLocale('fr');
+        $this->club->setOnboardingCompleted(true);
+        $this->club->setFfbbClubCode('TMT' . strtoupper(substr(md5($uid), 0, 10)));
+        $this->em->persist($this->club);
+
+        $this->sport = new Sport;
+        $this->sport->setName('Basketball');
+        $this->sport->setSlug('bball-' . $uid);
+        $this->sport->setIsActive(true);
+        $this->em->persist($this->sport);
+
+        $this->user = new User;
+        $this->user->setEmail('team' . $uid . '@test.com');
+        $this->user->setFirstName('Team');
+        $this->user->setLastName('Tester');
+        $this->user->setPasswordHash($this->passwordHasher->hashPassword($this->user, 'pass'));
+        $this->em->persist($this->user);
+
+        $this->em->flush();
+
+        $cu = new ClubUser;
+        $cu->setClubId($this->club->getId());
+        $cu->setUserId($this->user->getId());
+        $cu->setRole('admin');
+        $cu->setIsActive(true);
+        $this->em->persist($cu);
+
+        $this->season = new Season;
+        $this->season->setClubId($this->club->getId());
+        $this->season->setName('2025-2026');
+        $this->season->setStartDate(new DateTimeImmutable('2025-09-01'));
+        $this->season->setEndDate(new DateTimeImmutable('2026-06-30'));
+        $this->season->setStatus('active');
+        $this->em->persist($this->season);
+
+        $this->sportCategory = new SportCategory;
+        $this->sportCategory->setClubId($this->club->getId());
+        $this->sportCategory->setSportId($this->sport->getId());
+        $this->sportCategory->setName('U11');
+        $this->sportCategory->setIsCustom(false);
+        $this->sportCategory->setSortOrder(0);
+        $this->em->persist($this->sportCategory);
+
+        $existing = $this->em->getRepository(PriorityTier::class)->find(1);
+        if ($existing instanceof PriorityTier) {
+            $this->priorityTier = $existing;
+        } else {
+            $this->priorityTier = new PriorityTier;
+            $this->priorityTier->setId(1);
+            $this->priorityTier->setLabel('S');
+            $this->priorityTier->setName('Senior');
+            $this->priorityTier->setColor('#FF0000');
+            $this->priorityTier->setOrToolsWeight(100);
+            $this->priorityTier->setDefaultMinSessions(2);
+            $this->em->persist($this->priorityTier);
+        }
+
+        $this->em->flush();
     }
 
     private function createClub(string $name = 'Test Club'): Club
