@@ -464,7 +464,66 @@ Ou utilise directement l'URL retournée dans `pdfExportUrl`.
 
 ### Note importante
 
-À ce jour, la génération PDF est un **stub**. Le contrôleur et le handler existent, mais l'implémentation complète du worker PDF peut ne pas être terminée. Si le statut reste bloqué en `pending`, c'est probablement normal.
+La génération produit **deux fichiers** simultanément :
+
+| Fichier | Format | Usage |
+|---------|--------|-------|
+| `schedule-{id}.pdf` | PDF A4 | Document imprimable |
+| `schedule-{id}.png` | PNG 794×1123 px | Aperçu numérique (page 1) |
+
+Le champ `pngExportUrl` est renseigné en même temps que `pdfExportUrl`. Si le PNG échoue (par exemple parce que le worker ne peut pas écrire dans le répertoire de sortie), le statut PDF reste `completed` — le PNG est best-effort.
+
+## 8.5 Rapports de diagnostic (dev)
+
+> **Environnement : uniquement `APP_ENV=dev`**  
+> Ce service n'existe pas en production.
+
+À chaque génération de planning en mode développement, le backend écrit automatiquement un lot de fichiers de diagnostic dans `backend/var/generate/schedule-{id}/{lot}/`. Le numéro de lot (`001`, `002`, etc.) est incrémental et horodaté (`001-2026_06_16-21_38`).
+
+### Ce que le lot contient
+
+| Fichier | Contenu |
+|---------|---------|
+| `payload.json` | Snapshot JSON complet envoyé au moteur (équipes, salles, contraintes) |
+| `payload-summary.txt` | Résumé lisible : nombre d'équipes, de salles, de contraintes (HARD vs PREFERRED), de coachs |
+| `slots-by-team.txt` *(si génération réussie)* | Créneaux groupés par équipe, avec entraîneurs, horaires et salles |
+| `slots-by-venue.txt` *(si génération réussie)* | Mêmes créneaux, groupés par salle |
+| `diagnostics.txt` *(si diagnostics présents)* | Statut solveur, score, temps d'exécution, et liste des erreurs/avertissements |
+
+### Comment consulter les rapports
+
+Depuis le conteneur PHP :
+
+```bash
+cd backend && make exec
+
+# Lister tous les lots d'un schedule
+ls var/generate/schedule-a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+# Lire le résumé du dernier lot
+LATEST=$(ls -d var/generate/schedule-a1b2c3d4-*/001-* | sort | tail -1)
+cat "$LATEST/payload-summary.txt"
+
+# Lire les créneaux par équipe
+cat "$LATEST/slots-by-team.txt"
+
+# Lire les diagnostics
+cat "$LATEST/diagnostics.txt"
+```
+
+### À quoi ça sert
+
+- **Comprendre le payload** : `payload.json` est la trace exacte envoyée au solveur. Utile pour reproduire un bug côté Python.
+- **Vérifier les créneaux** : `slots-by-team.txt` permet de vérifier rapidement si les créneaux générés correspondent aux attentes, sans ouvrir le frontend.
+- **Diagnostiquer un échec** : quand la génération échoue (`FAILED`), `payload-summary.txt` reste écrit (hook 1 s'exécute avant l'appel au moteur). Le hook 2 (résultats) ne s'écrit que si la génération réussit.
+
+### Nettoyage
+
+Le répertoire `var/generate/` est gitigné. Tu peux le nettoyer à tout moment sans risque :
+
+```bash
+rm -rf var/generate/
+```
 
 ---
 
