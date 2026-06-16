@@ -13,6 +13,7 @@ use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use App\Service\ClubGenerationLock;
+use App\Service\DevScheduleReportWriter;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleResultImporter;
@@ -39,6 +40,7 @@ final class GenerateScheduleHandler
         private HubInterface $hub,
         private ClubGenerationLock $clubGenerationLock,
         private DiagnosticMessageBuilder $diagnosticMessageBuilder,
+        private ?DevScheduleReportWriter $devReportWriter = null,
     ) {}
 
     public function __invoke(GenerateScheduleMessage $message): void
@@ -82,6 +84,15 @@ final class GenerateScheduleHandler
 
         $this->entityManager->flush();
 
+        $lotDir = null;
+        if (null !== $this->devReportWriter) {
+            try {
+                $lotDir = $this->devReportWriter->writePayloadFiles($schedule, $scheduleInput);
+            } catch (Throwable) {
+                // never crash the generation over a report write failure
+            }
+        }
+
         try {
             $response = $this->httpClient->request('POST', self::ENGINE_URL, [
                 'json' => $scheduleInput,
@@ -107,6 +118,14 @@ final class GenerateScheduleHandler
         $this->applyEngineResult($schedule, $result);
         $this->publishProgress($schedule, $result);
         $this->entityManager->flush();
+
+        if (null !== $this->devReportWriter && null !== $lotDir) {
+            try {
+                $this->devReportWriter->writeResultFiles($schedule, $lotDir);
+            } catch (Throwable) {
+                // never crash the generation over a report write failure
+            }
+        }
     }
 
     private function findSchedule(string $scheduleId): ?Schedule

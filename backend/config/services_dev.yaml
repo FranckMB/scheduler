@@ -1,0 +1,4 @@
+services:
+    App\Service\DevScheduleReportWriter:
+        autowire: true
+        autoconfigure: true
