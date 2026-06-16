@@ -8,7 +8,7 @@ import pytest
 from ortools.sat.python import cp_model
 
 from app.solver.constraints import add_level_1_hard_constraints
-from app.solver.model import build_model
+from app.solver.model import SLOT_MINUTES, build_model
 from app.solver.objective import add_level_2_objective
 from app.solver.result_builder import build_result
 
@@ -136,7 +136,7 @@ class TestGoldenDatasets:
         team_sessions: dict[str, int] = {}
         for slot in result["slots"]:
             tid = slot["teamId"]
-            team_sessions[tid] = team_sessions.get(tid, 0) + 1
+            team_sessions[tid] = team_sessions.get(tid, 0) + int(slot["durationMinutes"]) // SLOT_MINUTES
 
         tier_s_a_teams = [
             t for t in data["teams"] if t["priorityTierId"] in (1, 2) and t.get("isActive", False)

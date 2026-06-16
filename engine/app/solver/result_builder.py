@@ -15,7 +15,13 @@ from typing import Any, Mapping
 
 from ortools.sat.python import cp_model
 
-from app.solver.model import SLOT_MINUTES, ScheduleCpModel
+from app.solver.model import (
+    DEFAULT_SESSION_MINUTES,
+    SLOT_MINUTES,
+    ScheduleCpModel,
+    _format_time,
+    _time_to_minutes,
+)
 
 
 def build_result(
@@ -92,7 +98,7 @@ def _locked_slot_to_dict(locked: Mapping[str, Any] | Any) -> dict[str, Any]:
     venue_id = str(_get(locked, "venue_id", "venueId"))
     day_of_week = int(_get(locked, "day_of_week", "dayOfWeek"))
     start_time = str(_get(locked, "start_time", "startTime"))
-    duration = int(_get(locked, "duration_minutes", "durationMinutes", default=SLOT_MINUTES))
+    duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
     coach_id = _get(locked, "coach_id", "coachId", default=None)
     temporary_lock = bool(_get(locked, "temporary_lock", "temporaryLock", default=False))
     temporary_lock_for = _get(locked, "temporary_lock_for", "temporaryLockFor", default=None)
@@ -124,22 +130,67 @@ def _build_solver_slots(
     solver: cp_model.CpSolver,
     model: ScheduleCpModel,
 ) -> list[dict[str, Any]]:
-    """Build output slots from CP-SAT boolean variables set to 1."""
-    slots: list[dict[str, Any]] = []
+    """Build output slots from CP-SAT boolean variables set to 1.
+
+    Consecutive 15-min variables for the same (team, venue, day) are merged
+    into a single slot whose durationMinutes equals the total covered time.
+    """
+    from collections import defaultdict
+
+    # Collect all active (team, venue, day, start_minutes) tuples
+    active: dict[tuple[str, str, int], list[int]] = defaultdict(list)
     for slot_key, var in model.x.items():
         if solver.Value(var) != 1:
             continue
         team_id, venue_id, day_of_week, slot_start = slot_key
+        start_minutes = _time_to_minutes(slot_start)
+        active[(team_id, venue_id, day_of_week)].append(start_minutes)
+
+    slots: list[dict[str, Any]] = []
+    for (team_id, venue_id, day_of_week), starts in active.items():
+        starts_sorted = sorted(starts)
         coach_id = _find_coach_for_team(model_data, team_id)
 
+        # Merge consecutive 15-min windows into contiguous blocks
+        if not starts_sorted:
+            continue
+        block_start = starts_sorted[0]
+        block_end = starts_sorted[0] + SLOT_MINUTES
+
+        for s in starts_sorted[1:]:
+            if s == block_end:
+                # contiguous — extend block
+                block_end = s + SLOT_MINUTES
+            else:
+                # gap — emit previous block and start a new one
+                duration = block_end - block_start
+                slots.append({
+                    "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
+                    "teamId": team_id,
+                    "venueId": venue_id,
+                    "coachId": coach_id,
+                    "dayOfWeek": day_of_week,
+                    "startTime": _format_time(block_start),
+                    "durationMinutes": duration,
+                    "lockLevel": "NONE",
+                    "temporaryLock": False,
+                    "temporaryLockFor": None,
+                    "temporaryMinSessionsOverride": None,
+                    "pendingConstraintSuggestion": None,
+                })
+                block_start = s
+                block_end = s + SLOT_MINUTES
+
+        # Emit the last block
+        duration = block_end - block_start
         slots.append({
-            "id": _slot_id(team_id, venue_id, day_of_week, slot_start),
+            "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
             "teamId": team_id,
             "venueId": venue_id,
             "coachId": coach_id,
             "dayOfWeek": day_of_week,
-            "startTime": slot_start,
-            "durationMinutes": SLOT_MINUTES,
+            "startTime": _format_time(block_start),
+            "durationMinutes": duration,
             "lockLevel": "NONE",
             "temporaryLock": False,
             "temporaryLockFor": None,
@@ -255,7 +306,8 @@ def _diagnose_coach_overload(
     for slot in slots:
         coach_id = slot.get("coachId")
         if coach_id:
-            coach_counts[coach_id] += 1
+            duration_minutes = int(slot.get("durationMinutes", SLOT_MINUTES))
+            coach_counts[coach_id] += max(1, duration_minutes // SLOT_MINUTES)
 
     for coach_id, count in coach_counts.items():
         threshold = _coach_threshold(model_data, coach_id)

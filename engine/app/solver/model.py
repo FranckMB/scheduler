@@ -6,7 +6,8 @@ from typing import Any, cast
 
 from ortools.sat.python import cp_model
 
-SLOT_MINUTES = 15
+SLOT_MINUTES = 15            # solver granularity — do not change
+DEFAULT_SESSION_MINUTES = 90  # default session duration when not specified in input
 HARD_LOCK_LEVEL = "HARD"
 
 SlotKey = tuple[str, str, int, str]
@@ -105,7 +106,7 @@ def _extract_hard_locks(
         venue_id = str(_required(slot, "venue_id", "venueId"))
         day_of_week = int(_required(slot, "day_of_week", "dayOfWeek"))
         start_minutes = _time_to_minutes(_required(slot, "start_time", "startTime"))
-        duration_minutes = int(_value(slot, "duration_minutes", "durationMinutes", default=SLOT_MINUTES))
+        duration_minutes = int(_value(slot, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
 
         if duration_minutes <= 0:
             raise ValueError(f"HARD slot for team {team_id} has a non-positive duration")

@@ -119,7 +119,7 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
 
     # Solve.
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10
+    solver.parameters.max_time_in_seconds = 90
     status = solver.Solve(model)
 
     # Transform the solution into the output schema.
