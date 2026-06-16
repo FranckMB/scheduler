@@ -127,10 +127,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         \assert($u7 instanceof SportCategory);
         $u9M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9M']);
         \assert($u9M instanceof SportCategory);
-        $u9F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9F']);
-        \assert($u9F instanceof SportCategory);
-        $u11M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11M']);
-        \assert($u11M instanceof SportCategory);
         $u11F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11F']);
         \assert($u11F instanceof SportCategory);
         $u13M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13M']);
