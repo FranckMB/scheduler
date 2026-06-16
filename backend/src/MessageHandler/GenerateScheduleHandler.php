@@ -82,6 +82,14 @@ final class GenerateScheduleHandler
             ->setSnapshotData($scheduleInput)
             ->setSnapshotHash($this->hashSnapshot($scheduleInput));
 
+        // Purge diagnostics from previous generation runs
+        $oldDiagnostics = $this->entityManager->getRepository(ScheduleDiagnostic::class)->findBy(
+            ['scheduleId' => $schedule->getId()],
+        );
+        foreach ($oldDiagnostics as $old) {
+            $this->entityManager->remove($old);
+        }
+
         $this->entityManager->flush();
 
         $lotDir = null;
