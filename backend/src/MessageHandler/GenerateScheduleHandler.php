@@ -105,12 +105,14 @@ final class GenerateScheduleHandler
             $this->persistDiagnostic($schedule, 'engine_timeout', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation timed out.');
             $this->publishProgress($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->entityManager->flush();
+            $this->writeResultFilesIfEnabled($schedule, $lotDir);
 
             return;
         } catch (Throwable $exception) {
             $this->failSchedule($schedule, 'engine_error', $exception->getMessage());
             $this->publishProgress($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->entityManager->flush();
+            $this->writeResultFilesIfEnabled($schedule, $lotDir);
 
             return;
         }
@@ -118,13 +120,19 @@ final class GenerateScheduleHandler
         $this->applyEngineResult($schedule, $result);
         $this->publishProgress($schedule, $result);
         $this->entityManager->flush();
+        $this->writeResultFilesIfEnabled($schedule, $lotDir);
+    }
 
-        if (null !== $this->devReportWriter && null !== $lotDir) {
-            try {
-                $this->devReportWriter->writeResultFiles($schedule, $lotDir);
-            } catch (Throwable) {
-                // never crash the generation over a report write failure
-            }
+    private function writeResultFilesIfEnabled(Schedule $schedule, ?string $lotDir): void
+    {
+        if (null === $this->devReportWriter || null === $lotDir) {
+            return;
+        }
+
+        try {
+            $this->devReportWriter->writeResultFiles($schedule, $lotDir);
+        } catch (Throwable) {
+            // never crash the generation over a report write failure
         }
     }
 
