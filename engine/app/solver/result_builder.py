@@ -214,6 +214,7 @@ def _generate_diagnostics(
     diagnostics.extend(_diagnose_unplaced(model_data, slots))
     diagnostics.extend(_diagnose_soft_lock_moved(model_data, slots))
     diagnostics.extend(_diagnose_coach_overload(model_data, slots))
+    diagnostics.extend(_diagnose_session_too_short(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(solver_status, slots))
     return diagnostics
 
@@ -328,6 +329,58 @@ def _diagnose_coach_overload(
                 ],
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
+    return diagnostics
+
+
+def _diagnose_session_too_short(
+    model_data: Mapping[str, Any] | Any,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Warn when a team's assigned session duration is shorter than requested minimum."""
+    diagnostics: list[dict[str, Any]] = []
+
+    teams: dict[str, Any] = {}
+    for team in _collection(model_data, "teams"):
+        team_id = str(_get(team, "id", "team_id", "teamId"))
+        teams[team_id] = team
+
+    groups: dict[tuple[str, str, int], list[dict[str, Any]]] = defaultdict(list)
+    for slot in slots:
+        if str(slot.get("lockLevel", "NONE")).upper() != "NONE":
+            continue
+        key = (slot["teamId"], slot["venueId"], slot["dayOfWeek"])
+        groups[key].append(slot)
+
+    for (team_id, venue_id, day_of_week), group_slots in groups.items():
+        team = teams.get(team_id)
+        if team is None:
+            continue
+
+        min_min = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
+        if min_min is None:
+            continue
+
+        requested_min = int(min_min)
+        assigned_min = sum(int(s.get("durationMinutes", 15)) for s in group_slots)
+
+        if assigned_min < requested_min:
+            diagnostics.append({
+                "id": f"diag-session-short-{team_id}-{venue_id}-{day_of_week}",
+                "type": "session_too_short",
+                "severity": "WARNING",
+                "teamId": team_id,
+                "venueId": venue_id,
+                "message": (
+                    f"Session duration {assigned_min} min is less than requested "
+                    f"{requested_min} min — venue availability window is too short."
+                ),
+                "suggestions": [
+                    f"Extend the venue availability window by at least {requested_min - assigned_min} minutes.",
+                    "Or reduce the requested minimum session duration for this team.",
+                ],
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+
     return diagnostics
 
 

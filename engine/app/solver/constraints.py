@@ -70,6 +70,7 @@ class HardConstraintStats:
     one_session_per_day: int = 0
     adult_weekday_time: int = 0
     min_session_duration: int = 0
+    no_late_start: int = 0
 
     @property
     def total_constraints_added(self) -> int:
@@ -91,6 +92,7 @@ class HardConstraintStats:
             + self.one_session_per_day
             + self.adult_weekday_time
             + self.min_session_duration
+            + self.no_late_start
         )
 
 
@@ -122,11 +124,12 @@ def add_level_1_hard_constraints(
       9. venue_closures       — closed venue slots forced to 0
      10. forced_venues        — forced venue excludes alternatives
 
-    New implicit rules:
+New implicit rules:
      11. one_session_per_day  — at most one session per day per team
      12. adult_weekday_time   — adult competitive teams cannot train before 19:00 on weekdays
-     13. min_session_duration — minimum session duration per team (default 90 min)
-    """
+     13. min_session_duration — adjacency constraints for teams with explicit minSessionMinutes
+     14. no_late_start        — no session may start after 20:45
+     """
 
     if assignments is None:
         assignments = getattr(model, "x", ())
@@ -184,12 +187,18 @@ def add_level_1_hard_constraints(
         model, assignment_list, teams=teams
     )
 
-    # 13. Minimum session duration — NOT applied as a hard constraint here.
-    # Enforcing consecutive-slot blocks causes infeasibility on fixtures where
-    # fewer than N slots are available in a time window. Duration is handled via
-    # slot templates (durationMinutes). minSessionMinutes is surfaced in the
-    # payload for future objective-level use.
-    stats.min_session_duration = 0
+    # 13. Minimum session duration — adjacency constraints for teams with
+    # explicit minSessionMinutes. Uses x[i] <= x[i+1] to force continuous
+    # blocks extending to end of window. Graceful degradation when window
+    # is shorter than requested duration.
+    stats.min_session_duration = add_min_session_duration_constraints(
+        model, assignment_list, teams=teams
+    )
+
+    # 14. No session may start after 20:45.
+    stats.no_late_start = add_no_late_start_constraints(
+        model, assignment_list
+    )
 
     return stats
 
@@ -701,6 +710,7 @@ _ADULT_LEVELS: frozenset[str] = frozenset(
 )
 _WEEKDAY_NUMBERS: frozenset[str] = frozenset({"1", "2", "3", "4", "5"})
 _ADULT_MIN_WEEKDAY_START: str = "19:00"
+_LAST_START_TIME: str = "20:45"
 _DEFAULT_MIN_SESSION_MINUTES: int = 90
 _SLOT_MINUTES: int = 15
 
@@ -801,23 +811,26 @@ def add_min_session_duration_constraints(
     teams: Iterable[Any] = (),
 ) -> int:
     """Implicit rule 13: each session must span at least minSessionMinutes
-    of consecutive 15-min slots (default 90 min = 6 slots).
+    of consecutive 15-min slots.
 
-    If a slot variable at position i is active (==1), all slots from i to i+N-1
-    in the same (team, venue, day) group must also be active.
-    If fewer than N subsequent slots exist, that slot is forced to 0.
+    Only teams with an explicit minSessionMinutes are constrained (no global
+    default). Uses adjacency constraints x[i] <= x[i+1] (i.e. x[i] - x[i+1]
+    <= 0) to force continuous blocks extending to the end of the window. When
+    the available window M < N (shorter than requested), adjacency still
+    applies but no hard infeasibility is introduced — graceful degradation.
     """
 
     import math
 
+    # Build constrained teams — only those with explicit minSessionMinutes
     min_slots_by_team: dict[str, int] = {}
     for team in teams:
         tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
         if tid is None:
             continue
         raw = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
-        minutes = int(raw) if raw is not None else _DEFAULT_MIN_SESSION_MINUTES
-        min_slots_by_team[str(tid)] = math.ceil(minutes / _SLOT_MINUTES)
+        if raw is not None:
+            min_slots_by_team[str(tid)] = math.ceil(int(raw) / _SLOT_MINUTES)
 
     if not min_slots_by_team:
         return 0
@@ -845,15 +858,43 @@ def add_min_session_duration_constraints(
         slot_list.sort(key=lambda x: x[0])
         vars_only = [v for _, v in slot_list]
 
-        for i, var_i in enumerate(vars_only):
-            for k in range(1, n):
-                j = i + k
-                if j >= len(vars_only):
-                    cast(Any, model).Add(cast(Any, var_i) == 0)
-                    added += 1
-                    break
-                cast(Any, model).Add(cast(Any, var_i) - cast(Any, vars_only[j]) <= 0)
-                added += 1
+        # Adjacency: x[i] <= x[i+1] forces continuous blocks extending
+        # to end of window. No slot is forced to 0 — graceful degradation
+        # when the window is shorter than the requested duration.
+        for i in range(len(vars_only) - 1):
+            cast(Any, model).Add(cast(Any, vars_only[i]) - cast(Any, vars_only[i + 1]) <= 0)
+            added += 1
+
+    return added
+
+
+def add_no_late_start_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+) -> int:
+    """Implicit rule: no session may start after 20:45.
+
+    Iterates all assignments and forces the variable to 0 when the
+    slot's start time (HH:MM parsed from slot_id) is later than
+    ``_LAST_START_TIME``.  Applies to ALL teams — no team filtering.
+    HARD-locked slots are safe by design (they are not in model.x).
+    """
+
+    added = 0
+    for assignment in assignments:
+        slot_id = _slot_id(assignment)
+        if slot_id is None:
+            continue
+
+        parts = str(slot_id).split(":")
+        if len(parts) < 3:
+            continue
+
+        slot_time = parts[1] + ":" + parts[2]
+
+        if slot_time > _LAST_START_TIME:
+            cast(Any, model).Add(_var(assignment) == 0)
+            added += 1
 
     return added
 
@@ -946,6 +987,7 @@ __all__ = [
     "add_level_1_hard_constraints",
     "add_min_session_duration_constraints",
     "add_min_sessions_constraints",
+    "add_no_late_start_constraints",
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
     "add_team_no_overlap",
