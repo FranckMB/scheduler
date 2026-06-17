@@ -305,6 +305,8 @@ final class ScheduleConstraintBuilder
             'sessionsPerWeek' => $team->getSessionsPerWeek(),
             'minSessionsOverride' => $team->getMinSessionsOverride(),
             'matchDay' => $team->getMatchDay(),
+            'allowMultipleSessionsPerDay' => $team->getAllowMultipleSessionsPerDay(),
+            'minSessionMinutes' => $team->getMinSessionMinutes(),
             'forcedVenueId' => $team->getForcedVenueId(),
             'isActive' => $team->getIsActive(),
             'parentTeamId' => $team->getParentTeamId(),
