@@ -186,6 +186,7 @@ final class GenerateScheduleHandler
         }
 
         $this->resultImporter->import($schedule, $result);
+        $this->persistDiagnostics($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
     }
 
