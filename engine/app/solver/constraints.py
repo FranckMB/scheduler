@@ -252,14 +252,35 @@ def add_fixed_slots(
 def add_forbidden_assignments(
     model: Any, assignments: Iterable[AssignmentLike], forbidden_assignments: Iterable[Any] = ()
 ) -> int:
-    """Constraint 6: forbidden assignment variables are fixed to 0."""
+    """Constraint 6: forbidden assignment variables are fixed to 0.
 
-    forbidden_ids = set(forbidden_assignments or ())
+    ``forbidden_assignments`` may contain either:
+    - plain string/hashable IDs matched against the assignment's ``id`` field, OR
+    - dicts with ``scope_target_id`` (team) and ``venue_id`` keys — every variable
+      for that (team, venue) pair is forced to 0 regardless of day/slot.
+    """
+
+    forbidden_ids: set[Any] = set()
+    forbidden_pairs: set[tuple[Any, Any]] = set()
+
+    for item in forbidden_assignments or ():
+        if isinstance(item, dict):
+            tid = item.get("scope_target_id") or item.get("team_id")
+            vid = item.get("venue_id") or item.get("room_id")
+            if tid is not None and vid is not None:
+                forbidden_pairs.add((str(tid), str(vid)))
+        else:
+            forbidden_ids.add(item)
+
     added = 0
     for assignment in assignments:
         assignment_id = _assignment_id(assignment)
-        if _bool_field(assignment, "forbidden", "is_forbidden") or (
-            assignment_id is not None and assignment_id in forbidden_ids
+        team_id = _team_id(assignment)
+        venue_id = _venue_id(assignment)
+        if (
+            _bool_field(assignment, "forbidden", "is_forbidden")
+            or (assignment_id is not None and assignment_id in forbidden_ids)
+            or (team_id is not None and venue_id is not None and (str(team_id), str(venue_id)) in forbidden_pairs)
         ):
             model.Add(_var(assignment) == 0)
             added += 1
