@@ -332,13 +332,10 @@ final class ScheduleConstraintBuilder
         ];
     }
 
-    /** @return array<string, mixed>|null */
-    private function serializeSlotTemplate(ScheduleSlotTemplate $slotTemplate): ?array
+    /** @return array<string, mixed> */
+    private function serializeSlotTemplate(ScheduleSlotTemplate $slotTemplate): array
     {
         $lockLevel = $slotTemplate->getLockLevel();
-        if (LockLevel::HARD === $lockLevel) {
-            return null;
-        }
 
         $pendingConstraintSuggestion = $slotTemplate->getPendingConstraintSuggestion();
         if (LockLevel::SOFT === $lockLevel) {
