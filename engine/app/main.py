@@ -111,7 +111,8 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     for team in data.get("teams", []):
         team_id = team.get("id")
         max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
-        if team_id and max_sessions:
+        min_session_minutes = team.get("minSessionMinutes") or team.get("min_session_minutes")
+        if team_id and max_sessions and not min_session_minutes:
             team_vars = assignments_by_team.get(team_id, [])
             if team_vars:
                 remaining_sessions = int(max_sessions) - locked_slots_by_team.get(team_id, 0)
