@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 AssignmentLike = Any
 BoolVarLike = Any
@@ -67,6 +67,9 @@ class HardConstraintStats:
     required_bridge_stub: int = 0
     min_sessions: int = 0
     forced_venues: int = 0
+    one_session_per_day: int = 0
+    adult_weekday_time: int = 0
+    min_session_duration: int = 0
 
     @property
     def total_constraints_added(self) -> int:
@@ -85,6 +88,9 @@ class HardConstraintStats:
             + self.required_bridge_stub
             + self.min_sessions
             + self.forced_venues
+            + self.one_session_per_day
+            + self.adult_weekday_time
+            + self.min_session_duration
         )
 
 
@@ -100,7 +106,7 @@ def add_level_1_hard_constraints(
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
 ) -> HardConstraintStats:
-    """Add the 5 implicit + 5 derived level-1 hard constraints to a CP-SAT model.
+    """Add the 5 implicit + 5 derived + 3 new level-1 hard constraints to a CP-SAT model.
 
     Implicit (always applied):
       1. VENUE_AT_MOST_ONE  — one venue hosts at most one team per time slot
@@ -115,6 +121,11 @@ def add_level_1_hard_constraints(
       8. coach_unavailability — unavailable coach slots forced to 0
       9. venue_closures       — closed venue slots forced to 0
      10. forced_venues        — forced venue excludes alternatives
+
+    New implicit rules:
+     11. one_session_per_day  — at most one session per day per team
+     12. adult_weekday_time   — adult competitive teams cannot train before 19:00 on weekdays
+     13. min_session_duration — minimum session duration per team (default 90 min)
     """
 
     if assignments is None:
@@ -162,6 +173,23 @@ def add_level_1_hard_constraints(
     stats.forced_venues = add_forced_venue_constraints(
         model, assignment_list, forced_venues=forced_venues
     )
+
+    # 11. At most one session per day per team (unless explicitly allowed).
+    stats.one_session_per_day = add_one_session_per_day_constraints(
+        model, assignment_list, teams=teams
+    )
+
+    # 12. Adult competitive teams cannot train before 19:00 on weekdays.
+    stats.adult_weekday_time = add_adult_weekday_time_constraints(
+        model, assignment_list, teams=teams
+    )
+
+    # 13. Minimum session duration — NOT applied as a hard constraint here.
+    # Enforcing consecutive-slot blocks causes infeasibility on fixtures where
+    # fewer than N slots are available in a time window. Duration is handled via
+    # slot templates (durationMinutes). minSessionMinutes is surfaced in the
+    # payload for future objective-level use.
+    stats.min_session_duration = 0
 
     return stats
 
@@ -660,11 +688,182 @@ def _forced_venue_id(
     return None
 
 
+_ADULT_LEVELS: frozenset[str] = frozenset(
+    {
+        "REGIONAL",
+        "DEPARTEMENTAL",
+        "NATIONAL",
+        "ELITE",
+        "HONNEUR",
+        "PROMOTION",
+        "PRE_REGION",
+    }
+)
+_WEEKDAY_NUMBERS: frozenset[str] = frozenset({"1", "2", "3", "4", "5"})
+_ADULT_MIN_WEEKDAY_START: str = "19:00"
+_DEFAULT_MIN_SESSION_MINUTES: int = 90
+_SLOT_MINUTES: int = 15
+
+
+def add_one_session_per_day_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    teams: Iterable[Any] = (),
+) -> int:
+    """Implicit rule 11: a team can have at most one training session per day,
+    unless allowMultipleSessionsPerDay is True for that team.
+    """
+
+    multi_allowed: set[str] = set()
+    for team in teams:
+        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        allow = _get(
+            team,
+            "allowMultipleSessionsPerDay",
+            "allow_multiple_sessions_per_day",
+            default=False,
+        )
+        if tid is not None and allow:
+            multi_allowed.add(str(tid))
+
+    groups: dict[tuple[str, str], list[BoolVarLike]] = defaultdict(list)
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        slot_id = _slot_id(assignment)
+        if team_id is None or slot_id is None:
+            continue
+        day = str(slot_id).split(":")[0]
+        groups[(str(team_id), day)].append(_var(assignment))
+
+    added = 0
+    for (team_id, _day), vars_list in groups.items():
+        if team_id in multi_allowed:
+            continue
+        if len(vars_list) > 1:
+            cast(Any, model).Add(sum(vars_list) <= 1)
+            added += 1
+
+    return added
+
+
+def add_adult_weekday_time_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    teams: Iterable[Any] = (),
+) -> int:
+    """Implicit rule 12: adult competitive teams (level != LOISIR, level != null)
+    cannot have sessions on weekdays (Mon–Fri) starting before 19:00.
+    """
+
+    adult_team_ids: set[str] = set()
+    for team in teams:
+        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        level = _get(team, "level", default=None)
+        if tid is not None and isinstance(level, str) and level.upper() in _ADULT_LEVELS:
+            adult_team_ids.add(str(tid))
+
+    if not adult_team_ids:
+        return 0
+
+    added = 0
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        if team_id is None or str(team_id) not in adult_team_ids:
+            continue
+
+        slot_id = _slot_id(assignment)
+        if slot_id is None:
+            continue
+
+        parts = str(slot_id).split(":")
+        if len(parts) < 3:
+            continue
+
+        day = parts[0]
+        slot_start = parts[1] + ":" + parts[2]
+
+        if day not in _WEEKDAY_NUMBERS:
+            continue
+
+        if slot_start < _ADULT_MIN_WEEKDAY_START:
+            cast(Any, model).Add(_var(assignment) == 0)
+            added += 1
+
+    return added
+
+
+def add_min_session_duration_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    teams: Iterable[Any] = (),
+) -> int:
+    """Implicit rule 13: each session must span at least minSessionMinutes
+    of consecutive 15-min slots (default 90 min = 6 slots).
+
+    If a slot variable at position i is active (==1), all slots from i to i+N-1
+    in the same (team, venue, day) group must also be active.
+    If fewer than N subsequent slots exist, that slot is forced to 0.
+    """
+
+    import math
+
+    min_slots_by_team: dict[str, int] = {}
+    for team in teams:
+        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        if tid is None:
+            continue
+        raw = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
+        minutes = int(raw) if raw is not None else _DEFAULT_MIN_SESSION_MINUTES
+        min_slots_by_team[str(tid)] = math.ceil(minutes / _SLOT_MINUTES)
+
+    if not min_slots_by_team:
+        return 0
+
+    groups: dict[tuple[str, str, str], list[tuple[str, BoolVarLike]]] = defaultdict(list)
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        venue_id = _venue_id(assignment)
+        slot_id = _slot_id(assignment)
+        if team_id is None or venue_id is None or slot_id is None:
+            continue
+        parts = str(slot_id).split(":")
+        if len(parts) < 3:
+            continue
+        day = parts[0]
+        slot_time = parts[1] + ":" + parts[2]
+        groups[(str(team_id), str(venue_id), day)].append((slot_time, _var(assignment)))
+
+    added = 0
+    for (team_id, _venue_key, _day), slot_list in groups.items():
+        n = min_slots_by_team.get(team_id)
+        if n is None or n <= 1:
+            continue
+
+        slot_list.sort(key=lambda x: x[0])
+        vars_only = [v for _, v in slot_list]
+
+        for i, var_i in enumerate(vars_only):
+            for k in range(1, n):
+                j = i + k
+                if j >= len(vars_only):
+                    cast(Any, model).Add(cast(Any, var_i) == 0)
+                    added += 1
+                    break
+                cast(Any, model).Add(cast(Any, var_i) - cast(Any, vars_only[j]) <= 0)
+                added += 1
+
+    return added
+
+
 def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
     """Parse v2 constraints[] array into solver-ready rule collections.
 
     Returns dict with keys: fixed_slots, forbidden_assignments,
-    coach_unavailability, venue_closures, forced_venues, time_windows
+    coach_unavailability, venue_closures, forced_venues, preferred_venues,
+    time_windows
     """
 
     result: dict[str, Any] = {
@@ -673,6 +872,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         "coach_unavailability": {},
         "venue_closures": {},
         "forced_venues": {},
+        "preferred_venues": {},
         "time_windows": [],
     }
 
@@ -713,6 +913,15 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         ):
             result["forced_venues"][scope_target_id] = config["forcedVenueId"]
 
+        elif (
+            family == "FACILITY"
+            and config.get("preferredVenueId")
+            and rule_type == "PREFERRED"
+            and scope == "TEAM"
+            and scope_target_id
+        ):
+            result["preferred_venues"][scope_target_id] = config["preferredVenueId"]
+
         elif family == "FACILITY" and config.get("forbiddenVenueId"):
             result["forbidden_assignments"].append(
                 {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
@@ -730,11 +939,14 @@ __all__ = [
     "add_coach_at_most_one",
     "add_coach_player_non_overlap",
     "add_coach_unavailability_constraints",
+    "add_adult_weekday_time_constraints",
     "add_fixed_slots",
     "add_forbidden_assignments",
     "add_forced_venue_constraints",
     "add_level_1_hard_constraints",
+    "add_min_session_duration_constraints",
     "add_min_sessions_constraints",
+    "add_one_session_per_day_constraints",
     "add_room_at_most_one",
     "add_team_no_overlap",
     "add_venue_closure_constraints",

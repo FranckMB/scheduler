@@ -118,10 +118,20 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
                 cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
 
     # Add objective function.
+    preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
+    soft_terms = []
+    for slot_key, var in model.x.items():
+        team_id = str(slot_key[0])
+        venue_id = str(slot_key[1])
+        preferred_venue_id = preferred_venues.get(team_id)
+        if preferred_venue_id is not None and venue_id == preferred_venue_id:
+            soft_terms.append((var, "preferred"))
+
     add_level_2_objective(
         model,
         model.x,
         teams=data.get("teams", []),
+        soft_terms=soft_terms,
     )
 
     # Solve.
