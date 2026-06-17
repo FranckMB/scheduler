@@ -746,9 +746,42 @@ def add_one_session_per_day_constraints(
         day = str(slot_id).split(":")[0]
         groups[(str(team_id), day)].append(_var(assignment))
 
+    sessions_per_week: dict[str, int] = {}
+    min_session_teams: set[str] = set()
+    for team in teams:
+        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        if tid is None:
+            continue
+        raw = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
+        if raw is not None:
+            min_session_teams.add(str(tid))
+        spw = _get(team, "sessionsPerWeek", "sessions_per_week", default=1)
+        sessions_per_week[str(tid)] = max(1, int(spw))
+
+    days_by_team: dict[str, list[tuple[str, list[BoolVarLike]]]] = defaultdict(list)
+    for (team_id, day), vars_list in groups.items():
+        if team_id in min_session_teams:
+            days_by_team[team_id].append((day, vars_list))
+
     added = 0
+    for team_id, day_entries in days_by_team.items():
+        if len(day_entries) <= 1:
+            continue
+        spw = sessions_per_week.get(team_id, 1)
+        day_active_vars: list[BoolVarLike] = []
+        for _day, vars_list in day_entries:
+            day_active = cast(Any, model).NewBoolVar(f"day_active_{team_id}_{_day}")
+            day_active_vars.append(day_active)
+            slot_sum = sum(cast(Any, v) for v in vars_list)
+            cast(Any, model).Add(slot_sum >= 1).OnlyEnforceIf(day_active)
+            cast(Any, model).Add(slot_sum == 0).OnlyEnforceIf(day_active.Not())
+        cast(Any, model).Add(sum(day_active_vars) <= spw)
+        added += 1
+
     for (team_id, _day), vars_list in groups.items():
         if team_id in multi_allowed:
+            continue
+        if team_id in min_session_teams:
             continue
         if len(vars_list) > 1:
             cast(Any, model).Add(sum(vars_list) <= 1)
