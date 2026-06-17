@@ -201,6 +201,7 @@ final class ScheduleConstraintBuilder
             'clubId' => $clubId,
             'seasonId' => $seasonId,
             'solverSeed' => $solverSeed,
+            'solverTimeoutSeconds' => 300,
             'venues' => array_map($this->serializeVenue(...), $venues),
             'teams' => array_map(fn (Team $team): array => $this->serializeTeam($team, $seasonId), $teams),
             'coaches' => array_map($this->serializeCoach(...), $coaches),
