@@ -16,6 +16,7 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueAvailability;
 use App\Enum\ConstraintScope;
+use App\Enum\ConstraintRuleType;
 use App\Enum\LockLevel;
 use App\Repository\VenueAvailabilityRepository;
 use DateTimeInterface;
@@ -192,7 +193,7 @@ final class ScheduleConstraintBuilder
             $this->serializeTeamCoachConstraints($teamCoaches),
             $this->serializeCoachPlayerMembershipConstraints($coachPlayerMemberships),
             $this->serializePriorityTierConstraints($priorityTiers),
-            $this->serializeUnifiedConstraints($constraints, $seasonId),
+            $this->serializeUnifiedConstraints($constraints, $seasonId, $teams),
         );
 
         return [
@@ -432,10 +433,11 @@ final class ScheduleConstraintBuilder
 
     /**
      * @param array<Constraint> $constraints
+     * @param array<Team>      $teams
      *
      * @return array<array<string, mixed>>
      */
-    private function serializeUnifiedConstraints(array $constraints, string $seasonId): array
+    private function serializeUnifiedConstraints(array $constraints, string $seasonId, array $teams = []): array
     {
         $result = [];
 
@@ -463,6 +465,27 @@ final class ScheduleConstraintBuilder
                         'sortOrder' => $constraint->getSortOrder(),
                         'isActive' => $constraint->getIsActive(),
                     ];
+                }
+
+                // When HARD + preferredVenueId: also forbid the venue for all teams NOT in the tag
+                if (ConstraintRuleType::HARD === $constraint->getRuleType() && isset($config['preferredVenueId'])) {
+                    $tagTeamIdSet = array_flip($teamIds);
+                    foreach ($teams as $team) {
+                        if (isset($tagTeamIdSet[$team->getId()])) {
+                            continue;
+                        }
+                        $result[] = [
+                            'id' => $constraint->getId() . ':forbidden:' . $team->getId(),
+                            'scope' => ConstraintScope::TEAM->value,
+                            'scopeTargetId' => $team->getId(),
+                            'family' => $constraint->getFamily()->value,
+                            'ruleType' => ConstraintRuleType::HARD->value,
+                            'name' => $constraint->getName() . ' (interdit hors tag)',
+                            'config' => ['forbiddenVenueId' => $config['preferredVenueId']],
+                            'sortOrder' => $constraint->getSortOrder(),
+                            'isActive' => $constraint->getIsActive(),
+                        ];
+                    }
                 }
 
                 continue;

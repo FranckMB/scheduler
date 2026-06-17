@@ -683,6 +683,15 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         ):
             result["forced_venues"][scope_target_id] = config["preferredVenueId"]
 
+        elif (
+            family == "FACILITY"
+            and config.get("forcedVenueId")
+            and rule_type == "HARD"
+            and scope == "TEAM"
+            and scope_target_id
+        ):
+            result["forced_venues"][scope_target_id] = config["forcedVenueId"]
+
         elif family == "FACILITY" and config.get("forbiddenVenueId"):
             result["forbidden_assignments"].append(
                 {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}

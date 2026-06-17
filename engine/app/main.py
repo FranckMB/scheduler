@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
-from app.solver.constraints import add_level_1_hard_constraints
+from app.solver.constraints import add_level_1_hard_constraints, parse_v2_constraints
 from app.solver.model import ScheduleCpModel, build_model
 from app.solver.objective import add_level_2_objective
 from app.solver.result_builder import build_result
@@ -83,11 +83,18 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # Build the CP-SAT model.
     model: ScheduleCpModel = build_model(data)
 
+    parsed = parse_v2_constraints(data.get("constraints", []))
+
     # Add hard constraints.
     add_level_1_hard_constraints(
         model,
         model.x,
         teams=data.get("teams", []),
+        fixed_assignments=parsed["fixed_slots"],
+        forbidden_assignments=parsed["forbidden_assignments"],
+        coach_unavailability=parsed["coach_unavailability"],
+        venue_closures=parsed["venue_closures"],
+        forced_venues=parsed["forced_venues"],
     )
 
     assignments_by_team: dict[str, list[Any]] = {}
