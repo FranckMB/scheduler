@@ -412,11 +412,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'Academie U13-U15',      'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
             ['name' => 'Academie U18',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
             ['name' => 'Mercredi Shark U9-U11', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir 1',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir 2',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir 3',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir Feminine',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F],
-            ['name' => '3x3',                   'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Loisir 1',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 2',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 3',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir Feminine',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 120],
+            ['name' => '3x3',                   'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 120],
             // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
             // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
             ['name' => 'CEC Groupe 1',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
@@ -433,6 +433,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ]);
             if ($existing instanceof Team) {
                 $teams[$teamData['name']] = $existing;
+                if (isset($teamData['minSessionMinutes']) && $existing->getMinSessionMinutes() !== $teamData['minSessionMinutes']) {
+                    $existing->setMinSessionMinutes($teamData['minSessionMinutes']);
+                }
             } else {
                 $team = new Team;
                 $team->setClubId($club->getId());
@@ -443,6 +446,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $team->setLevel($teamData['level']);
                 $team->setGender($teamData['gender']);
                 $team->setSessionsPerWeek($teamData['sessionsPerWeek']);
+                if (isset($teamData['minSessionMinutes'])) {
+                    $team->setMinSessionMinutes($teamData['minSessionMinutes']);
+                }
                 $team->setIsActive(true);
                 $manager->persist($team);
                 $teams[$teamData['name']] = $team;
@@ -616,8 +622,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // SECTION 8 — SLOT TEMPLATES (SM1 hard locks)
         // ============================================================
         $slotTemplates = [
-            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
         ];
 
         foreach ($slotTemplates as $slotData) {
@@ -640,6 +646,51 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $slot->setDurationMinutes($slotData['duration']);
                 $slot->setLockLevel($slotData['lock']);
                 $manager->persist($slot);
+            } else {
+                if ($existing->getDurationMinutes() !== $slotData['duration']) {
+                    $existing->setDurationMinutes($slotData['duration']);
+                }
+            }
+        }
+        $manager->flush();
+
+        // Loisir Féminine — HARD slot: Thursday at vDebarrosAnnexe, 20:30-22:30 (120 min)
+        // Remove old FACILITY constraint if it exists
+        $oldLoisirF = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'Loisir Féminine - Annexe jeudi exclusivement',
+        ]);
+        if ($oldLoisirF instanceof Constraint) {
+            $manager->remove($oldLoisirF);
+            $manager->flush();
+        }
+
+        $loisirF = $teams['Loisir Feminine'];
+        $lfSlotStart = new DateTimeImmutable('20:30');
+        $existingLfSlot = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
+            'teamId' => $loisirF->getId(),
+            'venueId' => $venues['vDebarrosAnnexe']->getId(),
+            'dayOfWeek' => 4,
+            'startTime' => $lfSlotStart,
+        ]);
+        if (!$existingLfSlot instanceof ScheduleSlotTemplate) {
+            $slot = new ScheduleSlotTemplate;
+            $slot->setClubId($club->getId());
+            $slot->setSeasonId($season->getId());
+            $slot->setScheduleId($season->getId());
+            $slot->setTeamId($loisirF->getId());
+            $slot->setVenueId($venues['vDebarrosAnnexe']->getId());
+            $slot->setDayOfWeek(4);
+            $slot->setStartTime($lfSlotStart);
+            $slot->setDurationMinutes(120);
+            $slot->setLockLevel(LockLevel::HARD);
+            $manager->persist($slot);
+        } else {
+            if ($existingLfSlot->getDurationMinutes() !== 120) {
+                $existingLfSlot->setDurationMinutes(120);
+            }
+            if (LockLevel::HARD !== $existingLfSlot->getLockLevel()) {
+                $existingLfSlot->setLockLevel(LockLevel::HARD);
             }
         }
         $manager->flush();
@@ -815,32 +866,36 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($c);
         }
 
-        // 9i — Camus reserved EXCLUSIVELY for loisir teams (HARD — user confirmed "exclusivement")
-        // Delete old PREFERRED constraint if it exists
+        // 9i — Camus reserved EXCLUSIVELY for Loisir 1 / 2 / 3 (individual HARD TEAM constraints)
+        // Remove old CLUB-scoped constraint if it exists
         $oldCamusPreferred = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
-            'name' => 'Camus - Préféré loisir',
+            'name' => 'Camus - Réservé loisir exclusivement',
         ]);
         if ($oldCamusPreferred instanceof Constraint) {
             $manager->remove($oldCamusPreferred);
             $manager->flush();
         }
-        $existingCamusHard = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Camus - Réservé loisir exclusivement',
-        ]);
-        if (!$existingCamusHard instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Camus - Réservé loisir exclusivement');
-            $c->setConfig(['preferredVenueId' => $venues['vCamus']->getId(), 'targetTag' => 'LOISIR']);
-            $c->setIsActive(true);
-            $manager->persist($c);
+        foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
+            $loisirTeam = $teams[$loisirName];
+            $constraintName = 'Camus - Réservé ' . $loisirName . ' exclusivement';
+            $existingCamus = $manager->getRepository(Constraint::class)->findOneBy([
+                'clubId' => $club->getId(),
+                'name' => $constraintName,
+            ]);
+            if (!$existingCamus instanceof Constraint) {
+                $c = new Constraint;
+                $c->setClubId($club->getId());
+                $c->setSeasonId($season->getId());
+                $c->setScope(ConstraintScope::TEAM);
+                $c->setScopeTargetId($loisirTeam->getId());
+                $c->setFamily(ConstraintFamily::FACILITY);
+                $c->setRuleType(ConstraintRuleType::HARD);
+                $c->setName($constraintName);
+                $c->setConfig(['preferredVenueId' => $venues['vCamus']->getId()]);
+                $c->setIsActive(true);
+                $manager->persist($c);
+            }
         }
 
         // 9j — SM3: Wednesday only (HARD DAY constraint)
@@ -968,25 +1023,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('3x3 - ADN mercredi 20h30 exclusivement');
             $c->setConfig(['forcedVenueId' => $venues['vAdn']->getId(), 'forcedDay' => 3, 'minStartTime' => '20:30']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 11b — Loisir Feminine: Annexe De Barros on Thursday exclusively
-        $existing11b = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Loisir Féminine - Annexe jeudi exclusivement',
-        ]);
-        if (!$existing11b instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::TEAM);
-            $c->setScopeTargetId($loisirFeminine->getId());
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Loisir Féminine - Annexe jeudi exclusivement');
-            $c->setConfig(['forcedVenueId' => $venues['vDebarrosAnnexe']->getId(), 'forcedDay' => 4]);
             $c->setIsActive(true);
             $manager->persist($c);
         }
