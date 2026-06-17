@@ -710,7 +710,7 @@ _ADULT_LEVELS: frozenset[str] = frozenset(
 )
 _WEEKDAY_NUMBERS: frozenset[str] = frozenset({"1", "2", "3", "4", "5"})
 _ADULT_MIN_WEEKDAY_START: str = "19:00"
-_LAST_START_TIME: str = "20:45"
+_LAST_START_TIME: str = "21:00"
 _DEFAULT_MIN_SESSION_MINUTES: int = 90
 _SLOT_MINUTES: int = 15
 
@@ -856,13 +856,15 @@ def add_min_session_duration_constraints(
             continue
 
         slot_list.sort(key=lambda x: x[0])
-        vars_only = [v for _, v in slot_list]
 
-        # Adjacency: x[i] <= x[i+1] forces continuous blocks extending
-        # to end of window. No slot is forced to 0 — graceful degradation
-        # when the window is shorter than the requested duration.
-        for i in range(len(vars_only) - 1):
-            cast(Any, model).Add(cast(Any, vars_only[i]) - cast(Any, vars_only[i + 1]) <= 0)
+        for i in range(len(slot_list) - 1):
+            t_cur, v_cur = slot_list[i]
+            t_nxt, v_nxt = slot_list[i + 1]
+            h_cur, m_cur = int(t_cur[:2]), int(t_cur[3:5])
+            h_nxt, m_nxt = int(t_nxt[:2]), int(t_nxt[3:5])
+            if (h_nxt * 60 + m_nxt) - (h_cur * 60 + m_cur) != _SLOT_MINUTES:
+                continue  # gap — no adjacency constraint between non-consecutive slots
+            cast(Any, model).Add(cast(Any, v_cur) - cast(Any, v_nxt) <= 0)
             added += 1
 
     return added
@@ -872,29 +874,55 @@ def add_no_late_start_constraints(
     model: Any,
     assignments: Iterable[AssignmentLike],
 ) -> int:
-    """Implicit rule: no session may start after 20:45.
+    """Implicit rule 14: no session may START at 21:00 or later.
 
-    Iterates all assignments and forces the variable to 0 when the
-    slot's start time (HH:MM parsed from slot_id) is later than
-    ``_LAST_START_TIME``.  Applies to ALL teams — no team filtering.
-    HARD-locked slots are safe by design (they are not in model.x).
+    A slot at 21:00+ is forbidden as a session *start*, but is allowed as a
+    *continuation* of a session that started at or before _LAST_START_TIME.
+
+    Implementation: for each (team, venue, day) group:
+    - early_vars: slots with start_time < _LAST_START_TIME  (can start here)
+    - late_vars:  slots with start_time >= _LAST_START_TIME (cannot start here)
+    - If no early_vars exist → force all late_vars to 0 (no valid start possible)
+    - If early_vars exist → each late_var <= sum(early_vars)
+      (late slot active only if at least one early slot is also active)
+
+    Applies to ALL teams. HARD-locked slots are safe by design (not in model.x).
     """
 
-    added = 0
+    # Group by (team_id, venue_id, day)
+    groups: dict[tuple[str, str, str], list[tuple[str, BoolVarLike]]] = defaultdict(list)
     for assignment in assignments:
+        team_id = _team_id(assignment)
+        venue_id = _venue_id(assignment)
         slot_id = _slot_id(assignment)
-        if slot_id is None:
+        if team_id is None or venue_id is None or slot_id is None:
             continue
-
         parts = str(slot_id).split(":")
         if len(parts) < 3:
             continue
-
+        day = parts[0]
         slot_time = parts[1] + ":" + parts[2]
+        groups[(str(team_id), str(venue_id), day)].append((slot_time, _var(assignment)))
 
-        if slot_time > _LAST_START_TIME:
-            cast(Any, model).Add(_var(assignment) == 0)
-            added += 1
+    added = 0
+    for _key, slot_list in groups.items():
+        early_vars = [v for t, v in slot_list if t < _LAST_START_TIME]
+        late_vars = [v for t, v in slot_list if t >= _LAST_START_TIME]
+
+        if not late_vars:
+            continue
+
+        if not early_vars:
+            # No valid start time in this group — forbid all late slots
+            for v in late_vars:
+                cast(Any, model).Add(cast(Any, v) == 0)
+                added += 1
+        else:
+            # Late slot can only be active if at least one early slot is active
+            early_sum = sum(cast(Any, v) for v in early_vars)
+            for v in late_vars:
+                cast(Any, model).Add(cast(Any, v) <= early_sum)
+                added += 1
 
     return added
 
