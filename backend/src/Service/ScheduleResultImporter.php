@@ -22,8 +22,19 @@ final class ScheduleResultImporter
             ->getRepository(ScheduleSlotTemplate::class)
             ->findBy(['scheduleId' => $schedule->getId()]);
 
+        $seasonSlots = $this->entityManager
+            ->getRepository(ScheduleSlotTemplate::class)
+            ->findBy([
+                'clubId' => $schedule->getClubId(),
+                'seasonId' => $schedule->getSeasonId(),
+            ]);
+
         $existingById = [];
         foreach ($existingSlots as $slot) {
+            $existingById[$slot->getId()] = $slot;
+        }
+
+        foreach ($seasonSlots as $slot) {
             $existingById[$slot->getId()] = $slot;
         }
 
