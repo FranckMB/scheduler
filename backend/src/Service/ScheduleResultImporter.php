@@ -49,7 +49,11 @@ final class ScheduleResultImporter
 
         foreach ($solverSlots as $slotId => $slotData) {
             $existingSlot = $existingById[$slotId] ?? null;
-            if (null !== $existingSlot && LockLevel::NONE !== $existingSlot->getLockLevel()) {
+            if (
+                null !== $existingSlot
+                && LockLevel::NONE !== $existingSlot->getLockLevel()
+                && $existingSlot->getScheduleId() === $schedule->getId()
+            ) {
                 continue;
             }
 
@@ -73,7 +77,12 @@ final class ScheduleResultImporter
 
         $slots = [];
         foreach ($rawSlots as $slot) {
-            if (!\is_array($slot) || ($slot['lockLevel'] ?? 'NONE') !== 'NONE') {
+            if (!\is_array($slot)) {
+                continue;
+            }
+
+            $lockLevel = ($slot['lockLevel'] ?? 'NONE');
+            if ('NONE' !== $lockLevel && 'HARD' !== $lockLevel) {
                 continue;
             }
 
@@ -101,7 +110,7 @@ final class ScheduleResultImporter
             ->setDayOfWeek((int) $slotData['dayOfWeek'])
             ->setStartTime($this->parseStartTime((string) $slotData['startTime']))
             ->setDurationMinutes((int) $slotData['durationMinutes'])
-            ->setLockLevel(LockLevel::NONE);
+            ->setLockLevel(LockLevel::tryFrom(strtoupper((string) ($slotData['lockLevel'] ?? 'NONE'))) ?? LockLevel::NONE);
     }
 
     private function parseStartTime(string $startTime): DateTimeImmutable
