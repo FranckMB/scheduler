@@ -65,10 +65,11 @@ db-reset-test:
 	$(EXECROOT) php bin/console doctrine:database:create -e test
 	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
-.PHONY: fixtures ## Load backend fixtures
+.PHONY: fixtures ## Load backend fixtures (also clears var/generate)
 fixtures: APP_ENV = dev
 fixtures:
 	$(EXEC) php bin/console doctrine:fixtures:load --no-interaction
+	$(EXECROOT) rm -rf var/generate
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:

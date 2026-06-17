@@ -15,8 +15,8 @@ use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueAvailability;
-use App\Enum\ConstraintScope;
 use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Repository\VenueAvailabilityRepository;
 use DateTimeInterface;
@@ -433,7 +433,7 @@ final class ScheduleConstraintBuilder
 
     /**
      * @param array<Constraint> $constraints
-     * @param array<Team>      $teams
+     * @param array<Team>       $teams
      *
      * @return array<array<string, mixed>>
      */

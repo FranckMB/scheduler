@@ -686,7 +686,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $slot->setLockLevel(LockLevel::HARD);
             $manager->persist($slot);
         } else {
-            if ($existingLfSlot->getDurationMinutes() !== 120) {
+            if (120 !== $existingLfSlot->getDurationMinutes()) {
                 $existingLfSlot->setDurationMinutes(120);
             }
             if (LockLevel::HARD !== $existingLfSlot->getLockLevel()) {
@@ -966,6 +966,39 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // ============================================================
         // SECTION 10 — ADDITIONAL SLOT TEMPLATES
         // ============================================================
+
+        // Loisir 1/2/3 — Camus slots (all 7 consecutive 15-min slots per day, 3 days)
+        // Camus available: Tue(2), Thu(4), Fri(5) 20:15-22:00 = 7 slots of 15 min
+        // Each team gets one full day at Camus (no overlap via room_at_most_one)
+        $camusSlotTimes = ['20:15', '20:30', '20:45', '21:00', '21:15', '21:30', '21:45'];
+        $camusDays = [2, 4, 5];
+        foreach ([$teams['Loisir 1'], $teams['Loisir 2'], $teams['Loisir 3']] as $loisirTeam) {
+            foreach ($camusDays as $camusDay) {
+                foreach ($camusSlotTimes as $camusTime) {
+                    $camusStart = new DateTimeImmutable($camusTime);
+                    $existingCamusSlot = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
+                        'teamId' => $loisirTeam->getId(),
+                        'venueId' => $venues['vCamus']->getId(),
+                        'dayOfWeek' => $camusDay,
+                        'startTime' => $camusStart,
+                    ]);
+                    if (!$existingCamusSlot instanceof ScheduleSlotTemplate) {
+                        $slot = new ScheduleSlotTemplate;
+                        $slot->setClubId($club->getId());
+                        $slot->setSeasonId($season->getId());
+                        $slot->setScheduleId($season->getId());
+                        $slot->setTeamId($loisirTeam->getId());
+                        $slot->setVenueId($venues['vCamus']->getId());
+                        $slot->setDayOfWeek($camusDay);
+                        $slot->setStartTime($camusStart);
+                        $slot->setDurationMinutes(15);
+                        $slot->setLockLevel(LockLevel::NONE);
+                        $manager->persist($slot);
+                    }
+                }
+            }
+        }
+        $manager->flush();
 
         // JDR Saturday — Academie hard-locked sessions
         $additionalSlots = [
