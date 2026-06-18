@@ -2,7 +2,7 @@
 set -euo pipefail
 
 API_BASE="http://localhost:8080/api"
-CLUB_ID="8b8d3ccd-4359-4f4a-a9fa-5b9d338c3d7f"
+CLUB_ID="77e1e118-e702-4839-8a9c-7c34187541e6"
 TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3ODE1NjI0MDMsImV4cCI6MTgxMzA5ODQwMywicm9sZXMiOlsiUk9MRV9BRE1JTiJdLCJ1c2VybmFtZSI6Im1hcmEubWJAYmNjbC5mciJ9.H-2HFRT1GS8EhZrjeI-QYpiOaRXCyU5fT2qW-7XJ20OQjSRmhX9drQCq7iyqzShLSVOFVZsIM193Dy98uRXlkUVSKRiZc1JW2GAT0nGxOsUHf1vqaZMDQTWyrlEjd70ArsJirYFyMzu83xAHWVUu1GF4DURw1PLD3d5X-H7YR5S2UNii8OCO8k8MvtUCTe_vU82tlqR5CeFMUcsYFNLsTF4-dcyE23eFHTF9r0ZJAzwwvyrnTaJuejYZd4NEQ74MACcmxELV5AZ9SRsdkWeBaC_P86cYFmsB2y4rN8oBNF5j4Yk90o11hIyR9ILyoPhxRLnYpjZJP1YA7_VG_HbWxA"
 SCHEDULE_ID=""
 CLUB_ID_ARG=""
@@ -160,29 +160,6 @@ print_slots() {
 
   if [[ "$line_count" -eq 0 ]]; then
     warn "Aucun créneau retourné par l'API."
-  fi
-}
-
-print_diagnostics() {
-  local diagnostics_json="$1"
-  local item
-
-  printf '%bPLANNING ÉCHOUÉ%b\n' "$RED" "$NC"
-  printf '%bDiagnostics%b\n' "$BLUE" "$NC"
-
-  local has_items=0
-  while IFS= read -r item; do
-    [[ -n "$item" ]] || continue
-    has_items=1
-    local type severity message
-    type=$(extract_field_from_json "$item" "type")
-    severity=$(extract_field_from_json "$item" "severity")
-    message=$(extract_field_from_json "$item" "message")
-    printf '  - [%s] %s: %s\n' "$severity" "$type" "$message"
-  done < <(printf '%s' "$diagnostics_json" | extract_items)
-
-  if [[ "$has_items" -eq 0 ]]; then
-    warn "Aucun diagnostic retourné par l'API."
   fi
 }
 
@@ -378,5 +355,4 @@ if [[ "$current_status" == "COMPLETED" ]]; then
   exit 0
 fi
 
-print_diagnostics "$HTTP_BODY"
 exit 1
