@@ -85,7 +85,45 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
 
     parsed = parse_v2_constraints(data.get("constraints", []))
 
-    # Add hard constraints.
+    locked_slots_by_team: dict[str, int] = {}
+    for locked_slot in model.locked_slots:
+        locked_team_id: str | None = locked_slot.get("team_id")
+        if locked_team_id:
+            locked_slots_by_team[locked_team_id] = locked_slots_by_team.get(locked_team_id, 0) + 1
+
+    _priority_tiers = parsed.get("priority_tiers", {})
+    adjusted_min_by_team: dict[str, int] = {}
+    for team in data.get("teams", []):
+        tid = str(team.get("id") or "")
+        if not tid:
+            continue
+        spw_raw = team.get("sessionsPerWeek") or team.get("sessions_per_week")
+        if spw_raw is None:
+            continue
+        spw = int(spw_raw)
+        eff_min = spw
+        tier_id_raw = team.get("priorityTierId")
+        if tier_id_raw is not None and _priority_tiers:
+            try:
+                tier_min = _priority_tiers.get(int(tier_id_raw))
+                if tier_min is not None:
+                    eff_min = min(spw, tier_min)
+            except (TypeError, ValueError):
+                pass
+        locked = locked_slots_by_team.get(tid, 0)
+        adjusted_min_by_team[tid] = max(0, eff_min - locked)
+
+    available_assignments_by_team: dict[str, list[Any]] = {}
+    for slot_key, var in model.x.items():
+        team_id = slot_key[0]
+        available_assignments_by_team.setdefault(team_id, []).append(var)
+
+    for team in data.get("teams", []):
+        team_id = team.get("id")
+        max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
+        if team_id and max_sessions and not available_assignments_by_team.get(team_id, []):
+            adjusted_min_by_team[str(team_id)] = 0
+
     add_level_1_hard_constraints(
         model,
         model.x,
@@ -96,18 +134,13 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         venue_closures=parsed["venue_closures"],
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
+        min_sessions_by_team=adjusted_min_by_team or None,
     )
 
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
         team_id = slot_key[0]
         assignments_by_team.setdefault(team_id, []).append(var)
-
-    locked_slots_by_team: dict[str, int] = {}
-    for locked_slot in model.locked_slots:
-        locked_team_id: str | None = locked_slot.get("team_id")
-        if locked_team_id:
-            locked_slots_by_team[locked_team_id] = locked_slots_by_team.get(locked_team_id, 0) + 1
 
     for team in data.get("teams", []):
         team_id = team.get("id")

@@ -303,3 +303,60 @@ class TestGenerateContract:
         assert len(result.slots) <= 3 * 6, (
             f"Expected at most 18 slot assignments (3 sessions × 6 slots), got {len(result.slots)}"
         )
+
+    def test_build_schedule_fully_locked_team_does_not_fail(self) -> None:
+        """Solver must not return FAILED when a team has all sessions already hard-locked.
+
+        Regression guard: team with sessionsPerWeek=1 and 1 HARD-locked slot has
+        remaining=0. Without adjusted_min_by_team, max_cap adds sum(vars)<=0 while
+        min_sessions adds sum(vars)>=1 → immediate INFEASIBLE.
+        With the fix, adjusted_min=0 for this team → no conflict.
+        """
+        input_data = ScheduleInputSchema.model_validate(
+            {
+                "clubId": "club-fully-locked",
+                "seasonId": "season-fully-locked",
+                "teams": [
+                    {
+                        "id": "team-locked",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 1,
+                        "name": "Team Fully Locked",
+                        "sessionsPerWeek": 1,
+                        "isActive": True,
+                    },
+                ],
+                "venues": [
+                    {
+                        "id": "venue-1",
+                        "name": "Court A",
+                        "isActive": True,
+                        "availability": [
+                            {"dayOfWeek": 2, "startTime": "18:00", "endTime": "20:00"},
+                        ],
+                    }
+                ],
+                "slotTemplates": [
+                    {
+                        "id": "locked-slot-1",
+                        "teamId": "team-locked",
+                        "venueId": "venue-1",
+                        "dayOfWeek": 2,
+                        "startTime": "18:00",
+                        "durationMinutes": 90,
+                        "lockLevel": "HARD",
+                    },
+                ],
+            }
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        assert result.status != "failed", (
+            f"Solver returned 'failed' for fully-locked team; "
+            f"status={result.status}, unplaced={result.unplaced}"
+        )
+        # The team has 1 hard-locked session — it must appear in output
+        assert len(result.slots) >= 1, (
+            f"Expected at least 1 slot (the hard-locked one), got {len(result.slots)}"
+        )
