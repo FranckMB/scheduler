@@ -95,6 +95,7 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         coach_unavailability=parsed["coach_unavailability"],
         venue_closures=parsed["venue_closures"],
         forced_venues=parsed["forced_venues"],
+        priority_tiers=parsed.get("priority_tiers", {}),
     )
 
     assignments_by_team: dict[str, list[Any]] = {}

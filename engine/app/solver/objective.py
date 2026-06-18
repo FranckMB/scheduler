@@ -14,7 +14,7 @@ from typing import Any
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V1"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V2"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -22,6 +22,7 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "A": 1000,
         "SOFT": 800,
         "B": 100,
+        "session_count": 20,
         "pref_link": 80,
         "preferred": 60,
         "grouping": 50,
@@ -34,7 +35,16 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
 )
 
 TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
-BONUS_WEIGHT_NAMES = ("SOFT", "pref_link", "preferred", "grouping", "max_days", "opt_link", "rest")
+BONUS_WEIGHT_NAMES = (
+    "SOFT",
+    "pref_link",
+    "preferred",
+    "grouping",
+    "max_days",
+    "opt_link",
+    "rest",
+    "session_count",
+)
 
 _PRIORITY_TIER_FIELDS = (
     "priority_tier",
@@ -179,6 +189,13 @@ def add_level_2_objective(
         coefficient_by_assignment[_assignment_key(assignment, variable)] = coefficient
         placement_terms += 1
         soft_bonus_terms += len(active_bonuses)
+
+    # Soft bonus: reward every placed session to maximise total session count
+    for assignment in assignment_list:
+        variable = _var(assignment)
+        variables.append(variable)
+        coefficients.append(LEVEL_2_OBJECTIVE_WEIGHTS["session_count"])
+        soft_bonus_terms += 1
 
     for soft_term in soft_terms:
         variable, weight_name = _soft_term_variable_and_weight(soft_term)

@@ -101,12 +101,13 @@ def add_level_1_hard_constraints(
     assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None = None,
     *,
     teams: Iterable[Any] = (),
-    min_sessions_by_team: Mapping[Any, int] | None = None,
+    min_sessions_by_team: Mapping[Any, int] | None = None,  # unused — kept for API compatibility
     fixed_assignments: Iterable[Any] = (),
     forbidden_assignments: Iterable[Any] = (),
     coach_unavailability: RuleCollection = (),
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
+    priority_tiers: Mapping[int, int] | None = None,
 ) -> HardConstraintStats:
     """Add the 5 implicit + 5 derived + 3 new level-1 hard constraints to a CP-SAT model.
 
@@ -169,7 +170,11 @@ New implicit rules:
 
     # 9. Effective minimum sessions are guaranteed by a hard linear bound.
     stats.min_sessions = add_min_sessions_constraints(
-        model, assignment_list, teams=teams, min_sessions_by_team=min_sessions_by_team
+        model,
+        assignment_list,
+        teams=teams,
+        min_sessions_by_team=min_sessions_by_team,
+        priority_tiers=priority_tiers,
     )
 
     # 10. If a venue is forced, every other venue option is forced to 0.
@@ -364,10 +369,17 @@ def add_min_sessions_constraints(
     *,
     teams: Iterable[Any] = (),
     min_sessions_by_team: Mapping[Any, int] | None = None,
+    priority_tiers: Mapping[int, int] | None = None,
 ) -> int:
     """Constraint 10: every team receives at least its effective minimum sessions."""
 
-    minimums = _effective_min_sessions_by_team(teams, min_sessions_by_team)
+    if priority_tiers:
+        minimums = _compute_effective_min_sessions(teams, priority_tiers)
+        if min_sessions_by_team:
+            for tid, minimum in min_sessions_by_team.items():
+                minimums[_scalar_id(tid)] = int(minimum)
+    else:
+        minimums = _effective_min_sessions_by_team(teams, min_sessions_by_team)
     if not minimums:
         return 0
 
@@ -636,6 +648,38 @@ def _contains(values: Any, candidate: Any) -> bool:
         return candidate in values
     except TypeError:
         return False
+
+
+def _compute_effective_min_sessions(
+    teams: Iterable[Any], priority_tiers: Mapping[int, int]
+) -> dict[Any, int]:
+    """Compute effective minimum sessions per team via tier defaultMinSessions.
+
+    effective_min = min(sessionsPerWeek, tier.defaultMinSessions)
+
+    If the team has no priorityTierId or the tier is not in priority_tiers,
+    falls back to sessionsPerWeek as the effective minimum.
+    """
+    minimums: dict[Any, int] = {}
+    for team in teams:
+        team_id = _scalar_id(_get(team, "id", "team_id", default=None))
+        if team_id is None:
+            continue
+        sessions_per_week_raw = _get(team, "sessions_per_week", "sessionsPerWeek", default=None)
+        if sessions_per_week_raw is None:
+            continue
+        sessions_per_week = int(sessions_per_week_raw)
+        tier_id_raw = _get(team, "priority_tier_id", "priorityTierId", default=None)
+        if tier_id_raw is not None:
+            try:
+                tier_key = int(tier_id_raw)
+            except (TypeError, ValueError):
+                tier_key = None
+            if tier_key is not None and tier_key in priority_tiers:
+                minimums[team_id] = min(sessions_per_week, priority_tiers[tier_key])
+                continue
+        minimums[team_id] = sessions_per_week
+    return minimums
 
 
 def _effective_min_sessions_by_team(
@@ -965,7 +1009,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
 
     Returns dict with keys: fixed_slots, forbidden_assignments,
     coach_unavailability, venue_closures, forced_venues, preferred_venues,
-    time_windows
+    time_windows, priority_tiers
     """
 
     result: dict[str, Any] = {
@@ -976,6 +1020,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         "forced_venues": {},
         "preferred_venues": {},
         "time_windows": [],
+        "priority_tiers": {},
     }
 
     for c in constraints:
@@ -1028,6 +1073,13 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
             result["forbidden_assignments"].append(
                 {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
             )
+
+        elif c.get("type") == "PRIORITY_TIER":
+            metadata = c.get("metadata") or {}
+            tier_id = metadata.get("id")
+            default_min = metadata.get("defaultMinSessions")
+            if tier_id is not None and default_min is not None:
+                result["priority_tiers"][int(tier_id)] = int(default_min)
 
         elif family in ("TIME", "DAY"):
             result["time_windows"].append(c)

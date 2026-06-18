@@ -215,6 +215,7 @@ def _generate_diagnostics(
     diagnostics.extend(_diagnose_soft_lock_moved(model_data, slots))
     diagnostics.extend(_diagnose_coach_overload(model_data, slots))
     diagnostics.extend(_diagnose_session_too_short(model_data, slots))
+    diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(solver_status, slots))
     return diagnostics
 
@@ -329,6 +330,89 @@ def _diagnose_coach_overload(
                 ],
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
+    return diagnostics
+
+
+def _diagnose_session_below_effective_min(
+    model_data: Mapping[str, Any] | Any,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Warn when a team's placed session units fall below its effective minimum."""
+    diagnostics: list[dict[str, Any]] = []
+
+    tier_min: dict[int, int] = {}
+    for tier in _collection(model_data, "priorityTiers", "priority_tiers"):
+        tid = _get(tier, "id")
+        default_min = _get(tier, "defaultMinSessions", "default_min_sessions")
+        if tid is not None and default_min is not None:
+            try:
+                tier_min[int(tid)] = int(default_min)
+            except (TypeError, ValueError):
+                pass
+
+    for constraint in _collection(model_data, "constraints"):
+        if not isinstance(constraint, Mapping):
+            continue
+        if constraint.get("type") != "PRIORITY_TIER":
+            continue
+        metadata = constraint.get("metadata") or {}
+        tier_id = metadata.get("id")
+        default_min = metadata.get("defaultMinSessions")
+        if tier_id is not None and default_min is not None:
+            try:
+                tier_min[int(tier_id)] = int(default_min)
+            except (TypeError, ValueError):
+                pass
+
+    placed_counts: dict[str, int] = defaultdict(int)
+    for slot in slots:
+        team_id = slot.get("teamId")
+        if team_id:
+            duration = int(slot.get("durationMinutes", SLOT_MINUTES))
+            placed_counts[str(team_id)] += max(1, duration // SLOT_MINUTES)
+
+    teams: dict[str, Any] = {}
+    team_names: dict[str, str] = {}
+    for team in _collection(model_data, "teams"):
+        team_id = str(_get(team, "id", "team_id", "teamId"))
+        teams[team_id] = team
+        team_names[team_id] = str(_get(team, "name", "team_name", default=team_id))
+
+    for team_id, team in teams.items():
+        spw_raw = _get(team, "sessions_per_week", "sessionsPerWeek", default=None)
+        if spw_raw is None:
+            continue
+        spw = int(spw_raw)
+
+        tier_id_raw = _get(team, "priority_tier_id", "priorityTierId", default=None)
+        effective_min = spw
+        if tier_id_raw is not None and tier_min:
+            try:
+                tier_key = int(tier_id_raw)
+            except (TypeError, ValueError):
+                tier_key = None
+            if tier_key is not None and tier_key in tier_min:
+                effective_min = min(spw, tier_min[tier_key])
+
+        placed = placed_counts.get(team_id, 0)
+        if placed < effective_min:
+            team_name = team_names.get(team_id, team_id)
+            diagnostics.append({
+                "id": f"diag-session-below-min-{team_id}",
+                "type": "session_below_effective_min",
+                "severity": "WARNING",
+                "teamId": team_id,
+                "message": (
+                    f"Team {team_name} ({team_id}) has {placed} session unit(s) placed, "
+                    f"below its effective minimum of {effective_min}."
+                ),
+                "suggestions": [
+                    "Add more venue availability or adjust slot templates for this team.",
+                    "Review the team's priority tier and sessionsPerWeek settings.",
+                ],
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+
     return diagnostics
 
 

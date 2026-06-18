@@ -118,6 +118,8 @@ class TestGoldenDatasets:
         data = _load_fixture("impossible")
         result = _run_pipeline(data)
 
+        # greedy-team needs sessionsPerWeek=50, effective_min=min(50,2)=2 (tier S),
+        # but only 1 slot exists → hard constraint unsatisfiable → status stays "failed".
         assert result["status"] == "failed"
         assert result["score"] is None
         assert any(d["type"] == "conflict" for d in result["diagnostics"])
@@ -141,10 +143,13 @@ class TestGoldenDatasets:
         tier_s_a_teams = [
             t for t in data["teams"] if t["priorityTierId"] in (1, 2) and t.get("isActive", False)
         ]
+        tier_defaults = {1: 3, 2: 2, 3: 2, 4: 2, 5: 1}
         for team in tier_s_a_teams:
-            min_sessions = team.get("minSessionsOverride") or team["sessionsPerWeek"]
+            spw = team["sessionsPerWeek"]
+            tier_id = team.get("priorityTierId", 5)
+            effective_min = min(spw, tier_defaults.get(tier_id, 1))
             placed = team_sessions.get(team["id"], 0)
-            assert placed >= min_sessions, (
-                f"Team {team['id']} (tier {team['priorityTierId']}) "
-                f"has {placed} sessions, expected >= {min_sessions}"
+            assert placed >= effective_min, (
+                f"Team {team['id']} ({team.get('name', team['id'])}) has {placed} sessions, "
+                f"expected >= {effective_min} (effective_min)"
             )
