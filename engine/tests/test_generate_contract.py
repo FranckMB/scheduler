@@ -255,3 +255,51 @@ class TestGenerateContract:
         assert isinstance(result.unplaced, list)
         assert result.diagnostics is not None
         assert isinstance(result.diagnostics, list)
+
+    def test_build_schedule_with_min_session_minutes_does_not_fail(self) -> None:
+        """Solver must not return FAILED when teams have minSessionMinutes set.
+
+        Regression guard for the bug where 'not min_session_minutes' in main.py
+        excluded those teams from max-cap, causing INFEASIBLE.
+        """
+        input_data = ScheduleInputSchema.model_validate(
+            {
+                "clubId": "club-min-session-minutes",
+                "seasonId": "season-min-session-minutes",
+                "teams": [
+                    {
+                        "id": "team-competitive",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 1,
+                        "name": "Team Competitive",
+                        "sessionsPerWeek": 3,
+                        "minSessionMinutes": 90,
+                        "isActive": True,
+                    },
+                ],
+                "venues": [
+                    {
+                        "id": "venue-1",
+                        "name": "Court A",
+                        "isActive": True,
+                        "availability": [
+                            {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
+                            {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
+                            {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"},
+                        ],
+                    }
+                ],
+                "slotTemplates": [],
+            }
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        assert result.status != "failed", (
+            f"Solver returned 'failed' for team with minSessionMinutes=90; "
+            f"status={result.status}, unplaced={result.unplaced}"
+        )
+        # Max-cap check: each session = 90 min = 6 slots of 15-min → max 3*6=18 slots
+        assert len(result.slots) <= 3 * 6, (
+            f"Expected at most 18 slot assignments (3 sessions × 6 slots), got {len(result.slots)}"
+        )

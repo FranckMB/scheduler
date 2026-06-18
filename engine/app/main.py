@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import add_level_1_hard_constraints, parse_v2_constraints
-from app.solver.model import ScheduleCpModel, build_model
+from app.solver.model import ScheduleCpModel, build_model, SLOT_MINUTES
 from app.solver.objective import add_level_2_objective
 from app.solver.result_builder import build_result
 
@@ -113,11 +113,16 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         team_id = team.get("id")
         max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
         min_session_minutes = team.get("minSessionMinutes") or team.get("min_session_minutes")
-        if team_id and max_sessions and not min_session_minutes:
+        if team_id and max_sessions:
             team_vars = assignments_by_team.get(team_id, [])
             if team_vars:
                 remaining_sessions = int(max_sessions) - locked_slots_by_team.get(team_id, 0)
-                cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
+                if min_session_minutes:
+                    # team_vars are 15-min BoolVars; cap must be in slot units
+                    slots_per_session = max(1, int(min_session_minutes) // SLOT_MINUTES)
+                    cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions * slots_per_session))
+                else:
+                    cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
 
     # Add objective function.
     preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
