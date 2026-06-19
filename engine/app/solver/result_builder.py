@@ -98,7 +98,7 @@ def _locked_slot_to_dict(locked: Mapping[str, Any] | Any) -> dict[str, Any]:
     team_id = str(_get(locked, "team_id", "teamId"))
     venue_id = str(_get(locked, "venue_id", "venueId"))
     day_of_week = int(_get(locked, "day_of_week", "dayOfWeek"))
-    start_time = str(_get(locked, "start_time", "startTime"))
+    start_time = str(_get(locked, "start_time", "startTime"))[:5]  # normalize "HH:MM:SS" → "HH:MM"
     duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
     coach_id = _get(locked, "coach_id", "coachId", default=None)
     temporary_lock = bool(_get(locked, "temporary_lock", "temporaryLock", default=False))
