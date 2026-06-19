@@ -12,25 +12,7 @@
         {
           "dayOfWeek": 1,
           "startTime": "18:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:45",
-          "durationMinutes": 15,
+          "durationMinutes": 60,
           "capacity": 1
         }
       ]

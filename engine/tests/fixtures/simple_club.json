@@ -12,98 +12,14 @@
         {
           "dayOfWeek": 1,
           "startTime": "18:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "18:45",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "19:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "19:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "19:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 1,
-          "startTime": "19:45",
-          "durationMinutes": 15,
-          "capacity": 1
+          "durationMinutes": 120,
+          "capacity": 5
         },
         {
           "dayOfWeek": 3,
           "startTime": "18:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "18:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "18:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "18:45",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "19:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "19:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "19:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 3,
-          "startTime": "19:45",
-          "durationMinutes": 15,
-          "capacity": 1
+          "durationMinutes": 120,
+          "capacity": 5
         }
       ]
     },
@@ -115,98 +31,14 @@
         {
           "dayOfWeek": 2,
           "startTime": "18:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "18:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "18:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "18:45",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "19:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "19:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "19:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 2,
-          "startTime": "19:45",
-          "durationMinutes": 15,
-          "capacity": 1
+          "durationMinutes": 120,
+          "capacity": 5
         },
         {
           "dayOfWeek": 4,
           "startTime": "18:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "18:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "18:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "18:45",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "19:00",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "19:15",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "19:30",
-          "durationMinutes": 15,
-          "capacity": 1
-        },
-        {
-          "dayOfWeek": 4,
-          "startTime": "19:45",
-          "durationMinutes": 15,
-          "capacity": 1
+          "durationMinutes": 120,
+          "capacity": 5
         }
       ]
     }

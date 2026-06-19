@@ -67,7 +67,8 @@ def build_result(
         slots.extend(solver_slots)
 
     # Always run diagnostic checks.
-    diagnostics.extend(_generate_diagnostics(model_data, solver_status, slots))
+    slot_capacities: dict[Any, int] = getattr(model, "slot_capacities", {})
+    diagnostics.extend(_generate_diagnostics(model_data, solver_status, slots, slot_capacities=slot_capacities))
 
     unplaced = _unplaced_team_ids(model_data, slots)
 
@@ -132,10 +133,17 @@ def _build_solver_slots(
 ) -> list[dict[str, Any]]:
     """Build output slots from CP-SAT boolean variables set to 1.
 
-    Consecutive 15-min variables for the same (team, venue, day) are merged
-    into a single slot whose durationMinutes equals the total covered time.
+    Consecutive variables for the same (team, venue, day) are merged into a
+    single slot. Duration per variable comes from ``model.slot_durations``
+    (the training-slot's declared duration) with a fallback to SLOT_MINUTES
+    for backward-compatible 15-min granularity.
     """
     from collections import defaultdict
+
+    slot_durations: dict[Any, int] = getattr(model, "slot_durations", {})
+
+    def _slot_dur(v_id: str, dow: int, start_min: int) -> int:
+        return slot_durations.get((v_id, dow, _format_time(start_min)), SLOT_MINUTES)
 
     # Collect all active (team, venue, day, start_minutes) tuples
     active: dict[tuple[str, str, int], list[int]] = defaultdict(list)
@@ -151,16 +159,18 @@ def _build_solver_slots(
         starts_sorted = sorted(starts)
         coach_id = _find_coach_for_team(model_data, team_id)
 
-        # Merge consecutive 15-min windows into contiguous blocks
+        # Merge consecutive variables into contiguous blocks.
+        # Two variables are contiguous when the next start equals the end of the
+        # current block (i.e., no gap between them regardless of duration).
         if not starts_sorted:
             continue
         block_start = starts_sorted[0]
-        block_end = starts_sorted[0] + SLOT_MINUTES
+        block_end = starts_sorted[0] + _slot_dur(venue_id, day_of_week, starts_sorted[0])
 
         for s in starts_sorted[1:]:
             if s == block_end:
                 # contiguous — extend block
-                block_end = s + SLOT_MINUTES
+                block_end = s + _slot_dur(venue_id, day_of_week, s)
             else:
                 # gap — emit previous block and start a new one
                 duration = block_end - block_start
@@ -179,7 +189,7 @@ def _build_solver_slots(
                     "pendingConstraintSuggestion": None,
                 })
                 block_start = s
-                block_end = s + SLOT_MINUTES
+                block_end = s + _slot_dur(venue_id, day_of_week, s)
 
         # Emit the last block
         duration = block_end - block_start
@@ -208,6 +218,8 @@ def _generate_diagnostics(
     model_data: Mapping[str, Any] | Any,
     solver_status: int,
     slots: list[dict[str, Any]],
+    *,
+    slot_capacities: dict[Any, int] | None = None,
 ) -> list[dict[str, Any]]:
     """Run post-solve checks and return manager-readable diagnostics."""
     diagnostics: list[dict[str, Any]] = []
@@ -216,7 +228,7 @@ def _generate_diagnostics(
     diagnostics.extend(_diagnose_coach_overload(model_data, slots))
     diagnostics.extend(_diagnose_session_too_short(model_data, slots))
     diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
-    diagnostics.extend(_diagnose_conflicts(solver_status, slots))
+    diagnostics.extend(_diagnose_conflicts(solver_status, slots, slot_capacities=slot_capacities))
     return diagnostics
 
 
@@ -471,8 +483,17 @@ def _diagnose_session_too_short(
 def _diagnose_conflicts(
     solver_status: int,
     slots: list[dict[str, Any]],
+    *,
+    slot_capacities: dict[Any, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Report infeasibility or detected double-bookings."""
+    """Report infeasibility or detected double-bookings.
+
+    ``slot_capacities`` maps ``(venue_id, day_of_week, start_time)`` to the
+    maximum number of teams allowed simultaneously.  When provided, a venue
+    booking is only flagged as a conflict when the number of teams exceeds the
+    slot's declared capacity (supporting multi-team training slots with
+    capacity > 1).  When absent, the legacy threshold of 1 is used.
+    """
     diagnostics: list[dict[str, Any]] = []
 
     if solver_status == cp_model.INFEASIBLE:
@@ -493,6 +514,8 @@ def _diagnose_conflicts(
         })
         return diagnostics
 
+    _caps: dict[Any, int] = slot_capacities or {}
+
     # Post-solve safety check: venue double-booking.
     venue_bookings: dict[tuple[str, int, str], list[str]] = defaultdict(list)
     for slot in slots:
@@ -500,7 +523,8 @@ def _diagnose_conflicts(
         venue_bookings[key].append(slot["teamId"])
 
     for (venue_id, day_of_week, start_time), team_ids in venue_bookings.items():
-        if len(team_ids) > 1:
+        capacity = _caps.get((venue_id, day_of_week, start_time), 1)
+        if len(team_ids) > capacity:
             diagnostics.append({
                 "id": f"diag-conflict-venue-{venue_id}-{day_of_week}-{start_time}",
                 "type": "conflict",
