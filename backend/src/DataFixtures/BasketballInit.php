@@ -1129,8 +1129,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
         $manager->flush();
 
-        // 9l — Adultes - Début minimum 18h50 (HARD TIME, CLUB scope, targetTag ADULTE)
-        // ADULTE tag = teams with level REGIONAL/DEPARTEMENTAL/LOISIR_ADULTE (resolved by TeamTagService)
+        // 9l — Adultes - Début minimum 18h50 (HARD TIME, CLUB scope, targetTag SENIOR)
+        // SENIOR tag = teams with ageMin >= 19 (resolved by TeamTagService)
         $existingAdultTime = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
             'name' => 'Adultes - Début minimum 18h50',
@@ -1144,16 +1144,16 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setFamily(ConstraintFamily::TIME);
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('Adultes - Début minimum 18h50');
-            $c->setConfig(['minStartTime' => '18:50', 'targetTag' => 'ADULTE']);
+            $c->setConfig(['minStartTime' => '18:50', 'targetTag' => 'SENIOR']);
             $c->setIsActive(true);
             $manager->persist($c);
         }
 
-        // 9m — Jeunes - Début maximum 20h00 (HARD TIME, CLUB scope, targetTag JEUNE)
+        // 9m — Jeunes - Début maximum 20h15 (HARD TIME, CLUB scope, targetTag JEUNE)
         // JEUNE tag = U13/U15/U18 age range (ageMin <= 18, ageMax > 12, resolved by TeamTagService)
         $existingYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
-            'name' => 'Jeunes - Début maximum 20h00',
+            'name' => 'Jeunes - Début maximum 20h15',
         ]);
         if (!$existingYouthTime instanceof Constraint) {
             $c = new Constraint;
@@ -1163,8 +1163,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setScopeTargetId(null);
             $c->setFamily(ConstraintFamily::TIME);
             $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Jeunes - Début maximum 20h00');
-            $c->setConfig(['maxStartTime' => '20:00', 'targetTag' => 'JEUNE']);
+            $c->setName('Jeunes - Début maximum 20h15');
+            $c->setConfig(['maxStartTime' => '20:15', 'targetTag' => 'JEUNE']);
             $c->setIsActive(true);
             $manager->persist($c);
         }

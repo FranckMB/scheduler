@@ -177,7 +177,7 @@ final class DevScheduleReportWriter
             $summaryLines[] = '';
         }
 
-        // 5. VenueAvailability
+        // 5. Créneaux d'entraînement
         $availabilities = $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
         if ([] !== $availabilities) {
             $summaryLines[] = \sprintf('Disponibilités salles (%d) :', \count($availabilities));
