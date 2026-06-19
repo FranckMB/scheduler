@@ -155,8 +155,8 @@ final class ContractSchemaTest extends TestCase
         self::assertIsArray($payload['venues'][0]['availability']);
         self::assertSame([
             'dayOfWeek' => 1,
-            'startTime' => '08:00',
-            'endTime' => '22:00',
+            'startTime' => '16:00',
+            'endTime' => '22:30',
         ], $payload['venues'][0]['availability'][0]);
 
         self::assertArrayHasKey('sportCategoryId', $payload['teams'][0]);

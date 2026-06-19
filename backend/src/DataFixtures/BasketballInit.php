@@ -381,7 +381,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'SF2', 'sportCategory' => $seniorF, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 2, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'SM3', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'SM4', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
-            ['name' => 'Veterans', 'sportCategory' => $veteran, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
+            ['name' => 'Veterans', 'sportCategory' => $veteran, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U21M1', 'sportCategory' => $u21M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U21M2', 'sportCategory' => $u21M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'SF3', 'sportCategory' => $seniorF, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::F, 'minSessionMinutes' => 90],
@@ -405,25 +405,25 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'U9M1', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U9M2', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             // --- Loisir / Baby / Academie teams ---
-            ['name' => 'Baby 1',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Baby 2',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Micro Basket',          'sportCategory' => $u5,    'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Academie U9-U11',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Academie U13-U15',      'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Academie U18',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Mercredi Shark U9-U11', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir 1',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir 2',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir 3',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir Feminine',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 120],
-            ['name' => '3x3',                   'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE, 'minSessionMinutes' => 120],
+            ['name' => 'Baby 1',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Baby 2',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Micro Basket',          'sportCategory' => $u5,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Academie U9-U11',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Academie U13-U15',      'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Academie U18',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Mercredi Shark U9-U11', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Loisir 1',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 2',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 3',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir Feminine',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 120],
+            ['name' => '3x3',                   'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE, 'minSessionMinutes' => 120],
             // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
             // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
-            ['name' => 'CEC Groupe 1',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 1',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 2 = joint training for U11F2 + U9M1 players
-            ['name' => 'CEC Groupe 2',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 2',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 3 = joint training for U11F1 + U11M2 players
-            ['name' => 'CEC Groupe 3',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 3',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
         ];
 
         foreach ($newTeamsData as $teamData) {
