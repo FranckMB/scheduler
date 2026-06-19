@@ -19,7 +19,8 @@ final class TeamLevelTest extends TestCase
         self::assertSame('REGIONAL', TeamLevel::REGIONAL->value);
         self::assertSame('NATIONAL', TeamLevel::NATIONAL->value);
         self::assertSame('DEPARTEMENTAL', TeamLevel::DEPARTEMENTAL->value);
-        self::assertSame('LOISIR', TeamLevel::LOISIR->value);
+        self::assertSame('LOISIR_ADULTE', TeamLevel::LOISIR_ADULTE->value);
+        self::assertSame('LOISIR_JEUNE', TeamLevel::LOISIR_JEUNE->value);
         self::assertSame('HONNEUR', TeamLevel::HONNEUR->value);
         self::assertSame('PROMOTION', TeamLevel::PROMOTION->value);
         self::assertSame('PRE_REGION', TeamLevel::PRE_REGION->value);
@@ -28,7 +29,8 @@ final class TeamLevelTest extends TestCase
     public function testFromValidValues(): void
     {
         self::assertSame(TeamLevel::ELITE, TeamLevel::from('ELITE'));
-        self::assertSame(TeamLevel::LOISIR, TeamLevel::from('LOISIR'));
+        self::assertSame(TeamLevel::LOISIR_ADULTE, TeamLevel::from('LOISIR_ADULTE'));
+        self::assertSame(TeamLevel::LOISIR_JEUNE, TeamLevel::from('LOISIR_JEUNE'));
         self::assertSame(TeamLevel::PRE_REGION, TeamLevel::from('PRE_REGION'));
     }
 

@@ -118,7 +118,7 @@ Une contrainte `CLUB` avec `config.targetTag = "JEUNE"` s'applique uniquement au
 | Âge | `JEUNE`, `SENIOR`, `EMB` |
 | Catégorie jeunes | `U9`, `U11`, `U13`, `U15`, `U18`, `U21` |
 | Genre | `FEMININE`, `MASCULINE`, `MIXTE` |
-| Niveau | `ELITE`, `REGIONAL`, `NATIONAL`, `DEPARTEMENTAL`, `LOISIR`, `HONNEUR`, `PROMOTION`, `PRE_REGION` |
+| Niveau | `ELITE`, `REGIONAL`, `NATIONAL`, `DEPARTEMENTAL`, `LOISIR_ADULTE`, `LOISIR_JEUNE`, `HONNEUR`, `PROMOTION`, `PRE_REGION` |
 
 > Exemple : `targetTag: "U11"` cible toutes les équipes U11 du club (garçons et filles confondus). Pour cibler uniquement les U11 filles, on combinerait avec `targetTag: "FEMININE"` (deux contraintes distinctes, ou logique future d'intersection de tags).
 

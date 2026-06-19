@@ -84,7 +84,7 @@ final class TeamTagServiceTest extends TestCase
         $team->setSeasonId('season-1');
         $team->setSportCategoryId('cat-senior');
         $team->setGender(Gender::M);
-        $team->setLevel(TeamLevel::LOISIR);
+        $team->setLevel(TeamLevel::LOISIR_ADULTE);
 
         $sportCategory = new SportCategory;
         $sportCategory->setName('Senior');
