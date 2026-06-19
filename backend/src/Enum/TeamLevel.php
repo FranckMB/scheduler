@@ -10,7 +10,8 @@ enum TeamLevel: string
     case REGIONAL = 'REGIONAL';
     case NATIONAL = 'NATIONAL';
     case DEPARTEMENTAL = 'DEPARTEMENTAL';
-    case LOISIR = 'LOISIR';
+    case LOISIR_ADULTE = 'LOISIR_ADULTE';
+    case LOISIR_JEUNE = 'LOISIR_JEUNE';
     case HONNEUR = 'HONNEUR';
     case PROMOTION = 'PROMOTION';
     case PRE_REGION = 'PRE_REGION';

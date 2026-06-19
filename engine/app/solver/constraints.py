@@ -750,6 +750,7 @@ _ADULT_LEVELS: frozenset[str] = frozenset(
         "HONNEUR",
         "PROMOTION",
         "PRE_REGION",
+        "LOISIR_ADULTE",
     }
 )
 _WEEKDAY_NUMBERS: frozenset[str] = frozenset({"1", "2", "3", "4", "5"})
@@ -840,8 +841,9 @@ def add_adult_weekday_time_constraints(
     *,
     teams: Iterable[Any] = (),
 ) -> int:
-    """Implicit rule 12: adult competitive teams (level != LOISIR, level != null)
-    cannot have sessions on weekdays (Mon–Fri) starting before 19:00.
+    """Implicit rule 12: adult teams (REGIONAL, DEPARTEMENTAL, NATIONAL, ELITE,
+    HONNEUR, PROMOTION, PRE_REGION, LOISIR_ADULTE) cannot have sessions on weekdays
+    starting before 19:00.
     """
 
     adult_team_ids: set[str] = set()
@@ -891,9 +893,16 @@ def add_min_session_duration_constraints(
     of consecutive 15-min slots.
 
     Only teams with an explicit minSessionMinutes are constrained (no global
-    default). Uses a ``use_here`` indicator variable per (team, venue, day):
-    - ``sum(slots) <= M * use_here``  — forces use_here=1 when any slot active
-    - ``sum(slots) >= N * use_here``  — if training here, at least N slots used
+    default). Uses a ``use_here`` indicator variable per (team, venue, day)
+    plus a no-gap triple constraint to enforce strict contiguity:
+
+    1. ``sum(slots) <= M * use_here``  — forces use_here=1 when any slot active
+    2. ``sum(slots) >= N * use_here``  — if training here, at least N slots used
+    3. No-gap triple constraint: for each consecutive triple (t, t+1, t+2),
+       ``x[t+1] + x[t] >= x[t+2]``. This prevents holes in the active block:
+       if a later slot (t+2) is active and an earlier slot (t) is inactive,
+       the middle slot (t+1) must be active. Combined with ``sum >= N * use_here``,
+       this forces exactly one contiguous run of at least N slots.
 
     Unlike the previous x[i] <= x[i+1] suffix chain (which forced sessions to
     run to the end of the window, blocking all other teams via room_at_most_one),
@@ -937,7 +946,9 @@ def add_min_session_duration_constraints(
         if n is None or n <= 1:
             continue
 
-        slot_vars = [v for _t, v in slot_list]
+        # Sort slots by time to ensure correct triple ordering
+        sorted_slots = sorted(slot_list, key=lambda sv: sv[0])
+        slot_vars = [v for _t, v in sorted_slots]
         m = len(slot_vars)
         if m == 0:
             continue
@@ -961,6 +972,18 @@ def add_min_session_duration_constraints(
         slot_sum = sum(cast(Any, v) for v in slot_vars)
         cast(Any, model).Add(slot_sum <= m * use_here)
         cast(Any, model).Add(slot_sum >= n * use_here)
+
+        # No-gap triple constraint: for each consecutive triple (t, t+1, t+2),
+        # x[t+1] + x[t] >= x[t+2]. This prevents any hole in the active block.
+        # If slot t+2 is active and slot t is inactive, then slot t+1 must be
+        # active — closing the gap. Combined with sum >= n * use_here, this
+        # forces exactly one contiguous run of at least n slots.
+        for i in range(m - 2):
+            cast(Any, model).Add(
+                cast(Any, slot_vars[i + 1]) + cast(Any, slot_vars[i])
+                >= cast(Any, slot_vars[i + 2])
+            )
+
         added += 1
 
     return added
