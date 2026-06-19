@@ -998,12 +998,10 @@ def add_no_late_start_constraints(
     A slot at 21:00+ is forbidden as a session *start*, but is allowed as a
     *continuation* of a session that started at or before _LAST_START_TIME.
 
-    Implementation: for each (team, venue, day) group:
-    - early_vars: slots with start_time < _LAST_START_TIME  (can start here)
-    - late_vars:  slots with start_time >= _LAST_START_TIME (cannot start here)
-    - If no early_vars exist → force all late_vars to 0 (no valid start possible)
-    - If early_vars exist → each late_var <= sum(early_vars)
-      (late slot active only if at least one early slot is also active)
+    Implementation: for each (team, venue, day) group, sort slots by time.
+    For each late slot (>= _LAST_START_TIME), it can only be active if the
+    immediately preceding slot is also active. This creates an adjacency chain
+    that prevents a late slot from starting a new session after a gap.
 
     Applies to ALL teams. HARD-locked slots are safe by design (not in model.x).
     """
@@ -1025,22 +1023,24 @@ def add_no_late_start_constraints(
 
     added = 0
     for _key, slot_list in groups.items():
-        early_vars = [v for t, v in slot_list if t < _LAST_START_TIME]
-        late_vars = [v for t, v in slot_list if t >= _LAST_START_TIME]
+        # Sort slots by time for adjacency checking
+        sorted_slots = sorted(slot_list, key=lambda sv: sv[0])
 
-        if not late_vars:
-            continue
+        for i, (slot_time, var) in enumerate(sorted_slots):
+            if slot_time < _LAST_START_TIME:
+                continue
 
-        if not early_vars:
-            # No valid start time in this group — forbid all late slots
-            for v in late_vars:
-                cast(Any, model).Add(cast(Any, v) == 0)
+            # Late slot (>= _LAST_START_TIME): can only be active if the
+            # immediately preceding slot is also active (continuation, not start).
+            # This creates a chain: each late slot depends on its predecessor,
+            # preventing a late slot from starting a new session after a gap.
+            if i == 0:
+                # No preceding slot — forbid this late slot entirely
+                cast(Any, model).Add(cast(Any, var) == 0)
                 added += 1
-        else:
-            # Late slot can only be active if at least one early slot is active
-            early_sum = sum(cast(Any, v) for v in early_vars)
-            for v in late_vars:
-                cast(Any, model).Add(cast(Any, v) <= early_sum)
+            else:
+                prev_var = sorted_slots[i - 1][1]
+                cast(Any, model).Add(cast(Any, var) <= cast(Any, prev_var))
                 added += 1
 
     return added

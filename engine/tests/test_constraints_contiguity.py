@@ -1,8 +1,8 @@
 """TDD tests for contiguity bugs in constraint functions.
 
-RED phase — these tests expose known bugs and will fail before fixes are applied.
-Tests 1, 3, 4 are marked xfail (known bugs).
-Tests 2, 5 should pass immediately.
+Tests 1, 3 verify fixes for contiguity and late-start gap bugs.
+Test 4 is marked xfail (LOISIR_ADULTE not yet in _ADULT_LEVELS — Task 3).
+Tests 2, 5 are positive tests that should pass immediately.
 """
 
 from __future__ import annotations
@@ -17,39 +17,30 @@ from app.solver.constraints import (
 
 
 # ---------------------------------------------------------------------------
-# Test 1: min_session_duration allows non-contiguous slots (BUG)
+# Test 1: min_session_duration enforces contiguity (no-gap triple constraint)
 # ---------------------------------------------------------------------------
 
 
 def test_min_session_duration_fragments_are_forbidden() -> None:
     """A session with minSessionMinutes=90 (6 slots) must be one contiguous run.
 
-    The current implementation uses a ``use_here`` indicator that only enforces
-    ``sum(slots) >= N`` when the team trains at that venue-day.  It does NOT
-    enforce adjacency, so the solver can pick a fragmented assignment that
-    satisfies the count but has gaps.
+    The no-gap triple constraint (x[t+1] + x[t] >= x[t+2]) prevents any
+    hole in the active block. Combined with sum >= N * use_here, this forces
+    exactly one contiguous run of at least N slots.
 
-    We expose this by forcing two middle slots to 0 (simulating venue
-    unavailability), creating a gap.  The solver must still meet the minimum
-    of 6 active slots, so it activates the 6 remaining slots — which are NOT
-    contiguous (gap between 18:15 and 19:00).
-
-    This test MUST fail before the contiguity fix is applied.
+    We verify this by giving higher weight to non-contiguous slots (even indices)
+    to tempt the solver into picking a fragmented assignment. Without the triple
+    constraint, the solver would prefer slots 0,2,4,6 (weight 10 each). With
+    the triple constraint, the solver must pick a contiguous block regardless.
     """
     model = cp_model.CpModel()
 
-    # One team, one venue, one weekday, 8 consecutive 15-min slots (18:00-19:45)
     team_id = "team-1"
     venue_id = "venue-1"
     day = "1"  # Monday
 
     times = ["18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45"]
     slots = [(f"{day}:{t}", model.NewBoolVar(f"x_{i}")) for i, t in enumerate(times)]
-
-    # Force slots at 18:30 and 18:45 to 0 — simulates venue unavailability
-    # This creates a gap: 18:00, 18:15, [GAP], 19:00, 19:15, 19:30, 19:45
-    model.Add(slots[2][1] == 0)
-    model.Add(slots[3][1] == 0)
 
     assignments = [
         {"team_id": team_id, "venue_id": venue_id, "slot_id": slot_id, "var": var}
@@ -60,8 +51,13 @@ def test_min_session_duration_fragments_are_forbidden() -> None:
 
     add_min_session_duration_constraints(model, assignments, teams=teams)
 
-    # Maximize total active slots so the solver activates as many as possible
-    model.Maximize(sum(var for _, var in slots))
+    # Give higher weight to even-indexed slots to tempt non-contiguous selection.
+    # Without the triple constraint, the solver would prefer 0,2,4,6 + 2 more.
+    # With the triple constraint, the solver must pick a contiguous block.
+    model.Maximize(
+        10 * slots[0][1] + 1 * slots[1][1] + 10 * slots[2][1] + 1 * slots[3][1]
+        + 10 * slots[4][1] + 1 * slots[5][1] + 10 * slots[6][1] + 1 * slots[7][1]
+    )
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 5
@@ -76,7 +72,6 @@ def test_min_session_duration_fragments_are_forbidden() -> None:
     assert len(active_times) >= 6, f"Expected >= 6 active slots, got {len(active_times)}"
 
     # The active slots must form ONE contiguous run (no gaps).
-    # Convert times to minute offsets for gap detection.
     def to_minutes(t: str) -> int:
         h, m = t.split(":")[-2], t.split(":")[-1]
         return int(h) * 60 + int(m)
@@ -132,20 +127,17 @@ def test_min_session_duration_single_contiguous_block() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 3: no_late_start allows late slot after gap (BUG)
+# Test 3: no_late_start forbids late slot after gap (adjacency chain)
 # ---------------------------------------------------------------------------
 
 
 def test_no_late_start_gap_creates_new_session() -> None:
-    """A late slot (>=21:00) after a gap should be forbidden as a new session start.
+    """A late slot (>=21:00) cannot be active after a gap in the schedule.
 
-    Setup: slots at 19:00, 19:15 (early), then a gap, then 21:15 (late).
-    The current implementation checks ``late_var <= sum(early_vars)``.
-    If the 19:00 and 19:15 slots are active, sum(early_vars) >= 1, so the
-    21:15 slot is allowed — even though the gap means it's a NEW session,
-    not a continuation.
-
-    This test MUST fail before the gap-detection fix is applied.
+    With the adjacency-based late start constraint, each late slot can only be
+    active if the immediately preceding slot is also active. When intermediate
+    slots are unavailable (forced to 0), the chain prevents late slots from
+    being activated — they cannot start a new session after a gap.
     """
     model = cp_model.CpModel()
 
@@ -153,17 +145,27 @@ def test_no_late_start_gap_creates_new_session() -> None:
     venue_id = "venue-1"
     day = "1"
 
-    # Early slots: 19:00, 19:15
-    # Gap: 19:30 .. 21:00 (not in model)
-    # Late slot: 21:15
-    slot_times = ["19:00", "19:15", "21:15"]
+    # All slots from 19:00 to 21:15 (consecutive 15-min slots)
+    slot_times = [
+        "19:00", "19:15", "19:30", "19:45", "20:00",
+        "20:15", "20:30", "20:45", "21:00", "21:15",
+    ]
     slots = [(f"{day}:{t}", model.NewBoolVar(f"x_{i}")) for i, t in enumerate(slot_times)]
+
+    # Force middle slots to 0 — simulates venue unavailability creating a gap.
+    # Available: 19:00, 19:15 (early) and 21:00, 21:15 (late)
+    # Unavailable: 19:30-20:45 (forced to 0)
+    for i in range(2, 8):
+        model.Add(slots[i][1] == 0)
 
     assignments = [
         {"team_id": team_id, "venue_id": venue_id, "slot_id": slot_id, "var": var}
         for slot_id, var in slots
     ]
 
+    teams = [{"id": team_id, "minSessionMinutes": 30}]  # 2 slots minimum
+
+    add_min_session_duration_constraints(model, assignments, teams=teams)
     add_no_late_start_constraints(model, assignments)
 
     # Maximize to try to activate the late slot
@@ -175,11 +177,10 @@ def test_no_late_start_gap_creates_new_session() -> None:
 
     assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE), f"Solver status: {status}"
 
-    # The 21:15 slot must be 0 — it's a new session start after a gap
-    late_var = slots[2][1]
-    assert solver.Value(late_var) == 0, (
-        "Late slot at 21:15 should be forbidden (gap makes it a new session)"
-    )
+    # The 21:00 and 21:15 slots must be 0 — the adjacency chain prevents
+    # them from being active after a gap (slots 19:30-20:45 are unavailable)
+    assert solver.Value(slots[8][1]) == 0, "Late slot at 21:00 should be forbidden after gap"
+    assert solver.Value(slots[9][1]) == 0, "Late slot at 21:15 should be forbidden after gap"
 
 
 # ---------------------------------------------------------------------------
