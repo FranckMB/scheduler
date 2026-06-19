@@ -891,10 +891,15 @@ def add_min_session_duration_constraints(
     of consecutive 15-min slots.
 
     Only teams with an explicit minSessionMinutes are constrained (no global
-    default). Uses adjacency constraints x[i] <= x[i+1] (i.e. x[i] - x[i+1]
-    <= 0) to force continuous blocks extending to the end of the window. When
-    the available window M < N (shorter than requested), adjacency still
-    applies but no hard infeasibility is introduced — graceful degradation.
+    default). Uses a ``use_here`` indicator variable per (team, venue, day):
+    - ``sum(slots) <= M * use_here``  — forces use_here=1 when any slot active
+    - ``sum(slots) >= N * use_here``  — if training here, at least N slots used
+
+    Unlike the previous x[i] <= x[i+1] suffix chain (which forced sessions to
+    run to the end of the window, blocking all other teams via room_at_most_one),
+    this formulation allows multiple teams to share a venue-day window.
+    When M < N (window shorter than requested): graceful degradation — no
+    constraint added for that window.
     """
 
     import math
@@ -932,17 +937,31 @@ def add_min_session_duration_constraints(
         if n is None or n <= 1:
             continue
 
-        slot_list.sort(key=lambda x: x[0])
+        slot_vars = [v for _t, v in slot_list]
+        m = len(slot_vars)
+        if m == 0:
+            continue
 
-        for i in range(len(slot_list) - 1):
-            t_cur, v_cur = slot_list[i]
-            t_nxt, v_nxt = slot_list[i + 1]
-            h_cur, m_cur = int(t_cur[:2]), int(t_cur[3:5])
-            h_nxt, m_nxt = int(t_nxt[:2]), int(t_nxt[3:5])
-            if (h_nxt * 60 + m_nxt) - (h_cur * 60 + m_cur) != _SLOT_MINUTES:
-                continue  # gap — no adjacency constraint between non-consecutive slots
-            cast(Any, model).Add(cast(Any, v_cur) - cast(Any, v_nxt) <= 0)
-            added += 1
+        if m < n:
+            # Window shorter than minimum duration — graceful degradation.
+            # The diagnostic system will flag sessions below effective minimum.
+            continue
+
+        # use_here is 1 iff the team trains at this venue on this day.
+        # sum(slots) <= m * use_here  → sum > 0 implies use_here = 1.
+        # sum(slots) >= n * use_here  → use_here = 1 implies sum >= n slots.
+        #
+        # Unlike the previous x[i] <= x[i+1] suffix chain (which extended
+        # sessions to end-of-window and blocked all other teams via
+        # room_at_most_one), this allows multiple teams to share a venue-day
+        # window at different time slots.
+        use_here = cast(Any, model).NewBoolVar(
+            f"min_dur_{team_id}_{_venue_key}_{_day}"
+        )
+        slot_sum = sum(cast(Any, v) for v in slot_vars)
+        cast(Any, model).Add(slot_sum <= m * use_here)
+        cast(Any, model).Add(slot_sum >= n * use_here)
+        added += 1
 
     return added
 

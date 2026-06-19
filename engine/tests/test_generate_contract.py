@@ -360,3 +360,59 @@ class TestGenerateContract:
         assert len(result.slots) >= 1, (
             f"Expected at least 1 slot (the hard-locked one), got {len(result.slots)}"
         )
+
+    @pytest.mark.timeout(30)
+    def test_build_schedule_two_teams_share_venue_day_does_not_fail(self) -> None:
+        """Two teams with minSessionMinutes at the same venue on the same day must
+        both be placeable.
+
+        Regression guard for the suffix-chain bug: x[i] <= x[i+1] forced sessions
+        to run to the end of the venue window, blocking all other teams via
+        room_at_most_one. With the use_here fix, multiple teams can share a
+        venue-day window at different time slots.
+        """
+        input_data = ScheduleInputSchema.model_validate(
+            {
+                "clubId": "club-share-window",
+                "seasonId": "season-share-window",
+                "teams": [
+                    {
+                        "id": "team-a",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 3,
+                        "name": "Team A",
+                        "sessionsPerWeek": 1,
+                        "minSessionMinutes": 90,
+                        "isActive": True,
+                    },
+                    {
+                        "id": "team-b",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 3,
+                        "name": "Team B",
+                        "sessionsPerWeek": 1,
+                        "minSessionMinutes": 90,
+                        "isActive": True,
+                    },
+                ],
+                "venues": [
+                    {
+                        "id": "venue-1",
+                        "name": "Court A",
+                        "isActive": True,
+                        "availability": [
+                            # 4 hours = 16 x 15-min slots — enough for 2 x 90-min sessions
+                            {"dayOfWeek": 1, "startTime": "18:00", "endTime": "22:00"},
+                        ],
+                    }
+                ],
+                "slotTemplates": [],
+            }
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        assert result.status != "failed", (
+            f"Solver returned 'failed' for 2 teams sharing a 4h venue window; "
+            f"status={result.status}, unplaced={result.unplaced}"
+        )
