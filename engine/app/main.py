@@ -91,27 +91,13 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         if locked_team_id:
             locked_slots_by_team[locked_team_id] = locked_slots_by_team.get(locked_team_id, 0) + 1
 
-    _priority_tiers = parsed.get("priority_tiers", {})
-    adjusted_min_by_team: dict[str, int] = {}
-    for team in data.get("teams", []):
-        tid = str(team.get("id") or "")
-        if not tid:
-            continue
-        spw_raw = team.get("sessionsPerWeek") or team.get("sessions_per_week")
-        if spw_raw is None:
-            continue
-        spw = int(spw_raw)
-        eff_min = spw
-        tier_id_raw = team.get("priorityTierId")
-        if tier_id_raw is not None and _priority_tiers:
-            try:
-                tier_min = _priority_tiers.get(int(tier_id_raw))
-                if tier_min is not None:
-                    eff_min = min(spw, tier_min)
-            except (TypeError, ValueError):
-                pass
-        locked = locked_slots_by_team.get(tid, 0)
-        adjusted_min_by_team[tid] = max(0, eff_min - locked)
+    # Hard min_sessions forces UNKNOWN when venue capacity < total sessions needed.
+    # Soft-only via objective bonus (session_count:20) + WARNING diagnostics.
+    adjusted_min_by_team: dict[str, int] = {
+        str(team.get("id") or ""): 0
+        for team in data.get("teams", [])
+        if team.get("id")
+    }
 
     available_assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
