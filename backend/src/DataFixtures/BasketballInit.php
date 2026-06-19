@@ -18,7 +18,7 @@ use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
-use App\Entity\VenueAvailability;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -241,70 +241,135 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         // ============================================================
-        // SECTION — VENUE AVAILABILITIES (per-venue specific hours)
+        // SECTION — VENUE TRAINING SLOTS
         // ============================================================
-        // Delete all existing VenueAvailability for this club before creating per-venue ones
-        // This ensures no stale generic defaults remain after a partial re-run
-        $existingVAs = $manager->getRepository(VenueAvailability::class)->findBy(['clubId' => $club->getId()]);
-        foreach ($existingVAs as $va) {
-            $manager->remove($va);
+        // Purge all existing VenueTrainingSlot for this club/season
+        $existingVenueSlots = $manager->getRepository(VenueTrainingSlot::class)->findBy([
+            'clubId' => $club->getId(),
+            'seasonId' => $season->getId(),
+        ]);
+        foreach ($existingVenueSlots as $existingVenueSlot) {
+            $manager->remove($existingVenueSlot);
         }
         $manager->flush();
 
-        // Per-venue availabilities — dayOfWeek: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-        // IMPORTANT: Armand Wednesday has TWO separate slots (morning + afternoon)
-        // so the solver cannot schedule anything between 12:00 and 16:00.
-        $perVenueAvailabilities = [
-            // Debarros
-            ['venue' => 'vDebarros', 'day' => 1, 'start' => '19:00', 'end' => '20:30'],
-            ['venue' => 'vDebarros', 'day' => 2, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vDebarros', 'day' => 3, 'start' => '16:00', 'end' => '22:30'],
-            ['venue' => 'vDebarros', 'day' => 4, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vDebarros', 'day' => 5, 'start' => '17:30', 'end' => '22:30'],
-            // De Barros Annexe (preferred for departemental/loisir)
-            ['venue' => 'vDebarrosAnnexe', 'day' => 2, 'start' => '19:00', 'end' => '20:30'],
-            ['venue' => 'vDebarrosAnnexe', 'day' => 3, 'start' => '19:00', 'end' => '22:30'],
-            ['venue' => 'vDebarrosAnnexe', 'day' => 4, 'start' => '20:30', 'end' => '22:30'],
-            ['venue' => 'vDebarrosAnnexe', 'day' => 5, 'start' => '19:00', 'end' => '20:30'],
-            // Camus (reserved exclusively for loisir teams)
-            ['venue' => 'vCamus', 'day' => 2, 'start' => '20:15', 'end' => '22:00'],
-            ['venue' => 'vCamus', 'day' => 4, 'start' => '20:15', 'end' => '22:00'],
-            ['venue' => 'vCamus', 'day' => 5, 'start' => '20:15', 'end' => '22:00'],
-            // Tonkin
-            ['venue' => 'vTonkin', 'day' => 1, 'start' => '19:00', 'end' => '20:15'],
-            ['venue' => 'vTonkin', 'day' => 3, 'start' => '16:00', 'end' => '22:30'],
-            // Jean Vilar (no female teams allowed)
-            ['venue' => 'vJeanVilar', 'day' => 2, 'start' => '18:00', 'end' => '22:30'],
-            ['venue' => 'vJeanVilar', 'day' => 4, 'start' => '18:00', 'end' => '22:30'],
-            // Matéo (main training venue, Saturday morning for Baby/Micro)
-            ['venue' => 'vMateo', 'day' => 1, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vMateo', 'day' => 2, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vMateo', 'day' => 3, 'start' => '16:00', 'end' => '22:30'],
-            ['venue' => 'vMateo', 'day' => 4, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vMateo', 'day' => 5, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vMateo', 'day' => 6, 'start' => '09:00', 'end' => '11:45'],
-            // Gymnase Armand — Wednesday has TWO slots to block 12h-16h gap
-            ['venue' => 'vArmand', 'day' => 1, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vArmand', 'day' => 2, 'start' => '17:30', 'end' => '22:30'],
-            ['venue' => 'vArmand', 'day' => 3, 'start' => '09:30', 'end' => '12:00'],  // Wednesday morning
-            ['venue' => 'vArmand', 'day' => 3, 'start' => '16:00', 'end' => '22:30'],  // Wednesday afternoon
-            ['venue' => 'vArmand', 'day' => 4, 'start' => '17:30', 'end' => '19:00'],
-            ['venue' => 'vArmand', 'day' => 5, 'start' => '17:30', 'end' => '22:30'],
-            // ADN (Wednesday only — CEC + 3x3)
-            ['venue' => 'vAdn', 'day' => 3, 'start' => '17:30', 'end' => '22:30'],
-            // JDR (Saturday only — Academie sessions)
-            ['venue' => 'vJdr', 'day' => 6, 'start' => '09:00', 'end' => '12:45'],
+        // [venue_var, day, startTime, durationMinutes, capacity]
+        // capacity=2 on slots shared by youth pairs (U13M1/M2, U9F1/F2, U9M1/M2)
+        /** @var list<array{string, int, string, int, int}> $trainingSlots */
+        $trainingSlots = [
+            // Matéo — Mon
+            ['vMateo', 1, '17:30', 90,  2],
+            ['vMateo', 1, '19:00', 90,  2],
+            ['vMateo', 1, '20:30', 120, 1],
+            // Matéo — Tue
+            ['vMateo', 2, '17:30', 90,  2],
+            ['vMateo', 2, '19:00', 90,  2],
+            ['vMateo', 2, '20:30', 120, 1],
+            // Matéo — Wed
+            ['vMateo', 3, '16:00', 90,  1],
+            ['vMateo', 3, '17:30', 90,  1],
+            ['vMateo', 3, '19:00', 90,  1],
+            ['vMateo', 3, '20:30', 120, 1],
+            // Matéo — Thu
+            ['vMateo', 4, '17:30', 90,  2],
+            ['vMateo', 4, '19:00', 90,  2],
+            ['vMateo', 4, '20:30', 120, 1],
+            // Matéo — Fri
+            ['vMateo', 5, '17:30', 90,  2],
+            ['vMateo', 5, '19:00', 90,  2],
+            ['vMateo', 5, '20:30', 120, 1],
+            // Matéo — Sat (Baby/Micro)
+            ['vMateo', 6, '09:00', 45,  1],
+            ['vMateo', 6, '09:45', 60,  1],
+            ['vMateo', 6, '10:45', 60,  1],
+            // Camus — Tue/Thu/Fri (Loisir)
+            ['vCamus', 2, '20:00', 150, 1],
+            ['vCamus', 4, '20:00', 150, 1],
+            ['vCamus', 5, '20:00', 150, 1],
+            // JDR — Tue
+            ['vJdr', 2, '17:30', 90,  1],
+            ['vJdr', 2, '19:00', 90,  1],
+            ['vJdr', 2, '20:30', 120, 1],
+            // JDR — Thu
+            ['vJdr', 4, '17:30', 90,  1],
+            ['vJdr', 4, '19:00', 90,  1],
+            ['vJdr', 4, '20:30', 120, 1],
+            // JDR — Sat (Académie)
+            ['vJdr', 6, '09:00', 75,  1],
+            ['vJdr', 6, '10:15', 75,  1],
+            ['vJdr', 6, '11:30', 75,  1],
+            // Armand — Mon
+            ['vArmand', 1, '17:30', 90,  2],
+            ['vArmand', 1, '19:00', 90,  2],
+            ['vArmand', 1, '20:30', 120, 1],
+            // Armand — Tue
+            ['vArmand', 2, '17:30', 90,  2],
+            ['vArmand', 2, '19:00', 90,  2],
+            // Armand — Wed
+            ['vArmand', 3, '16:00', 90,  1],
+            ['vArmand', 3, '17:30', 90,  1],
+            ['vArmand', 3, '19:00', 90,  1],
+            ['vArmand', 3, '20:30', 120, 1],
+            // Armand — Thu
+            ['vArmand', 4, '17:30', 90,  1],
+            // Armand — Fri
+            ['vArmand', 5, '17:30', 90,  2],
+            ['vArmand', 5, '19:00', 90,  2],
+            ['vArmand', 5, '20:30', 120, 1],
+            // Jean Vilar — Tue/Thu
+            ['vJeanVilar', 2, '18:45', 90,  1],
+            ['vJeanVilar', 2, '20:15', 135, 1],
+            ['vJeanVilar', 4, '18:45', 90,  1],
+            ['vJeanVilar', 4, '20:15', 135, 1],
+            // Tonkin — Mon
+            ['vTonkin', 1, '19:00', 90,  1],
+            // Tonkin — Wed
+            ['vTonkin', 3, '16:00', 90,  1],
+            ['vTonkin', 3, '17:30', 90,  1],
+            ['vTonkin', 3, '19:00', 90,  1],
+            ['vTonkin', 3, '20:30', 120, 1],
+            // Debarros — Mon
+            ['vDebarros', 1, '17:30', 90,  2],
+            ['vDebarros', 1, '19:00', 90,  2],
+            // Debarros — Tue
+            ['vDebarros', 2, '17:30', 90,  2],
+            ['vDebarros', 2, '19:00', 90,  2],
+            ['vDebarros', 2, '20:30', 120, 1],
+            // Debarros — Thu
+            ['vDebarros', 4, '17:30', 90,  2],
+            ['vDebarros', 4, '19:00', 90,  2],
+            ['vDebarros', 4, '20:30', 120, 1],
+            // Debarros — Fri
+            ['vDebarros', 5, '17:30', 90,  2],
+            ['vDebarros', 5, '19:00', 90,  2],
+            ['vDebarros', 5, '20:30', 120, 1],
+            // Annexe (vDebarrosAnnexe) — Mon
+            ['vDebarrosAnnexe', 1, '20:30', 120, 1],
+            // Annexe — Tue
+            ['vDebarrosAnnexe', 2, '17:30', 90,  1],
+            ['vDebarrosAnnexe', 2, '19:00', 90,  1],
+            // Annexe — Wed
+            ['vDebarrosAnnexe', 3, '17:30', 90,  1],
+            ['vDebarrosAnnexe', 3, '19:00', 90,  1],
+            ['vDebarrosAnnexe', 3, '20:30', 120, 1],
+            // Annexe — Fri
+            ['vDebarrosAnnexe', 5, '19:00', 90,  1],
+            // ADN — Wed
+            ['vAdn', 3, '17:30', 90,  1],
+            ['vAdn', 3, '19:00', 90,  1],
+            ['vAdn', 3, '20:30', 120, 1],
         ];
 
-        foreach ($perVenueAvailabilities as $avail) {
-            $va = new VenueAvailability;
-            $va->setClubId($club->getId());
-            $va->setSeasonId($season->getId());
-            $va->setVenueId($venues[$avail['venue']]->getId());
-            $va->setDayOfWeek($avail['day']);
-            $va->setStartTime(new DateTimeImmutable($avail['start']));
-            $va->setEndTime(new DateTimeImmutable($avail['end']));
-            $manager->persist($va);
+        foreach ($trainingSlots as [$venueVar, $day, $startTime, $duration, $capacity]) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($club->getId());
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($venues[$venueVar]->getId());
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable($startTime));
+            $slot->setDurationMinutes($duration);
+            $slot->setCapacity($capacity);
+            $manager->persist($slot);
         }
         $manager->flush();
 
@@ -982,6 +1047,55 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setIsActive(true);
             $manager->persist($c);
         }
+
+        // Veterans: Vendredi uniquement, interdit sur Camus/JDR/Jean Vilar/Tonkin/ADN
+        $veteransTeam = $teams['Veterans'];
+        $forbiddenVenueIds = [
+            $venues['vCamus']->getId(),
+            $venues['vJdr']->getId(),
+            $venues['vJeanVilar']->getId(),
+            $venues['vTonkin']->getId(),
+            $venues['vAdn']->getId(),
+        ];
+        foreach ($forbiddenVenueIds as $forbiddenVenueId) {
+            $constraintName = 'Veterans - Interdit ' . $forbiddenVenueId;
+            $existingVet = $manager->getRepository(Constraint::class)->findOneBy([
+                'clubId' => $club->getId(),
+                'name' => $constraintName,
+            ]);
+            if (!$existingVet instanceof Constraint) {
+                $c = new Constraint;
+                $c->setClubId($club->getId());
+                $c->setSeasonId($season->getId());
+                $c->setScope(ConstraintScope::TEAM);
+                $c->setScopeTargetId($veteransTeam->getId());
+                $c->setFamily(ConstraintFamily::FACILITY);
+                $c->setRuleType(ConstraintRuleType::HARD);
+                $c->setName($constraintName);
+                $c->setConfig(['forbiddenVenueId' => $forbiddenVenueId]);
+                $c->setIsActive(true);
+                $manager->persist($c);
+            }
+        }
+        // Veterans: Vendredi uniquement
+        $existingVetDay = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'Veterans - Vendredi uniquement',
+        ]);
+        if (!$existingVetDay instanceof Constraint) {
+            $c = new Constraint;
+            $c->setClubId($club->getId());
+            $c->setSeasonId($season->getId());
+            $c->setScope(ConstraintScope::TEAM);
+            $c->setScopeTargetId($veteransTeam->getId());
+            $c->setFamily(ConstraintFamily::DAY);
+            $c->setRuleType(ConstraintRuleType::HARD);
+            $c->setName('Veterans - Vendredi uniquement');
+            $c->setConfig(['preferredDays' => [5]]);
+            $c->setIsActive(true);
+            $manager->persist($c);
+        }
+        $manager->flush();
 
         // ============================================================
         // SECTION 10 — ADDITIONAL SLOT TEMPLATES

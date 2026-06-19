@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
-use App\Repository\VenueAvailabilityRepository;
+use App\Repository\VenueTrainingSlotRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity(repositoryClass: VenueAvailabilityRepository::class)]
-#[ORM\Table(name: 'venue_availability')]
-#[ORM\Index(name: 'idx_venue_availability_club_venue', columns: ['club_id', 'venue_id'])]
+#[ORM\Entity(repositoryClass: VenueTrainingSlotRepository::class)]
+#[ORM\Table(name: 'venue_training_slot')]
+#[ORM\Index(name: 'idx_venue_training_slot_club_venue', columns: ['club_id', 'venue_id'])]
 #[ORM\HasLifecycleCallbacks]
-class VenueAvailability
+class VenueTrainingSlot
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]
@@ -43,8 +43,11 @@ class VenueAvailability
     #[ORM\Column(type: 'time_immutable')]
     private DateTimeImmutable $startTime;
 
-    #[ORM\Column(type: 'time_immutable')]
-    private DateTimeImmutable $endTime;
+    #[ORM\Column(type: 'integer')]
+    private int $durationMinutes;
+
+    #[ORM\Column(type: 'integer', options: ['default' => 1])]
+    private int $capacity = 1;
 
     public function __construct()
     {
@@ -161,14 +164,26 @@ class VenueAvailability
         return $this;
     }
 
-    public function getEndTime(): DateTimeImmutable
+    public function getDurationMinutes(): int
     {
-        return $this->endTime;
+        return $this->durationMinutes;
     }
 
-    public function setEndTime(DateTimeImmutable $endTime): self
+    public function setDurationMinutes(int $durationMinutes): self
     {
-        $this->endTime = $endTime;
+        $this->durationMinutes = $durationMinutes;
+
+        return $this;
+    }
+
+    public function getCapacity(): int
+    {
+        return $this->capacity;
+    }
+
+    public function setCapacity(int $capacity): self
+    {
+        $this->capacity = $capacity;
 
         return $this;
     }

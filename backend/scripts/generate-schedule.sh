@@ -7,7 +7,7 @@ TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3ODE1NjI0MDMsImV4cCI6MTgx
 SCHEDULE_ID=""
 CLUB_ID_ARG=""
 POLL_INTERVAL=5
-TIMEOUT_SECONDS=300
+TIMEOUT_SECONDS=650
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -98,69 +98,6 @@ if value in (None, ""):
 
 print(value)
 '
-}
-
-extract_items() {
-  python3 -c '
-import json
-import sys
-
-data = json.load(sys.stdin)
-if isinstance(data, list):
-    items = data
-elif isinstance(data, dict):
-    items = data.get("hydra:member") or data.get("member") or data.get("items") or data.get("data") or []
-else:
-    items = []
-
-if not isinstance(items, list):
-    items = []
-
-for item in items:
-    if isinstance(item, (dict, list)):
-        print(json.dumps(item, ensure_ascii=False))
-'
-}
-
-day_label() {
-  case "$1" in
-    0|7) printf 'Dimanche' ;;
-    1) printf 'Lundi' ;;
-    2) printf 'Mardi' ;;
-    3) printf 'Mercredi' ;;
-    4) printf 'Jeudi' ;;
-    5) printf 'Vendredi' ;;
-    6) printf 'Samedi' ;;
-    *) printf 'J%s' "$1" ;;
-  esac
-}
-
-print_slots() {
-  local slots_json="$1"
-  local line_count=0
-  local item
-
-  printf '%bSlots créés%b\n' "$BLUE" "$NC"
-  printf '%-24s %-10s %-8s %-10s %-36s\n' "Équipe" "Jour" "Heure" "Durée" "Salle"
-  printf '%s\n' "-------------------------------------------------------------------------------------"
-
-  while IFS= read -r item; do
-    [[ -n "$item" ]] || continue
-    local team_id day_of_week start_time duration venue
-    team_id=$(extract_field_from_json "$item" "teamId")
-    day_of_week=$(extract_field_from_json "$item" "dayOfWeek")
-    start_time=$(extract_field_from_json "$item" "startTime")
-    duration=$(extract_field_from_json "$item" "durationMinutes")
-    venue=$(extract_field_from_json "$item" "venueId")
-
-    start_time=${start_time%:00}
-    printf '%-24s %-10s %-8s %-10s %-36s\n' "$team_id" "$(day_label "$day_of_week")" "$start_time" "${duration} min" "$venue"
-    line_count=$((line_count + 1))
-  done < <(printf '%s' "$slots_json" | extract_items)
-
-  if [[ "$line_count" -eq 0 ]]; then
-    warn "Aucun créneau retourné par l'API."
-  fi
 }
 
 extract_field_from_json() {
@@ -282,7 +219,7 @@ schedule_score=""
 
 while :; do
   if [[ "$SECONDS" -ge "$deadline" ]]; then
-    die "Timeout après 5 minutes en attendant la génération"
+    die "Timeout après ~10 minutes en attendant la génération"
   fi
 
   attempt=$((attempt + 1))
@@ -327,31 +264,14 @@ else:
   esac
 
   if [[ "$SECONDS" -ge "$deadline" ]]; then
-    die "Timeout après 5 minutes en attendant la génération"
+    die "Timeout après ~10 minutes en attendant la génération"
   fi
   sleep "$POLL_INTERVAL"
 done
 
 if [[ "$current_status" == "COMPLETED" ]]; then
   info "PLANNING COMPLETÉ"
-  slots_url_base="$API_BASE/schedule-slot-templates?scheduleId=$SCHEDULE_ID"
-  http_request GET "$slots_url_base"
-  if [[ "$HTTP_STATUS" == "404" ]]; then
-    http_request GET "$API_BASE/schedule_slot_templates?scheduleId=$SCHEDULE_ID"
-  fi
-
-  case "$HTTP_STATUS" in
-    200)
-      ;;
-    404)
-      die "Impossible de récupérer les créneaux (HTTP 404)"
-      ;;
-    *)
-      die "Impossible de récupérer les créneaux (HTTP $HTTP_STATUS): $HTTP_BODY"
-      ;;
-  esac
-
-  print_slots "$HTTP_BODY"
+  info "Génération terminée. Consultez les rapports dans le répertoire de lots."
   exit 0
 fi
 

@@ -9,10 +9,11 @@ class SerializableModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
-class VenueAvailabilityWindowSchema(SerializableModel):
+class VenueTrainingSlotSchema(SerializableModel):
     day_of_week: int = Field(alias="dayOfWeek")
-    start_time: str = Field(alias="startTime")  # "08:00"
-    end_time: str = Field(alias="endTime")  # "22:00"
+    start_time: str = Field(alias="startTime")  # "19:00"
+    duration_minutes: int = Field(alias="durationMinutes")
+    capacity: int = Field(default=1)
 
 
 class VenueSchema(SerializableModel):
@@ -26,7 +27,7 @@ class VenueSchema(SerializableModel):
     external_ref: str | None = Field(default=None, alias="externalRef")
     is_active: bool = Field(default=False, alias="isActive")
     parent_venue_id: str | None = Field(default=None, alias="parentVenueId")
-    availability: list[VenueAvailabilityWindowSchema] = Field(default_factory=list)
+    training_slots: list[VenueTrainingSlotSchema] = Field(default_factory=list, alias="trainingSlots")
 
 
 class PriorityTierSchema(SerializableModel):

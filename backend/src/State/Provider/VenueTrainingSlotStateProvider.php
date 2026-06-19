@@ -5,34 +5,32 @@ declare(strict_types=1);
 namespace App\State\Provider;
 
 use ApiPlatform\Metadata\Operation;
-use App\ApiResource\VenueAvailabilityResource;
-use App\Entity\VenueAvailability;
+use App\ApiResource\VenueTrainingSlotResource;
+use App\Entity\VenueTrainingSlot;
 
 /**
- * @extends AbstractStateProvider<VenueAvailability, VenueAvailabilityResource>
+ * @extends AbstractStateProvider<VenueTrainingSlot, VenueTrainingSlotResource>
  */
-class VenueAvailabilityStateProvider extends AbstractStateProvider
+class VenueTrainingSlotStateProvider extends AbstractStateProvider
 {
     protected function getEntityClass(): string
     {
-        return VenueAvailability::class;
-    }
-
-    protected function mapEntityToOutput(object $entity): VenueAvailabilityResource
-    {
-        return VenueAvailabilityResource::fromEntity($entity);
+        return VenueTrainingSlot::class;
     }
 
     /**
-     * @param array<string, mixed> $context
-     *
-     * @return array<int, VenueAvailabilityResource>
+     * @param VenueTrainingSlot $entity
      */
+    protected function mapEntityToOutput(object $entity): VenueTrainingSlotResource
+    {
+        return VenueTrainingSlotResource::fromEntity($entity);
+    }
+
     protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('e')
-            ->from(VenueAvailability::class, 'e');
+            ->from(VenueTrainingSlot::class, 'e');
 
         if (null !== $clubId) {
             $qb->andWhere('e.clubId = :clubId')->setParameter('clubId', $clubId);

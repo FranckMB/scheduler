@@ -23,6 +23,8 @@ class ScheduleCpModel(cp_model.CpModel):
         self.locked_slots: tuple[dict[str, Any], ...] = ()
         self.hard_slot_keys: frozenset[SlotKey] = frozenset()
         self.blocked_venue_slots: frozenset[VenueSlotKey] = frozenset()
+        self.slot_durations: dict[VenueSlotKey, int] = {}
+        self.slot_capacities: dict[VenueSlotKey, int] = {}
 
     def NumVariables(self) -> int:
         return len(self.Proto().variables)
@@ -41,6 +43,17 @@ def build_model(data: Mapping[str, Any] | Any) -> ScheduleCpModel:
     model.locked_slots = locked_slots
     model.hard_slot_keys = hard_slot_keys
     model.blocked_venue_slots = blocked_venue_slots
+
+    for venue in _collection(data, "venues"):
+        venue_id = str(_required(venue, "id"))
+        for ts in _collection(venue, "training_slots", "trainingSlots"):
+            day_of_week = int(_required(ts, "day_of_week", "dayOfWeek"))
+            start_time = _format_time(_time_to_minutes(_required(ts, "start_time", "startTime")))
+            duration = int(_value(ts, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+            capacity = int(_value(ts, "capacity", default=1))
+            vsk: VenueSlotKey = (venue_id, day_of_week, start_time)
+            model.slot_durations[vsk] = duration
+            model.slot_capacities[vsk] = capacity
 
     for team_id in teams:
         for venue_id, day_of_week, slot_start in available_slots:
@@ -68,24 +81,10 @@ def _derive_available_slots(data: Mapping[str, Any] | Any) -> tuple[VenueSlotKey
 
     for venue in _collection(data, "venues"):
         venue_id = str(_required(venue, "id"))
-        availability_windows = _collection(venue, "availability", "availabilities")
-
-        if availability_windows:
-            for window in availability_windows:
-                day_of_week = int(_required(window, "day_of_week", "dayOfWeek"))
-                start_minutes = _time_to_minutes(_required(window, "start_time", "startTime"))
-                end_minutes = _time_to_minutes(_required(window, "end_time", "endTime"))
-
-                if end_minutes <= start_minutes:
-                    raise ValueError(f"availability for venue {venue_id} ends before it starts")
-
-                for slot_minutes in range(start_minutes, end_minutes, SLOT_MINUTES):
-                    slots.add((venue_id, day_of_week, _format_time(slot_minutes)))
-        else:
-            # Default: all standard weekdays, 08:00-22:00
-            for day_of_week in DEFAULT_DAYS_OF_WEEK:
-                for slot_minutes in range(DEFAULT_START_MINUTES, DEFAULT_END_MINUTES, SLOT_MINUTES):
-                    slots.add((venue_id, day_of_week, _format_time(slot_minutes)))
+        for ts in _collection(venue, "training_slots", "trainingSlots"):
+            day_of_week = int(_required(ts, "day_of_week", "dayOfWeek"))
+            start_time = _format_time(_time_to_minutes(_required(ts, "start_time", "startTime")))
+            slots.add((venue_id, day_of_week, start_time))
 
     return tuple(sorted(slots, key=_sort_venue_slot))
 

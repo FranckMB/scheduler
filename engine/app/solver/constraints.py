@@ -68,10 +68,6 @@ class HardConstraintStats:
     min_sessions: int = 0
     forced_venues: int = 0
     one_session_per_day: int = 0
-    adult_weekday_time: int = 0
-    min_session_duration: int = 0
-    no_late_start: int = 0
-    time_windows: int = 0
 
     @property
     def total_constraints_added(self) -> int:
@@ -91,10 +87,6 @@ class HardConstraintStats:
             + self.min_sessions
             + self.forced_venues
             + self.one_session_per_day
-            + self.adult_weekday_time
-            + self.min_session_duration
-            + self.no_late_start
-            + self.time_windows
         )
 
 
@@ -110,12 +102,11 @@ def add_level_1_hard_constraints(
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
-    time_windows: Iterable[dict[str, Any]] = (),
 ) -> HardConstraintStats:
-    """Add the 5 implicit + 5 derived + 3 new level-1 hard constraints to a CP-SAT model.
+    """Add the 5 implicit + 5 derived + 1 new level-1 hard constraints to a CP-SAT model.
 
     Implicit (always applied):
-      1. VENUE_AT_MOST_ONE  — one venue hosts at most one team per time slot
+      1. VENUE_AT_MOST_ONE  — one venue hosts at most capacity teams per time slot
       2. COACH_NO_OVERLAP   — one coach coaches at most one team per time slot
       3. COACH_PLAYER_NO_OVERLAP — a coach-player cannot be in two roles at once
       4. TEAM_NO_OVERLAP    — a team cannot have two sessions at the same time
@@ -128,11 +119,8 @@ def add_level_1_hard_constraints(
       9. venue_closures       — closed venue slots forced to 0
      10. forced_venues        — forced venue excludes alternatives
 
-New implicit rules:
+    New implicit rule:
      11. one_session_per_day  — at most one session per day per team
-     12. adult_weekday_time   — adult competitive teams cannot train before 19:00 on weekdays
-     13. min_session_duration — adjacency constraints for teams with explicit minSessionMinutes
-     14. no_late_start        — no session may start after 20:45
      """
 
     if assignments is None:
@@ -190,35 +178,13 @@ New implicit rules:
         model, assignment_list, teams=teams
     )
 
-    # 12. Adult competitive teams cannot train before 19:00 on weekdays.
-    stats.adult_weekday_time = add_adult_weekday_time_constraints(
-        model, assignment_list, teams=teams
-    )
-
-    # 13. Minimum session duration — adjacency constraints for teams with
-    # explicit minSessionMinutes. Uses x[i] <= x[i+1] to force continuous
-    # blocks extending to end of window. Graceful degradation when window
-    # is shorter than requested duration.
-    stats.min_session_duration = add_min_session_duration_constraints(
-        model, assignment_list, teams=teams
-    )
-
-    # 14. No session may start after 20:45.
-    stats.no_late_start = add_no_late_start_constraints(
-        model, assignment_list
-    )
-
-    # 15. Per-team time windows from payload constraints (TIME/DAY family).
-    stats.time_windows = add_time_window_constraints(
-        model, assignment_list, time_windows=time_windows
-    )
-
     return stats
 
 
 def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
-    """Constraint 1: one room/venue can host at most one team per time slot."""
+    """Constraint 1: one room/venue can host at most capacity teams per time slot."""
 
+    slot_capacities: dict[Any, int] = getattr(model, "slot_capacities", {})
     groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
         venue_id = _venue_id(assignment)
@@ -227,7 +193,19 @@ def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> i
             continue
         groups[(venue_id, time_key)].append(_var(assignment))
 
-    return _add_at_most_one_groups(model, groups.values())
+    added = 0
+    for (venue_id, time_key), variables in groups.items():
+        deduped = _dedupe_variables(variables)
+        if len(deduped) < 2:
+            continue
+        parts = str(time_key).split(":", 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            cap = slot_capacities.get((venue_id, int(parts[0]), parts[1]), 1)
+        else:
+            cap = 1
+        model.Add(sum(deduped) <= cap)
+        added += 1
+    return added
 
 
 def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
@@ -749,20 +727,6 @@ def _forced_venue_id(
     return None
 
 
-_ADULT_LEVELS: frozenset[str] = frozenset(
-    {
-        "REGIONAL",
-        "NATIONAL",
-        "ELITE",
-        "HONNEUR",
-        "PROMOTION",
-        "PRE_REGION",
-        "LOISIR_ADULTE",
-    }
-)
-_WEEKDAY_NUMBERS: frozenset[str] = frozenset({"1", "2", "3", "4", "5"})
-_ADULT_MIN_WEEKDAY_START: str = "19:00"
-_LAST_START_TIME: str = "21:00"
 _DEFAULT_MIN_SESSION_MINUTES: int = 90
 _SLOT_MINUTES: int = 15
 
@@ -838,293 +802,6 @@ def add_one_session_per_day_constraints(
         if len(vars_list) > 1:
             cast(Any, model).Add(sum(vars_list) <= 1)
             added += 1
-
-    return added
-
-
-def add_adult_weekday_time_constraints(
-    model: Any,
-    assignments: Iterable[AssignmentLike],
-    *,
-    teams: Iterable[Any] = (),
-) -> int:
-    """Implicit rule 12: adult teams (REGIONAL, DEPARTEMENTAL, NATIONAL, ELITE,
-    HONNEUR, PROMOTION, PRE_REGION, LOISIR_ADULTE) cannot have sessions on weekdays
-    starting before 19:00.
-    """
-
-    adult_team_ids: set[str] = set()
-    for team in teams:
-        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
-        level = _get(team, "level", default=None)
-        if tid is not None and isinstance(level, str) and level.upper() in _ADULT_LEVELS:
-            adult_team_ids.add(str(tid))
-
-    if not adult_team_ids:
-        return 0
-
-    added = 0
-    for assignment in assignments:
-        team_id = _team_id(assignment)
-        if team_id is None or str(team_id) not in adult_team_ids:
-            continue
-
-        slot_id = _slot_id(assignment)
-        if slot_id is None:
-            continue
-
-        parts = str(slot_id).split(":")
-        if len(parts) < 3:
-            continue
-
-        day = parts[0]
-        slot_start = parts[1] + ":" + parts[2]
-
-        if day not in _WEEKDAY_NUMBERS:
-            continue
-
-        if slot_start < _ADULT_MIN_WEEKDAY_START:
-            cast(Any, model).Add(_var(assignment) == 0)
-            added += 1
-
-    return added
-
-
-def add_time_window_constraints(
-    model: Any,
-    assignments: Iterable[AssignmentLike],
-    *,
-    time_windows: Iterable[dict[str, Any]] = (),
-) -> int:
-    """Constraint 15: enforce maxStartTime, minStartTime, and preferredDays (HARD)
-    from TIME/DAY constraints resolved from the payload (parse_v2_constraints time_windows).
-
-    Each entry in time_windows has:
-      - scopeTargetId: team_id (TEAM scope, already resolved by backend)
-      - config: {maxStartTime?: "HH:MM", minStartTime?: "HH:MM", preferredDays?: [int]}
-      - ruleType: "HARD"
-    """
-    time_windows_list = list(time_windows)
-    if not time_windows_list:
-        return 0
-
-    max_start_by_team: dict[str, str] = {}
-    min_start_by_team: dict[str, str] = {}
-    allowed_days_by_team: dict[str, frozenset[int]] = {}
-
-    for tw in time_windows_list:
-        if tw.get("ruleType") != "HARD":
-            continue
-        team_id = tw.get("scopeTargetId") or tw.get("scope_target_id")
-        if not team_id:
-            continue
-        config = tw.get("config") or {}
-        if "maxStartTime" in config:
-            max_start_by_team[str(team_id)] = str(config["maxStartTime"])
-        if "minStartTime" in config:
-            min_start_by_team[str(team_id)] = str(config["minStartTime"])
-        if "preferredDays" in config and isinstance(config["preferredDays"], list):
-            allowed_days_by_team[str(team_id)] = frozenset(int(d) for d in config["preferredDays"])
-
-    if not max_start_by_team and not min_start_by_team and not allowed_days_by_team:
-        return 0
-
-    added = 0
-    for assignment in assignments:
-        team_id = _team_id(assignment)
-        if team_id is None:
-            continue
-        tid = str(team_id)
-
-        if tid not in max_start_by_team and tid not in min_start_by_team and tid not in allowed_days_by_team:
-            continue
-
-        slot_id = _slot_id(assignment)
-        if slot_id is None:
-            continue
-        parts = str(slot_id).split(":")
-        if len(parts) < 3:
-            continue
-        day_str = parts[0]
-        slot_start = parts[1] + ":" + parts[2]
-        day = int(day_str) if day_str.isdigit() else None
-
-        if tid in max_start_by_team and slot_start > max_start_by_team[tid]:
-            cast(Any, model).Add(_var(assignment) == 0)
-            added += 1
-            continue
-
-        if tid in min_start_by_team and slot_start < min_start_by_team[tid]:
-            cast(Any, model).Add(_var(assignment) == 0)
-            added += 1
-            continue
-
-        if tid in allowed_days_by_team and day is not None and day not in allowed_days_by_team[tid]:
-            cast(Any, model).Add(_var(assignment) == 0)
-            added += 1
-
-    return added
-
-
-def add_min_session_duration_constraints(
-    model: Any,
-    assignments: Iterable[AssignmentLike],
-    *,
-    teams: Iterable[Any] = (),
-) -> int:
-    """Implicit rule 13: each session must span at least minSessionMinutes
-    of consecutive 15-min slots.
-
-    Only teams with an explicit minSessionMinutes are constrained (no global
-    default). Uses a ``use_here`` indicator variable per (team, venue, day)
-    plus a no-gap triple constraint to enforce strict contiguity:
-
-    1. ``sum(slots) <= M * use_here``  — forces use_here=1 when any slot active
-    2. ``sum(slots) >= N * use_here``  — if training here, at least N slots used
-    3. No-gap triple constraint: for each consecutive triple (t, t+1, t+2),
-       ``x[t+1] + x[t] >= x[t+2]``. This prevents holes in the active block:
-       if a later slot (t+2) is active and an earlier slot (t) is inactive,
-       the middle slot (t+1) must be active. Combined with ``sum >= N * use_here``,
-       this forces exactly one contiguous run of at least N slots.
-
-    Unlike the previous x[i] <= x[i+1] suffix chain (which forced sessions to
-    run to the end of the window, blocking all other teams via room_at_most_one),
-    this formulation allows multiple teams to share a venue-day window.
-    When M < N (window shorter than requested): graceful degradation — no
-    constraint added for that window.
-    """
-
-    import math
-
-    # Build constrained teams — only those with explicit minSessionMinutes
-    min_slots_by_team: dict[str, int] = {}
-    for team in teams:
-        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
-        if tid is None:
-            continue
-        raw = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
-        if raw is not None:
-            min_slots_by_team[str(tid)] = math.ceil(int(raw) / _SLOT_MINUTES)
-
-    if not min_slots_by_team:
-        return 0
-
-    groups: dict[tuple[str, str, str], list[tuple[str, BoolVarLike]]] = defaultdict(list)
-    for assignment in assignments:
-        team_id = _team_id(assignment)
-        venue_id = _venue_id(assignment)
-        slot_id = _slot_id(assignment)
-        if team_id is None or venue_id is None or slot_id is None:
-            continue
-        parts = str(slot_id).split(":")
-        if len(parts) < 3:
-            continue
-        day = parts[0]
-        slot_time = parts[1] + ":" + parts[2]
-        groups[(str(team_id), str(venue_id), day)].append((slot_time, _var(assignment)))
-
-    added = 0
-    for (team_id, _venue_key, _day), slot_list in groups.items():
-        n = min_slots_by_team.get(team_id)
-        if n is None or n <= 1:
-            continue
-
-        # Sort slots by time to ensure correct triple ordering
-        sorted_slots = sorted(slot_list, key=lambda sv: sv[0])
-        slot_vars = [v for _t, v in sorted_slots]
-        m = len(slot_vars)
-        if m == 0:
-            continue
-
-        if m < n:
-            # Window shorter than minimum duration — graceful degradation.
-            # The diagnostic system will flag sessions below effective minimum.
-            continue
-
-        # use_here is 1 iff the team trains at this venue on this day.
-        # sum(slots) <= m * use_here  → sum > 0 implies use_here = 1.
-        # sum(slots) >= n * use_here  → use_here = 1 implies sum >= n slots.
-        #
-        # Unlike the previous x[i] <= x[i+1] suffix chain (which extended
-        # sessions to end-of-window and blocked all other teams via
-        # room_at_most_one), this allows multiple teams to share a venue-day
-        # window at different time slots.
-        use_here = cast(Any, model).NewBoolVar(
-            f"min_dur_{team_id}_{_venue_key}_{_day}"
-        )
-        slot_sum = sum(cast(Any, v) for v in slot_vars)
-        cast(Any, model).Add(slot_sum <= m * use_here)
-        cast(Any, model).Add(slot_sum >= n * use_here)
-
-        # No-gap triple constraint: for each consecutive triple (t, t+1, t+2),
-        # x[t+1] + x[t] >= x[t+2]. This prevents any hole in the active block.
-        # If slot t+2 is active and slot t is inactive, then slot t+1 must be
-        # active — closing the gap. Combined with sum >= n * use_here, this
-        # forces exactly one contiguous run of at least n slots.
-        for i in range(m - 2):
-            cast(Any, model).Add(
-                cast(Any, slot_vars[i + 1]) + cast(Any, slot_vars[i])
-                >= cast(Any, slot_vars[i + 2])
-            )
-
-        added += 1
-
-    return added
-
-
-def add_no_late_start_constraints(
-    model: Any,
-    assignments: Iterable[AssignmentLike],
-) -> int:
-    """Implicit rule 14: no session may START at 21:00 or later.
-
-    A slot at 21:00+ is forbidden as a session *start*, but is allowed as a
-    *continuation* of a session that started at or before _LAST_START_TIME.
-
-    Implementation: for each (team, venue, day) group, sort slots by time.
-    For each late slot (>= _LAST_START_TIME), it can only be active if the
-    immediately preceding slot is also active. This creates an adjacency chain
-    that prevents a late slot from starting a new session after a gap.
-
-    Applies to ALL teams. HARD-locked slots are safe by design (not in model.x).
-    """
-
-    # Group by (team_id, venue_id, day)
-    groups: dict[tuple[str, str, str], list[tuple[str, BoolVarLike]]] = defaultdict(list)
-    for assignment in assignments:
-        team_id = _team_id(assignment)
-        venue_id = _venue_id(assignment)
-        slot_id = _slot_id(assignment)
-        if team_id is None or venue_id is None or slot_id is None:
-            continue
-        parts = str(slot_id).split(":")
-        if len(parts) < 3:
-            continue
-        day = parts[0]
-        slot_time = parts[1] + ":" + parts[2]
-        groups[(str(team_id), str(venue_id), day)].append((slot_time, _var(assignment)))
-
-    added = 0
-    for _key, slot_list in groups.items():
-        # Sort slots by time for adjacency checking
-        sorted_slots = sorted(slot_list, key=lambda sv: sv[0])
-
-        for i, (slot_time, var) in enumerate(sorted_slots):
-            if slot_time < _LAST_START_TIME:
-                continue
-
-            # Late slot (>= _LAST_START_TIME): can only be active if the
-            # immediately preceding slot is also active (continuation, not start).
-            # This creates a chain: each late slot depends on its predecessor,
-            # preventing a late slot from starting a new session after a gap.
-            if i == 0:
-                # No preceding slot — forbid this late slot entirely
-                cast(Any, model).Add(cast(Any, var) == 0)
-                added += 1
-            else:
-                prev_var = sorted_slots[i - 1][1]
-                cast(Any, model).Add(cast(Any, var) <= cast(Any, prev_var))
-                added += 1
 
     return added
 
@@ -1218,16 +895,12 @@ __all__ = [
     "add_coach_at_most_one",
     "add_coach_player_non_overlap",
     "add_coach_unavailability_constraints",
-    "add_adult_weekday_time_constraints",
     "add_fixed_slots",
     "add_forbidden_assignments",
     "add_forced_venue_constraints",
     "add_level_1_hard_constraints",
-    "add_min_session_duration_constraints",
     "add_min_sessions_constraints",
-    "add_no_late_start_constraints",
     "add_one_session_per_day_constraints",
-    "add_time_window_constraints",
     "add_room_at_most_one",
     "add_team_no_overlap",
     "add_venue_closure_constraints",

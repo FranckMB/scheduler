@@ -14,7 +14,9 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\Venue;
-use App\Entity\VenueAvailability;
+use App\Entity\VenueTrainingSlot;
+use App\Enum\ConstraintFamily;
+use App\Enum\LockLevel;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -176,7 +178,7 @@ final class DevScheduleReportWriter
         }
 
         // 5. VenueAvailability
-        $availabilities = $this->entityManager->getRepository(VenueAvailability::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        $availabilities = $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
         if ([] !== $availabilities) {
             $summaryLines[] = \sprintf('Disponibilités salles (%d) :', \count($availabilities));
             $byVenue = [];
@@ -185,13 +187,101 @@ final class DevScheduleReportWriter
             }
             foreach ($byVenue as $venueId => $vas) {
                 $venueName = $venueNames[$venueId] ?? $venueId;
-                usort($vas, static fn (VenueAvailability $a, VenueAvailability $b): int => $a->getDayOfWeek() <=> $b->getDayOfWeek() ?: $a->getStartTime() <=> $b->getStartTime());
+                usort($vas, static fn (VenueTrainingSlot $a, VenueTrainingSlot $b): int => $a->getDayOfWeek() <=> $b->getDayOfWeek() ?: $a->getStartTime() <=> $b->getStartTime());
                 $slots = [];
                 foreach ($vas as $va) {
                     $dayName = self::DAYS[$va->getDayOfWeek()] ?? (string) $va->getDayOfWeek();
-                    $slots[] = \sprintf('%s %s-%s', $dayName, $va->getStartTime()->format('H:i'), $va->getEndTime()->format('H:i'));
+                    $end = DateTimeImmutable::createFromInterface($va->getStartTime())->modify('+' . $va->getDurationMinutes() . ' minutes');
+                    $slots[] = \sprintf('%s %s-%s', $dayName, $va->getStartTime()->format('H:i'), $end->format('H:i'));
                 }
                 $summaryLines[] = \sprintf('  %s : %s', $venueName, implode(', ', $slots));
+            }
+            $summaryLines[] = '';
+        }
+
+        // 6. Slots templates HARD
+        $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        $hardSlots = array_values(array_filter($slots, static fn (ScheduleSlotTemplate $slot): bool => LockLevel::HARD === $slot->getLockLevel()));
+        if ([] !== $hardSlots) {
+            usort($hardSlots, static function (ScheduleSlotTemplate $a, ScheduleSlotTemplate $b) use ($teamNames): int {
+                $teamA = $teamNames[$a->getTeamId()] ?? $a->getTeamId();
+                $teamB = $teamNames[$b->getTeamId()] ?? $b->getTeamId();
+                if ($teamA !== $teamB) {
+                    return $teamA <=> $teamB;
+                }
+
+                if ($a->getDayOfWeek() !== $b->getDayOfWeek()) {
+                    return $a->getDayOfWeek() <=> $b->getDayOfWeek();
+                }
+
+                return $a->getStartTime()->format('H:i') <=> $b->getStartTime()->format('H:i');
+            });
+
+            $summaryLines[] = \sprintf('Slots HARD lockés (%d) :', \count($hardSlots));
+            foreach ($hardSlots as $slot) {
+                $teamName = $teamNames[$slot->getTeamId()] ?? $slot->getTeamId();
+                $venueName = $venueNames[$slot->getVenueId()] ?? $slot->getVenueId();
+                $start = $slot->getStartTime()->format('H:i');
+                $end = DateTimeImmutable::createFromInterface($slot->getStartTime())->modify('+' . $slot->getDurationMinutes() . ' minutes')->format('H:i');
+
+                $summaryLines[] = \sprintf(
+                    '  %-20s  J%d  %s → %s (%d min)   @ %s',
+                    $teamName,
+                    $slot->getDayOfWeek(),
+                    $start,
+                    $end,
+                    $slot->getDurationMinutes(),
+                    $venueName,
+                );
+            }
+            $summaryLines[] = '';
+        }
+
+        // 7. Contraintes horaires (TIME family)
+        $timeConstraints = array_values(array_filter($activeConstraints, static fn (Constraint $constraint): bool => ConstraintFamily::TIME === $constraint->getFamily()));
+        if ([] !== $timeConstraints) {
+            usort($timeConstraints, static function (Constraint $a, Constraint $b): int {
+                $typeOrder = ['HARD' => 0, 'PREFERRED' => 1];
+                $aType = $typeOrder[$a->getRuleType()->value] ?? 99;
+                $bType = $typeOrder[$b->getRuleType()->value] ?? 99;
+                if ($aType !== $bType) {
+                    return $aType <=> $bType;
+                }
+
+                return $a->getSortOrder() <=> $b->getSortOrder();
+            });
+
+            $summaryLines[] = \sprintf('Contraintes horaires (%d) :', \count($timeConstraints));
+            foreach ($timeConstraints as $constraint) {
+                $scopeStr = $constraint->getScope()->value;
+                $scopeTargetId = $constraint->getScopeTargetId();
+                if (null !== $scopeTargetId && '' !== $scopeTargetId && 'CLUB' !== $constraint->getScope()->value) {
+                    $targetName = $scopeTargetId;
+                    if ('TEAM' === $constraint->getScope()->value) {
+                        $targetName = $teamNames[$scopeTargetId] ?? $scopeTargetId;
+                    } elseif ('FACILITY' === $constraint->getScope()->value) {
+                        $targetName = $venueNames[$scopeTargetId] ?? $scopeTargetId;
+                    } elseif ('COACH' === $constraint->getScope()->value) {
+                        $targetName = $coachNames[$scopeTargetId] ?? $scopeTargetId;
+                    }
+                    $scopeStr .= ': ' . $targetName;
+                }
+
+                $configParts = [];
+                foreach ($constraint->getConfig() as $key => $val) {
+                    if (\is_array($val)) {
+                        $configParts[] = $key . '=[' . implode(',', $val) . ']';
+                    } else {
+                        $configParts[] = $key . '=' . $val;
+                    }
+                }
+
+                $line = \sprintf('  [%s]      scope: %s', $constraint->getRuleType()->value, $scopeStr);
+                if ([] !== $configParts) {
+                    $line .= '       config: ' . implode(', ', $configParts);
+                }
+
+                $summaryLines[] = $line;
             }
             $summaryLines[] = '';
         }
@@ -295,6 +385,48 @@ final class DevScheduleReportWriter
 
         file_put_contents($lotDir . '/slots-by-venue.txt', implode("\n", $lines));
 
+        // slots-by-coach.txt
+        $coachSlots = [];
+        foreach ($teamCoaches as $teamId => $coaches) {
+            foreach ($coaches as $coachName) {
+                $coachSlots[$coachName] ??= [];
+                foreach ($slots as $slot) {
+                    if ($slot['teamId'] !== $teamId) {
+                        continue;
+                    }
+
+                    $coachSlots[$coachName][] = $slot;
+                }
+            }
+        }
+
+        ksort($coachSlots);
+
+        $lines = [];
+        foreach ($coachSlots as $coachName => $coachScheduleSlots) {
+            $lines[] = $coachName;
+
+            if ([] === $coachScheduleSlots) {
+                $lines[] = '  aucun créneau';
+                $lines[] = '';
+                continue;
+            }
+
+            usort($coachScheduleSlots, static fn (array $a, array $b): int => $a['dayOfWeek'] <=> $b['dayOfWeek'] ?: $a['startTime'] <=> $b['startTime']);
+
+            foreach ($coachScheduleSlots as $slot) {
+                $dayName = self::DAYS[$slot['dayOfWeek']] ?? (string) $slot['dayOfWeek'];
+                $start = $slot['startTime']->format('H:i');
+                $end = DateTimeImmutable::createFromInterface($slot['startTime'])->modify('+' . $slot['durationMinutes'] . ' minutes')->format('H:i');
+                $venueName = $venueNames[$slot['venueId']] ?? $slot['venueId'];
+                $teamName = $teamNames[$slot['teamId']] ?? $slot['teamId'];
+                $lines[] = \sprintf('  %-10s %s → %s (%d min)  @ %s — %s', $dayName, $start, $end, $slot['durationMinutes'], $venueName, $teamName);
+            }
+            $lines[] = '';
+        }
+
+        file_put_contents($lotDir . '/slots-by-coach.txt', implode("\n", $lines));
+
         // diagnostics.txt
         $diagnostics = $this->entityManager->getRepository(ScheduleDiagnostic::class)->findBy(
             ['scheduleId' => $schedule->getId()],
@@ -351,9 +483,9 @@ final class DevScheduleReportWriter
             for ($i = 1; $i < \count($groupSlots); ++$i) {
                 $prev = $groupSlots[$i - 1];
                 $curr = $groupSlots[$i];
-                $prevEnd = $prev->getStartTime()->modify('+' . $prev->getDurationMinutes() . ' minutes');
+                $prevEnd = (clone $prev->getStartTime())->modify('+' . $prev->getDurationMinutes() . ' minutes');
 
-                if ($prevEnd === $curr->getStartTime()) {
+                if ($prevEnd == $curr->getStartTime()) {
                     $blockDuration += $curr->getDurationMinutes();
                     continue;
                 }

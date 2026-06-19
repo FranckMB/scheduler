@@ -14,11 +14,11 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
-use App\Entity\VenueAvailability;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
-use App\Repository\VenueAvailabilityRepository;
+use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
@@ -32,17 +32,7 @@ final class ScheduleConstraintBuilder
     private const DEFAULT_SOLVER_SEED = 42;
     private const SOFT_LOCK_PENALTY = 10_000;
 
-    /** @var array<int, array{dayOfWeek: int, startTime: string, endTime: string}> */
-    private const DEFAULT_VENUE_AVAILABILITY = [
-        ['dayOfWeek' => 1, 'startTime' => '16:00', 'endTime' => '22:30'],
-        ['dayOfWeek' => 2, 'startTime' => '16:00', 'endTime' => '22:30'],
-        ['dayOfWeek' => 3, 'startTime' => '08:00', 'endTime' => '22:30'],
-        ['dayOfWeek' => 4, 'startTime' => '16:00', 'endTime' => '22:30'],
-        ['dayOfWeek' => 5, 'startTime' => '16:00', 'endTime' => '22:30'],
-        ['dayOfWeek' => 6, 'startTime' => '08:00', 'endTime' => '14:00'],
-    ];
-
-    /** @var array<string, array<VenueAvailability>> */
+    /** @var array<string, array<VenueTrainingSlot>> */
     private array $currentAvailabilitiesByVenue = [];
 
     public function __construct(
@@ -50,7 +40,7 @@ final class ScheduleConstraintBuilder
         #[Autowire(service: 'cache.schedule')]
         private readonly ?CacheItemPoolInterface $scheduleCachePool = null,
         private readonly ?TeamTagService $teamTagService = null,
-        private readonly ?VenueAvailabilityRepository $venueAvailabilityRepository = null,
+        private readonly ?VenueTrainingSlotRepository $venueTrainingSlotRepository = null,
     ) {}
 
     public static function cacheKey(string $clubId): string
@@ -86,8 +76,8 @@ final class ScheduleConstraintBuilder
 
         // Pre-load venue availabilities to avoid N+1 queries in serializeVenue()
         $availabilitiesByVenue = [];
-        if ($this->venueAvailabilityRepository instanceof VenueAvailabilityRepository) {
-            $rows = $this->venueAvailabilityRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
+            $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
             foreach ($rows as $row) {
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
             }
@@ -247,27 +237,28 @@ final class ScheduleConstraintBuilder
             'externalRef' => $venue->getExternalRef(),
             'isActive' => $venue->getIsActive(),
             'parentVenueId' => $venue->getParentVenueId(),
-            'availability' => $this->buildAvailability($this->currentAvailabilitiesByVenue[$venue->getId()] ?? []),
+            'trainingSlots' => $this->buildTrainingSlots($this->currentAvailabilitiesByVenue[$venue->getId()] ?? []),
         ];
     }
 
     /**
-     * @param array<VenueAvailability> $availabilities
+     * @param array<VenueTrainingSlot> $slots
      *
-     * @return array<int, array{dayOfWeek: int, startTime: string, endTime: string}>
+     * @return array<int, array{dayOfWeek: int, startTime: string, durationMinutes: int, capacity: int}>
      */
-    private function buildAvailability(array $availabilities): array
+    private function buildTrainingSlots(array $slots): array
     {
-        if ([] === $availabilities) {
-            return self::DEFAULT_VENUE_AVAILABILITY;
+        if ([] === $slots) {
+            return [];
         }
 
         $result = [];
-        foreach ($availabilities as $va) {
+        foreach ($slots as $slot) {
             $result[] = [
-                'dayOfWeek' => $va->getDayOfWeek(),
-                'startTime' => $va->getStartTime()->format('H:i'),
-                'endTime' => $va->getEndTime()->format('H:i'),
+                'dayOfWeek' => $slot->getDayOfWeek(),
+                'startTime' => $slot->getStartTime()->format('H:i'),
+                'durationMinutes' => $slot->getDurationMinutes(),
+                'capacity' => $slot->getCapacity(),
             ];
         }
 

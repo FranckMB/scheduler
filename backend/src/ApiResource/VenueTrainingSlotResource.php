@@ -12,22 +12,22 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use App\Dto\VenueAvailabilityInput;
-use App\Entity\VenueAvailability;
-use App\State\Processor\VenueAvailabilityStateProcessor;
-use App\State\Provider\VenueAvailabilityStateProvider;
+use App\Dto\VenueTrainingSlotInput;
+use App\Entity\VenueTrainingSlot;
+use App\State\Processor\VenueTrainingSlotStateProcessor;
+use App\State\Provider\VenueTrainingSlotStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-#[ApiResource(shortName: 'VenueAvailability', operations: [
+#[ApiResource(shortName: 'VenueTrainingSlot', operations: [
     new GetCollection,
     new Get,
     new Post,
     new Put,
     new Delete,
-], input: VenueAvailabilityInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: VenueAvailabilityStateProvider::class, processor: VenueAvailabilityStateProcessor::class)]
+], input: VenueTrainingSlotInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: VenueTrainingSlotStateProvider::class, processor: VenueTrainingSlotStateProcessor::class)]
 #[ApiFilter(SearchFilter::class, properties: ['venueId' => 'exact', 'seasonId' => 'exact'])]
-class VenueAvailabilityResource
+class VenueTrainingSlotResource
 {
     #[Groups(['read'])]
     public string $id = '';
@@ -51,9 +51,12 @@ class VenueAvailabilityResource
     public DateTimeImmutable $startTime;
 
     #[Groups(['read'])]
-    public DateTimeImmutable $endTime;
+    public int $durationMinutes = 0;
 
-    public static function fromEntity(VenueAvailability $entity): self
+    #[Groups(['read'])]
+    public int $capacity = 1;
+
+    public static function fromEntity(VenueTrainingSlot $entity): self
     {
         $dto = new self;
         $dto->id = $entity->getId();
@@ -63,7 +66,8 @@ class VenueAvailabilityResource
         $dto->venueId = $entity->getVenueId();
         $dto->dayOfWeek = $entity->getDayOfWeek();
         $dto->startTime = $entity->getStartTime();
-        $dto->endTime = $entity->getEndTime();
+        $dto->durationMinutes = $entity->getDurationMinutes();
+        $dto->capacity = $entity->getCapacity();
 
         return $dto;
     }
