@@ -618,6 +618,17 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
         $manager->flush();
 
+        // Purge all existing slot templates for this club/season before recreating
+        // This eliminates phantom HARD slots created by old fixture versions or manual edits
+        $existingSlots = $manager->getRepository(ScheduleSlotTemplate::class)->findBy([
+            'clubId' => $club->getId(),
+            'seasonId' => $season->getId(),
+        ]);
+        foreach ($existingSlots as $existingSlot) {
+            $manager->remove($existingSlot);
+        }
+        $manager->flush();
+
         // ============================================================
         // SECTION 8 — SLOT TEMPLATES (SM1 hard locks)
         // ============================================================
@@ -749,12 +760,21 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($c);
         }
 
-        // 9c — Jeunes no training after 19h30 (HARD)
-        $existing = $manager->getRepository(Constraint::class)->findOneBy([
+        // Delete old Jeunes constraint before recreating EMB rule
+        $oldJeunesConstraint = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
             'name' => 'Jeunes - Fin entraînement 19h30',
         ]);
-        if (!$existing instanceof Constraint) {
+        if ($oldJeunesConstraint instanceof Constraint) {
+            $manager->remove($oldJeunesConstraint);
+            $manager->flush();
+        }
+
+        $existingEmb = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'EMB (U9/U11) - Début au premier créneau (max 17h30)',
+        ]);
+        if (!$existingEmb instanceof Constraint) {
             $c = new Constraint;
             $c->setClubId($club->getId());
             $c->setSeasonId($season->getId());
@@ -762,8 +782,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setScopeTargetId(null);
             $c->setFamily(ConstraintFamily::TIME);
             $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Jeunes - Fin entraînement 19h30');
-            $c->setConfig(['maxStartTime' => '19:30', 'targetTag' => 'JEUNE']);
+            $c->setName('EMB (U9/U11) - Début au premier créneau (max 17h30)');
+            $c->setConfig(['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
             $c->setIsActive(true);
             $manager->persist($c);
         }

@@ -71,6 +71,7 @@ class HardConstraintStats:
     adult_weekday_time: int = 0
     min_session_duration: int = 0
     no_late_start: int = 0
+    time_windows: int = 0
 
     @property
     def total_constraints_added(self) -> int:
@@ -93,6 +94,7 @@ class HardConstraintStats:
             + self.adult_weekday_time
             + self.min_session_duration
             + self.no_late_start
+            + self.time_windows
         )
 
 
@@ -108,6 +110,7 @@ def add_level_1_hard_constraints(
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
+    time_windows: Iterable[dict[str, Any]] = (),
 ) -> HardConstraintStats:
     """Add the 5 implicit + 5 derived + 3 new level-1 hard constraints to a CP-SAT model.
 
@@ -203,6 +206,11 @@ New implicit rules:
     # 14. No session may start after 20:45.
     stats.no_late_start = add_no_late_start_constraints(
         model, assignment_list
+    )
+
+    # 15. Per-team time windows from payload constraints (TIME/DAY family).
+    stats.time_windows = add_time_window_constraints(
+        model, assignment_list, time_windows=time_windows
     )
 
     return stats
@@ -744,7 +752,6 @@ def _forced_venue_id(
 _ADULT_LEVELS: frozenset[str] = frozenset(
     {
         "REGIONAL",
-        "DEPARTEMENTAL",
         "NATIONAL",
         "ELITE",
         "HONNEUR",
@@ -877,6 +884,82 @@ def add_adult_weekday_time_constraints(
             continue
 
         if slot_start < _ADULT_MIN_WEEKDAY_START:
+            cast(Any, model).Add(_var(assignment) == 0)
+            added += 1
+
+    return added
+
+
+def add_time_window_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    time_windows: Iterable[dict[str, Any]] = (),
+) -> int:
+    """Constraint 15: enforce maxStartTime, minStartTime, and preferredDays (HARD)
+    from TIME/DAY constraints resolved from the payload (parse_v2_constraints time_windows).
+
+    Each entry in time_windows has:
+      - scopeTargetId: team_id (TEAM scope, already resolved by backend)
+      - config: {maxStartTime?: "HH:MM", minStartTime?: "HH:MM", preferredDays?: [int]}
+      - ruleType: "HARD"
+    """
+    time_windows_list = list(time_windows)
+    if not time_windows_list:
+        return 0
+
+    max_start_by_team: dict[str, str] = {}
+    min_start_by_team: dict[str, str] = {}
+    allowed_days_by_team: dict[str, frozenset[int]] = {}
+
+    for tw in time_windows_list:
+        if tw.get("ruleType") != "HARD":
+            continue
+        team_id = tw.get("scopeTargetId") or tw.get("scope_target_id")
+        if not team_id:
+            continue
+        config = tw.get("config") or {}
+        if "maxStartTime" in config:
+            max_start_by_team[str(team_id)] = str(config["maxStartTime"])
+        if "minStartTime" in config:
+            min_start_by_team[str(team_id)] = str(config["minStartTime"])
+        if "preferredDays" in config and isinstance(config["preferredDays"], list):
+            allowed_days_by_team[str(team_id)] = frozenset(int(d) for d in config["preferredDays"])
+
+    if not max_start_by_team and not min_start_by_team and not allowed_days_by_team:
+        return 0
+
+    added = 0
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        if team_id is None:
+            continue
+        tid = str(team_id)
+
+        if tid not in max_start_by_team and tid not in min_start_by_team and tid not in allowed_days_by_team:
+            continue
+
+        slot_id = _slot_id(assignment)
+        if slot_id is None:
+            continue
+        parts = str(slot_id).split(":")
+        if len(parts) < 3:
+            continue
+        day_str = parts[0]
+        slot_start = parts[1] + ":" + parts[2]
+        day = int(day_str) if day_str.isdigit() else None
+
+        if tid in max_start_by_team and slot_start > max_start_by_team[tid]:
+            cast(Any, model).Add(_var(assignment) == 0)
+            added += 1
+            continue
+
+        if tid in min_start_by_team and slot_start < min_start_by_team[tid]:
+            cast(Any, model).Add(_var(assignment) == 0)
+            added += 1
+            continue
+
+        if tid in allowed_days_by_team and day is not None and day not in allowed_days_by_team[tid]:
             cast(Any, model).Add(_var(assignment) == 0)
             added += 1
 
@@ -1144,6 +1227,7 @@ __all__ = [
     "add_min_sessions_constraints",
     "add_no_late_start_constraints",
     "add_one_session_per_day_constraints",
+    "add_time_window_constraints",
     "add_room_at_most_one",
     "add_team_no_overlap",
     "add_venue_closure_constraints",

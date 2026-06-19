@@ -9,7 +9,7 @@ final readonly class GenerateScheduleMessage
     public function __construct(
         private string $scheduleId,
         private string $clubId,
-        private int $timeoutSeconds = 180,
+        private int $timeoutSeconds = 650,
     ) {}
 
     public function getScheduleId(): string

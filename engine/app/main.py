@@ -121,6 +121,7 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,
+        time_windows=parsed.get("time_windows", []),
     )
 
     assignments_by_team: dict[str, list[Any]] = {}
