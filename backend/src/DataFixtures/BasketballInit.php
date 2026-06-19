@@ -650,6 +650,38 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $manager->persist($teamCoach);
             }
         }
+        $manager->flush();
+
+        // ============================================================
+        // SECTION 6b — ADDITIONAL TEAM-COACH LINKS
+        // ============================================================
+        // Emerick -> U15F1 (MAIN), Enzo -> U13F1 (MAIN), Thomas -> SM1 (ASSISTANT)
+        // Note: TeamCoachRole enum has MAIN + ASSISTANT (no SECONDARY case).
+        // Enzo->U13F1 and Thomas->U15M1 already exist above; idempotent check skips duplicates.
+        $newCoachLinks2 = [
+            ['coach' => $coachEmerick, 'team' => $teams['U15F1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachEnzo,    'team' => $teams['U13F1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachThomas,  'team' => $teams['SM1'],   'role' => TeamCoachRole::ASSISTANT],
+        ];
+
+        foreach ($newCoachLinks2 as $link) {
+            $existing = $manager->getRepository(TeamCoach::class)->findOneBy([
+                'teamId' => $link['team']->getId(),
+                'coachId' => $link['coach']->getId(),
+                'role' => $link['role'],
+            ]);
+            if (null === $existing) {
+                $teamCoach = new TeamCoach;
+                $teamCoach->setClubId($club->getId());
+                $teamCoach->setSeasonId($season->getId());
+                $teamCoach->setTeamId($link['team']->getId());
+                $teamCoach->setCoachId($link['coach']->getId());
+                $teamCoach->setRole($link['role']);
+                $teamCoach->setIsRequired(true);
+                $manager->persist($teamCoach);
+            }
+        }
+        $manager->flush();
 
         // ============================================================
         // SECTION 7 — NEW COACH-PLAYER MEMBERSHIPS
@@ -1092,6 +1124,47 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('Veterans - Vendredi uniquement');
             $c->setConfig(['preferredDays' => [5]]);
+            $c->setIsActive(true);
+            $manager->persist($c);
+        }
+        $manager->flush();
+
+        // 9l — Adultes - Début minimum 18h50 (HARD TIME, CLUB scope, targetTag ADULTE)
+        // ADULTE tag = teams with level REGIONAL/DEPARTEMENTAL/LOISIR_ADULTE (resolved by TeamTagService)
+        $existingAdultTime = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'Adultes - Début minimum 18h50',
+        ]);
+        if (!$existingAdultTime instanceof Constraint) {
+            $c = new Constraint;
+            $c->setClubId($club->getId());
+            $c->setSeasonId($season->getId());
+            $c->setScope(ConstraintScope::CLUB);
+            $c->setScopeTargetId(null);
+            $c->setFamily(ConstraintFamily::TIME);
+            $c->setRuleType(ConstraintRuleType::HARD);
+            $c->setName('Adultes - Début minimum 18h50');
+            $c->setConfig(['minStartTime' => '18:50', 'targetTag' => 'ADULTE']);
+            $c->setIsActive(true);
+            $manager->persist($c);
+        }
+
+        // 9m — Jeunes - Début maximum 20h00 (HARD TIME, CLUB scope, targetTag JEUNE)
+        // JEUNE tag = U13/U15/U18 age range (ageMin <= 18, ageMax > 12, resolved by TeamTagService)
+        $existingYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'Jeunes - Début maximum 20h00',
+        ]);
+        if (!$existingYouthTime instanceof Constraint) {
+            $c = new Constraint;
+            $c->setClubId($club->getId());
+            $c->setSeasonId($season->getId());
+            $c->setScope(ConstraintScope::CLUB);
+            $c->setScopeTargetId(null);
+            $c->setFamily(ConstraintFamily::TIME);
+            $c->setRuleType(ConstraintRuleType::HARD);
+            $c->setName('Jeunes - Début maximum 20h00');
+            $c->setConfig(['maxStartTime' => '20:00', 'targetTag' => 'JEUNE']);
             $c->setIsActive(true);
             $manager->persist($c);
         }
