@@ -797,8 +797,6 @@ def add_one_session_per_day_constraints(
     for (team_id, _day), vars_list in groups.items():
         if team_id in multi_allowed:
             continue
-        if team_id in min_session_teams:
-            continue
         if len(vars_list) > 1:
             cast(Any, model).Add(sum(vars_list) <= 1)
             added += 1
