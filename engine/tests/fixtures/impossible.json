@@ -8,26 +8,95 @@
       "id": "gym-a",
       "name": "Gymnasium A",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "19:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     }
   ],
   "teams": [
-    {"id": "greedy-team", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Greedy Team", "sessionsPerWeek": 50, "isActive": true}
+    {
+      "id": "greedy-team",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Greedy Team",
+      "sessionsPerWeek": 50,
+      "isActive": true
+    }
   ],
   "coaches": [
-    {"id": "coach-1", "firstName": "Alice", "lastName": "Martin", "isActive": true}
+    {
+      "id": "coach-1",
+      "firstName": "Alice",
+      "lastName": "Martin",
+      "isActive": true
+    }
   ],
   "slotTemplates": [
-    {"id": "tpl-greedy-1", "teamId": "greedy-team", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 60, "lockLevel": "NONE"}
+    {
+      "id": "tpl-greedy-1",
+      "teamId": "greedy-team",
+      "venueId": "gym-a",
+      "coachId": "coach-1",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    }
   ],
   "constraints": [],
   "priorityTiers": [
-    {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
-    {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2},
-    {"id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1},
-    {"id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1},
-    {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1}
+    {
+      "id": 1,
+      "label": "S",
+      "orToolsWeight": 10000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 2,
+      "label": "A",
+      "orToolsWeight": 1000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 3,
+      "label": "B",
+      "orToolsWeight": 100,
+      "defaultMinSessions": 1
+    },
+    {
+      "id": 4,
+      "label": "C",
+      "orToolsWeight": 10,
+      "defaultMinSessions": 1
+    },
+    {
+      "id": 5,
+      "label": "D",
+      "orToolsWeight": 1,
+      "defaultMinSessions": 1
+    }
   ]
 }

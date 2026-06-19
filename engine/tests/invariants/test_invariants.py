@@ -129,9 +129,9 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
     for v in venues:
         for d in draw(st.lists(day_st, min_size=1, max_size=3, unique=True)):
             start = draw(slot_start_st)
-            end = start + draw(st.sampled_from([60, 120, 180]))
+            duration = draw(st.sampled_from([60, 120, 180]))
             venue_avail_map[v["id"]].append(
-                {"dayOfWeek": d, "startTime": _time_str(start), "endTime": _time_str(end)}
+                {"dayOfWeek": d, "startTime": _time_str(start), "durationMinutes": duration, "capacity": 1}
             )
 
     templates = []
@@ -167,9 +167,9 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
                 }
             )
 
-    # Inject availability windows into venue objects
+    # Inject training slots into venue objects
     for v in venues:
-        v["availability"] = venue_avail_map.get(v["id"], [])
+        v["trainingSlots"] = venue_avail_map.get(v["id"], [])
 
     return {
         "clubId": "club-hypothesis",
@@ -288,7 +288,7 @@ class TestInvariants:
             "seasonId": "season-2024",
             "version": "2.0",
             "solverSeed": 42,
-            "venues": [{"id": "gym-a", "name": "Gym A", "isActive": True, "availability": [{"dayOfWeek": 1, "startTime": "18:00", "endTime": "18:15"}]}],
+            "venues": [{"id": "gym-a", "name": "Gym A", "isActive": True, "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 15, "capacity": 1}]}],
             "teams": [
                 {"id": "team-s", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team S", "sessionsPerWeek": 1, "isActive": True},
                 {"id": "team-d", "sportCategoryId": "sc-1", "priorityTierId": 5, "name": "Team D", "sessionsPerWeek": 0, "isActive": True},

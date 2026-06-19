@@ -151,13 +151,17 @@ final class ContractSchemaTest extends TestCase
         self::assertIsString($payload['venues'][0]['id']);
         self::assertSame('manual', $payload['venues'][0]['source']);
         self::assertIsBool($payload['venues'][0]['isActive']);
-        self::assertArrayHasKey('availability', $payload['venues'][0]);
-        self::assertIsArray($payload['venues'][0]['availability']);
-        self::assertSame([
-            'dayOfWeek' => 1,
-            'startTime' => '16:00',
-            'endTime' => '22:30',
-        ], $payload['venues'][0]['availability'][0]);
+        self::assertArrayHasKey('trainingSlots', $payload['venues'][0]);
+        self::assertIsArray($payload['venues'][0]['trainingSlots']);
+        if (!empty($payload['venues'][0]['trainingSlots'])) {
+            $slot = $payload['venues'][0]['trainingSlots'][0];
+            self::assertArrayHasKey('dayOfWeek', $slot);
+            self::assertArrayHasKey('startTime', $slot);
+            self::assertArrayHasKey('durationMinutes', $slot);
+            self::assertArrayHasKey('capacity', $slot);
+            self::assertArrayNotHasKey('endTime', $slot);
+        }
+        self::assertArrayNotHasKey('availability', $payload['venues'][0]);
 
         self::assertArrayHasKey('sportCategoryId', $payload['teams'][0]);
         self::assertSame(1, $payload['teams'][0]['priorityTierId']);

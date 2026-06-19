@@ -8,65 +8,746 @@
       "id": "gym-a",
       "name": "Gymnasium A",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "gym-b",
       "name": "Gymnasium B",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     }
   ],
   "teams": [
-    {"id": "sm1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sm2", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sw1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Women 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18m", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Men", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18w", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Women", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u15m", "sportCategoryId": "u15", "priorityTierId": 3, "name": "U15 Men", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u15w", "sportCategoryId": "u15", "priorityTierId": 3, "name": "U15 Women", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u13m", "sportCategoryId": "u13", "priorityTierId": 4, "name": "U13 Men", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u13w", "sportCategoryId": "u13", "priorityTierId": 4, "name": "U13 Women", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u11", "sportCategoryId": "u11", "priorityTierId": 5, "name": "U11 Mixed", "sessionsPerWeek": 1, "isActive": true}
+    {
+      "id": "sm1",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sm2",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sw1",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Women 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18m",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Men",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18w",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Women",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u15m",
+      "sportCategoryId": "u15",
+      "priorityTierId": 3,
+      "name": "U15 Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u15w",
+      "sportCategoryId": "u15",
+      "priorityTierId": 3,
+      "name": "U15 Women",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u13m",
+      "sportCategoryId": "u13",
+      "priorityTierId": 4,
+      "name": "U13 Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u13w",
+      "sportCategoryId": "u13",
+      "priorityTierId": 4,
+      "name": "U13 Women",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u11",
+      "sportCategoryId": "u11",
+      "priorityTierId": 5,
+      "name": "U11 Mixed",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
   ],
   "coaches": [
-    {"id": "coach-1", "firstName": "Alice", "lastName": "Martin", "isActive": true},
-    {"id": "coach-2", "firstName": "Bob", "lastName": "Dupont", "isActive": true},
-    {"id": "coach-3", "firstName": "Charlie", "lastName": "Bernard", "isActive": true},
-    {"id": "coach-4", "firstName": "Diana", "lastName": "Petit", "isActive": true},
-    {"id": "coach-5", "firstName": "Eric", "lastName": "Moreau", "isActive": true}
+    {
+      "id": "coach-1",
+      "firstName": "Alice",
+      "lastName": "Martin",
+      "isActive": true
+    },
+    {
+      "id": "coach-2",
+      "firstName": "Bob",
+      "lastName": "Dupont",
+      "isActive": true
+    },
+    {
+      "id": "coach-3",
+      "firstName": "Charlie",
+      "lastName": "Bernard",
+      "isActive": true
+    },
+    {
+      "id": "coach-4",
+      "firstName": "Diana",
+      "lastName": "Petit",
+      "isActive": true
+    },
+    {
+      "id": "coach-5",
+      "firstName": "Eric",
+      "lastName": "Moreau",
+      "isActive": true
+    }
   ],
   "slotTemplates": [
-    {"id": "tpl-sm1-1", "teamId": "sm1", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm1-2", "teamId": "sm1", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 5, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm2-1", "teamId": "sm2", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm2-2", "teamId": "sm2", "venueId": "gym-a", "coachId": "coach-1", "dayOfWeek": 5, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw1-1", "teamId": "sw1", "venueId": "gym-b", "coachId": "coach-2", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw1-2", "teamId": "sw1", "venueId": "gym-b", "coachId": "coach-2", "dayOfWeek": 5, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-u18m-1", "teamId": "u18m", "venueId": "gym-b", "coachId": "coach-3", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18m-2", "teamId": "u18m", "venueId": "gym-b", "coachId": "coach-3", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w-1", "teamId": "u18w", "venueId": "gym-a", "coachId": "coach-4", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w-2", "teamId": "u18w", "venueId": "gym-a", "coachId": "coach-4", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u15m-1", "teamId": "u15m", "venueId": "gym-b", "coachId": "coach-5", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u15w-1", "teamId": "u15w", "venueId": "gym-a", "coachId": "coach-5", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u13m-1", "teamId": "u13m", "venueId": "gym-b", "coachId": "coach-3", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u13w-1", "teamId": "u13w", "venueId": "gym-a", "coachId": "coach-4", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u11-1", "teamId": "u11", "venueId": "gym-b", "coachId": "coach-2", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 60, "lockLevel": "NONE"}
+    {
+      "id": "tpl-sm1-1",
+      "teamId": "sm1",
+      "venueId": "gym-a",
+      "coachId": "coach-1",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm1-2",
+      "teamId": "sm1",
+      "venueId": "gym-a",
+      "coachId": "coach-1",
+      "dayOfWeek": 5,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm2-1",
+      "teamId": "sm2",
+      "venueId": "gym-a",
+      "coachId": "coach-1",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm2-2",
+      "teamId": "sm2",
+      "venueId": "gym-a",
+      "coachId": "coach-1",
+      "dayOfWeek": 5,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw1-1",
+      "teamId": "sw1",
+      "venueId": "gym-b",
+      "coachId": "coach-2",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw1-2",
+      "teamId": "sw1",
+      "venueId": "gym-b",
+      "coachId": "coach-2",
+      "dayOfWeek": 5,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m-1",
+      "teamId": "u18m",
+      "venueId": "gym-b",
+      "coachId": "coach-3",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m-2",
+      "teamId": "u18m",
+      "venueId": "gym-b",
+      "coachId": "coach-3",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w-1",
+      "teamId": "u18w",
+      "venueId": "gym-a",
+      "coachId": "coach-4",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w-2",
+      "teamId": "u18w",
+      "venueId": "gym-a",
+      "coachId": "coach-4",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u15m-1",
+      "teamId": "u15m",
+      "venueId": "gym-b",
+      "coachId": "coach-5",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u15w-1",
+      "teamId": "u15w",
+      "venueId": "gym-a",
+      "coachId": "coach-5",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u13m-1",
+      "teamId": "u13m",
+      "venueId": "gym-b",
+      "coachId": "coach-3",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u13w-1",
+      "teamId": "u13w",
+      "venueId": "gym-a",
+      "coachId": "coach-4",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u11-1",
+      "teamId": "u11",
+      "venueId": "gym-b",
+      "coachId": "coach-2",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    }
   ],
   "constraints": [],
   "priorityTiers": [
-    {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
-    {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2},
-    {"id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1},
-    {"id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1},
-    {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1}
+    {
+      "id": 1,
+      "label": "S",
+      "orToolsWeight": 10000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 2,
+      "label": "A",
+      "orToolsWeight": 1000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 3,
+      "label": "B",
+      "orToolsWeight": 100,
+      "defaultMinSessions": 1
+    },
+    {
+      "id": 4,
+      "label": "C",
+      "orToolsWeight": 10,
+      "defaultMinSessions": 1
+    },
+    {
+      "id": 5,
+      "label": "D",
+      "orToolsWeight": 1,
+      "defaultMinSessions": 1
+    }
   ]
 }

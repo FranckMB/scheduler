@@ -8,221 +8,4902 @@
       "id": "gym-1",
       "name": "Main Gym 1",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "gym-2",
       "name": "Main Gym 2",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "gym-3",
       "name": "Secondary Gym 1",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "gym-4",
       "name": "Secondary Gym 2",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "17:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "17:00", "endTime": "22:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "17:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "21:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "court-1",
       "name": "Court A",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "court-2",
       "name": "Court B",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "court-3",
       "name": "Court C",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     },
     {
       "id": "court-4",
       "name": "Court D",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 4,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "18:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "19:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:00",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:15",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:30",
+          "durationMinutes": 15,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 5,
+          "startTime": "20:45",
+          "durationMinutes": 15,
+          "capacity": 1
+        }
       ]
     }
   ],
   "teams": [
-    {"id": "sm1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sm2", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sm3", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Men 3", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sw1", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Women 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "sw2", "sportCategoryId": "senior", "priorityTierId": 1, "name": "Senior Women 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u21m1", "sportCategoryId": "u21", "priorityTierId": 2, "name": "U21 Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u21m2", "sportCategoryId": "u21", "priorityTierId": 2, "name": "U21 Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u21w1", "sportCategoryId": "u21", "priorityTierId": 2, "name": "U21 Women 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u21w2", "sportCategoryId": "u21", "priorityTierId": 2, "name": "U21 Women 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18m1", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18m2", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18w1", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Women 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u18w2", "sportCategoryId": "u18", "priorityTierId": 2, "name": "U18 Women 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u16m1", "sportCategoryId": "u16", "priorityTierId": 3, "name": "U16 Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u16m2", "sportCategoryId": "u16", "priorityTierId": 3, "name": "U16 Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u16m3", "sportCategoryId": "u16", "priorityTierId": 3, "name": "U16 Men 3", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u16w1", "sportCategoryId": "u16", "priorityTierId": 3, "name": "U16 Women 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u16w2", "sportCategoryId": "u16", "priorityTierId": 3, "name": "U16 Women 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u14m1", "sportCategoryId": "u14", "priorityTierId": 3, "name": "U14 Men 1", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u14m2", "sportCategoryId": "u14", "priorityTierId": 3, "name": "U14 Men 2", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u14m3", "sportCategoryId": "u14", "priorityTierId": 3, "name": "U14 Men 3", "sessionsPerWeek": 2, "isActive": true},
-    {"id": "u14w1", "sportCategoryId": "u14", "priorityTierId": 4, "name": "U14 Women 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u14w2", "sportCategoryId": "u14", "priorityTierId": 4, "name": "U14 Women 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u12m1", "sportCategoryId": "u12", "priorityTierId": 4, "name": "U12 Men 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u12m2", "sportCategoryId": "u12", "priorityTierId": 4, "name": "U12 Men 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u12m3", "sportCategoryId": "u12", "priorityTierId": 4, "name": "U12 Men 3", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u12w1", "sportCategoryId": "u12", "priorityTierId": 4, "name": "U12 Women 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u12w2", "sportCategoryId": "u12", "priorityTierId": 4, "name": "U12 Women 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u10m1", "sportCategoryId": "u10", "priorityTierId": 5, "name": "U10 Men 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u10m2", "sportCategoryId": "u10", "priorityTierId": 5, "name": "U10 Men 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u10m3", "sportCategoryId": "u10", "priorityTierId": 5, "name": "U10 Men 3", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u10w1", "sportCategoryId": "u10", "priorityTierId": 5, "name": "U10 Women 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u10w2", "sportCategoryId": "u10", "priorityTierId": 5, "name": "U10 Women 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u8m1", "sportCategoryId": "u8", "priorityTierId": 5, "name": "U8 Men 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u8m2", "sportCategoryId": "u8", "priorityTierId": 5, "name": "U8 Men 2", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u8w1", "sportCategoryId": "u8", "priorityTierId": 5, "name": "U8 Women 1", "sessionsPerWeek": 1, "isActive": true},
-    {"id": "u8w2", "sportCategoryId": "u8", "priorityTierId": 5, "name": "U8 Women 2", "sessionsPerWeek": 1, "isActive": true}
+    {
+      "id": "sm1",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sm2",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sm3",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Men 3",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sw1",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Women 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "sw2",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Senior Women 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u21m1",
+      "sportCategoryId": "u21",
+      "priorityTierId": 2,
+      "name": "U21 Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u21m2",
+      "sportCategoryId": "u21",
+      "priorityTierId": 2,
+      "name": "U21 Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u21w1",
+      "sportCategoryId": "u21",
+      "priorityTierId": 2,
+      "name": "U21 Women 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u21w2",
+      "sportCategoryId": "u21",
+      "priorityTierId": 2,
+      "name": "U21 Women 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18m1",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18m2",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18w1",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Women 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u18w2",
+      "sportCategoryId": "u18",
+      "priorityTierId": 2,
+      "name": "U18 Women 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u16m1",
+      "sportCategoryId": "u16",
+      "priorityTierId": 3,
+      "name": "U16 Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u16m2",
+      "sportCategoryId": "u16",
+      "priorityTierId": 3,
+      "name": "U16 Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u16m3",
+      "sportCategoryId": "u16",
+      "priorityTierId": 3,
+      "name": "U16 Men 3",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u16w1",
+      "sportCategoryId": "u16",
+      "priorityTierId": 3,
+      "name": "U16 Women 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u16w2",
+      "sportCategoryId": "u16",
+      "priorityTierId": 3,
+      "name": "U16 Women 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u14m1",
+      "sportCategoryId": "u14",
+      "priorityTierId": 3,
+      "name": "U14 Men 1",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u14m2",
+      "sportCategoryId": "u14",
+      "priorityTierId": 3,
+      "name": "U14 Men 2",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u14m3",
+      "sportCategoryId": "u14",
+      "priorityTierId": 3,
+      "name": "U14 Men 3",
+      "sessionsPerWeek": 2,
+      "isActive": true
+    },
+    {
+      "id": "u14w1",
+      "sportCategoryId": "u14",
+      "priorityTierId": 4,
+      "name": "U14 Women 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u14w2",
+      "sportCategoryId": "u14",
+      "priorityTierId": 4,
+      "name": "U14 Women 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u12m1",
+      "sportCategoryId": "u12",
+      "priorityTierId": 4,
+      "name": "U12 Men 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u12m2",
+      "sportCategoryId": "u12",
+      "priorityTierId": 4,
+      "name": "U12 Men 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u12m3",
+      "sportCategoryId": "u12",
+      "priorityTierId": 4,
+      "name": "U12 Men 3",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u12w1",
+      "sportCategoryId": "u12",
+      "priorityTierId": 4,
+      "name": "U12 Women 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u12w2",
+      "sportCategoryId": "u12",
+      "priorityTierId": 4,
+      "name": "U12 Women 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u10m1",
+      "sportCategoryId": "u10",
+      "priorityTierId": 5,
+      "name": "U10 Men 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u10m2",
+      "sportCategoryId": "u10",
+      "priorityTierId": 5,
+      "name": "U10 Men 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u10m3",
+      "sportCategoryId": "u10",
+      "priorityTierId": 5,
+      "name": "U10 Men 3",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u10w1",
+      "sportCategoryId": "u10",
+      "priorityTierId": 5,
+      "name": "U10 Women 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u10w2",
+      "sportCategoryId": "u10",
+      "priorityTierId": 5,
+      "name": "U10 Women 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u8m1",
+      "sportCategoryId": "u8",
+      "priorityTierId": 5,
+      "name": "U8 Men 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u8m2",
+      "sportCategoryId": "u8",
+      "priorityTierId": 5,
+      "name": "U8 Men 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u8w1",
+      "sportCategoryId": "u8",
+      "priorityTierId": 5,
+      "name": "U8 Women 1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u8w2",
+      "sportCategoryId": "u8",
+      "priorityTierId": 5,
+      "name": "U8 Women 2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
   ],
   "coaches": [
-    {"id": "c1", "firstName": "Alice", "lastName": "Martin", "isActive": true},
-    {"id": "c2", "firstName": "Bob", "lastName": "Dupont", "isActive": true},
-    {"id": "c3", "firstName": "Charlie", "lastName": "Bernard", "isActive": true},
-    {"id": "c4", "firstName": "Diana", "lastName": "Petit", "isActive": true},
-    {"id": "c5", "firstName": "Eric", "lastName": "Moreau", "isActive": true},
-    {"id": "c6", "firstName": "Fiona", "lastName": "Leroy", "isActive": true},
-    {"id": "c7", "firstName": "George", "lastName": "Roux", "isActive": true},
-    {"id": "c8", "firstName": "Hannah", "lastName": "Garcia", "isActive": true},
-    {"id": "c9", "firstName": "Ian", "lastName": "Silva", "isActive": true},
-    {"id": "c10", "firstName": "Julia", "lastName": "Kovacs", "isActive": true},
-    {"id": "c11", "firstName": "Kevin", "lastName": "Olsen", "isActive": true},
-    {"id": "c12", "firstName": "Laura", "lastName": "Novak", "isActive": true},
-    {"id": "c13", "firstName": "Marc", "lastName": "Jensen", "isActive": true},
-    {"id": "c14", "firstName": "Nina", "lastName": "Bakker", "isActive": true},
-    {"id": "c15", "firstName": "Oscar", "lastName": "Lindt", "isActive": true}
+    {
+      "id": "c1",
+      "firstName": "Alice",
+      "lastName": "Martin",
+      "isActive": true
+    },
+    {
+      "id": "c2",
+      "firstName": "Bob",
+      "lastName": "Dupont",
+      "isActive": true
+    },
+    {
+      "id": "c3",
+      "firstName": "Charlie",
+      "lastName": "Bernard",
+      "isActive": true
+    },
+    {
+      "id": "c4",
+      "firstName": "Diana",
+      "lastName": "Petit",
+      "isActive": true
+    },
+    {
+      "id": "c5",
+      "firstName": "Eric",
+      "lastName": "Moreau",
+      "isActive": true
+    },
+    {
+      "id": "c6",
+      "firstName": "Fiona",
+      "lastName": "Leroy",
+      "isActive": true
+    },
+    {
+      "id": "c7",
+      "firstName": "George",
+      "lastName": "Roux",
+      "isActive": true
+    },
+    {
+      "id": "c8",
+      "firstName": "Hannah",
+      "lastName": "Garcia",
+      "isActive": true
+    },
+    {
+      "id": "c9",
+      "firstName": "Ian",
+      "lastName": "Silva",
+      "isActive": true
+    },
+    {
+      "id": "c10",
+      "firstName": "Julia",
+      "lastName": "Kovacs",
+      "isActive": true
+    },
+    {
+      "id": "c11",
+      "firstName": "Kevin",
+      "lastName": "Olsen",
+      "isActive": true
+    },
+    {
+      "id": "c12",
+      "firstName": "Laura",
+      "lastName": "Novak",
+      "isActive": true
+    },
+    {
+      "id": "c13",
+      "firstName": "Marc",
+      "lastName": "Jensen",
+      "isActive": true
+    },
+    {
+      "id": "c14",
+      "firstName": "Nina",
+      "lastName": "Bakker",
+      "isActive": true
+    },
+    {
+      "id": "c15",
+      "firstName": "Oscar",
+      "lastName": "Lindt",
+      "isActive": true
+    }
   ],
   "slotTemplates": [
-    {"id": "tpl-sm1-1", "teamId": "sm1", "venueId": "gym-1", "coachId": "c1", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm1-2", "teamId": "sm1", "venueId": "gym-1", "coachId": "c1", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm2-1", "teamId": "sm2", "venueId": "gym-2", "coachId": "c2", "dayOfWeek": 2, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm2-2", "teamId": "sm2", "venueId": "gym-2", "coachId": "c2", "dayOfWeek": 4, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm3-1", "teamId": "sm3", "venueId": "gym-3", "coachId": "c3", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sm3-2", "teamId": "sm3", "venueId": "gym-3", "coachId": "c3", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw1-1", "teamId": "sw1", "venueId": "gym-1", "coachId": "c4", "dayOfWeek": 2, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw1-2", "teamId": "sw1", "venueId": "gym-1", "coachId": "c4", "dayOfWeek": 4, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw2-1", "teamId": "sw2", "venueId": "gym-2", "coachId": "c5", "dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-sw2-2", "teamId": "sw2", "venueId": "gym-2", "coachId": "c5", "dayOfWeek": 3, "startTime": "19:00", "durationMinutes": 120, "lockLevel": "NONE"},
-    {"id": "tpl-u21m1-1", "teamId": "u21m1", "venueId": "court-1", "coachId": "c6", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21m1-2", "teamId": "u21m1", "venueId": "court-1", "coachId": "c6", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21m2-1", "teamId": "u21m2", "venueId": "court-2", "coachId": "c7", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21m2-2", "teamId": "u21m2", "venueId": "court-2", "coachId": "c7", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21w1-1", "teamId": "u21w1", "venueId": "court-3", "coachId": "c8", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21w1-2", "teamId": "u21w1", "venueId": "court-3", "coachId": "c8", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21w2-1", "teamId": "u21w2", "venueId": "court-4", "coachId": "c9", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u21w2-2", "teamId": "u21w2", "venueId": "court-4", "coachId": "c9", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18m1-1", "teamId": "u18m1", "venueId": "gym-4", "coachId": "c10", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18m1-2", "teamId": "u18m1", "venueId": "gym-4", "coachId": "c10", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18m2-1", "teamId": "u18m2", "venueId": "gym-3", "coachId": "c11", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18m2-2", "teamId": "u18m2", "venueId": "gym-3", "coachId": "c11", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w1-1", "teamId": "u18w1", "venueId": "court-1", "coachId": "c12", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w1-2", "teamId": "u18w1", "venueId": "court-1", "coachId": "c12", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w2-1", "teamId": "u18w2", "venueId": "court-2", "coachId": "c13", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u18w2-2", "teamId": "u18w2", "venueId": "court-2", "coachId": "c13", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m1-1", "teamId": "u16m1", "venueId": "gym-1", "coachId": "c14", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m1-2", "teamId": "u16m1", "venueId": "gym-1", "coachId": "c14", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m2-1", "teamId": "u16m2", "venueId": "gym-2", "coachId": "c15", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m2-2", "teamId": "u16m2", "venueId": "gym-2", "coachId": "c15", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m3-1", "teamId": "u16m3", "venueId": "gym-3", "coachId": "c1", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16m3-2", "teamId": "u16m3", "venueId": "gym-3", "coachId": "c1", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16w1-1", "teamId": "u16w1", "venueId": "gym-4", "coachId": "c2", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16w1-2", "teamId": "u16w1", "venueId": "gym-4", "coachId": "c2", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16w2-1", "teamId": "u16w2", "venueId": "court-3", "coachId": "c3", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u16w2-2", "teamId": "u16w2", "venueId": "court-3", "coachId": "c3", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m1-1", "teamId": "u14m1", "venueId": "court-4", "coachId": "c4", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m1-2", "teamId": "u14m1", "venueId": "court-4", "coachId": "c4", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m2-1", "teamId": "u14m2", "venueId": "gym-1", "coachId": "c5", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m2-2", "teamId": "u14m2", "venueId": "gym-1", "coachId": "c5", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m3-1", "teamId": "u14m3", "venueId": "gym-2", "coachId": "c6", "dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14m3-2", "teamId": "u14m3", "venueId": "gym-2", "coachId": "c6", "dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14w1-1", "teamId": "u14w1", "venueId": "court-1", "coachId": "c7", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u14w2-1", "teamId": "u14w2", "venueId": "court-2", "coachId": "c8", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "NONE"},
-    {"id": "tpl-u12m1-1", "teamId": "u12m1", "venueId": "gym-3", "coachId": "c9", "dayOfWeek": 2, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u12m2-1", "teamId": "u12m2", "venueId": "gym-4", "coachId": "c10", "dayOfWeek": 4, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u12m3-1", "teamId": "u12m3", "venueId": "court-3", "coachId": "c11", "dayOfWeek": 1, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u12w1-1", "teamId": "u12w1", "venueId": "court-4", "coachId": "c12", "dayOfWeek": 3, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u12w2-1", "teamId": "u12w2", "venueId": "gym-1", "coachId": "c13", "dayOfWeek": 5, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u10m1-1", "teamId": "u10m1", "venueId": "gym-2", "coachId": "c14", "dayOfWeek": 2, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u10m2-1", "teamId": "u10m2", "venueId": "court-1", "coachId": "c15", "dayOfWeek": 4, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u10m3-1", "teamId": "u10m3", "venueId": "gym-3", "coachId": "c1", "dayOfWeek": 1, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u10w1-1", "teamId": "u10w1", "venueId": "court-2", "coachId": "c2", "dayOfWeek": 3, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u10w2-1", "teamId": "u10w2", "venueId": "gym-4", "coachId": "c3", "dayOfWeek": 5, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u8m1-1", "teamId": "u8m1", "venueId": "court-3", "coachId": "c4", "dayOfWeek": 2, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u8m2-1", "teamId": "u8m2", "venueId": "gym-1", "coachId": "c5", "dayOfWeek": 4, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u8w1-1", "teamId": "u8w1", "venueId": "court-4", "coachId": "c6", "dayOfWeek": 1, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"},
-    {"id": "tpl-u8w2-1", "teamId": "u8w2", "venueId": "gym-2", "coachId": "c7", "dayOfWeek": 3, "startTime": "17:00", "durationMinutes": 60, "lockLevel": "NONE"}
+    {
+      "id": "tpl-sm1-1",
+      "teamId": "sm1",
+      "venueId": "gym-1",
+      "coachId": "c1",
+      "dayOfWeek": 1,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm1-2",
+      "teamId": "sm1",
+      "venueId": "gym-1",
+      "coachId": "c1",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm2-1",
+      "teamId": "sm2",
+      "venueId": "gym-2",
+      "coachId": "c2",
+      "dayOfWeek": 2,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm2-2",
+      "teamId": "sm2",
+      "venueId": "gym-2",
+      "coachId": "c2",
+      "dayOfWeek": 4,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm3-1",
+      "teamId": "sm3",
+      "venueId": "gym-3",
+      "coachId": "c3",
+      "dayOfWeek": 1,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sm3-2",
+      "teamId": "sm3",
+      "venueId": "gym-3",
+      "coachId": "c3",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw1-1",
+      "teamId": "sw1",
+      "venueId": "gym-1",
+      "coachId": "c4",
+      "dayOfWeek": 2,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw1-2",
+      "teamId": "sw1",
+      "venueId": "gym-1",
+      "coachId": "c4",
+      "dayOfWeek": 4,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw2-1",
+      "teamId": "sw2",
+      "venueId": "gym-2",
+      "coachId": "c5",
+      "dayOfWeek": 1,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-sw2-2",
+      "teamId": "sw2",
+      "venueId": "gym-2",
+      "coachId": "c5",
+      "dayOfWeek": 3,
+      "startTime": "19:00",
+      "durationMinutes": 120,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21m1-1",
+      "teamId": "u21m1",
+      "venueId": "court-1",
+      "coachId": "c6",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21m1-2",
+      "teamId": "u21m1",
+      "venueId": "court-1",
+      "coachId": "c6",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21m2-1",
+      "teamId": "u21m2",
+      "venueId": "court-2",
+      "coachId": "c7",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21m2-2",
+      "teamId": "u21m2",
+      "venueId": "court-2",
+      "coachId": "c7",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21w1-1",
+      "teamId": "u21w1",
+      "venueId": "court-3",
+      "coachId": "c8",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21w1-2",
+      "teamId": "u21w1",
+      "venueId": "court-3",
+      "coachId": "c8",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21w2-1",
+      "teamId": "u21w2",
+      "venueId": "court-4",
+      "coachId": "c9",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u21w2-2",
+      "teamId": "u21w2",
+      "venueId": "court-4",
+      "coachId": "c9",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m1-1",
+      "teamId": "u18m1",
+      "venueId": "gym-4",
+      "coachId": "c10",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m1-2",
+      "teamId": "u18m1",
+      "venueId": "gym-4",
+      "coachId": "c10",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m2-1",
+      "teamId": "u18m2",
+      "venueId": "gym-3",
+      "coachId": "c11",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18m2-2",
+      "teamId": "u18m2",
+      "venueId": "gym-3",
+      "coachId": "c11",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w1-1",
+      "teamId": "u18w1",
+      "venueId": "court-1",
+      "coachId": "c12",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w1-2",
+      "teamId": "u18w1",
+      "venueId": "court-1",
+      "coachId": "c12",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w2-1",
+      "teamId": "u18w2",
+      "venueId": "court-2",
+      "coachId": "c13",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u18w2-2",
+      "teamId": "u18w2",
+      "venueId": "court-2",
+      "coachId": "c13",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m1-1",
+      "teamId": "u16m1",
+      "venueId": "gym-1",
+      "coachId": "c14",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m1-2",
+      "teamId": "u16m1",
+      "venueId": "gym-1",
+      "coachId": "c14",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m2-1",
+      "teamId": "u16m2",
+      "venueId": "gym-2",
+      "coachId": "c15",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m2-2",
+      "teamId": "u16m2",
+      "venueId": "gym-2",
+      "coachId": "c15",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m3-1",
+      "teamId": "u16m3",
+      "venueId": "gym-3",
+      "coachId": "c1",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16m3-2",
+      "teamId": "u16m3",
+      "venueId": "gym-3",
+      "coachId": "c1",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16w1-1",
+      "teamId": "u16w1",
+      "venueId": "gym-4",
+      "coachId": "c2",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16w1-2",
+      "teamId": "u16w1",
+      "venueId": "gym-4",
+      "coachId": "c2",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16w2-1",
+      "teamId": "u16w2",
+      "venueId": "court-3",
+      "coachId": "c3",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u16w2-2",
+      "teamId": "u16w2",
+      "venueId": "court-3",
+      "coachId": "c3",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m1-1",
+      "teamId": "u14m1",
+      "venueId": "court-4",
+      "coachId": "c4",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m1-2",
+      "teamId": "u14m1",
+      "venueId": "court-4",
+      "coachId": "c4",
+      "dayOfWeek": 2,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m2-1",
+      "teamId": "u14m2",
+      "venueId": "gym-1",
+      "coachId": "c5",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m2-2",
+      "teamId": "u14m2",
+      "venueId": "gym-1",
+      "coachId": "c5",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m3-1",
+      "teamId": "u14m3",
+      "venueId": "gym-2",
+      "coachId": "c6",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14m3-2",
+      "teamId": "u14m3",
+      "venueId": "gym-2",
+      "coachId": "c6",
+      "dayOfWeek": 5,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14w1-1",
+      "teamId": "u14w1",
+      "venueId": "court-1",
+      "coachId": "c7",
+      "dayOfWeek": 4,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u14w2-1",
+      "teamId": "u14w2",
+      "venueId": "court-2",
+      "coachId": "c8",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u12m1-1",
+      "teamId": "u12m1",
+      "venueId": "gym-3",
+      "coachId": "c9",
+      "dayOfWeek": 2,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u12m2-1",
+      "teamId": "u12m2",
+      "venueId": "gym-4",
+      "coachId": "c10",
+      "dayOfWeek": 4,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u12m3-1",
+      "teamId": "u12m3",
+      "venueId": "court-3",
+      "coachId": "c11",
+      "dayOfWeek": 1,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u12w1-1",
+      "teamId": "u12w1",
+      "venueId": "court-4",
+      "coachId": "c12",
+      "dayOfWeek": 3,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u12w2-1",
+      "teamId": "u12w2",
+      "venueId": "gym-1",
+      "coachId": "c13",
+      "dayOfWeek": 5,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u10m1-1",
+      "teamId": "u10m1",
+      "venueId": "gym-2",
+      "coachId": "c14",
+      "dayOfWeek": 2,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u10m2-1",
+      "teamId": "u10m2",
+      "venueId": "court-1",
+      "coachId": "c15",
+      "dayOfWeek": 4,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u10m3-1",
+      "teamId": "u10m3",
+      "venueId": "gym-3",
+      "coachId": "c1",
+      "dayOfWeek": 1,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u10w1-1",
+      "teamId": "u10w1",
+      "venueId": "court-2",
+      "coachId": "c2",
+      "dayOfWeek": 3,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u10w2-1",
+      "teamId": "u10w2",
+      "venueId": "gym-4",
+      "coachId": "c3",
+      "dayOfWeek": 5,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u8m1-1",
+      "teamId": "u8m1",
+      "venueId": "court-3",
+      "coachId": "c4",
+      "dayOfWeek": 2,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u8m2-1",
+      "teamId": "u8m2",
+      "venueId": "gym-1",
+      "coachId": "c5",
+      "dayOfWeek": 4,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u8w1-1",
+      "teamId": "u8w1",
+      "venueId": "court-4",
+      "coachId": "c6",
+      "dayOfWeek": 1,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-u8w2-1",
+      "teamId": "u8w2",
+      "venueId": "gym-2",
+      "coachId": "c7",
+      "dayOfWeek": 3,
+      "startTime": "17:00",
+      "durationMinutes": 60,
+      "lockLevel": "NONE"
+    }
   ],
   "constraints": [],
   "priorityTiers": [
-    {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
-    {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2},
-    {"id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 2},
-    {"id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1},
-    {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1}
+    {
+      "id": 1,
+      "label": "S",
+      "orToolsWeight": 10000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 2,
+      "label": "A",
+      "orToolsWeight": 1000,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 3,
+      "label": "B",
+      "orToolsWeight": 100,
+      "defaultMinSessions": 2
+    },
+    {
+      "id": 4,
+      "label": "C",
+      "orToolsWeight": 10,
+      "defaultMinSessions": 1
+    },
+    {
+      "id": 5,
+      "label": "D",
+      "orToolsWeight": 1,
+      "defaultMinSessions": 1
+    }
   ]
 }

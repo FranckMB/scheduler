@@ -89,7 +89,7 @@ class TestGenerateContract:
                     {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True, "availability": [{"dayOfWeek": 2, "startTime": "14:00", "endTime": "15:00"}]},
+                    {"id": "venue-1", "name": "Court A", "isActive": True, "trainingSlots": [{"dayOfWeek": 2, "startTime": "14:00", "durationMinutes": 60, "capacity": 1}]},
                 ],
                 "slotTemplates": [
                     {
@@ -131,7 +131,7 @@ class TestGenerateContract:
                     {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True, "availability": [{"dayOfWeek": 1, "startTime": "18:00", "endTime": "19:00"}]},
+                    {"id": "venue-1", "name": "Court A", "isActive": True, "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}]},
                 ],
                 "slotTemplates": [
                     {
@@ -282,10 +282,10 @@ class TestGenerateContract:
                         "id": "venue-1",
                         "name": "Court A",
                         "isActive": True,
-                        "availability": [
-                            {"dayOfWeek": 1, "startTime": "18:00", "endTime": "21:00"},
-                            {"dayOfWeek": 3, "startTime": "18:00", "endTime": "21:00"},
-                            {"dayOfWeek": 5, "startTime": "18:00", "endTime": "21:00"},
+                        "trainingSlots": [
+                            {"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 180, "capacity": 1},
+                            {"dayOfWeek": 3, "startTime": "18:00", "durationMinutes": 180, "capacity": 1},
+                            {"dayOfWeek": 5, "startTime": "18:00", "durationMinutes": 180, "capacity": 1},
                         ],
                     }
                 ],
@@ -299,9 +299,9 @@ class TestGenerateContract:
             f"Solver returned 'failed' for team with minSessionMinutes=90; "
             f"status={result.status}, unplaced={result.unplaced}"
         )
-        # Max-cap check: each session = 90 min = 6 slots of 15-min → max 3*6=18 slots
-        assert len(result.slots) <= 3 * 6, (
-            f"Expected at most 18 slot assignments (3 sessions × 6 slots), got {len(result.slots)}"
+        # Max-cap check: 3 training slots available → max 3 slot assignments
+        assert len(result.slots) <= 3, (
+            f"Expected at most 3 slot assignments (3 training slots), got {len(result.slots)}"
         )
 
     def test_build_schedule_fully_locked_team_does_not_fail(self) -> None:
@@ -331,8 +331,8 @@ class TestGenerateContract:
                         "id": "venue-1",
                         "name": "Court A",
                         "isActive": True,
-                        "availability": [
-                            {"dayOfWeek": 2, "startTime": "18:00", "endTime": "20:00"},
+                        "trainingSlots": [
+                            {"dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 120, "capacity": 1},
                         ],
                     }
                 ],
@@ -400,9 +400,8 @@ class TestGenerateContract:
                         "id": "venue-1",
                         "name": "Court A",
                         "isActive": True,
-                        "availability": [
-                            # 4 hours = 16 x 15-min slots — enough for 2 x 90-min sessions
-                            {"dayOfWeek": 1, "startTime": "18:00", "endTime": "22:00"},
+                        "trainingSlots": [
+                            {"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 240, "capacity": 1},
                         ],
                     }
                 ],

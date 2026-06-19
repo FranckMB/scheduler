@@ -8,15 +8,15 @@ APP_ENV ?= dev
 
 ifdef APP_ENV
 	ifeq ($(shell uname),Darwin)
-		EXECROOT := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
-		EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+		EXECROOT = $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+		EXEC = $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
 	else
-		EXECROOT := $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
-		EXEC := $(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm
+		EXECROOT = $(FIG) exec -e APP_ENV=$(APP_ENV) php-fpm
+		EXEC = $(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm
 	endif
 else
-	EXECROOT :=
-	EXEC :=
+	EXECROOT =
+	EXEC =
 endif
 
 .PHONY: help ## Display this help

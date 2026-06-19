@@ -22,7 +22,7 @@ class ResultBuilderTest(unittest.TestCase):
             "clubId": "club-1",
             "seasonId": "season-1",
             "teams": [{"id": "team-1", "priorityTierId": 3, "sportCategoryId": "sc-1", "name": "Team 1"}],
-            "venues": [{"id": "venue-1", "name": "Court A", "availability": [{"dayOfWeek": 1, "startTime": "09:00", "endTime": "10:00"}]}],
+            "venues": [{"id": "venue-1", "name": "Court A", "trainingSlots": [{"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 60, "capacity": 1}]}],
             "coaches": [],
             "slotTemplates": [],
         }
@@ -167,8 +167,11 @@ class ResultBuilderTest(unittest.TestCase):
                 "lockLevel": "NONE",
             },
         ]
-        # Expand availability to cover both slots.
-        data["venues"][0]["availability"] = [{"dayOfWeek": 1, "startTime": "09:00", "endTime": "09:30"}]
+        # Two consecutive 15-min training slots so merged duration=30 → count=2 > maxDaysOverride=1.
+        data["venues"][0]["trainingSlots"] = [
+            {"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 15, "capacity": 1},
+            {"dayOfWeek": 1, "startTime": "09:15", "durationMinutes": 15, "capacity": 1},
+        ]
         model = build_model(data)
         for var in model.x.values():
             model.Add(var == 1)
