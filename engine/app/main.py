@@ -12,9 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
-from app.solver.constraints import add_level_1_hard_constraints, parse_v2_constraints
+from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
 from app.solver.model import ScheduleCpModel, build_model, SLOT_MINUTES
-from app.solver.objective import add_level_2_objective
+from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, LEVEL_2_OBJECTIVE_WEIGHTS
 from app.solver.result_builder import build_result
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
@@ -123,6 +123,8 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         min_sessions_by_team=adjusted_min_by_team or None,
     )
 
+    add_time_window_constraints(model, model.x, parsed["time_windows"])
+
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
         team_id = slot_key[0]
@@ -152,6 +154,8 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         preferred_venue_id = preferred_venues.get(team_id)
         if preferred_venue_id is not None and venue_id == preferred_venue_id:
             soft_terms.append((var, "preferred"))
+
+    soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
 
     add_level_2_objective(
         model,
