@@ -18,6 +18,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence, cast
 
+from .model import _time_to_minutes
+
 AssignmentLike = Any
 BoolVarLike = Any
 RuleCollection = Any
@@ -349,6 +351,79 @@ def add_venue_closure_constraints(
     return added
 
 
+def add_time_window_constraints(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    time_windows: Iterable[dict[str, Any]] = (),
+) -> int:
+    added = 0
+    for constraint in time_windows or ():
+        if not constraint.get("isActive", True):
+            continue
+
+        rule_type = constraint.get("ruleType") or constraint.get("rule_type")
+        family = constraint.get("family")
+        if rule_type == "PREFERRED" and family == "TIME":
+            # TODO: PREFERRED TIME not implemented
+            continue
+        if rule_type != "HARD" or family not in ("TIME", "DAY"):
+            continue
+
+        team_id = constraint.get("scope_target_id") or constraint.get("scopeTargetId")
+        if team_id is None:
+            continue
+        team_id_text = str(team_id)
+        config = constraint.get("config") or {}
+
+        min_start_time = config.get("minStartTime")
+        max_start_time = config.get("maxStartTime")
+        forbidden_days = config.get("forbiddenDays") or []
+        forced_day = config.get("forcedDay")
+
+        min_start_minutes = _time_to_minutes(min_start_time) if min_start_time is not None else None
+        max_start_minutes = _time_to_minutes(max_start_time) if max_start_time is not None else None
+        forbidden_day_set = {int(day) for day in forbidden_days if day is not None}
+        forced_day_value = int(forced_day) if forced_day is not None else None
+
+        for slot_key, var in x.items():
+            if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+                continue
+
+            slot_team_id = slot_key[0]
+            if str(slot_team_id) != team_id_text:
+                continue
+
+            day = slot_key[2]
+            slot_start = slot_key[3]
+
+            if family == "TIME":
+                slot_start_minutes = _time_to_minutes(slot_start)
+                if min_start_minutes is not None and slot_start_minutes < min_start_minutes:
+                    model.Add(var == 0)
+                    added += 1
+                    continue
+                if max_start_minutes is not None and slot_start_minutes > max_start_minutes:
+                    model.Add(var == 0)
+                    added += 1
+                    continue
+
+            if family == "DAY":
+                try:
+                    day_value = int(day)
+                except (TypeError, ValueError):
+                    continue
+                if day_value in forbidden_day_set:
+                    model.Add(var == 0)
+                    added += 1
+                    continue
+                if forced_day_value is not None and day_value != forced_day_value:
+                    model.Add(var == 0)
+                    added += 1
+                    continue
+
+    return added
+
+
 def add_min_sessions_constraints(
     model: Any,
     assignments: Iterable[AssignmentLike],
@@ -406,8 +481,10 @@ def add_forced_venue_constraints(
 
 
 def _normalise_assignments(
-    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike]
+    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None
 ) -> list[AssignmentLike]:
+    if assignments is None:
+        return []
     if isinstance(assignments, Mapping):
         return [_assignment_from_mapping_item(key, value) for key, value in assignments.items()]
     return list(assignments)
@@ -900,6 +977,7 @@ __all__ = [
     "add_min_sessions_constraints",
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
+    "add_time_window_constraints",
     "add_team_no_overlap",
     "add_venue_closure_constraints",
     "parse_v2_constraints",

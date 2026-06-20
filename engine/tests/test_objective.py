@@ -19,6 +19,7 @@ EXPECTED_WEIGHTS = {
     "pref_link": 80,
     "preferred": 60,
     "grouping": 50,
+    "preferred_day": 30,
     "C": 10,
     "max_days": 8,
     "opt_link": 5,

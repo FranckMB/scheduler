@@ -26,6 +26,7 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "pref_link": 80,
         "preferred": 60,
         "grouping": 50,
+        "preferred_day": 30,
         "C": 10,
         "max_days": 8,
         "opt_link": 5,
@@ -40,6 +41,7 @@ BONUS_WEIGHT_NAMES = (
     "pref_link",
     "preferred",
     "grouping",
+    "preferred_day",
     "max_days",
     "opt_link",
     "rest",
@@ -215,6 +217,71 @@ def add_level_2_objective(
         total_terms=len(variables),
         coefficient_by_assignment=coefficient_by_assignment,
     )
+
+
+def add_preferred_day_bonus(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    time_windows: Iterable[Any],
+    weights: Mapping[str, int],
+) -> list[tuple[BoolVarLike, str]]:
+    """Return soft objective terms for preferred-day time windows."""
+
+    del model
+    if "preferred_day" not in weights:
+        raise KeyError("preferred_day")
+
+    soft_terms: list[tuple[BoolVarLike, str]] = []
+    seen_keys: set[Any] = set()
+
+    for time_window in time_windows:
+        rule_type = _get(time_window, "ruleType", "rule_type", default=None)
+        if rule_type != "PREFERRED":
+            continue
+
+        family = _get(time_window, "family", default=None)
+        if family != "DAY":
+            # TODO: PREFERRED TIME not implemented
+            continue
+
+        team_id = _scalar_id(
+            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
+        )
+        if team_id is None:
+            continue
+
+        config = _get(time_window, "config", default={}) or {}
+        preferred_days = config.get("preferredDays") or config.get("preferred_days") or ()
+        preferred_day_numbers: set[int] = set()
+        for preferred_day in preferred_days:
+            try:
+                preferred_day_numbers.add(int(_scalar_id(preferred_day)))
+            except (TypeError, ValueError):
+                continue
+
+        if not preferred_day_numbers:
+            continue
+
+        for slot_key, variable in x.items():
+            if slot_key in seen_keys:
+                continue
+            if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+                continue
+            if _scalar_id(slot_key[0]) != team_id:
+                continue
+
+            try:
+                day_of_week = int(_scalar_id(slot_key[2]))
+            except (TypeError, ValueError):
+                continue
+
+            if day_of_week not in preferred_day_numbers:
+                continue
+
+            soft_terms.append((variable, "preferred_day"))
+            seen_keys.add(slot_key)
+
+    return soft_terms
 
 
 def apply_level_2_objective(*args: Any, **kwargs: Any) -> Level2ObjectiveStats:
@@ -457,6 +524,7 @@ __all__ = [
     "SCORE_FORMULA_VERSION",
     "TIER_WEIGHT_NAMES",
     "add_level_2_objective",
+    "add_preferred_day_bonus",
     "add_objective",
     "apply_level_2_objective",
     "set_level_2_objective",
