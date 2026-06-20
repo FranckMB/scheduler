@@ -30,7 +30,7 @@ class VenueTrainingSlotInput
     public ?int $durationMinutes = null;
 
     #[Assert\NotBlank]
-    #[Assert\Range(min: 1)]
+    #[Assert\Range(min: 1, max: 2)]
     #[Groups(['write'])]
     public ?int $capacity = 1;
 }

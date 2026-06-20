@@ -11,6 +11,7 @@ import asyncio
 
 from app.main import build_schedule
 from app.schemas.input_schema import ScheduleInputSchema
+from pydantic import ValidationError
 
 
 def test_capacity_2_slot_allows_two_teams() -> None:
@@ -109,3 +110,35 @@ def test_capacity_1_slot_allows_only_one_team() -> None:
     assert len(result.unplaced) >= 1, (
         f"Expected at least 1 unplaced team with capacity=1, got unplaced={result.unplaced}"
     )
+
+
+def test_capacity_0_slot_is_rejected_by_validation() -> None:
+    try:
+        ScheduleInputSchema.model_validate({
+            "clubId": "club-capacity-0",
+            "seasonId": "season-capacity-0",
+            "teams": [
+                {
+                    "id": "team-a",
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 3,
+                    "name": "Team A",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                },
+            ],
+            "venues": [
+                {
+                    "id": "venue-1",
+                    "name": "Gymnasium",
+                    "isActive": True,
+                    "trainingSlots": [
+                        {"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90, "capacity": 0},
+                    ],
+                },
+            ],
+            "slotTemplates": [],
+        })
+        raise AssertionError("Expected ValidationError for capacity=0")
+    except ValidationError as exc:
+        assert "greater than or equal to 1" in str(exc)

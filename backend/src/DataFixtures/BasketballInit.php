@@ -38,7 +38,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
 {
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher,
-    ) {}
+    )
+    {
+    }
 
     public function load(ObjectManager $manager): void
     {
@@ -258,105 +260,105 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         /** @var list<array{string, int, string, int, int}> $trainingSlots */
         $trainingSlots = [
             // Matéo — Mon
-            ['vMateo', 1, '17:30', 90,  2],
-            ['vMateo', 1, '19:00', 90,  2],
+            ['vMateo', 1, '17:30', 90, 2],
+            ['vMateo', 1, '19:00', 90, 1],
             ['vMateo', 1, '20:30', 120, 1],
             // Matéo — Tue
-            ['vMateo', 2, '17:30', 90,  2],
-            ['vMateo', 2, '19:00', 90,  2],
+            ['vMateo', 2, '17:30', 90, 1],
+            ['vMateo', 2, '19:00', 90, 1],
             ['vMateo', 2, '20:30', 120, 1],
             // Matéo — Wed
-            ['vMateo', 3, '16:00', 90,  1],
-            ['vMateo', 3, '17:30', 90,  1],
-            ['vMateo', 3, '19:00', 90,  1],
+            ['vMateo', 3, '16:00', 90, 1],
+            ['vMateo', 3, '17:30', 90, 1],
+            ['vMateo', 3, '19:00', 90, 1],
             ['vMateo', 3, '20:30', 120, 1],
             // Matéo — Thu
-            ['vMateo', 4, '17:30', 90,  2],
-            ['vMateo', 4, '19:00', 90,  2],
+            ['vMateo', 4, '17:30', 90, 1],
+            ['vMateo', 4, '19:00', 90, 1],
             ['vMateo', 4, '20:30', 120, 1],
             // Matéo — Fri
-            ['vMateo', 5, '17:30', 90,  2],
-            ['vMateo', 5, '19:00', 90,  2],
+            ['vMateo', 5, '17:30', 90, 1],
+            ['vMateo', 5, '19:00', 90, 1],
             ['vMateo', 5, '20:30', 120, 1],
             // Matéo — Sat (Baby/Micro)
-            ['vMateo', 6, '09:00', 45,  1],
-            ['vMateo', 6, '09:45', 60,  1],
-            ['vMateo', 6, '10:45', 60,  1],
+            ['vMateo', 6, '09:00', 45, 1],
+            ['vMateo', 6, '09:45', 60, 1],
+            ['vMateo', 6, '10:45', 60, 1],
             // Camus — Tue/Thu/Fri (Loisir)
             ['vCamus', 2, '20:00', 150, 1],
             ['vCamus', 4, '20:00', 150, 1],
             ['vCamus', 5, '20:00', 150, 1],
             // JDR — Tue
-            ['vJdr', 2, '17:30', 90,  1],
-            ['vJdr', 2, '19:00', 90,  1],
+            ['vJdr', 2, '17:30', 90, 2],
+            ['vJdr', 2, '19:00', 90, 1],
             ['vJdr', 2, '20:30', 120, 1],
             // JDR — Thu
-            ['vJdr', 4, '17:30', 90,  1],
-            ['vJdr', 4, '19:00', 90,  1],
+            ['vJdr', 4, '17:30', 90, 2],
+            ['vJdr', 4, '19:00', 90, 1],
             ['vJdr', 4, '20:30', 120, 1],
             // JDR — Sat (Académie)
-            ['vJdr', 6, '09:00', 75,  1],
-            ['vJdr', 6, '10:15', 75,  1],
-            ['vJdr', 6, '11:30', 75,  1],
+            ['vJdr', 6, '09:00', 75, 1],
+            ['vJdr', 6, '10:15', 75, 1],
+            ['vJdr', 6, '11:30', 75, 1],
             // Armand — Mon
-            ['vArmand', 1, '17:30', 90,  2],
-            ['vArmand', 1, '19:00', 90,  2],
+            ['vArmand', 1, '17:30', 90, 1],
+            ['vArmand', 1, '19:00', 90, 1],
             ['vArmand', 1, '20:30', 120, 1],
             // Armand — Tue
-            ['vArmand', 2, '17:30', 90,  2],
-            ['vArmand', 2, '19:00', 90,  2],
+            ['vArmand', 2, '17:30', 90, 1],
+            ['vArmand', 2, '19:00', 90, 1],
             // Armand — Wed
-            ['vArmand', 3, '16:00', 90,  1],
-            ['vArmand', 3, '17:30', 90,  1],
-            ['vArmand', 3, '19:00', 90,  1],
+            ['vArmand', 3, '16:00', 90, 1],
+            ['vArmand', 3, '17:30', 90, 1],
+            ['vArmand', 3, '19:00', 90, 1],
             ['vArmand', 3, '20:30', 120, 1],
             // Armand — Thu
-            ['vArmand', 4, '17:30', 90,  1],
+            ['vArmand', 4, '17:30', 90, 1],
             // Armand — Fri
-            ['vArmand', 5, '17:30', 90,  2],
-            ['vArmand', 5, '19:00', 90,  2],
+            ['vArmand', 5, '17:30', 90, 1],
+            ['vArmand', 5, '19:00', 90, 1],
             ['vArmand', 5, '20:30', 120, 1],
             // Jean Vilar — Tue/Thu
-            ['vJeanVilar', 2, '18:45', 90,  1],
+            ['vJeanVilar', 2, '18:45', 90, 1],
             ['vJeanVilar', 2, '20:15', 135, 1],
-            ['vJeanVilar', 4, '18:45', 90,  1],
+            ['vJeanVilar', 4, '18:45', 90, 1],
             ['vJeanVilar', 4, '20:15', 135, 1],
             // Tonkin — Mon
-            ['vTonkin', 1, '19:00', 90,  1],
+            ['vTonkin', 1, '19:00', 90, 1],
             // Tonkin — Wed
-            ['vTonkin', 3, '16:00', 90,  1],
-            ['vTonkin', 3, '17:30', 90,  1],
-            ['vTonkin', 3, '19:00', 90,  1],
+            ['vTonkin', 3, '16:00', 90, 1],
+            ['vTonkin', 3, '17:30', 90, 1],
+            ['vTonkin', 3, '19:00', 90, 1],
             ['vTonkin', 3, '20:30', 120, 1],
             // Debarros — Mon
-            ['vDebarros', 1, '17:30', 90,  2],
-            ['vDebarros', 1, '19:00', 90,  2],
+            ['vDebarros', 1, '17:30', 90, 1],
+            ['vDebarros', 1, '19:00', 90, 1],
             // Debarros — Tue
-            ['vDebarros', 2, '17:30', 90,  2],
-            ['vDebarros', 2, '19:00', 90,  2],
+            ['vDebarros', 2, '17:30', 90, 1],
+            ['vDebarros', 2, '19:00', 90, 1],
             ['vDebarros', 2, '20:30', 120, 1],
             // Debarros — Thu
-            ['vDebarros', 4, '17:30', 90,  2],
-            ['vDebarros', 4, '19:00', 90,  2],
+            ['vDebarros', 4, '17:30', 90, 1],
+            ['vDebarros', 4, '19:00', 90, 1],
             ['vDebarros', 4, '20:30', 120, 1],
             // Debarros — Fri
-            ['vDebarros', 5, '17:30', 90,  2],
-            ['vDebarros', 5, '19:00', 90,  2],
+            ['vDebarros', 5, '17:30', 90, 1],
+            ['vDebarros', 5, '19:00', 90, 1],
             ['vDebarros', 5, '20:30', 120, 1],
             // Annexe (vDebarrosAnnexe) — Mon
             ['vDebarrosAnnexe', 1, '20:30', 120, 1],
             // Annexe — Tue
-            ['vDebarrosAnnexe', 2, '17:30', 90,  1],
-            ['vDebarrosAnnexe', 2, '19:00', 90,  1],
+            ['vDebarrosAnnexe', 2, '17:30', 90, 1],
+            ['vDebarrosAnnexe', 2, '19:00', 90, 1],
             // Annexe — Wed
-            ['vDebarrosAnnexe', 3, '17:30', 90,  1],
-            ['vDebarrosAnnexe', 3, '19:00', 90,  1],
+            ['vDebarrosAnnexe', 3, '17:30', 90, 1],
+            ['vDebarrosAnnexe', 3, '19:00', 90, 1],
             ['vDebarrosAnnexe', 3, '20:30', 120, 1],
             // Annexe — Fri
-            ['vDebarrosAnnexe', 5, '19:00', 90,  1],
+            ['vDebarrosAnnexe', 5, '19:00', 90, 1],
             // ADN — Wed
-            ['vAdn', 3, '17:30', 90,  1],
-            ['vAdn', 3, '19:00', 90,  1],
+            ['vAdn', 3, '17:30', 90, 1],
+            ['vAdn', 3, '19:00', 90, 1],
             ['vAdn', 3, '20:30', 120, 1],
         ];
 
@@ -445,7 +447,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'SF1', 'sportCategory' => $seniorF, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 3, 'priorityTierId' => 1, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'SF2', 'sportCategory' => $seniorF, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 2, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'SM3', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
-            ['name' => 'SM4', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
+            ['name' => 'SM4', 'sportCategory' => $seniorM, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'Veterans', 'sportCategory' => $veteran, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U21M1', 'sportCategory' => $u21M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U21M2', 'sportCategory' => $u21M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
@@ -470,25 +472,25 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'U9M1', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U9M2', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             // --- Loisir / Baby / Academie teams ---
-            ['name' => 'Baby 1',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Baby 2',                'sportCategory' => $u7,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Micro Basket',          'sportCategory' => $u5,    'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Academie U9-U11',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            ['name' => 'Academie U13-U15',      'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Academie U18',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Baby 1', 'sportCategory' => $u7, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Baby 2', 'sportCategory' => $u7, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Micro Basket', 'sportCategory' => $u5, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Academie U9-U11', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Academie U13-U15', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'Academie U18', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
             ['name' => 'Mercredi Shark U9-U11', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null],
-            ['name' => 'Loisir 1',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir 2',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir 3',              'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
-            ['name' => 'Loisir Feminine',       'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 120],
-            ['name' => '3x3',                   'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE, 'minSessionMinutes' => 120],
+            ['name' => 'Loisir 1', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 2', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir 3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => null, 'minSessionMinutes' => 150],
+            ['name' => 'Loisir Feminine', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 120],
+            ['name' => '3x3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE, 'minSessionMinutes' => 120],
             // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
             // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
-            ['name' => 'CEC Groupe 1',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 1', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 2 = joint training for U11F2 + U9M1 players
-            ['name' => 'CEC Groupe 2',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 2', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 3 = joint training for U11F1 + U11M2 players
-            ['name' => 'CEC Groupe 3',          'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
         ];
 
         foreach ($newTeamsData as $teamData) {
@@ -614,57 +616,28 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // SECTION 6 — NEW TEAM-COACH LINKS
         // ============================================================
         $newTeamCoachLinks = [
-            ['coach' => $coachMaxime, 'team' => $sm1, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachMara, 'team' => $sf2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachEmerick, 'team' => $sf1, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachMara, 'team' => $sf2, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachLionel, 'team' => $sf3, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachMaxime, 'team' => $sm1, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachThomas, 'team' => $sm1, 'role' => TeamCoachRole::ASSISTANT],
             ['coach' => $coachNicoPatin, 'team' => $sm2, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachEnzo, 'team' => $u18f1, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachEnzo, 'team' => $u13f1, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachThomas, 'team' => $u21m1, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachThomas, 'team' => $u15m1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachFlo, 'team' => $sm3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachChris, 'team' => $sm4, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachThomas, 'team' => $u21m1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMarlon, 'team' => $u21m2, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachLionel, 'team' => $sf3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachNicolasBarilleau, 'team' => $u18m1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachInes, 'team' => $u18m2, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachEnzo, 'team' => $u18f1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachFlorian, 'team' => $u18f3, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachThomas, 'team' => $u15m1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachLuca, 'team' => $u15m2, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachEmerick, 'team' => $teams['U15F1'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachThalie, 'team' => $u15f3, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachEnzo, 'team' => $u13f1, 'role' => TeamCoachRole::MAIN],
         ];
 
         foreach ($newTeamCoachLinks as $link) {
-            $existing = $manager->getRepository(TeamCoach::class)->findOneBy([
-                'teamId' => $link['team']->getId(),
-                'coachId' => $link['coach']->getId(),
-                'role' => $link['role'],
-            ]);
-            if (null === $existing) {
-                $teamCoach = new TeamCoach;
-                $teamCoach->setClubId($club->getId());
-                $teamCoach->setSeasonId($season->getId());
-                $teamCoach->setTeamId($link['team']->getId());
-                $teamCoach->setCoachId($link['coach']->getId());
-                $teamCoach->setRole($link['role']);
-                $teamCoach->setIsRequired(true);
-                $manager->persist($teamCoach);
-            }
-        }
-        $manager->flush();
-
-        // ============================================================
-        // SECTION 6b — ADDITIONAL TEAM-COACH LINKS
-        // ============================================================
-        // Emerick -> U15F1 (MAIN), Enzo -> U13F1 (MAIN), Thomas -> SM1 (ASSISTANT)
-        // Note: TeamCoachRole enum has MAIN + ASSISTANT (no SECONDARY case).
-        // Enzo->U13F1 and Thomas->U15M1 already exist above; idempotent check skips duplicates.
-        $newCoachLinks2 = [
-            ['coach' => $coachEmerick, 'team' => $teams['U15F1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachEnzo,    'team' => $teams['U13F1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachThomas,  'team' => $teams['SM1'],   'role' => TeamCoachRole::ASSISTANT],
-        ];
-
-        foreach ($newCoachLinks2 as $link) {
             $existing = $manager->getRepository(TeamCoach::class)->findOneBy([
                 'teamId' => $link['team']->getId(),
                 'coachId' => $link['coach']->getId(),
@@ -787,7 +760,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $slot->setSeasonId($season->getId());
             $slot->setScheduleId($season->getId());
             $slot->setTeamId($loisirF->getId());
-            $slot->setVenueId($venues['vDebarrosAnnexe']->getId());
+            $slot->setVenueId($venues['vDebarros']->getId());
             $slot->setDayOfWeek(4);
             $slot->setStartTime($lfSlotStart);
             $slot->setDurationMinutes(120);
@@ -806,56 +779,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // ============================================================
         // SECTION 9 — CONSTRAINTS
         // ============================================================
-
-        // 9a — ADN availability (closed all days except Wednesday)
-        foreach ([1, 2, 4, 5, 6] as $closedDay) {
-            $constraintName = 'ADN - Fermé jour ' . $closedDay;
-            $existing = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existing instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::FACILITY);
-                $c->setScopeTargetId($venues['vAdn']->getId());
-                $c->setFamily(ConstraintFamily::FACILITY);
-                $c->setRuleType(ConstraintRuleType::HARD);
-                $c->setName($constraintName);
-                $c->setConfig(['closedDay' => $closedDay]);
-                $c->setIsActive(true);
-                $manager->persist($c);
-            }
-        }
-
-        // 9b — ADN open Wednesday 17h30-22h30 (CORRECTED from 19h)
-        // Delete old constraint with wrong time if it exists
-        $oldAdnConstraint = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'ADN - Ouvert mercredi 19h-22h30',
-        ]);
-        if ($oldAdnConstraint instanceof Constraint) {
-            $manager->remove($oldAdnConstraint);
-            $manager->flush();
-        }
-        $existingAdnOpen = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'ADN - Ouvert mercredi 17h30-22h30',
-        ]);
-        if (!$existingAdnOpen instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::FACILITY);
-            $c->setScopeTargetId($venues['vAdn']->getId());
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('ADN - Ouvert mercredi 17h30-22h30');
-            $c->setConfig(['onlyDay' => 3, 'startTime' => '17:30', 'endTime' => '22:30']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
 
         // Delete old Jeunes constraint before recreating EMB rule
         $oldJeunesConstraint = $manager->getRepository(Constraint::class)->findOneBy([
@@ -880,13 +803,13 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setFamily(ConstraintFamily::TIME);
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('EMB (U9/U11) - Début au premier créneau (max 17h30)');
-            $c->setConfig(['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
+            $c->setConfig(['maxStartTime' => '18:00', 'targetTag' => 'EMB']);
             $c->setIsActive(true);
             $manager->persist($c);
         }
 
         // 9d — U11/U13 preferred from 17h30 (PREFERRED)
-        foreach (['U11', 'U13'] as $tag) {
+        foreach (['U13'] as $tag) {
             $constraintName = $tag . ' - Début préféré 17h30';
             $existing = $manager->getRepository(Constraint::class)->findOneBy([
                 'clubId' => $club->getId(),
@@ -901,7 +824,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $c->setFamily(ConstraintFamily::TIME);
                 $c->setRuleType(ConstraintRuleType::PREFERRED);
                 $c->setName($constraintName);
-                $c->setConfig(['minStartTime' => '17:30', 'targetTag' => $tag]);
+                $c->setConfig(['minStartTime' => '18:00', 'targetTag' => $tag]);
                 $c->setIsActive(true);
                 $manager->persist($c);
             }
@@ -1018,7 +941,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // 9j — SM3: Wednesday only (HARD DAY constraint)
         $existing = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
-            'name' => 'SM3 - Mercredi uniquement',
+            'name' => 'SM3 - Mercredi et Armand uniquement',
         ]);
         if (!$existing instanceof Constraint) {
             $c = new Constraint;
@@ -1029,56 +952,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setFamily(ConstraintFamily::DAY);
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('SM3 - Mercredi uniquement');
-            $c->setConfig(['preferredDays' => [3]]);
+            $c->setConfig(['preferredDays' => [3], 'preferredVenueId' => $venues['vArmand']->getId()]);
             $c->setIsActive(true);
             $manager->persist($c);
         }
 
-        // 9k — SM3: start from 20h15 at Armand exclusively (CORRECTED from 20:00)
-        $oldSm3Time = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'SM3 - Début à partir de 20h',
-        ]);
-        if ($oldSm3Time instanceof Constraint) {
-            $manager->remove($oldSm3Time);
-            $manager->flush();
-        }
-        $existingSm3Time = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'SM3 - Début à partir de 20h15',
-        ]);
-        if (!$existingSm3Time instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::TEAM);
-            $c->setScopeTargetId($sm3->getId());
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('SM3 - Début à partir de 20h15');
-            $c->setConfig(['minStartTime' => '20:15']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 9k2 — SM3: forced to Gymnase Armand on Wednesday (HARD)
-        $existingSm3Venue = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'SM3 - Gymnase Armand mercredi exclusivement',
-        ]);
-        if (!$existingSm3Venue instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::TEAM);
-            $c->setScopeTargetId($sm3->getId());
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('SM3 - Gymnase Armand mercredi exclusivement');
-            $c->setConfig(['forcedVenueId' => $venues['vArmand']->getId()]);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
 
         // Veterans: Vendredi uniquement, interdit sur Camus/JDR/Jean Vilar/Tonkin/ADN
         $veteransTeam = $teams['Veterans'];
@@ -1149,11 +1027,21 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($c);
         }
 
-        // 9m — Jeunes - Début maximum 20h15 (HARD TIME, CLUB scope, targetTag JEUNE)
+        // 9m — Jeunes - Début maximum 19h50 (HARD TIME, CLUB scope, targetTag JEUNE)
         // JEUNE tag = U13/U15/U18 age range (ageMin <= 18, ageMax > 12, resolved by TeamTagService)
-        $existingYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
+        // Delete old constraint (was 20h15) before creating the corrected one
+        $oldYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
             'clubId' => $club->getId(),
             'name' => 'Jeunes - Début maximum 20h15',
+        ]);
+        if ($oldYouthTime instanceof Constraint) {
+            $manager->remove($oldYouthTime);
+            $manager->flush();
+        }
+
+        $existingYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'Jeunes - Début maximum 19h50',
         ]);
         if (!$existingYouthTime instanceof Constraint) {
             $c = new Constraint;
@@ -1163,8 +1051,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setScopeTargetId(null);
             $c->setFamily(ConstraintFamily::TIME);
             $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Jeunes - Début maximum 20h15');
-            $c->setConfig(['maxStartTime' => '20:15', 'targetTag' => 'JEUNE']);
+            $c->setName('Jeunes - Début maximum 19h50');
+            $c->setConfig(['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
             $c->setIsActive(true);
             $manager->persist($c);
         }
@@ -1174,51 +1062,19 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // SECTION 10 — ADDITIONAL SLOT TEMPLATES
         // ============================================================
 
-        // Loisir 1/2/3 — Camus slots (all 7 consecutive 15-min slots per day, 3 days)
-        // Camus available: Tue(2), Thu(4), Fri(5) 20:15-22:00 = 7 slots of 15 min
-        // Each team gets one full day at Camus (no overlap via room_at_most_one)
-        $camusSlotTimes = ['20:15', '20:30', '20:45', '21:00', '21:15', '21:30', '21:45'];
-        $camusDays = [2, 4, 5];
-        foreach ([$teams['Loisir 1'], $teams['Loisir 2'], $teams['Loisir 3']] as $loisirTeam) {
-            foreach ($camusDays as $camusDay) {
-                foreach ($camusSlotTimes as $camusTime) {
-                    $camusStart = new DateTimeImmutable($camusTime);
-                    $existingCamusSlot = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
-                        'teamId' => $loisirTeam->getId(),
-                        'venueId' => $venues['vCamus']->getId(),
-                        'dayOfWeek' => $camusDay,
-                        'startTime' => $camusStart,
-                    ]);
-                    if (!$existingCamusSlot instanceof ScheduleSlotTemplate) {
-                        $slot = new ScheduleSlotTemplate;
-                        $slot->setClubId($club->getId());
-                        $slot->setSeasonId($season->getId());
-                        $slot->setScheduleId($season->getId());
-                        $slot->setTeamId($loisirTeam->getId());
-                        $slot->setVenueId($venues['vCamus']->getId());
-                        $slot->setDayOfWeek($camusDay);
-                        $slot->setStartTime($camusStart);
-                        $slot->setDurationMinutes(15);
-                        $slot->setLockLevel(LockLevel::NONE);
-                        $manager->persist($slot);
-                    }
-                }
-            }
-        }
-        $manager->flush();
-
         // JDR Saturday — Academie hard-locked sessions
         $additionalSlots = [
             // JDR Saturday academies
-            ['team' => $academieU9U11,  'venue' => 'vJdr',   'day' => 6, 'startTime' => '09:00', 'duration' => 75,  'lock' => LockLevel::HARD],
-            ['team' => $academieU13U15, 'venue' => 'vJdr',   'day' => 6, 'startTime' => '10:15', 'duration' => 75,  'lock' => LockLevel::HARD],
-            ['team' => $academieU18,    'venue' => 'vJdr',   'day' => 6, 'startTime' => '11:30', 'duration' => 75,  'lock' => LockLevel::HARD],
+            ['team' => $academieU9U11, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '09:00', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $academieU13U15, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '10:15', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $academieU18, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '11:30', 'duration' => 75, 'lock' => LockLevel::HARD],
             // Matéo Saturday morning — Baby & Micro Basket
-            ['team' => $microBasket,    'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:00', 'duration' => 45,  'lock' => LockLevel::HARD],
-            ['team' => $baby1,          'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:45', 'duration' => 60,  'lock' => LockLevel::HARD],
-            ['team' => $baby2,          'venue' => 'vMateo', 'day' => 6, 'startTime' => '10:45', 'duration' => 60,  'lock' => LockLevel::HARD],
+            ['team' => $microBasket, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:00', 'duration' => 45, 'lock' => LockLevel::HARD],
+            ['team' => $baby1, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:45', 'duration' => 60, 'lock' => LockLevel::HARD],
+            ['team' => $baby2, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '10:45', 'duration' => 60, 'lock' => LockLevel::HARD],
             // CEC Groupe 1 — ADN Wednesday 17:30 (ADN can be split into 3 courts)
-            ['team' => $cecGroupe1,     'venue' => 'vAdn',   'day' => 3, 'startTime' => '17:30', 'duration' => 90,  'lock' => LockLevel::HARD],
+            ['team' => $cecGroupe1, 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Mercredi Shark U9-U11'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '09:30', 'duration' => 75, 'lock' => LockLevel::HARD],
         ];
 
         foreach ($additionalSlots as $slotData) {

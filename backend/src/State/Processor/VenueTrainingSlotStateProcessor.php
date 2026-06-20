@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\State\Processor;
 
+use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\VenueTrainingSlotResource;
 use App\Dto\VenueTrainingSlotInput;
+use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use DateTimeImmutable;
 
@@ -41,11 +43,13 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
             $entity->setCapacity($input->capacity);
         }
 
+        $this->validateCapacityForVenue($entity);
+
         return $entity;
     }
 
     /**
-     * @param VenueTrainingSlot $entity
+     * @param VenueTrainingSlot      $entity
      * @param VenueTrainingSlotInput $input
      */
     protected function updateEntityFromInput(object $entity, object $input): void
@@ -65,6 +69,8 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         if (null !== $input->capacity) {
             $entity->setCapacity($input->capacity);
         }
+
+        $this->validateCapacityForVenue($entity);
     }
 
     /**
@@ -73,5 +79,18 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): VenueTrainingSlotResource
     {
         return VenueTrainingSlotResource::fromEntity($entity);
+    }
+
+    private function validateCapacityForVenue(VenueTrainingSlot $entity): void
+    {
+        if ($entity->getCapacity() <= 1) {
+            return;
+        }
+
+        $venue = $this->entityManager->find(Venue::class, $entity->getVenueId());
+
+        if ($venue instanceof Venue && false === $venue->getCanSplit()) {
+            throw new ValidationException('Cannot set capacity > 1 on a venue that cannot split.');
+        }
     }
 }

@@ -13,7 +13,7 @@ class VenueTrainingSlotSchema(SerializableModel):
     day_of_week: int = Field(alias="dayOfWeek")
     start_time: str = Field(alias="startTime")  # "19:00"
     duration_minutes: int = Field(alias="durationMinutes")
-    capacity: int = Field(default=1)
+    capacity: int = Field(default=1, ge=1)
 
 
 class VenueSchema(SerializableModel):
