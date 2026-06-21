@@ -73,6 +73,14 @@ def _run_pipeline(data: dict[str, Any], *, max_time_in_seconds: int = 5) -> dict
     return build_result(data, solver, model, status=status)
 
 
+def _team_age_min_by_id(data: dict[str, Any]) -> dict[str, int | None]:
+    return {team["id"]: team.get("ageMin") for team in data.get("teams", []) if team.get("id")}
+
+
+def _hard_locked_team_ids(data: dict[str, Any]) -> set[str]:
+    return {tpl["teamId"] for tpl in data.get("slotTemplates", []) if tpl.get("teamId") and tpl.get("lockLevel") == "HARD"}
+
+
 # ---------------------------------------------------------------------------
 # Hypothesis strategies
 # ---------------------------------------------------------------------------
@@ -231,6 +239,41 @@ class TestInvariants:
             # The result builder assigns the same coach to all slots of a team,
             # so we only assert that no two *different* teams share a coach.
             assert len(team_ids) <= 1, f"Coach double-booking at {key}: {team_ids}"
+
+    @settings(max_examples=20, deadline=None)
+    @given(data=random_fixture())
+    def test_age_order_per_venue_day(self, data: dict[str, Any]) -> None:
+        result = _run_pipeline(data)
+        if result["status"] != "completed":
+            pytest.skip("Solver did not find a feasible solution")
+
+        age_min_by_team = _team_age_min_by_id(data)
+        hard_locked_team_ids = _hard_locked_team_ids(data)
+
+        slots_by_group: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for slot in result["slots"]:
+            key = (slot["venueId"], slot["dayOfWeek"])
+            slots_by_group.setdefault(key, []).append(slot)
+
+        for key, slots in slots_by_group.items():
+            for i, slot_a in enumerate(slots):
+                age_a = age_min_by_team.get(slot_a["teamId"])
+                if age_a is None or slot_a["teamId"] in hard_locked_team_ids:
+                    continue
+                for slot_b in slots[i + 1 :]:
+                    age_b = age_min_by_team.get(slot_b["teamId"])
+                    if age_b is None or slot_b["teamId"] in hard_locked_team_ids:
+                        continue
+                    if age_a < age_b:
+                        assert slot_a["startTime"] <= slot_b["startTime"], (
+                            f"Age order violated at {key}: {slot_a['teamId']} ({age_a}) at {slot_a['startTime']} "
+                            f"must start at or before {slot_b['teamId']} ({age_b}) at {slot_b['startTime']}"
+                        )
+                    elif age_b < age_a:
+                        assert slot_b["startTime"] <= slot_a["startTime"], (
+                            f"Age order violated at {key}: {slot_b['teamId']} ({age_b}) at {slot_b['startTime']} "
+                            f"must start at or before {slot_a['teamId']} ({age_a}) at {slot_a['startTime']}"
+                        )
 
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
