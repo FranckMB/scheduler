@@ -114,7 +114,11 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
         first = self.assignment(model, "first", team_id="team-1", slot_id="slot-1", venue_id="venue-1")
         second = self.assignment(model, "second", team_id="team-1", slot_id="slot-2", venue_id="venue-1")
 
-        stats = add_level_1_hard_constraints(model, [first, second])
+        stats = add_level_1_hard_constraints(
+            model,
+            [first, second],
+            teams=[{"id": "team-1", "sessionsPerWeek": 2}],
+        )
         model.Add(first.var == 1)
         model.Add(second.var == 1)
 
@@ -185,7 +189,10 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
         ]
 
         stats = add_level_1_hard_constraints(
-            model, assignments, min_sessions_by_team={"team-1": 2}
+            model,
+            assignments,
+            teams=[{"id": "team-1", "sessionsPerWeek": 3}],
+            min_sessions_by_team={"team-1": 2},
         )
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 2

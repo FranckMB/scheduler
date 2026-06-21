@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
-from app.solver.model import ScheduleCpModel, build_model, SLOT_MINUTES
+from app.solver.model import ScheduleCpModel, build_model
 from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, LEVEL_2_OBJECTIVE_WEIGHTS
 from app.solver.result_builder import build_result
 
@@ -67,6 +67,42 @@ def read_implicit_rules() -> ImplicitConstraintSyncRequest:
         ) from exc
 
 
+def _day_constraint_conflict_team_ids(time_windows: list[dict[str, Any]]) -> set[str]:
+    forced_days_by_team: dict[str, set[int]] = {}
+    forbidden_days_by_team: dict[str, set[int]] = {}
+
+    for constraint in time_windows or []:
+        if not constraint.get("isActive", True):
+            continue
+
+        rule_type = constraint.get("ruleType") or constraint.get("rule_type")
+        family = constraint.get("family")
+        if rule_type == "PREFERRED" and family == "TIME":
+            continue
+        if rule_type != "HARD" or family != "DAY":
+            continue
+
+        team_id = constraint.get("scope_target_id") or constraint.get("scopeTargetId")
+        if team_id is None:
+            continue
+
+        team_id_text = str(team_id)
+        config = constraint.get("config") or {}
+        forced_days = config.get("forcedDays") or []
+        forbidden_days = config.get("forbiddenDays") or []
+
+        forced_days_by_team.setdefault(team_id_text, set()).update(int(day) for day in forced_days if day is not None)
+        forbidden_days_by_team.setdefault(team_id_text, set()).update(
+            int(day) for day in forbidden_days if day is not None
+        )
+
+    return {
+        team_id
+        for team_id, forced_days in forced_days_by_team.items()
+        if forced_days & forbidden_days_by_team.get(team_id, set())
+    }
+
+
 async def get_club_lock(club_id: str) -> asyncio.Lock:
     async with _club_locks_guard:
         lock = _club_locks.get(club_id)
@@ -110,6 +146,9 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         if team_id and max_sessions and not available_assignments_by_team.get(team_id, []):
             adjusted_min_by_team[str(team_id)] = 0
 
+    for team_id in _day_constraint_conflict_team_ids(parsed["time_windows"]):
+        adjusted_min_by_team[team_id] = 0
+
     add_level_1_hard_constraints(
         model,
         model.x,
@@ -123,7 +162,7 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         min_sessions_by_team=adjusted_min_by_team or None,
     )
 
-    add_time_window_constraints(model, model.x, parsed["time_windows"])
+    _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])
 
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
@@ -133,17 +172,11 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     for team in data.get("teams", []):
         team_id = team.get("id")
         max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
-        min_session_minutes = team.get("minSessionMinutes") or team.get("min_session_minutes")
         if team_id and max_sessions:
             team_vars = assignments_by_team.get(team_id, [])
             if team_vars:
                 remaining_sessions = int(max_sessions) - locked_slots_by_team.get(team_id, 0)
-                if min_session_minutes:
-                    # team_vars are 15-min BoolVars; cap must be in slot units
-                    slots_per_session = max(1, int(min_session_minutes) // SLOT_MINUTES)
-                    cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions * slots_per_session))
-                else:
-                    cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
+                cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
 
     # Add objective function.
     preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
@@ -171,6 +204,8 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
 
     # Transform the solution into the output schema.
     result_dict = build_result(data, solver, model, status=status)
+    if conflicts:
+        result_dict.setdefault("diagnostics", []).extend(conflicts)
 
     # Validate and return.
     return ScheduleOutputSchema.model_validate(result_dict)

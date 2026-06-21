@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence, cast
 
 from .model import _time_to_minutes
@@ -355,8 +356,12 @@ def add_time_window_constraints(
     model: Any,
     x: Mapping[Any, BoolVarLike],
     time_windows: Iterable[dict[str, Any]] = (),
-) -> int:
+) -> tuple[int, list[dict[str, Any]]]:
     added = 0
+    conflicts: list[dict[str, Any]] = []
+
+    day_rules_by_team: dict[str, dict[str, set[int]]] = defaultdict(lambda: {"forced": set(), "forbidden": set()})
+
     for constraint in time_windows or ():
         if not constraint.get("isActive", True):
             continue
@@ -375,15 +380,17 @@ def add_time_window_constraints(
         team_id_text = str(team_id)
         config = constraint.get("config") or {}
 
+        if family == "DAY":
+            forced_days = config.get("forcedDays") or []
+            forbidden_days = config.get("forbiddenDays") or []
+            day_rules_by_team[team_id_text]["forced"].update(int(day) for day in forced_days if day is not None)
+            day_rules_by_team[team_id_text]["forbidden"].update(int(day) for day in forbidden_days if day is not None)
+            continue
+
         min_start_time = config.get("minStartTime")
         max_start_time = config.get("maxStartTime")
-        forbidden_days = config.get("forbiddenDays") or []
-        forced_day = config.get("forcedDay")
-
         min_start_minutes = _time_to_minutes(min_start_time) if min_start_time is not None else None
         max_start_minutes = _time_to_minutes(max_start_time) if max_start_time is not None else None
-        forbidden_day_set = {int(day) for day in forbidden_days if day is not None}
-        forced_day_value = int(forced_day) if forced_day is not None else None
 
         for slot_key, var in x.items():
             if not isinstance(slot_key, tuple) or len(slot_key) < 4:
@@ -393,35 +400,71 @@ def add_time_window_constraints(
             if str(slot_team_id) != team_id_text:
                 continue
 
-            day = slot_key[2]
             slot_start = slot_key[3]
+            slot_start_minutes = _time_to_minutes(slot_start)
+            if min_start_minutes is not None and slot_start_minutes < min_start_minutes:
+                model.Add(var == 0)
+                added += 1
+                continue
+            if max_start_minutes is not None and slot_start_minutes > max_start_minutes:
+                model.Add(var == 0)
+                added += 1
 
-            if family == "TIME":
-                slot_start_minutes = _time_to_minutes(slot_start)
-                if min_start_minutes is not None and slot_start_minutes < min_start_minutes:
-                    model.Add(var == 0)
-                    added += 1
-                    continue
-                if max_start_minutes is not None and slot_start_minutes > max_start_minutes:
-                    model.Add(var == 0)
-                    added += 1
-                    continue
+    team_day_vars: dict[str, dict[int, list[BoolVarLike]]] = defaultdict(lambda: defaultdict(list))
+    team_all_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
 
-            if family == "DAY":
-                try:
-                    day_value = int(day)
-                except (TypeError, ValueError):
-                    continue
-                if day_value in forbidden_day_set:
-                    model.Add(var == 0)
-                    added += 1
-                    continue
-                if forced_day_value is not None and day_value != forced_day_value:
-                    model.Add(var == 0)
-                    added += 1
-                    continue
+    for slot_key, var in x.items():
+        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+            continue
 
-    return added
+        slot_team_id = slot_key[0]
+        team_id_text = str(slot_team_id)
+        team_all_vars[team_id_text].append(var)
+
+        day = slot_key[2]
+        try:
+            day_value = int(day)
+        except (TypeError, ValueError):
+            continue
+        team_day_vars[team_id_text][day_value].append(var)
+
+    for team_id_text, day_rules in day_rules_by_team.items():
+        forced_day_set = day_rules["forced"]
+        forbidden_day_set = day_rules["forbidden"]
+        if forced_day_set & forbidden_day_set:
+            conflicts.append({
+                "id": f"day_constraint_conflict-{team_id_text}",
+                "type": "day_constraint_conflict",
+                "severity": "ERROR",
+                "teamId": team_id_text,
+                "message": (
+                    f"Team {team_id_text} has contradictory forcedDays and forbiddenDays; "
+                    "the team is forced to 0 slots."
+                ),
+                "suggestions": [
+                    "Remove the overlapping days from forcedDays or forbiddenDays.",
+                ],
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+            for var in team_all_vars.get(team_id_text, []):
+                model.Add(var == 0)
+                added += 1
+            continue
+
+        for day_value in forbidden_day_set:
+            for var in team_day_vars.get(team_id_text, {}).get(day_value, []):
+                model.Add(var == 0)
+                added += 1
+
+        if forced_day_set:
+            forced_day_vars: list[BoolVarLike] = []
+            for day_value in forced_day_set:
+                forced_day_vars.extend(team_day_vars.get(team_id_text, {}).get(day_value, []))
+
+            model.Add(sum(forced_day_vars) >= 1)
+            added += 1
+
+    return added, conflicts
 
 
 def add_min_sessions_constraints(
@@ -804,10 +847,6 @@ def _forced_venue_id(
     return None
 
 
-_DEFAULT_MIN_SESSION_MINUTES: int = 90
-_SLOT_MINUTES: int = 15
-
-
 def add_one_session_per_day_constraints(
     model: Any,
     assignments: Iterable[AssignmentLike],
@@ -840,21 +879,16 @@ def add_one_session_per_day_constraints(
         groups[(str(team_id), day)].append(_var(assignment))
 
     sessions_per_week: dict[str, int] = {}
-    min_session_teams: set[str] = set()
     for team in teams:
         tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
         if tid is None:
             continue
-        raw = _get(team, "minSessionMinutes", "min_session_minutes", default=None)
-        if raw is not None:
-            min_session_teams.add(str(tid))
         spw = _get(team, "sessionsPerWeek", "sessions_per_week", default=1)
         sessions_per_week[str(tid)] = max(1, int(spw))
 
     days_by_team: dict[str, list[tuple[str, list[BoolVarLike]]]] = defaultdict(list)
     for (team_id, day), vars_list in groups.items():
-        if team_id in min_session_teams:
-            days_by_team[team_id].append((day, vars_list))
+        days_by_team[team_id].append((day, vars_list))
 
     added = 0
     for team_id, day_entries in days_by_team.items():

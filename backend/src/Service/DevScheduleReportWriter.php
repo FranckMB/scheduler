@@ -126,11 +126,7 @@ final class DevScheduleReportWriter
 
                 $configParts = [];
                 foreach ($c->getConfig() as $key => $val) {
-                    if (\is_array($val)) {
-                        $configParts[] = $key . '=[' . implode(',', $val) . ']';
-                    } else {
-                        $configParts[] = $key . '=' . $val;
-                    }
+                    $configParts[] = \is_array($val) ? $key . '=[' . implode(',', $val) . ']' : $key . '=' . $val;
                 }
                 $detailParts = ['scope: ' . $scopeStr];
                 if ([] !== $configParts) {
@@ -269,11 +265,7 @@ final class DevScheduleReportWriter
 
                 $configParts = [];
                 foreach ($constraint->getConfig() as $key => $val) {
-                    if (\is_array($val)) {
-                        $configParts[] = $key . '=[' . implode(',', $val) . ']';
-                    } else {
-                        $configParts[] = $key . '=' . $val;
-                    }
+                    $configParts[] = \is_array($val) ? $key . '=[' . implode(',', $val) . ']' : $key . '=' . $val;
                 }
 
                 $line = \sprintf('  [%s]      scope: %s', $constraint->getRuleType()->value, $scopeStr);
@@ -480,12 +472,13 @@ final class DevScheduleReportWriter
             $blockStart = clone $first->getStartTime();
             $blockDuration = $first->getDurationMinutes();
 
-            for ($i = 1; $i < \count($groupSlots); ++$i) {
+            $counter = \count($groupSlots);
+            for ($i = 1; $i < $counter; ++$i) {
                 $prev = $groupSlots[$i - 1];
                 $curr = $groupSlots[$i];
                 $prevEnd = (clone $prev->getStartTime())->modify('+' . $prev->getDurationMinutes() . ' minutes');
 
-                if ($prevEnd == $curr->getStartTime()) {
+                if ($prevEnd === $curr->getStartTime()) {
                     $blockDuration += $curr->getDurationMinutes();
                     continue;
                 }

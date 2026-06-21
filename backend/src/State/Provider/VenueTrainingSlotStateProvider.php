@@ -37,7 +37,7 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
         }
 
         $request = $this->requestStack->getCurrentRequest();
-        if (null !== $request) {
+        if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
             $venueId = $request->query->get('venueId');
             if (null !== $venueId && '' !== $venueId) {
                 $qb->andWhere('e.venueId = :venueId')->setParameter('venueId', $venueId);

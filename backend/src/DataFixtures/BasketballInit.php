@@ -38,9 +38,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
 {
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher,
-    )
-    {
-    }
+    ) {}
 
     public function load(ObjectManager $manager): void
     {
@@ -129,7 +127,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         \assert($u7 instanceof SportCategory);
         $u9M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9M']);
         \assert($u9M instanceof SportCategory);
+        $u9F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9F']);
+        \assert($u9M instanceof SportCategory);
         $u11F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11F']);
+        \assert($u11F instanceof SportCategory);
+        $u11M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11M']);
         \assert($u11F instanceof SportCategory);
         $u13M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13M']);
         \assert($u13M instanceof SportCategory);
@@ -467,8 +469,12 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'U13F3', 'sportCategory' => $u13F, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 5, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'U13M1', 'sportCategory' => $u13M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U13M2', 'sportCategory' => $u13M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
+            ['name' => 'U11M1', 'sportCategory' => $u11M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::F, 'minSessionMinutes' => 90],
+            ['name' => 'U11M2', 'sportCategory' => $u11M, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'U11F1', 'sportCategory' => $u11F, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::F, 'minSessionMinutes' => 90],
             ['name' => 'U11F2', 'sportCategory' => $u11F, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::F, 'minSessionMinutes' => 90],
+            ['name' => 'U9F1', 'sportCategory' => $u9F, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
+            ['name' => 'U9F2', 'sportCategory' => $u9F, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U9M1', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             ['name' => 'U9M2', 'sportCategory' => $u9M, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M, 'minSessionMinutes' => 90],
             // --- Loisir / Baby / Academie teams ---
@@ -486,11 +492,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => '3x3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE, 'minSessionMinutes' => 120],
             // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
             // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
-            ['name' => 'CEC Groupe 1', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 1', 'sportCategory' => $u9M, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 2 = joint training for U11F2 + U9M1 players
-            ['name' => 'CEC Groupe 2', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 2', 'sportCategory' => $u11M, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             // CEC Groupe 3 = joint training for U11F1 + U11M2 players
-            ['name' => 'CEC Groupe 3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'CEC Groupe 3', 'sportCategory' => $u11M, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
         ];
 
         foreach ($newTeamsData as $teamData) {
@@ -727,10 +733,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $slot->setDurationMinutes($slotData['duration']);
                 $slot->setLockLevel($slotData['lock']);
                 $manager->persist($slot);
-            } else {
-                if ($existing->getDurationMinutes() !== $slotData['duration']) {
-                    $existing->setDurationMinutes($slotData['duration']);
-                }
+            } elseif ($existing->getDurationMinutes() !== $slotData['duration']) {
+                $existing->setDurationMinutes($slotData['duration']);
             }
         }
         $manager->flush();
@@ -952,12 +956,10 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setFamily(ConstraintFamily::DAY);
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('SM3 - Mercredi uniquement');
-            $c->setConfig(['preferredDays' => [3], 'preferredVenueId' => $venues['vArmand']->getId()]);
+            $c->setConfig(['forcedDays' => [3], 'preferredVenueId' => $venues['vArmand']->getId()]);
             $c->setIsActive(true);
             $manager->persist($c);
         }
-
-
         // Veterans: Vendredi uniquement, interdit sur Camus/JDR/Jean Vilar/Tonkin/ADN
         $veteransTeam = $teams['Veterans'];
         $forbiddenVenueIds = [
@@ -1001,7 +1003,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setFamily(ConstraintFamily::DAY);
             $c->setRuleType(ConstraintRuleType::HARD);
             $c->setName('Veterans - Vendredi uniquement');
-            $c->setConfig(['preferredDays' => [5]]);
+            $c->setConfig(['forcedDays' => [5]]);
             $c->setIsActive(true);
             $manager->persist($c);
         }
@@ -1056,6 +1058,25 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setIsActive(true);
             $manager->persist($c);
         }
+
+        $existingEMBTime = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'name' => 'EMB - Début maximum 19h50',
+        ]);
+        if (!$existingEMBTime instanceof Constraint) {
+            $c = new Constraint;
+            $c->setClubId($club->getId());
+            $c->setSeasonId($season->getId());
+            $c->setScope(ConstraintScope::CLUB);
+            $c->setScopeTargetId(null);
+            $c->setFamily(ConstraintFamily::TIME);
+            $c->setRuleType(ConstraintRuleType::HARD);
+            $c->setName('EMB - Début maximum 19h50');
+            $c->setConfig(['maxStartTime' => '19:50', 'targetTag' => 'EMB']);
+            $c->setIsActive(true);
+            $manager->persist($c);
+        }
+
         $manager->flush();
 
         // ============================================================
@@ -1157,7 +1178,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $c->setScope(ConstraintScope::TEAM);
                 $c->setScopeTargetId($targetTeam->getId());
                 $c->setFamily(ConstraintFamily::FACILITY);
-                $c->setRuleType(ConstraintRuleType::PREFERRED);
+                $c->setRuleType(ConstraintRuleType::HARD);
                 $c->setName($constraintName);
                 $c->setConfig(['preferredVenueId' => $venues['vJeanVilar']->getId()]);
                 $c->setIsActive(true);

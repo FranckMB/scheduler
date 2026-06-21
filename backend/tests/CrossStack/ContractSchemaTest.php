@@ -14,6 +14,7 @@ use App\Enum\ConstraintScope;
 use App\Service\ScheduleConstraintBuilder;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -119,7 +120,7 @@ final class ContractSchemaTest extends TestCase
             ->setRuleType(ConstraintRuleType::PREFERRED)
             ->setConfig(['type' => 'preferred']);
 
-        return (new ScheduleConstraintBuilder)->buildPayload(
+        return new ScheduleConstraintBuilder(new NullLogger)->buildPayload(
             clubId: self::CLUB_ID,
             seasonId: self::SEASON_ID,
             venues: [$venue],

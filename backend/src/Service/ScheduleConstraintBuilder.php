@@ -23,6 +23,7 @@ use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class ScheduleConstraintBuilder
@@ -36,6 +37,7 @@ final class ScheduleConstraintBuilder
     private array $currentAvailabilitiesByVenue = [];
 
     public function __construct(
+        private readonly LoggerInterface $logger,
         private readonly ?EntityManagerInterface $entityManager = null,
         #[Autowire(service: 'cache.schedule')]
         private readonly ?CacheItemPoolInterface $scheduleCachePool = null,
@@ -183,7 +185,7 @@ final class ScheduleConstraintBuilder
             $this->serializeTeamCoachConstraints($teamCoaches),
             $this->serializeCoachPlayerMembershipConstraints($coachPlayerMemberships),
             $this->serializePriorityTierConstraints($priorityTiers),
-            $this->serializeUnifiedConstraints($constraints, $seasonId, $teams),
+            $this->serializeUnifiedConstraints($constraints, $seasonId, $clubId, $teams),
         );
 
         return [
@@ -298,7 +300,6 @@ final class ScheduleConstraintBuilder
             'minSessionsOverride' => $team->getMinSessionsOverride(),
             'matchDay' => $team->getMatchDay(),
             'allowMultipleSessionsPerDay' => $team->getAllowMultipleSessionsPerDay(),
-            'minSessionMinutes' => $team->getMinSessionMinutes(),
             'forcedVenueId' => $team->getForcedVenueId(),
             'isActive' => $team->getIsActive(),
             'parentTeamId' => $team->getParentTeamId(),
@@ -428,7 +429,7 @@ final class ScheduleConstraintBuilder
      *
      * @return array<array<string, mixed>>
      */
-    private function serializeUnifiedConstraints(array $constraints, string $seasonId, array $teams = []): array
+    private function serializeUnifiedConstraints(array $constraints, string $seasonId, string $clubId, array $teams = []): array
     {
         $result = [];
 
@@ -439,7 +440,7 @@ final class ScheduleConstraintBuilder
 
             // Resolve CLUB+targetTag into N TEAM constraints
             if (ConstraintScope::CLUB === $scope && null !== $targetTag && '' !== $targetTag) {
-                $teamIds = $this->resolveTagToTeamIds($targetTag, $seasonId);
+                $teamIds = $this->resolveTagToTeamIds($targetTag, $seasonId, $clubId);
 
                 foreach ($teamIds as $teamId) {
                     $resolvedConfig = $config;
@@ -504,7 +505,7 @@ final class ScheduleConstraintBuilder
      *
      * @return list<string>
      */
-    private function resolveTagToTeamIds(string $targetTag, string $seasonId): array
+    private function resolveTagToTeamIds(string $targetTag, string $seasonId, string $clubId): array
     {
         if (!$this->entityManager instanceof EntityManagerInterface) {
             return [];
@@ -512,9 +513,14 @@ final class ScheduleConstraintBuilder
 
         // Find the tag by name
         $tagRepo = $this->entityManager->getRepository(TeamTag::class);
-        $tag = $tagRepo->findOneBy(['name' => $targetTag]);
+        $tag = $tagRepo->findOneBy(['name' => $targetTag, 'clubId' => $clubId]);
 
         if (!$tag instanceof TeamTag) {
+            $this->logger->warning(
+                "Tag '{$targetTag}' not found for club {$clubId} — constraint will be ignored.",
+                ['targetTag' => $targetTag, 'clubId' => $clubId, 'seasonId' => $seasonId],
+            );
+
             return [];
         }
 

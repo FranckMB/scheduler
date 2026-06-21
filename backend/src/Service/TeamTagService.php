@@ -89,7 +89,7 @@ final class TeamTagService
             'NATIONAL' => '#CD7F32',
             'DEPARTEMENTAL' => '#87CEEB',
             'LOISIR_ADULTE' => '#98FB98',
-            'LOISIR_JEUNE'  => '#90EE90',
+            'LOISIR_JEUNE' => '#90EE90',
             'HONNEUR' => '#F0E68C',
             'PROMOTION' => '#DDA0DD',
             'PRE_REGION' => '#B0E0E6',

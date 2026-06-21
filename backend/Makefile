@@ -69,7 +69,7 @@ db-reset-test:
 fixtures: APP_ENV = dev
 fixtures:
 	$(EXEC) php bin/console doctrine:fixtures:load --no-interaction
-	$(EXECROOT) rm -rf var/generate
+	$(EXECROOT) rm -rf var/generate/*
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:

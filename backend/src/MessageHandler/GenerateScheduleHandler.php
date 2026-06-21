@@ -93,7 +93,7 @@ final class GenerateScheduleHandler
         $this->entityManager->flush();
 
         $lotDir = null;
-        if (null !== $this->devReportWriter) {
+        if ($this->devReportWriter instanceof DevScheduleReportWriter) {
             try {
                 $lotDir = $this->devReportWriter->writePayloadFiles($schedule, $scheduleInput);
             } catch (Throwable) {
@@ -133,7 +133,7 @@ final class GenerateScheduleHandler
 
     private function writeResultFilesIfEnabled(Schedule $schedule, ?string $lotDir): void
     {
-        if (null === $this->devReportWriter || null === $lotDir) {
+        if (!$this->devReportWriter instanceof DevScheduleReportWriter || null === $lotDir) {
             return;
         }
 

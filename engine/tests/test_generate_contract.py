@@ -256,11 +256,11 @@ class TestGenerateContract:
         assert result.diagnostics is not None
         assert isinstance(result.diagnostics, list)
 
-    def test_build_schedule_with_min_session_minutes_does_not_fail(self) -> None:
-        """Solver must not return FAILED when teams have minSessionMinutes set.
+    def test_build_schedule_with_short_session_window_does_not_fail(self) -> None:
+        """Solver must not return FAILED when teams request a longer session window.
 
-        Regression guard for the bug where 'not min_session_minutes' in main.py
-        excluded those teams from max-cap, causing INFEASIBLE.
+        Regression guard for the bug where the main cap logic excluded those teams
+        from max-cap, causing INFEASIBLE.
         """
         input_data = ScheduleInputSchema.model_validate(
             {
@@ -273,7 +273,6 @@ class TestGenerateContract:
                         "priorityTierId": 1,
                         "name": "Team Competitive",
                         "sessionsPerWeek": 3,
-                        "minSessionMinutes": 90,
                         "isActive": True,
                     },
                 ],
@@ -296,7 +295,7 @@ class TestGenerateContract:
         result = asyncio.run(build_schedule(input_data))
 
         assert result.status != "failed", (
-            f"Solver returned 'failed' for team with minSessionMinutes=90; "
+            f"Solver returned 'failed' for team with a 90-minute session request; "
             f"status={result.status}, unplaced={result.unplaced}"
         )
         # Max-cap check: 3 training slots available → max 3 slot assignments
@@ -363,7 +362,7 @@ class TestGenerateContract:
 
     @pytest.mark.timeout(30)
     def test_build_schedule_two_teams_share_venue_day_does_not_fail(self) -> None:
-        """Two teams with minSessionMinutes at the same venue on the same day must
+        """Two teams with a longer session request at the same venue on the same day must
         both be placeable.
 
         Regression guard for the suffix-chain bug: x[i] <= x[i+1] forced sessions
@@ -382,7 +381,6 @@ class TestGenerateContract:
                         "priorityTierId": 3,
                         "name": "Team A",
                         "sessionsPerWeek": 1,
-                        "minSessionMinutes": 90,
                         "isActive": True,
                     },
                     {
@@ -391,7 +389,6 @@ class TestGenerateContract:
                         "priorityTierId": 3,
                         "name": "Team B",
                         "sessionsPerWeek": 1,
-                        "minSessionMinutes": 90,
                         "isActive": True,
                     },
                 ],
