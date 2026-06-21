@@ -25,12 +25,12 @@ final class ScheduleConstraintBuilderAgeFieldsTest extends TestCase
 
     public function testBuildAddsAgeFieldsToEveryTeam(): void
     {
-        $u13Category = (new SportCategory())
+        $u13Category = (new SportCategory)
             ->setId('sport-category-u13m')
             ->setAgeMin(12)
             ->setAgeMax(13);
 
-        $loisirCategory = (new SportCategory())
+        $loisirCategory = (new SportCategory)
             ->setId('sport-category-loisir')
             ->setAgeMin(null)
             ->setAgeMax(null);
@@ -44,14 +44,14 @@ final class ScheduleConstraintBuilderAgeFieldsTest extends TestCase
         );
 
         $teams = [
-            (new Team())
+            (new Team)
                 ->setId('team-u13')
                 ->setClubId('club-1')
                 ->setSeasonId('season-1')
                 ->setSportCategoryId('sport-category-u13m')
                 ->setPriorityTierId(1)
                 ->setName('U13M 1'),
-            (new Team())
+            (new Team)
                 ->setId('team-loisir')
                 ->setClubId('club-1')
                 ->setSeasonId('season-1')
