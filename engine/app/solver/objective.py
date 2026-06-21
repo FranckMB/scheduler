@@ -35,6 +35,8 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     }
 )
 
+UNPLACED_PENALTY = 100000
+
 TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
 BONUS_WEIGHT_NAMES = (
     "SOFT",
@@ -198,6 +200,20 @@ def add_level_2_objective(
         variables.append(variable)
         coefficients.append(LEVEL_2_OBJECTIVE_WEIGHTS["session_count"])
         soft_bonus_terms += 1
+
+    # Unplaced penalty: objective -= UNPLACED_PENALTY * (1 - placed) per team.
+    assignments_by_team: dict[Any, list[BoolVarLike]] = {}
+    for assignment in assignment_list:
+        team_id = _team_id(assignment)
+        if team_id is not None:
+            assignments_by_team.setdefault(team_id, []).append(_var(assignment))
+
+    for team_id, team_vars in assignments_by_team.items():
+        placed = model.NewBoolVar(f"placed_{team_id}")
+        model.Add(sum(team_vars) >= 1).OnlyEnforceIf(placed)
+        model.Add(sum(team_vars) == 0).OnlyEnforceIf(placed.Not())
+        variables.append(placed.Not())
+        coefficients.append(-UNPLACED_PENALTY)
 
     for soft_term in soft_terms:
         variable, weight_name = _soft_term_variable_and_weight(soft_term)
@@ -523,6 +539,7 @@ __all__ = [
     "Level2ObjectiveStats",
     "SCORE_FORMULA_VERSION",
     "TIER_WEIGHT_NAMES",
+    "UNPLACED_PENALTY",
     "add_level_2_objective",
     "add_preferred_day_bonus",
     "add_objective",

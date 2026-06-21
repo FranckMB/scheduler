@@ -228,6 +228,7 @@ def _generate_diagnostics(
     diagnostics.extend(_diagnose_coach_overload(model_data, slots))
     diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(solver_status, slots, slot_capacities=slot_capacities))
+    diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     return diagnostics
 
 
@@ -508,6 +509,69 @@ def _diagnose_conflicts(
                 "suggestions": [
                     "Split the sessions or assign a different coach to one team.",
                 ],
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+
+    return diagnostics
+
+
+_DAY_NAMES = {
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
+}
+
+
+def _diagnose_unused_slots(
+    model_data: Mapping[str, Any] | Any,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Warn about available training slots that received no team assignment.
+
+    Only slots that were *available* (declared in ``venues[].trainingSlots``)
+    but not used by any placed session are reported. Venue closures and coach
+    unavailability are excluded because those slots are not in the available
+    set the solver could use.
+    """
+    diagnostics: list[dict[str, Any]] = []
+
+    used: set[tuple[str, int, str]] = {
+        (str(slot["venueId"]), int(slot["dayOfWeek"]), str(slot["startTime"]))
+        for slot in slots
+    }
+
+    for venue in _collection(model_data, "venues"):
+        venue_id = str(_get(venue, "id"))
+        venue_name = str(_get(venue, "name", default=venue_id))
+        for ts in _collection(venue, "training_slots", "trainingSlots"):
+            day_of_week = int(_get(ts, "day_of_week", "dayOfWeek"))
+            start_time = str(_get(ts, "start_time", "startTime"))
+            duration = int(_get(ts, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+
+            if (venue_id, day_of_week, start_time) in used:
+                continue
+
+            start_minutes = _time_to_minutes(start_time)
+            end_minutes = start_minutes + duration
+            end_time = _format_time(end_minutes)
+            day_name = _DAY_NAMES.get(day_of_week, str(day_of_week))
+
+            diagnostics.append({
+                "id": f"diag-unused-slot-{venue_id}-{day_of_week}-{start_time}",
+                "type": "unused_slot",
+                "severity": "WARNING",
+                "venueId": venue_id,
+                "dayOfWeek": day_of_week,
+                "startTime": start_time,
+                "durationMinutes": duration,
+                "message": f"{venue_name} {day_name} {start_time}-{end_time}: no team assigned",
+                "suggestions": [],
+                "teamId": None,
+                "coachId": None,
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
 

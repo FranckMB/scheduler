@@ -1,0 +1,92 @@
+{
+  "clubId": "club-age-order",
+  "seasonId": "season-2024",
+  "version": "2.0",
+  "solverSeed": 42,
+  "venues": [
+    {
+      "id": "test-gym",
+      "name": "Test Gym",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "17:30",
+          "durationMinutes": 90,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "19:00",
+          "durationMinutes": 90,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "20:30",
+          "durationMinutes": 90,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 1,
+          "startTime": "22:00",
+          "durationMinutes": 90,
+          "capacity": 1
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "u13m",
+      "sportCategoryId": "u13",
+      "ageMin": 12,
+      "ageMax": 13,
+      "priorityTierId": 3,
+      "name": "U13 Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u15m",
+      "sportCategoryId": "u15",
+      "ageMin": 14,
+      "ageMax": 15,
+      "priorityTierId": 3,
+      "name": "U15 Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "u18m",
+      "sportCategoryId": "u18",
+      "ageMin": 16,
+      "ageMax": 18,
+      "priorityTierId": 3,
+      "name": "U18 Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "senior-m",
+      "sportCategoryId": "senior",
+      "ageMin": 22,
+      "ageMax": 99,
+      "priorityTierId": 3,
+      "name": "Senior Men",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
+  ],
+  "coaches": [],
+  "slotTemplates": [],
+  "constraints": [],
+  "priorityTiers": [
+    {
+      "id": 3,
+      "label": "B",
+      "orToolsWeight": 100,
+      "defaultMinSessions": 1
+    }
+  ]
+}

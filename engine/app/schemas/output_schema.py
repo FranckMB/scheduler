@@ -41,6 +41,7 @@ class DiagnosticSchema(SerializableModel):
     venue_id: str | None = Field(default=None, alias="venueId")
     day_of_week: int | None = Field(default=None, alias="dayOfWeek")
     start_time: str | None = Field(default=None, alias="startTime")
+    duration_minutes: int | None = Field(default=None, alias="durationMinutes")
     message: str
     suggestions: list[str] = Field(default_factory=list)
     created_at: datetime | None = Field(default=None, alias="createdAt")

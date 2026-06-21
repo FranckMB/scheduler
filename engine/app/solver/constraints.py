@@ -71,6 +71,7 @@ class HardConstraintStats:
     min_sessions: int = 0
     forced_venues: int = 0
     one_session_per_day: int = 0
+    age_ascending: int = 0
 
     @property
     def total_constraints_added(self) -> int:
@@ -90,6 +91,7 @@ class HardConstraintStats:
             + self.min_sessions
             + self.forced_venues
             + self.one_session_per_day
+            + self.age_ascending
         )
 
 
@@ -124,6 +126,7 @@ def add_level_1_hard_constraints(
 
     New implicit rule:
      11. one_session_per_day  — at most one session per day per team
+     12. age_ascending        — younger teams train earlier than older teams (same venue+day)
      """
 
     if assignments is None:
@@ -178,6 +181,11 @@ def add_level_1_hard_constraints(
 
     # 11. At most one session per day per team (unless explicitly allowed).
     stats.one_session_per_day = add_one_session_per_day_constraints(
+        model, assignment_list, teams=teams
+    )
+
+    # 12. Younger teams train earlier than older teams in the same venue+day.
+    stats.age_ascending = add_age_ascending_constraints(
         model, assignment_list, teams=teams
     )
 
@@ -915,6 +923,90 @@ def add_one_session_per_day_constraints(
     return added
 
 
+def add_age_ascending_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    teams: Iterable[Any] = (),
+) -> int:
+    """Implicit rule 12: younger teams train earlier than older teams
+    in the same venue on the same day.
+
+    For each pair (A, B) where A.ageMin < B.ageMin (both not None, neither
+    HARD-locked), and for each venue+day, if slot_A starts later than slot_B,
+    prevent both from being selected simultaneously:
+    ``x[A, venue, day, slot_A] + x[B, venue, day, slot_B] <= 1``.
+
+    Teams with ``ageMin=None`` (Loisir, Baby) and HARD-locked teams are exempt.
+    No constraint is added between teams sharing the same ``ageMin``.
+    """
+
+    team_age_min: dict[str, int] = {}
+    for team in teams:
+        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        if tid is None:
+            continue
+        age_min = _get(team, "ageMin", "age_min", default=None)
+        if age_min is None:
+            continue
+        team_age_min[str(tid)] = int(age_min)
+
+    if len(team_age_min) < 2:
+        return 0
+
+    hard_locked_teams: set[str] = set()
+    hard_slot_keys: frozenset[tuple[str, str, int, str]] = getattr(model, "hard_slot_keys", frozenset())
+    for slot_key in hard_slot_keys:
+        hard_locked_teams.add(str(slot_key[0]))
+
+    locked_slots = getattr(model, "locked_slots", ())
+    for locked in locked_slots:
+        tid = _scalar_id(_get(locked, "team_id", "teamId", default=None))
+        if tid is not None:
+            hard_locked_teams.add(str(tid))
+
+    groups: dict[tuple[str, str], list[tuple[str, int, BoolVarLike]]] = defaultdict(list)
+    for assignment in assignments:
+        team_id = _team_id(assignment)
+        venue_id = _venue_id(assignment)
+        slot_id = _slot_id(assignment)
+        if team_id is None or venue_id is None or slot_id is None:
+            continue
+        team_id_str = str(team_id)
+        if team_id_str not in team_age_min or team_id_str in hard_locked_teams:
+            continue
+        slot_id_str = str(slot_id)
+        parts = slot_id_str.split(":", 1)
+        if len(parts) != 2:
+            continue
+        day = parts[0]
+        start_minutes = _time_to_minutes(parts[1])
+        groups[(str(venue_id), day)].append((team_id_str, start_minutes, _var(assignment)))
+
+    added = 0
+    for _entries in groups.values():
+        by_team: dict[str, list[tuple[int, BoolVarLike]]] = defaultdict(list)
+        for team_id_str, start_minutes, var in _entries:
+            by_team[team_id_str].append((start_minutes, var))
+
+        team_ids_here = [t for t in by_team if t in team_age_min]
+        team_ids_here.sort(key=lambda t: team_age_min[t])
+
+        for i in range(len(team_ids_here)):
+            for j in range(i + 1, len(team_ids_here)):
+                team_a = team_ids_here[i]
+                team_b = team_ids_here[j]
+                if team_age_min[team_a] == team_age_min[team_b]:
+                    continue
+                for start_a, var_a in by_team[team_a]:
+                    for start_b, var_b in by_team[team_b]:
+                        if start_a > start_b:
+                            model.Add(var_a + var_b <= 1)
+                            added += 1
+
+    return added
+
+
 def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
     """Parse v2 constraints[] array into solver-ready rule collections.
 
@@ -1001,6 +1093,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
 __all__ = [
     "AssignmentVariable",
     "HardConstraintStats",
+    "add_age_ascending_constraints",
     "add_coach_at_most_one",
     "add_coach_player_non_overlap",
     "add_coach_unavailability_constraints",
