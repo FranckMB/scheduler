@@ -30,17 +30,15 @@ final class ScheduleConstraintBuilderTest extends TestCase
     {
         $seasonId = 'season-1';
         $club1Id = 'club-1';
-        $tag = (new TeamTag())
+        $tag = (new TeamTag)
             ->setId('tag-jeune-club-1')
             ->setClubId($club1Id)
             ->setName('JEUNE');
 
         $this->teamTagRepository->expects(self::once())
             ->method('findOneBy')
-            ->with(self::callback(static function (array $criteria) use ($club1Id): bool {
-                return 'JEUNE' === ($criteria['name'] ?? null)
-                    && $club1Id === ($criteria['clubId'] ?? null);
-            }))
+            ->with(self::callback(static fn (array $criteria): bool => 'JEUNE' === ($criteria['name'] ?? null)
+                    && $club1Id === ($criteria['clubId'] ?? null)))
             ->willReturn($tag);
 
         $this->teamTagAssignmentRepository->method('findBy')->willReturnCallback(
@@ -49,17 +47,17 @@ final class ScheduleConstraintBuilderTest extends TestCase
                     return [];
                 }
 
-                $first = (new TeamTagAssignment())
+                $first = (new TeamTagAssignment)
                     ->setTeamId('team-a')
                     ->setTagId('tag-jeune-club-1')
                     ->setSeasonId('season-1');
-                $second = (new TeamTagAssignment())
+                $second = (new TeamTagAssignment)
                     ->setTeamId('team-b')
                     ->setTagId('tag-jeune-club-1')
                     ->setSeasonId('season-1');
 
                 return [$first, $second];
-            }
+            },
         );
 
         $club1TeamIds = $this->invokeResolveTagToTeamIds('JEUNE', $seasonId, $club1Id);
@@ -76,11 +74,9 @@ final class ScheduleConstraintBuilderTest extends TestCase
             ->method('warning')
             ->with(
                 self::callback(static fn (string $message): bool => str_contains($message, 'JEUNE') && str_contains($message, $clubId)),
-                self::callback(static function (array $context) use ($clubId, $seasonId): bool {
-                    return 'JEUNE' === ($context['targetTag'] ?? null)
+                self::callback(static fn (array $context): bool => 'JEUNE' === ($context['targetTag'] ?? null)
                         && $clubId === ($context['clubId'] ?? null)
-                        && $seasonId === ($context['seasonId'] ?? null);
-                }),
+                        && $seasonId === ($context['seasonId'] ?? null)),
             );
 
         $result = $this->invokeResolveTagToTeamIds('JEUNE', $seasonId, $clubId);

@@ -33,11 +33,14 @@ class ScheduleSlotSchema(SerializableModel):
 
 class DiagnosticSchema(SerializableModel):
     id: str
+    # Valid diagnostic types: unplaced, soft_lock_moved, coach_overload, session_below_effective_min, conflict, unused_slot
     type: str
     severity: str
     team_id: str | None = Field(default=None, alias="teamId")
     coach_id: str | None = Field(default=None, alias="coachId")
     venue_id: str | None = Field(default=None, alias="venueId")
+    day_of_week: int | None = Field(default=None, alias="dayOfWeek")
+    start_time: str | None = Field(default=None, alias="startTime")
     message: str
     suggestions: list[str] = Field(default_factory=list)
     created_at: datetime | None = Field(default=None, alias="createdAt")

@@ -9,6 +9,7 @@ use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\TeamTag;
@@ -273,6 +274,10 @@ final class ScheduleConstraintBuilder
     private function serializeTeam(Team $team, string $seasonId): array
     {
         $tags = [];
+        $sportCategory = null;
+        if ($this->entityManager instanceof EntityManagerInterface) {
+            $sportCategory = $this->entityManager->getRepository(SportCategory::class)->find($team->getSportCategoryId());
+        }
         if ($this->teamTagService instanceof TeamTagService && $this->entityManager instanceof EntityManagerInterface) {
             $this->teamTagService->syncTeamTags($team, $seasonId);
             // Get tags from database
@@ -292,6 +297,8 @@ final class ScheduleConstraintBuilder
         return [
             'id' => $team->getId(),
             'sportCategoryId' => $team->getSportCategoryId(),
+            'ageMin' => $sportCategory?->getAgeMin(),
+            'ageMax' => $sportCategory?->getAgeMax(),
             'priorityTierId' => $team->getPriorityTierId(),
             'name' => $team->getName(),
             'gender' => $team->getGender()?->value,

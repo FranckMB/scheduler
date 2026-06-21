@@ -40,6 +40,9 @@ class PriorityTierSchema(SerializableModel):
 class TeamSchema(SerializableModel):
     id: str
     sport_category_id: str = Field(alias="sportCategoryId")
+    """Age range from SportCategory. Used for age-ascending constraint. None = constraint skipped."""
+    ageMin: int | None = None
+    ageMax: int | None = None
     priority_tier_id: int = Field(alias="priorityTierId")
     name: str
     gender: str | None = None
