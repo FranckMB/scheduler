@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
-from app.solver.model import ScheduleCpModel, build_model
+from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, build_model, _time_to_minutes
 from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, LEVEL_2_OBJECTIVE_WEIGHTS
 from app.solver.result_builder import build_result
 
@@ -116,10 +116,49 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # Convert Pydantic input to a plain dict for the solver pipeline.
     data: dict[str, Any] = input_data.model_dump(by_alias=True)
 
-    # Build the CP-SAT model.
+    # Pass 1: try with all constraints (including coach rest day + salarie distribution).
+    status_pass1, solver_pass1, model_pass1, conflicts_pass1 = _solve_pass(
+        data, input_data, skip_rest_day_and_distribution=False
+    )
+
+    if status_pass1 != cp_model.INFEASIBLE:
+        # Pass 1 succeeded — use its result directly.
+        result_dict = build_result(
+            data, solver_pass1, model_pass1, status=status_pass1, fallback_used=False
+        )
+        if conflicts_pass1:
+            result_dict.setdefault("diagnostics", []).extend(conflicts_pass1)
+    else:
+        # Pass 2: drop coach rest day + salarie distribution constraints to find a feasible solution.
+        status_pass2, solver_pass2, model_pass2, conflicts_pass2 = _solve_pass(
+            data, input_data, skip_rest_day_and_distribution=True
+        )
+        result_dict = build_result(
+            data, solver_pass2, model_pass2, status=status_pass2, fallback_used=True
+        )
+        if conflicts_pass2:
+            result_dict.setdefault("diagnostics", []).extend(conflicts_pass2)
+
+    # Validate and return.
+    return ScheduleOutputSchema.model_validate(result_dict)
+
+
+def _solve_pass(
+    data: dict[str, Any],
+    input_data: ScheduleInputSchema,
+    *,
+    skip_rest_day_and_distribution: bool = False,
+) -> tuple[int, cp_model.CpSolver, ScheduleCpModel, list[dict[str, Any]]]:
+    """Run one pass of the solver pipeline: build model, add constraints, solve.
+
+    Returns (status, solver, model, conflicts) so the caller can decide whether
+    to retry. Each pass uses the full ``solver_timeout_seconds``.
+    """
     model: ScheduleCpModel = build_model(data)
 
     parsed = parse_v2_constraints(data.get("constraints", []))
+    team_coach_map: dict[str, list[str]] = parsed.get("team_coach_map", {})
+    team_player_map: dict[str, list[str]] = parsed.get("team_player_map", {})
 
     locked_slots_by_team: dict[str, int] = {}
     for locked_slot in model.locked_slots:
@@ -149,10 +188,36 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     for team_id in _day_constraint_conflict_team_ids(parsed["time_windows"]):
         adjusted_min_by_team[team_id] = 0
 
+    # Build assignments from model.x with start/end for consecutive-session constraints.
+    # Each (team, venue, day, slot) appears exactly ONCE — no per-coach duplication.
+    # Coach and player info is passed separately via team_coach_map / team_player_map.
+    assignments: list[dict[str, Any]] = []
+    for slot_key, var in model.x.items():
+        team_id_str = str(slot_key[0])
+        venue_id_str = str(slot_key[1])
+        day_of_week = slot_key[2]
+        slot_start = slot_key[3]
+        slot_id = f"{day_of_week}:{slot_start}"
+
+        vsk = (venue_id_str, day_of_week, slot_start)
+        duration = model.slot_durations.get(vsk, DEFAULT_SESSION_MINUTES)
+        start_minutes = _time_to_minutes(slot_start)
+        end_minutes = start_minutes + duration
+
+        assignments.append({
+            "var": var,
+            "team_id": team_id_str,
+            "venue_id": venue_id_str,
+            "slot_id": slot_id,
+            "start": start_minutes,
+            "end": end_minutes,
+        })
+
     add_level_1_hard_constraints(
         model,
-        model.x,
+        assignments,
         teams=data.get("teams", []),
+        coaches=data.get("coaches", []),
         fixed_assignments=parsed["fixed_slots"],
         forbidden_assignments=parsed["forbidden_assignments"],
         coach_unavailability=parsed["coach_unavailability"],
@@ -160,6 +225,9 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,
+        skip_rest_day_and_distribution=skip_rest_day_and_distribution,
+        team_coach_map=team_coach_map,
+        team_player_map=team_player_map,
     )
 
     _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])
@@ -192,23 +260,17 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
 
     add_level_2_objective(
         model,
-        model.x,
+        assignments,
         teams=data.get("teams", []),
         soft_terms=soft_terms,
     )
 
-    # Solve.
+    # Solve — each pass uses the full timeout.
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = input_data.solver_timeout_seconds
     status = solver.Solve(model)
 
-    # Transform the solution into the output schema.
-    result_dict = build_result(data, solver, model, status=status)
-    if conflicts:
-        result_dict.setdefault("diagnostics", []).extend(conflicts)
-
-    # Validate and return.
-    return ScheduleOutputSchema.model_validate(result_dict)
+    return status, solver, model, conflicts
 
 
 @app.get("/health")

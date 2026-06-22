@@ -59,6 +59,9 @@ class Coach
     #[ORM\Column(type: 'boolean')]
     private bool $isActive = true;
 
+    #[ORM\Column(type: 'boolean')]
+    private bool $isEmployee = false;
+
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $parentCoachId = null;
 
@@ -243,6 +246,18 @@ class Coach
     public function setIsActive(bool $isActive): self
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function isEmployee(): bool
+    {
+        return $this->isEmployee;
+    }
+
+    public function setIsEmployee(bool $isEmployee): self
+    {
+        $this->isEmployee = $isEmployee;
 
         return $this;
     }

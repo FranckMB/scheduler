@@ -317,10 +317,12 @@ final class DevScheduleReportWriter
             $coachNames[$coach->getId()] = trim($coach->getFirstName() . ' ' . $coach->getLastName());
         }
 
-        // Build team → coaches map from TeamCoach
+        // Build team → coaches map from TeamCoach (names for display, IDs for player matching)
         $teamCoaches = [];
+        $teamCoachIds = [];
         foreach ($this->entityManager->getRepository(TeamCoach::class)->findBy(['clubId' => $schedule->getClubId()]) as $tc) {
             $teamCoaches[$tc->getTeamId()][] = $coachNames[$tc->getCoachId()] ?? $tc->getCoachId();
+            $teamCoachIds[$tc->getTeamId()][] = $tc->getCoachId();
         }
 
         // slots-by-team.txt
@@ -378,17 +380,49 @@ final class DevScheduleReportWriter
         file_put_contents($lotDir . '/slots-by-venue.txt', implode("\n", $lines));
 
         // slots-by-coach.txt
+        // Load active CoachPlayerMembership so coaches-who-play also appear.
+        $playerMemberships = $this->entityManager->getRepository(CoachPlayerMembership::class)
+            ->findBy(['clubId' => $schedule->getClubId(), 'seasonId' => $schedule->getSeasonId()]);
+
+        // Build coachId → list of teamIds where coach is an active player.
+        $coachPlayerTeams = [];
+        foreach ($playerMemberships as $m) {
+            if (!$m->isIsActive()) {
+                continue;
+            }
+            $coachPlayerTeams[$m->getCoachId()][] = $m->getTeamId();
+        }
+
+        // Initialize coachSlots with every coach in the club/season so that
+        // coaches with no coaching and no playing still show "Aucun créneau".
         $coachSlots = [];
-        foreach ($teamCoaches as $teamId => $coaches) {
-            foreach ($coaches as $coachName) {
-                $coachSlots[$coachName] ??= [];
+        foreach ($coachNames as $coachName) {
+            $coachSlots[$coachName] = [];
+        }
+
+        // Coaching slots (coach assigned via TeamCoach).
+        foreach ($teamCoachIds as $teamId => $coachIds) {
+            foreach ($coachIds as $coachId) {
+                $coachName = $coachNames[$coachId] ?? $coachId;
                 foreach ($slots as $slot) {
                     if ($slot['teamId'] !== $teamId) {
                         continue;
                     }
 
-                    $coachSlots[$coachName][] = $slot;
+                    $coachSlots[$coachName][] = ['slot' => $slot, 'isPlayer' => false];
                 }
+            }
+        }
+
+        // Player slots (coach is an active member of the team via CoachPlayerMembership).
+        foreach ($coachPlayerTeams as $coachId => $teamIds) {
+            $coachName = $coachNames[$coachId] ?? $coachId;
+            foreach ($slots as $slot) {
+                if (!\in_array($slot['teamId'], $teamIds, true)) {
+                    continue;
+                }
+
+                $coachSlots[$coachName][] = ['slot' => $slot, 'isPlayer' => true];
             }
         }
 
@@ -399,20 +433,22 @@ final class DevScheduleReportWriter
             $lines[] = $coachName;
 
             if ([] === $coachScheduleSlots) {
-                $lines[] = '  aucun créneau';
+                $lines[] = '  Aucun créneau';
                 $lines[] = '';
                 continue;
             }
 
-            usort($coachScheduleSlots, static fn (array $a, array $b): int => $a['dayOfWeek'] <=> $b['dayOfWeek'] ?: $a['startTime'] <=> $b['startTime']);
+            usort($coachScheduleSlots, static fn (array $a, array $b): int => $a['slot']['dayOfWeek'] <=> $b['slot']['dayOfWeek'] ?: $a['slot']['startTime'] <=> $b['slot']['startTime']);
 
-            foreach ($coachScheduleSlots as $slot) {
+            foreach ($coachScheduleSlots as $entry) {
+                $slot = $entry['slot'];
                 $dayName = self::DAYS[$slot['dayOfWeek']] ?? (string) $slot['dayOfWeek'];
                 $start = $slot['startTime']->format('H:i');
                 $end = DateTimeImmutable::createFromInterface($slot['startTime'])->modify('+' . $slot['durationMinutes'] . ' minutes')->format('H:i');
                 $venueName = $venueNames[$slot['venueId']] ?? $slot['venueId'];
                 $teamName = $teamNames[$slot['teamId']] ?? $slot['teamId'];
-                $lines[] = \sprintf('  %-10s %s → %s (%d min)  @ %s — %s', $dayName, $start, $end, $slot['durationMinutes'], $venueName, $teamName);
+                $suffix = $entry['isPlayer'] ? ' — joueur' : '';
+                $lines[] = \sprintf('  %-10s %s → %s (%d min)  @ %s — %s%s', $dayName, $start, $end, $slot['durationMinutes'], $venueName, $teamName, $suffix);
             }
             $lines[] = '';
         }

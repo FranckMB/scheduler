@@ -72,10 +72,13 @@ class HardConstraintStats:
     forced_venues: int = 0
     one_session_per_day: int = 0
     age_ascending: int = 0
+    coach_rest_day: int = 0
+    salarie_distribution: int = 0
+    max_consecutive_sessions: int = 0
 
     @property
     def total_constraints_added(self) -> int:
-        """Return the number of concrete CP-SAT constraints added."""
+        """Return the number of concrete CP-SAT constraints added to the model."""
 
         return (
             self.room_at_most_one
@@ -92,6 +95,9 @@ class HardConstraintStats:
             + self.forced_venues
             + self.one_session_per_day
             + self.age_ascending
+            + self.coach_rest_day
+            + self.salarie_distribution
+            + self.max_consecutive_sessions
         )
 
 
@@ -100,6 +106,7 @@ def add_level_1_hard_constraints(
     assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None = None,
     *,
     teams: Iterable[Any] = (),
+    coaches: Iterable[Any] = (),
     min_sessions_by_team: Mapping[Any, int] | None = None,  # unused — kept for API compatibility
     fixed_assignments: Iterable[Any] = (),
     forbidden_assignments: Iterable[Any] = (),
@@ -107,6 +114,9 @@ def add_level_1_hard_constraints(
     venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
+    skip_rest_day_and_distribution: bool = False,
+    team_coach_map: dict[str, list[str]] | None = None,
+    team_player_map: dict[str, list[str]] | None = None,
 ) -> HardConstraintStats:
     """Add the 5 implicit + 5 derived + 1 new level-1 hard constraints to a CP-SAT model.
 
@@ -127,7 +137,12 @@ def add_level_1_hard_constraints(
     New implicit rule:
      11. one_session_per_day  — at most one session per day per team
      12. age_ascending        — younger teams train earlier than older teams (same venue+day)
-     """
+
+    When ``skip_rest_day_and_distribution`` is True, constraints 3b (coach_rest_day)
+    and 3c (salarie_distribution) are skipped. This is used in the two-pass fallback:
+    Pass 1 runs all constraints; if INFEASIBLE, Pass 2 drops these two to find a
+    feasible solution, and a WARNING diagnostic is emitted instead.
+    """
 
     if assignments is None:
         assignments = getattr(model, "x", ())
@@ -139,10 +154,34 @@ def add_level_1_hard_constraints(
     stats.room_at_most_one = add_room_at_most_one(model, assignment_list)
 
     # 2. One coach works with at most one team at a time.
-    stats.coach_at_most_one = add_coach_at_most_one(model, assignment_list)
+    stats.coach_at_most_one = add_coach_at_most_one(
+        model, assignment_list, team_coach_map=team_coach_map
+    )
 
     # 3. A person cannot coach and play at the same time.
-    stats.coach_player_non_overlap = add_coach_player_non_overlap(model, assignment_list)
+    stats.coach_player_non_overlap = add_coach_player_non_overlap(
+        model, assignment_list, team_coach_map=team_coach_map, team_player_map=team_player_map
+    )
+
+    # 3b. Every coach must have at least one rest day from Monday to Friday.
+    if not skip_rest_day_and_distribution:
+        stats.coach_rest_day = add_coach_rest_day_constraints(
+            model, assignment_list, coaches=coaches,
+            team_coach_map=team_coach_map, team_player_map=team_player_map,
+        )
+
+    # 3c. At least one salarié coach must be present each Mon-Fri day.
+    if not skip_rest_day_and_distribution:
+        stats.salarie_distribution = add_salarie_distribution_constraints(
+            model, assignment_list, coaches=coaches,
+            team_coach_map=team_coach_map, team_player_map=team_player_map,
+        )
+
+    # 3d. A coach may not be in all 3 slots of a consecutive triple.
+    stats.max_consecutive_sessions = add_max_consecutive_sessions_constraints(
+        model, assignment_list, coaches=coaches,
+        team_coach_map=team_coach_map, team_player_map=team_player_map,
+    )
 
     # 4. A team cannot have two sessions at the same time slot.
     stats.team_no_overlap = add_team_no_overlap(model, assignment_list)
@@ -219,22 +258,43 @@ def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> i
     return added
 
 
-def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
-    """Constraint 2: one coach can coach at most one team per time slot."""
+def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, team_coach_map: dict[str, list[str]] | None = None) -> int:
+    """Constraint 2: one coach can coach at most one team per time slot.
+
+    When ``team_coach_map`` is provided and the assignment's team is in the map,
+    all coaches for that team are looked up from the map. Otherwise, falls back
+    to the assignment's ``coach_id`` attribute for backward compatibility.
+    """
 
     groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
-        coach_id = _coach_id(assignment)
         time_key = _time_key(assignment)
-        if coach_id is None or time_key is None:
+        if time_key is None:
             continue
-        groups[(coach_id, time_key)].append(_var(assignment))
+
+        team_id = _team_id(assignment)
+        team_id_str = str(team_id) if team_id is not None else None
+
+        # Look up coaches from team_coach_map
+        if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+            for coach_id in team_coach_map[team_id_str]:
+                groups[(coach_id, time_key)].append(_var(assignment))
+        else:
+            # Fall back to assignment's coach_id attribute
+            coach_id = _coach_id(assignment)
+            if coach_id is not None:
+                groups[(coach_id, time_key)].append(_var(assignment))
 
     return _add_at_most_one_groups(model, groups.values())
 
 
-def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLike]) -> int:
-    """Constraint 3: a coach-player cannot be in two roles at the same time."""
+def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLike], *, team_coach_map: dict[str, list[str]] | None = None, team_player_map: dict[str, list[str]] | None = None) -> int:
+    """Constraint 3: a coach-player cannot be in two roles at the same time.
+
+    When ``team_coach_map`` / ``team_player_map`` are provided and the
+    assignment's team is found, coaches and players are looked up from the
+    maps. Otherwise, falls back to the assignment's own attributes.
+    """
 
     coach_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     player_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
@@ -244,18 +304,313 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
         if time_key is None:
             continue
 
-        coach_id = _coach_id(assignment)
-        if coach_id is not None:
-            coach_groups[(coach_id, time_key)].append(_var(assignment))
+        team_id = _team_id(assignment)
+        team_id_str = str(team_id) if team_id is not None else None
 
-        for player_id in _player_ids(assignment):
-            player_groups[(player_id, time_key)].append(_var(assignment))
+        if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+            for coach_id in team_coach_map[team_id_str]:
+                coach_groups[(coach_id, time_key)].append(_var(assignment))
+        else:
+            coach_id = _coach_id(assignment)
+            if coach_id is not None:
+                coach_groups[(coach_id, time_key)].append(_var(assignment))
+
+        if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
+            for player_id in team_player_map[team_id_str]:
+                player_groups[(player_id, time_key)].append(_var(assignment))
+        else:
+            for player_id in _player_ids(assignment):
+                player_groups[(player_id, time_key)].append(_var(assignment))
 
     overlap_groups = (
         coach_groups[key] + player_groups[key]
         for key in coach_groups.keys() & player_groups.keys()
     )
     return _add_at_most_one_groups(model, overlap_groups)
+
+
+def add_coach_rest_day_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    coaches: Iterable[Any] = (),
+    team_coach_map: dict[str, list[str]] | None = None,
+    team_player_map: dict[str, list[str]] | None = None,
+) -> int:
+    """Constraint 3b: every coach must have at least one rest day from Monday to Friday.
+
+    For each coach, creates ``is_working[coach, day]`` BoolVars for days 1-5
+    using reification, then enforces ``sum(is_working) <= 4`` (at most 4 working
+    days among Mon-Fri, guaranteeing at least 1 rest day).
+
+    Both coaching assignments (via ``team_coach_map``) and coach-player playing
+    assignments (via ``team_player_map``) count as working days. Falls back to
+    assignment attributes when maps are not provided or team is not found.
+    Coaches whose ``max_days_override`` is 4 or less are skipped because their
+    rest day is already guaranteed by that cap.
+    """
+
+    # Build coach_id -> max_days_override map
+    coach_max_days: dict[str, int | None] = {}
+    for coach in coaches:
+        coach_id = _scalar_id(_get(coach, "id", "coach_id", default=None))
+        if coach_id is None:
+            continue
+        coach_id_str = str(coach_id)
+        max_days = _get(coach, "max_days_override", "maxDaysOverride", default=None)
+        coach_max_days[coach_id_str] = int(max_days) if max_days is not None else None
+
+    if not coach_max_days:
+        return 0
+
+    # Group assignment variables by (person_id, day) for days 1-5.
+    # A person is "working" on a day if they coach or play on that day.
+    person_day_vars: dict[tuple[str, int], list[BoolVarLike]] = defaultdict(list)
+
+    for assignment in assignments:
+        slot_id = _slot_id(assignment)
+        if slot_id is None:
+            continue
+        day_str = str(slot_id).split(":")[0]
+        try:
+            day = int(day_str)
+        except (TypeError, ValueError):
+            continue
+        if day < 1 or day > 5:
+            continue
+
+        team_id = _team_id(assignment)
+        team_id_str = str(team_id) if team_id is not None else None
+
+        # Coaching assignments — look up from team_coach_map
+        if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+            for coach_id in team_coach_map[team_id_str]:
+                if coach_id in coach_max_days:
+                    person_day_vars[(coach_id, day)].append(_var(assignment))
+        else:
+            coach_id = _coach_id(assignment)
+            if coach_id is not None:
+                coach_id_str = str(coach_id)
+                if coach_id_str in coach_max_days:
+                    person_day_vars[(coach_id_str, day)].append(_var(assignment))
+
+        # Playing assignments (coach as player) — look up from team_player_map
+        if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
+            for player_id in team_player_map[team_id_str]:
+                if player_id in coach_max_days:
+                    person_day_vars[(player_id, day)].append(_var(assignment))
+        else:
+            for player_id in _player_ids(assignment):
+                player_id_str = str(player_id)
+                if player_id_str in coach_max_days:
+                    person_day_vars[(player_id_str, day)].append(_var(assignment))
+
+    added = 0
+    for coach_id_str, max_days in coach_max_days.items():
+        # Skip coaches whose max_days_override <= 4 (rest day already guaranteed)
+        if max_days is not None and max_days <= 4:
+            continue
+
+        # Create is_working BoolVars for each day 1-5 using reification
+        is_working_vars: list[BoolVarLike] = []
+        for day in range(1, 6):
+            day_vars = _dedupe_variables(person_day_vars.get((coach_id_str, day), []))
+            is_working = cast(Any, model).NewBoolVar(f"coach_rest_day_is_working_{coach_id_str}_day{day}")
+            is_working_vars.append(is_working)
+
+            if not day_vars:
+                # No assignments on this day => coach is definitely not working
+                cast(Any, model).Add(is_working == 0)
+            else:
+                day_sum = sum(cast(Any, v) for v in day_vars)
+                cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(is_working)
+                cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(is_working.Not())
+
+        # Enforce: at most 4 working days among Mon-Fri (at least 1 rest day)
+        cast(Any, model).Add(sum(is_working_vars) <= 4)
+        added += 1
+
+    return added
+
+
+def add_salarie_distribution_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    coaches: Iterable[Any] = (),
+    team_coach_map: dict[str, list[str]] | None = None,
+    team_player_map: dict[str, list[str]] | None = None,
+) -> int:
+    """Constraint 3c: at least one salarié coach must be present each Mon-Fri day.
+
+    A salarié is a coach with ``isEmployee=True``. For each day 1-5 (Mon-Fri),
+    creates a ``day_has_salarie[d]`` BoolVar with reification and enforces
+    ``day_has_salarie[d] == 1``. Both coaching assignments (via ``team_coach_map``)
+    and coach-player playing assignments (via ``team_player_map``) count as being
+    present. Falls back to assignment attributes when maps are not provided.
+
+    Skipped if there are fewer than 2 salarié coaches.
+    """
+
+    salarie_ids: set[str] = set()
+    for coach in coaches:
+        coach_id = _scalar_id(_get(coach, "id", "coach_id", default=None))
+        if coach_id is None:
+            continue
+        is_employee = _get(coach, "isEmployee", "is_employee", default=False)
+        if is_employee:
+            salarie_ids.add(str(coach_id))
+
+    if len(salarie_ids) < 2:
+        return 0
+
+    day_vars: dict[int, list[BoolVarLike]] = defaultdict(list)
+
+    for assignment in assignments:
+        slot_id = _slot_id(assignment)
+        if slot_id is None:
+            continue
+        day_str = str(slot_id).split(":")[0]
+        try:
+            day = int(day_str)
+        except (TypeError, ValueError):
+            continue
+        if day < 1 or day > 5:
+            continue
+
+        team_id = _team_id(assignment)
+        team_id_str = str(team_id) if team_id is not None else None
+
+        if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+            for coach_id in team_coach_map[team_id_str]:
+                if coach_id in salarie_ids:
+                    day_vars[day].append(_var(assignment))
+        else:
+            coach_id = _coach_id(assignment)
+            if coach_id is not None and str(coach_id) in salarie_ids:
+                day_vars[day].append(_var(assignment))
+
+        if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
+            for player_id in team_player_map[team_id_str]:
+                if player_id in salarie_ids:
+                    day_vars[day].append(_var(assignment))
+        else:
+            for player_id in _player_ids(assignment):
+                if str(player_id) in salarie_ids:
+                    day_vars[day].append(_var(assignment))
+
+    added = 0
+    for day in range(1, 6):
+        day_assignments = _dedupe_variables(day_vars.get(day, []))
+        day_has_salarie = cast(Any, model).NewBoolVar(f"day_has_salarie_day{day}")
+
+        if not day_assignments:
+            cast(Any, model).Add(day_has_salarie == 0)
+        else:
+            day_sum = sum(cast(Any, v) for v in day_assignments)
+            cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(day_has_salarie)
+            cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(day_has_salarie.Not())
+
+        cast(Any, model).Add(day_has_salarie == 1)
+        added += 1
+
+    return added
+
+
+def add_max_consecutive_sessions_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    *,
+    coaches: Iterable[Any] = (),
+    team_coach_map: dict[str, list[str]] | None = None,
+    team_player_map: dict[str, list[str]] | None = None,
+) -> int:
+    """Constraint 3d: a coach may not be in all 3 slots of a consecutive triple.
+
+    For each venue, identifies consecutive slot triples (A, B, C) where
+    A.end == B.start and B.end == C.start. For each coach, the sum of
+    their assignments (coaching + playing) across the triple must be <= 2.
+
+    Coaches and players are looked up from ``team_coach_map`` and
+    ``team_player_map`` when available, falling back to assignment attributes.
+    """
+
+    coach_ids: set[str] = set()
+    for coach in coaches:
+        coach_id = _scalar_id(_get(coach, "id", "coach_id", default=None))
+        if coach_id is not None:
+            coach_ids.add(str(coach_id))
+
+    if not coach_ids:
+        return 0
+
+    venue_day_slots: dict[tuple[str, str], list[tuple[int, int, AssignmentLike]]] = defaultdict(list)
+
+    for assignment in assignments:
+        venue_id = _venue_id(assignment)
+        slot_id = _slot_id(assignment)
+        if venue_id is None or slot_id is None:
+            continue
+
+        slot_id_str = str(slot_id)
+        parts = slot_id_str.split(":", 1)
+        if len(parts) < 2:
+            continue
+        day = parts[0]
+
+        start = _get(assignment, "start", "start_minute", "start_time", "starts_at", default=None)
+        end = _get(assignment, "end", "end_minute", "end_time", "ends_at", default=None)
+        if start is None or end is None:
+            continue
+
+        start_minutes = int(start) if not isinstance(start, int) else start
+        end_minutes = int(end) if not isinstance(end, int) else end
+
+        venue_day_slots[(str(venue_id), day)].append((start_minutes, end_minutes, assignment))
+
+    added = 0
+    for (venue_key, day_key), slot_entries in venue_day_slots.items():
+        slot_entries.sort(key=lambda x: x[0])
+
+        for i in range(len(slot_entries) - 2):
+            start_a, end_a, _ = slot_entries[i]
+            start_b, end_b, _ = slot_entries[i + 1]
+            start_c, end_c, _ = slot_entries[i + 2]
+
+            if end_a != start_b or end_b != start_c:
+                continue
+
+            coach_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
+
+            for _, _, assignment in slot_entries[i : i + 3]:
+                team_id = _team_id(assignment)
+                team_id_str = str(team_id) if team_id is not None else None
+
+                if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+                    for cid in team_coach_map[team_id_str]:
+                        if cid in coach_ids:
+                            coach_vars[cid].append(_var(assignment))
+                else:
+                    cid = _coach_id(assignment)
+                    if cid is not None and str(cid) in coach_ids:
+                        coach_vars[str(cid)].append(_var(assignment))
+
+                if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
+                    for pid in team_player_map[team_id_str]:
+                        if pid in coach_ids:
+                            coach_vars[pid].append(_var(assignment))
+                else:
+                    for pid in _player_ids(assignment):
+                        if str(pid) in coach_ids:
+                            coach_vars[str(pid)].append(_var(assignment))
+
+            for cid, vars_list in coach_vars.items():
+                deduped = _dedupe_variables(vars_list)
+                if len(deduped) >= 3:
+                    cast(Any, model).Add(sum(deduped) <= 2)
+                    added += 1
+
+    return added
 
 
 def add_team_no_overlap(model: Any, assignments: Iterable[AssignmentLike]) -> int:
@@ -916,8 +1271,9 @@ def add_one_session_per_day_constraints(
     for (team_id, _day), vars_list in groups.items():
         if team_id in multi_allowed:
             continue
-        if len(vars_list) > 1:
-            cast(Any, model).Add(sum(vars_list) <= 1)
+        deduped = _dedupe_variables(vars_list)
+        if len(deduped) > 1:
+            cast(Any, model).Add(sum(deduped) <= 1)
             added += 1
 
     return added
@@ -1012,7 +1368,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
 
     Returns dict with keys: fixed_slots, forbidden_assignments,
     coach_unavailability, venue_closures, forced_venues, preferred_venues,
-    time_windows, priority_tiers
+    time_windows, priority_tiers, team_coach_map, team_player_map
     """
 
     result: dict[str, Any] = {
@@ -1024,19 +1380,55 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         "preferred_venues": {},
         "time_windows": [],
         "priority_tiers": {},
+        "team_coach_map": {},
+        "team_player_map": {},
     }
 
     for c in constraints:
         if not c.get("isActive", True):
             continue
         rule_type = c.get("ruleType") or c.get("rule_type")
+        c_type = c.get("type")
         family = c.get("family")
         scope = c.get("scope")
         scope_target_id = c.get("scopeTargetId") or c.get("scope_target_id")
         config = c.get("config") or {}
+        metadata = c.get("metadata") or {}
 
         if rule_type == "LOCK":
             result["fixed_slots"].append(c.get("id"))
+
+        elif c_type == "TEAM_COACH":
+            team_id = c.get("teamId") or c.get("team_id") or scope_target_id
+            coach_id = (
+                metadata.get("coachId")
+                or metadata.get("coach_id")
+                or c.get("value")
+                or config.get("coachId")
+                or config.get("coach_id")
+            )
+            if team_id and coach_id:
+                team_id_str = str(team_id)
+                coach_id_str = str(coach_id)
+                result["team_coach_map"].setdefault(team_id_str, []).append(coach_id_str)
+
+        elif c_type == "COACH_PLAYER_UNAVAILABILITY":
+            team_id = (
+                metadata.get("teamId")
+                or metadata.get("team_id")
+                or c.get("teamId")
+                or c.get("team_id")
+                or scope_target_id
+            )
+            coach_id = (
+                metadata.get("coachId")
+                or metadata.get("coach_id")
+                or c.get("value")
+            )
+            if team_id and coach_id:
+                team_id_str = str(team_id)
+                coach_id_str = str(coach_id)
+                result["team_player_map"].setdefault(team_id_str, []).append(coach_id_str)
 
         elif family == "COACH_AVAILABILITY" and scope_target_id:
             unavail = config.get("unavailableDays") or []
@@ -1096,14 +1488,17 @@ __all__ = [
     "add_age_ascending_constraints",
     "add_coach_at_most_one",
     "add_coach_player_non_overlap",
+    "add_coach_rest_day_constraints",
     "add_coach_unavailability_constraints",
     "add_fixed_slots",
     "add_forbidden_assignments",
     "add_forced_venue_constraints",
     "add_level_1_hard_constraints",
+    "add_max_consecutive_sessions_constraints",
     "add_min_sessions_constraints",
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
+    "add_salarie_distribution_constraints",
     "add_time_window_constraints",
     "add_team_no_overlap",
     "add_venue_closure_constraints",

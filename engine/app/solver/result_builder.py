@@ -30,6 +30,7 @@ def build_result(
     model: ScheduleCpModel,
     *,
     status: Any | None = None,
+    fallback_used: bool = False,
 ) -> dict[str, Any]:
     """Transform a CP-SAT solution into a dict matching ``ScheduleOutputSchema``.
 
@@ -38,6 +39,8 @@ def build_result(
         solver: The OR-Tools ``CpSolver`` instance after solving.
         model: The ``ScheduleCpModel`` containing variables and locked slots.
         status: Optional solver status. If omitted, inferred from the solver.
+        fallback_used: True when Pass 1 was INFEASIBLE and Pass 2 (without
+            coach rest day + salarie distribution constraints) was used instead.
 
     Returns:
         A dictionary that validates against ``ScheduleOutputSchema``.
@@ -68,7 +71,11 @@ def build_result(
 
     # Always run diagnostic checks.
     slot_capacities: dict[Any, int] = getattr(model, "slot_capacities", {})
-    diagnostics.extend(_generate_diagnostics(model_data, solver_status, slots, slot_capacities=slot_capacities))
+    diagnostics.extend(
+        _generate_diagnostics(
+            model_data, solver_status, slots, slot_capacities=slot_capacities, fallback_used=fallback_used
+        )
+    )
 
     unplaced = _unplaced_team_ids(model_data, slots)
 
@@ -220,6 +227,7 @@ def _generate_diagnostics(
     slots: list[dict[str, Any]],
     *,
     slot_capacities: dict[Any, int] | None = None,
+    fallback_used: bool = False,
 ) -> list[dict[str, Any]]:
     """Run post-solve checks and return manager-readable diagnostics."""
     diagnostics: list[dict[str, Any]] = []
@@ -229,6 +237,8 @@ def _generate_diagnostics(
     diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(solver_status, slots, slot_capacities=slot_capacities))
     diagnostics.extend(_diagnose_unused_slots(model_data, slots))
+    if fallback_used:
+        diagnostics.extend(_diagnose_coach_rest_days(model_data, slots))
     return diagnostics
 
 
@@ -572,6 +582,51 @@ def _diagnose_unused_slots(
                 "suggestions": [],
                 "teamId": None,
                 "coachId": None,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+
+    return diagnostics
+
+
+def _diagnose_coach_rest_days(
+    model_data: Mapping[str, Any] | Any,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Emit a WARNING for each coach who has coaching assignments on all 5 weekdays (Mon-Fri).
+
+    Only called when the fallback pass was used (``fallback_used=True``), meaning
+    the coach rest day constraint was dropped to achieve feasibility.
+    """
+    diagnostics: list[dict[str, Any]] = []
+
+    coach_names: dict[str, str] = {}
+    for coach in _collection(model_data, "coaches"):
+        coach_id = _get(coach, "id", "coach_id", "coachId")
+        if coach_id is not None:
+            coach_names[str(coach_id)] = str(_get(coach, "name", "coach_name", default=str(coach_id)))
+
+    coach_days: dict[str, set[int]] = defaultdict(set)
+    for slot in slots:
+        coach_id = slot.get("coachId")
+        if not coach_id:
+            continue
+        day = slot.get("dayOfWeek")
+        if day is not None and int(day) in range(1, 6):
+            coach_days[str(coach_id)].add(int(day))
+
+    for coach_id, days in coach_days.items():
+        if len(days) == 5:
+            name = coach_names.get(coach_id, coach_id)
+            diagnostics.append({
+                "id": f"diag-coach-no-rest-day-{coach_id}",
+                "type": "coach_no_rest_day",
+                "severity": "WARNING",
+                "coachId": coach_id,
+                "message": f"Coach {name} n'a pas de jour de repos (lundi-vendredi)",
+                "suggestions": [
+                    "Reduce the number of sessions assigned to this coach.",
+                    "Add coach unavailability constraints for at least one weekday.",
+                ],
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
 

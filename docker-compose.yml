@@ -28,8 +28,12 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+      args:
+        UID: ${USER_ID:-1000}
+        GID: ${GROUP_ID:-1000}
     container_name: clubscheduler-php-fpm
     working_dir: /app/backend
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     volumes:
       - ./:/app:cached
     env_file:
@@ -114,8 +118,12 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+      args:
+        UID: ${USER_ID:-1000}
+        GID: ${GROUP_ID:-1000}
     container_name: clubscheduler-messenger-worker
     working_dir: /app/backend
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     volumes:
       - ./:/app:cached
     env_file:

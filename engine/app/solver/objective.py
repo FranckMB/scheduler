@@ -37,6 +37,16 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
 
 UNPLACED_PENALTY = 100000
 
+CHAINING_TIER_WEIGHTS = MappingProxyType(
+    {
+        "S": 200,
+        "A": 20,
+        "B": 2,
+        "C": 0.2,
+        "D": 0.02,
+    }
+)
+
 TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
 BONUS_WEIGHT_NAMES = (
     "SOFT",
@@ -146,6 +156,7 @@ class Level2ObjectiveStats:
     placement_terms: int
     soft_bonus_terms: int
     total_terms: int
+    chaining_bonus: int
     coefficient_by_assignment: Mapping[Any, int]
 
 
@@ -221,6 +232,8 @@ def add_level_2_objective(
         coefficients.append(LEVEL_2_OBJECTIVE_WEIGHTS[weight_name])
         soft_bonus_terms += 1
 
+    chaining_terms = add_chaining_bonus(model, assignment_list, teams=teams)
+
     if variables:
         model.Maximize(sum(coefficient * variable for variable, coefficient in zip(variables, coefficients)))
     else:
@@ -231,6 +244,7 @@ def add_level_2_objective(
         placement_terms=placement_terms,
         soft_bonus_terms=soft_bonus_terms,
         total_terms=len(variables),
+        chaining_bonus=chaining_terms,
         coefficient_by_assignment=coefficient_by_assignment,
     )
 
@@ -298,6 +312,107 @@ def add_preferred_day_bonus(
             seen_keys.add(slot_key)
 
     return soft_terms
+
+
+def add_chaining_bonus(
+    model: Any,
+    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike],
+    *,
+    teams: Iterable[Any] = (),
+) -> int:
+    """Add a SOFT bonus for same-venue back-to-back coaching sessions.
+
+    For each pair of consecutive slots (A, B) in the same venue on the same
+    day where A.end == B.start, and for each coach who could be assigned to
+    both slots, create a ``chained`` BoolVar that is true when the coach is
+    assigned to both. The bonus weight is ``tier_weight / 50`` where the tier
+    is the highest-tier team the coach coaches across the two sessions.
+
+    Returns the number of chaining bonus terms added to the objective.
+    """
+
+    assignment_list = _normalise_assignments(assignments)
+    if len(assignment_list) < 2:
+        return 0
+
+    teams_by_id = _teams_by_id(teams)
+
+    slot_lookup: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+
+    for assignment in assignment_list:
+        venue_id = _get_venue_id(assignment)
+        slot_id = _get_slot_id(assignment)
+        if venue_id is None or slot_id is None:
+            continue
+
+        slot_id_str = str(slot_id)
+        parts = slot_id_str.split(":", 1)
+        if len(parts) != 2:
+            continue
+
+        day = parts[0]
+        start_minutes = _parse_time_minutes(parts[1])
+        if start_minutes is None:
+            continue
+
+        start_val = _get(assignment, "start", "start_minute", "starts_at", default=None)
+        end_val = _get(assignment, "end", "end_minute", "ends_at", default=None)
+
+        start_min = int(start_val) if start_val is not None else start_minutes
+        end_min = int(end_val) if end_val is not None else None
+
+        key = (str(venue_id), day, start_min)
+        slot_lookup.setdefault(key, []).append({
+            "assignment": assignment,
+            "start": start_min,
+            "end": end_min,
+        })
+
+    chaining_terms = 0
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for key, entries in slot_lookup.items():
+        venue_id, day, _start_min = key
+        for entry in entries:
+            end_min = entry["end"]
+            if end_min is None:
+                continue
+
+            next_key = (venue_id, day, end_min)
+            next_entries = slot_lookup.get(next_key)
+            if next_entries is None:
+                continue
+
+            for next_entry in next_entries:
+                pair_id_a = str(_assignment_key(entry["assignment"], _var(entry["assignment"])))
+                pair_id_b = str(_assignment_key(next_entry["assignment"], _var(next_entry["assignment"])))
+                pair_key = (pair_id_a, pair_id_b)
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+
+                coaches_a = _coach_ids_for(entry["assignment"])
+                coaches_b = _coach_ids_for(next_entry["assignment"])
+                common_coaches = coaches_a & coaches_b
+
+                for coach_id in common_coaches:
+                    tier_a = _priority_tier_name(entry["assignment"], teams_by_id)
+                    tier_b = _priority_tier_name(next_entry["assignment"], teams_by_id)
+                    highest_tier = _higher_tier(tier_a, tier_b)
+                    weight = CHAINING_TIER_WEIGHTS.get(highest_tier, 0)
+                    if weight == 0:
+                        continue
+
+                    var_a = _var(entry["assignment"])
+                    var_b = _var(next_entry["assignment"])
+                    chained = model.NewBoolVar(f"chained_{coach_id}_{pair_id_a}_{pair_id_b}")
+                    model.AddBoolAnd([var_a, var_b]).OnlyEnforceIf(chained)
+                    model.AddBoolOr([var_a.Not(), var_b.Not()]).OnlyEnforceIf(chained.Not())
+
+                    model.Maximize(weight * chained)
+                    chaining_terms += 1
+
+    return chaining_terms
 
 
 def apply_level_2_objective(*args: Any, **kwargs: Any) -> Level2ObjectiveStats:
@@ -533,13 +648,50 @@ def _assignment_key(assignment: AssignmentLike, variable: BoolVarLike) -> Any:
     return variable.Index() if hasattr(variable, "Index") else id(variable)
 
 
+def _get_venue_id(assignment: AssignmentLike) -> str | None:
+    result = _scalar_id(_get(assignment, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None))
+    return str(result) if result is not None else None
+
+
+def _get_slot_id(assignment: AssignmentLike) -> str | None:
+    result = _scalar_id(_get(assignment, "slot_id", "time_slot_id", "timeslot_id", "slot", "time_slot", default=None))
+    return str(result) if result is not None else None
+
+
+def _parse_time_minutes(time_str: str) -> int | None:
+    try:
+        parts = time_str.split(":")
+        if len(parts) < 2:
+            return None
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, TypeError):
+        return None
+
+
+def _coach_ids_for(assignment: AssignmentLike) -> set[str]:
+    coach_id = _scalar_id(_get(assignment, "coach_id", "trainer_id", "coach", "trainer", default=None))
+    result: set[str] = set()
+    if coach_id is not None:
+        result.add(str(coach_id))
+    return result
+
+
+def _higher_tier(tier_a: str, tier_b: str) -> str:
+    tier_order = {"S": 0, "A": 1, "B": 2, "C": 3, "D": 4}
+    rank_a = tier_order.get(tier_a, 99)
+    rank_b = tier_order.get(tier_b, 99)
+    return tier_a if rank_a <= rank_b else tier_b
+
+
 __all__ = [
     "BONUS_WEIGHT_NAMES",
+    "CHAINING_TIER_WEIGHTS",
     "LEVEL_2_OBJECTIVE_WEIGHTS",
     "Level2ObjectiveStats",
     "SCORE_FORMULA_VERSION",
     "TIER_WEIGHT_NAMES",
     "UNPLACED_PENALTY",
+    "add_chaining_bonus",
     "add_level_2_objective",
     "add_preferred_day_bonus",
     "add_objective",

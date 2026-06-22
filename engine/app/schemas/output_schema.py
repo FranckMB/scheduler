@@ -33,7 +33,7 @@ class ScheduleSlotSchema(SerializableModel):
 
 class DiagnosticSchema(SerializableModel):
     id: str
-    # Valid diagnostic types: unplaced, soft_lock_moved, coach_overload, session_below_effective_min, conflict, unused_slot
+    # Valid diagnostic types: unplaced, soft_lock_moved, coach_overload, session_below_effective_min, conflict, unused_slot, coach_no_rest_day
     type: str
     severity: str
     team_id: str | None = Field(default=None, alias="teamId")

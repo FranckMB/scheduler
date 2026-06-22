@@ -1,5 +1,8 @@
 FROM php:8.4-fpm
 
+ARG UID=1000
+ARG GID=1000
+
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     PATH="/root/.composer/vendor/bin:${PATH}"
 
@@ -29,6 +32,8 @@ RUN apt-get update \
     && echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/zz-memory.ini \
     && echo "max_execution_time = 0" >> /usr/local/etc/php/conf.d/zz-memory.ini \
     && rm -rf /var/lib/apt/lists/*
+
+RUN usermod -u ${UID} www-data && groupmod -g ${GID} www-data
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 

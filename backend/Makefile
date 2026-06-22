@@ -3,6 +3,8 @@
 FIG := docker compose -f ../docker-compose.yml
 USERID := $(shell id -u)
 GROUPID := $(shell id -g)
+export USER_ID := $(USERID)
+export GROUP_ID := $(GROUPID)
 APP_ENV ?= $(shell awk -F= '$$1=="APP_ENV" {print $$2}' .env 2>/dev/null | tail -n 1)
 APP_ENV ?= dev
 
@@ -69,7 +71,7 @@ db-reset-test:
 fixtures: APP_ENV = dev
 fixtures:
 	$(EXEC) php bin/console doctrine:fixtures:load --no-interaction
-	$(EXECROOT) rm -rf var/generate/*
+	$(EXECROOT) rm -rf ./var/generate/*
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:
@@ -92,6 +94,10 @@ lint:
 	$(MAKE) phpstan
 	$(MAKE) cs
 	$(MAKE) rector
+
+.PHONY: fix-perms ## Fix permissions on var/generate so host user can read reports
+fix-perms:
+	$(FIG) exec --user root php-fpm chown -R $(USERID):$(GROUPID) /app/backend/var/generate
 
 .PHONY: exec ## Enter the php-fpm container
 exec:

@@ -70,9 +70,6 @@ class Team
     #[ORM\Column(type: 'boolean', options: ['default' => false])]
     private bool $allowMultipleSessionsPerDay = false;
 
-    #[ORM\Column(type: 'smallint', nullable: true)]
-    private ?int $minSessionMinutes = null;
-
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $forcedVenueId = null;
 
@@ -277,18 +274,6 @@ class Team
     public function setAllowMultipleSessionsPerDay(bool $allowMultipleSessionsPerDay): self
     {
         $this->allowMultipleSessionsPerDay = $allowMultipleSessionsPerDay;
-
-        return $this;
-    }
-
-    public function getMinSessionMinutes(): ?int
-    {
-        return $this->minSessionMinutes;
-    }
-
-    public function setMinSessionMinutes(?int $minSessionMinutes): self
-    {
-        $this->minSessionMinutes = $minSessionMinutes;
 
         return $this;
     }

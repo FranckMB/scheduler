@@ -72,6 +72,7 @@ class CoachSchema(SerializableModel):
     acceptable_late_minutes: int | None = Field(default=None, alias="acceptableLateMinutes")
     is_active: bool = Field(default=False, alias="isActive")
     parent_coach_id: str | None = Field(default=None, alias="parentCoachId")
+    is_employee: bool = Field(default=False, alias="isEmployee")
 
 
 class ConstraintV2Schema(BaseModel):

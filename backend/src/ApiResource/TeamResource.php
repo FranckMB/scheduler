@@ -69,9 +69,6 @@ class TeamResource
     public bool $allowMultipleSessionsPerDay = false;
 
     #[Groups(['read'])]
-    public ?int $minSessionMinutes = null;
-
-    #[Groups(['read'])]
     public ?string $forcedVenueId = null;
 
     #[Groups(['read'])]
@@ -95,7 +92,6 @@ class TeamResource
         $dto->minSessionsOverride = $entity->getMinSessionsOverride();
         $dto->matchDay = $entity->getMatchDay();
         $dto->allowMultipleSessionsPerDay = $entity->getAllowMultipleSessionsPerDay();
-        $dto->minSessionMinutes = $entity->getMinSessionMinutes();
         $dto->forcedVenueId = $entity->getForcedVenueId();
         $dto->isActive = $entity->getIsActive();
         $dto->parentTeamId = $entity->getParentTeamId();

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 import pathlib
 from typing import Any
 
@@ -26,7 +27,13 @@ def _normalize_team_fields(data: dict[str, Any]) -> None:
             team["forced_venue_id"] = team["forcedVenueId"]
 
 
-def _run_pipeline(data: dict[str, Any], *, max_time_in_seconds: int = 5) -> dict[str, Any]:
+def _run_pipeline(
+    data: dict[str, Any],
+    *,
+    max_time_in_seconds: int = 5,
+    skip_rest_day_and_distribution: bool = False,
+    fallback_used: bool = False,
+) -> dict[str, Any]:
     _normalize_team_fields(data)
     model = build_model(data)
 
@@ -49,7 +56,13 @@ def _run_pipeline(data: dict[str, Any], *, max_time_in_seconds: int = 5) -> dict
             "coach_id": team_coaches.get(team_id),
         })
 
-    add_level_1_hard_constraints(model, assignments, teams=data.get("teams", []))
+    add_level_1_hard_constraints(
+        model,
+        assignments,
+        teams=data.get("teams", []),
+        coaches=data.get("coaches", []),
+        skip_rest_day_and_distribution=skip_rest_day_and_distribution,
+    )
 
     # Add realistic upper bound: no team gets more than sessions_per_week.
     assignments_by_team: dict[str, list[Any]] = {}
@@ -70,7 +83,7 @@ def _run_pipeline(data: dict[str, Any], *, max_time_in_seconds: int = 5) -> dict
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time_in_seconds
     status = solver.Solve(model)
-    return build_result(data, solver, model, status=status)
+    return build_result(data, solver, model, status=status, fallback_used=fallback_used)
 
 
 def _team_age_min_by_id(data: dict[str, Any]) -> dict[str, int | None]:
@@ -300,6 +313,91 @@ class TestInvariants:
             if key in expected_coaches and cid is not None:
                 assert cid == expected_coaches[key], (
                     f"Slot for {tid} at {key} has coach {cid}, expected {expected_coaches[key]}"
+                )
+
+    def test_coach_rest_day_warning_matches_five_weekday_workload(self) -> None:
+        data = {
+            "clubId": "club-rest-day-warning",
+            "seasonId": "season-2024",
+            "version": "2.0",
+            "solverSeed": 42,
+            "venues": [
+                {
+                    "id": "venue-1",
+                    "name": "Venue 1",
+                    "isActive": True,
+                    "trainingSlots": [
+                        {"dayOfWeek": d, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}
+                        for d in range(1, 6)
+                    ],
+                }
+            ],
+            "teams": [
+                {
+                    "id": f"team-{d}",
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 1,
+                    "name": f"Team {d}",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                }
+                for d in range(1, 6)
+            ],
+            "coaches": [
+                {
+                    "id": "coach-1",
+                    "firstName": "Coach",
+                    "lastName": "One",
+                    "isActive": True,
+                }
+            ],
+            "slotTemplates": [
+                {
+                    "id": f"tpl-{d}",
+                    "teamId": f"team-{d}",
+                    "venueId": "venue-1",
+                    "coachId": "coach-1",
+                    "dayOfWeek": d,
+                    "startTime": "18:00",
+                    "durationMinutes": 60,
+                    "lockLevel": "NONE",
+                }
+                for d in range(1, 6)
+            ],
+            "constraints": [],
+            "priorityTiers": [
+                {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 1},
+            ],
+        }
+
+        first_pass = _run_pipeline(data)
+        assert first_pass["status"] == "failed", "Pass 1 should fail when coach works all 5 weekdays"
+
+        result = _run_pipeline(
+            data,
+            skip_rest_day_and_distribution=True,
+            fallback_used=True,
+        )
+
+        assert result["status"] == "completed"
+
+        coach_days: dict[str, set[int]] = defaultdict(set)
+        for slot in result["slots"]:
+            coach_id = slot.get("coachId")
+            day_of_week = slot.get("dayOfWeek")
+            if coach_id and day_of_week is not None and 1 <= int(day_of_week) <= 5:
+                coach_days[str(coach_id)].add(int(day_of_week))
+
+        warnings_by_coach = {
+            str(diag["coachId"])
+            for diag in result["diagnostics"]
+            if diag.get("type") == "coach_no_rest_day" and diag.get("severity") == "WARNING" and diag.get("coachId")
+        }
+
+        for coach_id, days in coach_days.items():
+            if len(days) == 5:
+                assert coach_id in warnings_by_coach, (
+                    f"Coach {coach_id} works all 5 weekdays, but no coach_no_rest_day WARNING was emitted"
                 )
 
     @settings(max_examples=20, deadline=None)
