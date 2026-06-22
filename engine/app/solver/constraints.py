@@ -1069,6 +1069,14 @@ def _time_key(assignment: AssignmentLike) -> Any:
     return None
 
 
+def _intervals_overlap(a_start: Any, a_end: Any, b_start: Any, b_end: Any) -> bool:
+    return bool(a_start < b_end and b_start < a_end)
+
+
+def _interval_key(person_id: Any, day: Any, pair_index: Any) -> str:
+    return f"{person_id}:{day}:{pair_index}"
+
+
 def _player_ids(assignment: AssignmentLike) -> list[Any]:
     players = _get(
         assignment,
