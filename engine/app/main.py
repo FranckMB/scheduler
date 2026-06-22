@@ -14,7 +14,7 @@ from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, build_model, _time_to_minutes
-from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, LEVEL_2_OBJECTIVE_WEIGHTS
+from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, is_team_satisfied_by_hard_locks, LEVEL_2_OBJECTIVE_WEIGHTS
 from app.solver.result_builder import build_result
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
@@ -116,43 +116,30 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # Convert Pydantic input to a plain dict for the solver pipeline.
     data: dict[str, Any] = input_data.model_dump(by_alias=True)
 
-    # Pass 1: try with all constraints (including coach rest day + salarie distribution).
-    status_pass1, solver_pass1, model_pass1, conflicts_pass1 = _solve_pass(
-        data, input_data, skip_rest_day_and_distribution=False
-    )
+    # Single pass with all HARD constraints (including coach rest day + salarie
+    # distribution).  If the solver returns INFEASIBLE, build_result produces
+    # status="failed" with conflict diagnostics — no silent constraint dropping.
+    solver_status, solver, model, conflicts = _solve(data, input_data)
 
-    if status_pass1 != cp_model.INFEASIBLE:
-        # Pass 1 succeeded — use its result directly.
-        result_dict = build_result(
-            data, solver_pass1, model_pass1, status=status_pass1, fallback_used=False
-        )
-        if conflicts_pass1:
-            result_dict.setdefault("diagnostics", []).extend(conflicts_pass1)
-    else:
-        # Pass 2: drop coach rest day + salarie distribution constraints to find a feasible solution.
-        status_pass2, solver_pass2, model_pass2, conflicts_pass2 = _solve_pass(
-            data, input_data, skip_rest_day_and_distribution=True
-        )
-        result_dict = build_result(
-            data, solver_pass2, model_pass2, status=status_pass2, fallback_used=True
-        )
-        if conflicts_pass2:
-            result_dict.setdefault("diagnostics", []).extend(conflicts_pass2)
+    result_dict = build_result(
+        data, solver, model, status=solver_status, fallback_used=False
+    )
+    if conflicts:
+        result_dict.setdefault("diagnostics", []).extend(conflicts)
 
     # Validate and return.
     return ScheduleOutputSchema.model_validate(result_dict)
 
 
-def _solve_pass(
+def _solve(
     data: dict[str, Any],
     input_data: ScheduleInputSchema,
-    *,
-    skip_rest_day_and_distribution: bool = False,
 ) -> tuple[int, cp_model.CpSolver, ScheduleCpModel, list[dict[str, Any]]]:
-    """Run one pass of the solver pipeline: build model, add constraints, solve.
+    """Run the solver pipeline: build model, add constraints, solve.
 
-    Returns (status, solver, model, conflicts) so the caller can decide whether
-    to retry. Each pass uses the full ``solver_timeout_seconds``.
+    Returns (status, solver, model, conflicts).  All HARD constraints are
+    active — no fallback pass that silently drops rest-day or distribution
+    constraints.  Uses the full ``solver_timeout_seconds``.
     """
     model: ScheduleCpModel = build_model(data)
 
@@ -165,6 +152,18 @@ def _solve_pass(
         locked_team_id: str | None = locked_slot.get("team_id")
         if locked_team_id:
             locked_slots_by_team[locked_team_id] = locked_slots_by_team.get(locked_team_id, 0) + 1
+
+    # Identify teams whose sessionsPerWeek is fully covered by HARD locks.
+    # These teams must NOT receive the -UNPLACED_PENALTY term in the objective
+    # because their solver variables are forced to 0 by remaining_sessions,
+    # not because they are genuinely unplaced.
+    hard_satisfied_team_ids: set[str] = set()
+    for team in data.get("teams", []):
+        team_id = team.get("id")
+        sessions_per_week = team.get("sessions_per_week") or team.get("sessionsPerWeek")
+        if team_id and sessions_per_week:
+            if is_team_satisfied_by_hard_locks(str(team_id), model.locked_slots, int(sessions_per_week)):
+                hard_satisfied_team_ids.add(str(team_id))
 
     # Hard min_sessions forces UNKNOWN when venue capacity < total sessions needed.
     # Soft-only via objective bonus (session_count:20) + WARNING diagnostics.
@@ -225,7 +224,6 @@ def _solve_pass(
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,
-        skip_rest_day_and_distribution=skip_rest_day_and_distribution,
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
     )
@@ -263,9 +261,10 @@ def _solve_pass(
         assignments,
         teams=data.get("teams", []),
         soft_terms=soft_terms,
+        hard_satisfied_team_ids=hard_satisfied_team_ids,
     )
 
-    # Solve — each pass uses the full timeout.
+    # Solve — uses the full configured timeout.
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = input_data.solver_timeout_seconds
     status = solver.Solve(model)

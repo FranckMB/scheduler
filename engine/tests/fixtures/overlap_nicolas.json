@@ -1,1 +1,96 @@
-{}
+{
+  "clubId": "club-overlap-nicolas",
+  "seasonId": "season-2026",
+  "version": "2.0",
+  "solverSeed": 42,
+  "solverTimeoutSeconds": 10,
+  "venues": [
+    {
+      "id": "jean-vilar",
+      "name": "Jean Vilar",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 2,
+          "startTime": "18:45",
+          "durationMinutes": 90,
+          "capacity": 1
+        }
+      ]
+    },
+    {
+      "id": "debarros",
+      "name": "Debarros",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 90,
+          "capacity": 1
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "u18m1",
+      "sportCategoryId": "cat-u18",
+      "priorityTierId": 3,
+      "name": "U18M1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "sm2",
+      "sportCategoryId": "cat-senior",
+      "priorityTierId": 2,
+      "name": "SM2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
+  ],
+  "coaches": [
+    {
+      "id": "nicolas",
+      "firstName": "Nicolas",
+      "lastName": "Barilleau",
+      "isActive": true
+    }
+  ],
+  "slotTemplates": [],
+  "constraints": [
+    {
+      "id": "tc-u18m1-nicolas",
+      "type": "TEAM_COACH",
+      "teamId": "u18m1",
+      "severity": "HARD",
+      "value": "nicolas",
+      "metadata": {
+        "coachId": "nicolas",
+        "role": "MAIN",
+        "isRequired": true
+      }
+    },
+    {
+      "id": "cpu-sm2-nicolas",
+      "type": "COACH_PLAYER_UNAVAILABILITY",
+      "teamId": "sm2",
+      "severity": "HARD",
+      "value": "nicolas",
+      "metadata": {
+        "coachId": "nicolas",
+        "teamId": "sm2",
+        "position": null,
+        "isActive": true
+      }
+    }
+  ],
+  "priorityTiers": [
+    { "id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2 },
+    { "id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2 },
+    { "id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1 },
+    { "id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1 },
+    { "id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1 }
+  ]
+}

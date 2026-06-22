@@ -14,7 +14,7 @@ from typing import Any
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V2"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V3"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -36,6 +36,28 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
 )
 
 UNPLACED_PENALTY = 100000
+
+
+def is_team_satisfied_by_hard_locks(
+    team_id: str,
+    locked_slots: Iterable[Mapping[str, Any]],
+    sessions_per_week: int,
+) -> bool:
+    """Return True if the team's weekly sessions are fully covered by HARD locks.
+
+    Each entry in *locked_slots* represents one HARD-locked session for a team.
+    If the count of HARD locks for *team_id* is greater than or equal to
+    *sessions_per_week*, the team is fully satisfied and must NOT receive the
+    ``-UNPLACED_PENALTY`` term in the objective.
+    """
+
+    hard_count = sum(
+        1
+        for slot in locked_slots
+        if str(slot.get("team_id", "")) == str(team_id)
+    )
+    return hard_count >= sessions_per_week
+
 
 CHAINING_TIER_WEIGHTS = MappingProxyType(
     {
@@ -166,6 +188,7 @@ def add_level_2_objective(
     *,
     teams: Iterable[Any] = (),
     soft_terms: Iterable[Any] = (),
+    hard_satisfied_team_ids: set[str] | None = None,
     score_formula_version: str = SCORE_FORMULA_VERSION,
 ) -> Level2ObjectiveStats:
     """Maximize the fixed T24 weighted score for candidate placements.
@@ -175,6 +198,12 @@ def add_level_2_objective(
     weights are added to the same linear term. Extra soft literals can be passed
     through soft_terms as (literal, weight_name) pairs or mapping/object
     values with var/weight_name fields.
+
+    When *hard_satisfied_team_ids* is provided, teams whose weekly sessions are
+    fully covered by HARD locks are excluded from the ``placed.Not() *
+    -UNPLACED_PENALTY`` term — their solver variables are forced to 0 by the
+    remaining_sessions constraint, which would otherwise trigger the penalty
+    even though the team is effectively placed.
     """
 
     if score_formula_version != SCORE_FORMULA_VERSION:
@@ -220,6 +249,8 @@ def add_level_2_objective(
             assignments_by_team.setdefault(team_id, []).append(_var(assignment))
 
     for team_id, team_vars in assignments_by_team.items():
+        if hard_satisfied_team_ids is not None and str(team_id) in hard_satisfied_team_ids:
+            continue
         placed = model.NewBoolVar(f"placed_{team_id}")
         model.Add(sum(team_vars) >= 1).OnlyEnforceIf(placed)
         model.Add(sum(team_vars) == 0).OnlyEnforceIf(placed.Not())
@@ -696,5 +727,6 @@ __all__ = [
     "add_preferred_day_bonus",
     "add_objective",
     "apply_level_2_objective",
+    "is_team_satisfied_by_hard_locks",
     "set_level_2_objective",
 ]

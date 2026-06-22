@@ -264,9 +264,15 @@ def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, 
     When ``team_coach_map`` is provided and the assignment's team is in the map,
     all coaches for that team are looked up from the map. Otherwise, falls back
     to the assignment's ``coach_id`` attribute for backward compatibility.
+
+    Overlap detection uses both ``_time_key`` grouping (same slot start) and
+    ``_intervals_overlap`` (interval intersection) so that coaching assignments
+    with different start times but overlapping intervals are also prevented.
     """
 
     groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
+
     for assignment in assignments:
         time_key = _time_key(assignment)
         if time_key is None:
@@ -276,16 +282,27 @@ def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, 
         team_id_str = str(team_id) if team_id is not None else None
 
         # Look up coaches from team_coach_map
+        coach_ids: list[Any] = []
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
-            for coach_id in team_coach_map[team_id_str]:
-                groups[(coach_id, time_key)].append(_var(assignment))
+            coach_ids = list(team_coach_map[team_id_str])
         else:
             # Fall back to assignment's coach_id attribute
             coach_id = _coach_id(assignment)
             if coach_id is not None:
-                groups[(coach_id, time_key)].append(_var(assignment))
+                coach_ids = [coach_id]
 
-    return _add_at_most_one_groups(model, groups.values())
+        var = _var(assignment)
+        for coach_id in coach_ids:
+            groups[(coach_id, time_key)].append(var)
+
+        start, end, day = _extract_interval(assignment)
+        if start is not None and end is not None and day is not None:
+            for coach_id in coach_ids:
+                person_entries[str(coach_id)].append((start, end, var, day))
+
+    time_key_added = _add_at_most_one_groups(model, groups.values())
+    interval_added = _add_interval_at_most_one(model, person_entries)
+    return time_key_added + interval_added
 
 
 def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLike], *, team_coach_map: dict[str, list[str]] | None = None, team_player_map: dict[str, list[str]] | None = None) -> int:
@@ -294,10 +311,17 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
     When ``team_coach_map`` / ``team_player_map`` are provided and the
     assignment's team is found, coaches and players are looked up from the
     maps. Otherwise, falls back to the assignment's own attributes.
+
+    Overlap detection uses both ``_time_key`` grouping (same slot start) and
+    ``_intervals_overlap`` (interval intersection) so that assignments with
+    different start times but overlapping intervals are also prevented. The
+    interval check covers ALL role combinations for the same person
+    (coach-coach, coach-player, player-player).
     """
 
     coach_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     player_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
 
     for assignment in assignments:
         time_key = _time_key(assignment)
@@ -307,26 +331,40 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
         team_id = _team_id(assignment)
         team_id_str = str(team_id) if team_id is not None else None
 
+        all_person_ids: set[str] = set()
+
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
             for coach_id in team_coach_map[team_id_str]:
                 coach_groups[(coach_id, time_key)].append(_var(assignment))
+                all_person_ids.add(str(coach_id))
         else:
             coach_id = _coach_id(assignment)
             if coach_id is not None:
                 coach_groups[(coach_id, time_key)].append(_var(assignment))
+                all_person_ids.add(str(coach_id))
 
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for player_id in team_player_map[team_id_str]:
                 player_groups[(player_id, time_key)].append(_var(assignment))
+                all_person_ids.add(str(player_id))
         else:
             for player_id in _player_ids(assignment):
                 player_groups[(player_id, time_key)].append(_var(assignment))
+                all_person_ids.add(str(player_id))
+
+        var = _var(assignment)
+        start, end, day = _extract_interval(assignment)
+        if start is not None and end is not None and day is not None:
+            for person_id in all_person_ids:
+                person_entries[person_id].append((start, end, var, day))
 
     overlap_groups = (
         coach_groups[key] + player_groups[key]
         for key in coach_groups.keys() & player_groups.keys()
     )
-    return _add_at_most_one_groups(model, overlap_groups)
+    time_key_added = _add_at_most_one_groups(model, overlap_groups)
+    interval_added = _add_interval_at_most_one(model, person_entries)
+    return time_key_added + interval_added
 
 
 def add_coach_rest_day_constraints(
@@ -1075,6 +1113,58 @@ def _intervals_overlap(a_start: Any, a_end: Any, b_start: Any, b_end: Any) -> bo
 
 def _interval_key(person_id: Any, day: Any, pair_index: Any) -> str:
     return f"{person_id}:{day}:{pair_index}"
+
+
+def _extract_interval(assignment: AssignmentLike) -> tuple[int | None, int | None, str | None]:
+    """Extract (start_minutes, end_minutes, day) from an assignment.
+
+    Returns (None, None, None) when start/end or slot_id are missing so callers
+    can fall back to ``_time_key`` grouping.
+    """
+    start = _get(assignment, "start", "start_minute", "start_time", "starts_at", default=None)
+    end = _get(assignment, "end", "end_minute", "end_time", "ends_at", default=None)
+    if start is None or end is None:
+        return None, None, None
+
+    start_minutes = int(start) if not isinstance(start, int) else start
+    end_minutes = int(end) if not isinstance(end, int) else end
+
+    slot_id = _slot_id(assignment)
+    if slot_id is None:
+        return start_minutes, end_minutes, None
+    day = str(slot_id).split(":")[0]
+    return start_minutes, end_minutes, day
+
+
+def _add_interval_at_most_one(
+    model: Any,
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]],
+) -> int:
+    """Add pairwise ``varA + varB <= 1`` for overlapping intervals per person per day.
+
+    Args:
+        model: CP-SAT model.
+        person_entries: ``dict[person_id, list[(start, end, var, day)]]``.
+
+    Returns: number of pairwise constraints added.
+    """
+    added = 0
+    for entries in person_entries.values():
+        by_day: dict[str, list[tuple[int, int, BoolVarLike]]] = defaultdict(list)
+        for start, end, var, day in entries:
+            by_day[day].append((start, end, var))
+
+        for day_entries in by_day.values():
+            for i in range(len(day_entries)):
+                a_start, a_end, var_a = day_entries[i]
+                for j in range(i + 1, len(day_entries)):
+                    b_start, b_end, var_b = day_entries[j]
+                    if var_a is var_b:
+                        continue
+                    if _intervals_overlap(a_start, a_end, b_start, b_end):
+                        model.Add(var_a + var_b <= 1)
+                        added += 1
+    return added
 
 
 def _player_ids(assignment: AssignmentLike) -> list[Any]:

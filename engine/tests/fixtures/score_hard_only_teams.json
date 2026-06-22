@@ -1,1 +1,134 @@
-{}
+{
+  "clubId": "club-score-test",
+  "seasonId": "season-2026",
+  "version": "2.0",
+  "scheduleName": "Score HARD-only teams",
+  "solverSeed": 42,
+  "solverTimeoutSeconds": 10,
+  "venues": [
+    {
+      "id": "gym-1",
+      "name": "Gymnasium 1",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 1,
+          "startTime": "18:00",
+          "durationMinutes": 90,
+          "capacity": 5
+        },
+        {
+          "dayOfWeek": 3,
+          "startTime": "18:00",
+          "durationMinutes": 90,
+          "capacity": 5
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "team-a",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Team A (HARD-only)",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "team-b",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Team B",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "team-c",
+      "sportCategoryId": "senior",
+      "priorityTierId": 1,
+      "name": "Team C",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
+  ],
+  "coaches": [
+    {
+      "id": "coach-1",
+      "firstName": "Coach",
+      "lastName": "One",
+      "isActive": true
+    },
+    {
+      "id": "coach-2",
+      "firstName": "Coach",
+      "lastName": "Two",
+      "isActive": true
+    },
+    {
+      "id": "coach-3",
+      "firstName": "Coach",
+      "lastName": "Three",
+      "isActive": true
+    }
+  ],
+  "slotTemplates": [
+    {
+      "id": "tpl-team-a-hard",
+      "teamId": "team-a",
+      "venueId": "gym-1",
+      "coachId": "coach-1",
+      "dayOfWeek": 1,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "HARD"
+    },
+    {
+      "id": "tpl-team-b",
+      "teamId": "team-b",
+      "venueId": "gym-1",
+      "coachId": "coach-2",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    },
+    {
+      "id": "tpl-team-c",
+      "teamId": "team-c",
+      "venueId": "gym-1",
+      "coachId": "coach-3",
+      "dayOfWeek": 3,
+      "startTime": "18:00",
+      "durationMinutes": 90,
+      "lockLevel": "NONE"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "c-team-a-coach",
+      "type": "TEAM_COACH",
+      "teamId": "team-a",
+      "metadata": { "coachId": "coach-1" }
+    },
+    {
+      "id": "c-team-b-coach",
+      "type": "TEAM_COACH",
+      "teamId": "team-b",
+      "metadata": { "coachId": "coach-2" }
+    },
+    {
+      "id": "c-team-c-coach",
+      "type": "TEAM_COACH",
+      "teamId": "team-c",
+      "metadata": { "coachId": "coach-3" }
+    }
+  ],
+  "priorityTiers": [
+    { "id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2 },
+    { "id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2 },
+    { "id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1 },
+    { "id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1 },
+    { "id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1 }
+  ]
+}
