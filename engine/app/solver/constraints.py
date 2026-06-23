@@ -565,18 +565,20 @@ def add_max_consecutive_sessions_constraints(
 ) -> int:
     """Constraint 3d: a person may not be in all 3 slots of a consecutive triple.
 
-    Two grouping strategies are applied:
+    Uses a single **cross-venue** grouping strategy: for each
+    ``(person_id, day)``, collects all assignments across all venues where
+    the person appears (coach via ``team_coach_map`` or player via
+    ``team_player_map``).  Detects back-to-back chains A->B->C (where
+    A.end == B.start and B.end == C.start) and adds
+    ``sum(varA + varB + varC) <= 2`` for each triple.
 
-    1. **Same-venue** (preserved): for each ``(venue_id, day)``, identifies
-       consecutive slot triples (A, B, C) where A.end == B.start and
-       B.end == C.start.  For each coach, the sum of their assignments
-       (coaching + playing) across the triple must be <= 2.
-
-    2. **Cross-venue** (BUG-3 fix): for each ``(person_id, day)``, collects
-       all assignments across all venues where the person appears (coach via
-       ``team_coach_map`` or player via ``team_player_map``).  Detects
-       back-to-back chains A->B->C that span different venues and adds
-       ``sum(varA + varB + varC) <= 2`` for each triple.
+    Cross-venue grouping is sufficient on its own: a same-venue triple is
+    just a cross-venue triple where all three slots happen to share a
+    venue, so it is already detected by the ``(person_id, day)`` grouping.
+    The previous same-venue ``(venue_id, day)`` loop was redundant and is
+    removed for performance — on the BCCL payload (~2793 assignments,
+    ~196 entries per venue-day) the O(n^3) triple search per venue-day
+    made constraint building exceed the 30s test timeout.
 
     Coaches and players are looked up from ``team_coach_map`` and
     ``team_player_map`` when available, falling back to assignment attributes.
@@ -591,13 +593,11 @@ def add_max_consecutive_sessions_constraints(
     if not coach_ids:
         return 0
 
-    venue_day_slots: dict[tuple[str, str], list[tuple[int, int, AssignmentLike]]] = defaultdict(list)
     # Deduplicate by variable so a person who is both coach and player on the
     # same team does not get duplicate entries that could mask real triples.
     person_day_entries: dict[tuple[str, str], dict[int, tuple[int, int, AssignmentLike]]] = defaultdict(dict)
 
     for assignment in assignments:
-        venue_id = _venue_id(assignment)
         slot_id = _slot_id(assignment)
         if slot_id is None:
             continue
@@ -615,9 +615,6 @@ def add_max_consecutive_sessions_constraints(
 
         start_minutes = int(start) if not isinstance(start, int) else start
         end_minutes = int(end) if not isinstance(end, int) else end
-
-        if venue_id is not None:
-            venue_day_slots[(str(venue_id), day)].append((start_minutes, end_minutes, assignment))
 
         team_id = _team_id(assignment)
         team_id_str = str(team_id) if team_id is not None else None
@@ -647,39 +644,6 @@ def add_max_consecutive_sessions_constraints(
             person_day_entries[(person_id, day)][var_key] = (start_minutes, end_minutes, assignment)
 
     added = 0
-
-    # --- Same-venue grouping (existing behavior, preserved) ---
-    for slot_entries in venue_day_slots.values():
-        for a, b, c in _find_consecutive_triples(slot_entries):
-            coach_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
-
-            for _, _, assignment in (a, b, c):
-                team_id = _team_id(assignment)
-                team_id_str = str(team_id) if team_id is not None else None
-
-                if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
-                    for cid in team_coach_map[team_id_str]:
-                        if cid in coach_ids:
-                            coach_vars[cid].append(_var(assignment))
-                else:
-                    cid = _coach_id(assignment)
-                    if cid is not None and str(cid) in coach_ids:
-                        coach_vars[str(cid)].append(_var(assignment))
-
-                if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
-                    for pid in team_player_map[team_id_str]:
-                        if pid in coach_ids:
-                            coach_vars[pid].append(_var(assignment))
-                else:
-                    for pid in _player_ids(assignment):
-                        if str(pid) in coach_ids:
-                            coach_vars[str(pid)].append(_var(assignment))
-
-            for vars_list in coach_vars.values():
-                deduped = _dedupe_variables(vars_list)
-                if len(deduped) >= 3:
-                    cast(Any, model).Add(sum(deduped) <= 2)
-                    added += 1
 
     # --- Cross-venue grouping by (person_id, day) — BUG-3 fix ---
     for entries_dict in person_day_entries.values():

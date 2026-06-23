@@ -267,6 +267,8 @@ def _solve(
     # Solve — uses the full configured timeout.
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = input_data.solver_timeout_seconds
+    solver.parameters.random_seed = input_data.solver_seed
+    solver.parameters.num_search_workers = 1
     status = solver.Solve(model)
 
     return status, solver, model, conflicts

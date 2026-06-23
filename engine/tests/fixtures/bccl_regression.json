@@ -1,0 +1,4468 @@
+{
+    "version": "2.0",
+    "clubId": "0b0c5137-230f-48ee-bec7-2fd100dafa4b",
+    "seasonId": "64572a2b-5cbe-45b1-a9d5-f5fdf73d9608",
+    "solverSeed": 42,
+    "solverTimeoutSeconds": 300,
+    "venues": [
+        {
+            "id": "183b9fbc-33d2-4f02-85e8-838fd5e8e635",
+            "name": "Camus",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "20:00",
+                    "durationMinutes": 150,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "20:00",
+                    "durationMinutes": 150,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "20:00",
+                    "durationMinutes": 150,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "3c69ac61-7ea2-4516-8b04-d6eb00f2beb4",
+            "name": "Debarros",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "52c1153a-466d-4617-aee9-2ea306de8b26",
+            "name": "De Barros Annexe",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "5bf180d6-32e0-4954-874c-2c45b0a7d992",
+            "name": "Jean Vilar",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "18:45",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "20:15",
+                    "durationMinutes": 135,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "18:45",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "20:15",
+                    "durationMinutes": 135,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "a2d8c244-c21f-479c-ac95-96605136ca92",
+            "name": "Tonkin",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "16:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "c083c3d1-8a32-4636-9ec7-a47da4f3a8fa",
+            "name": "JDR",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 2
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 2
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "09:00",
+                    "durationMinutes": 75,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "10:15",
+                    "durationMinutes": 75,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "11:30",
+                    "durationMinutes": 75,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "c82e22ba-3851-4790-bd9f-99451dfad23f",
+            "name": "Gymnase Armand",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "16:00",
+                    "durationMinutes": 75,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "17:15",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "18:45",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "20:15",
+                    "durationMinutes": 135,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "d0f96847-9a55-4255-8c9c-1b6dad420589",
+            "name": "ADN",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                }
+            ]
+        },
+        {
+            "id": "edf71b47-57d9-424b-9202-b791de393b56",
+            "name": "Matéo",
+            "isExternal": false,
+            "color": null,
+            "latitude": null,
+            "longitude": null,
+            "source": "fixture",
+            "externalRef": null,
+            "isActive": true,
+            "parentVenueId": null,
+            "trainingSlots": [
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 2
+                },
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 1,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 2,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "16:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 3,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 4,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "17:30",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "19:00",
+                    "durationMinutes": 90,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 5,
+                    "startTime": "20:30",
+                    "durationMinutes": 120,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "09:00",
+                    "durationMinutes": 45,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "09:45",
+                    "durationMinutes": 60,
+                    "capacity": 1
+                },
+                {
+                    "dayOfWeek": 6,
+                    "startTime": "10:45",
+                    "durationMinutes": 60,
+                    "capacity": 1
+                }
+            ]
+        }
+    ],
+    "teams": [
+        {
+            "id": "039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "sportCategoryId": "93ff63ca-08eb-456b-9526-1397f860e488",
+            "ageMin": 14,
+            "ageMax": 15,
+            "priorityTierId": 4,
+            "name": "U15M2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "04abafda-556d-4dbf-9c6f-aa6a90ba2565",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Loisir 2",
+            "gender": null,
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "sportCategoryId": "4c5d8b53-cbe7-456b-8770-79feb8e89c0e",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 3,
+            "name": "U11M1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "sportCategoryId": "16f443ae-a9a4-4562-8186-81979bb3a8fa",
+            "ageMin": 12,
+            "ageMax": 13,
+            "priorityTierId": 4,
+            "name": "U13M2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "sportCategoryId": "0d632f8d-4100-4398-af7a-58529a6507a5",
+            "ageMin": 12,
+            "ageMax": 13,
+            "priorityTierId": 3,
+            "name": "U13F1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "1ae5dd19-e188-4133-8081-16400169fb95",
+            "sportCategoryId": "690ba028-603c-4e56-9bd3-c8fa10c68819",
+            "ageMin": 6,
+            "ageMax": 7,
+            "priorityTierId": 5,
+            "name": "Baby 1",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "sportCategoryId": "93ff63ca-08eb-456b-9526-1397f860e488",
+            "ageMin": 14,
+            "ageMax": 15,
+            "priorityTierId": 3,
+            "name": "U15M1",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 3,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "254932d8-b1f8-410b-afcb-12fa56c89002",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Academie U9-U11",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "324580fd-1327-49c3-a89d-1a8f38091504",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Academie U18",
+            "gender": null,
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "4090fd9e-56b6-430b-9f8b-9f8bb6af142c",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Mercredi Shark U9-U11",
+            "gender": null,
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "45edbac3-6aa0-46da-b18e-eb453169cc4f",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Loisir 3",
+            "gender": null,
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "sportCategoryId": "47623eb7-9c02-446a-87af-e8705e8e413d",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 3,
+            "name": "U11F1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "sportCategoryId": "5ee3c4be-59d0-4ee0-a5c2-2082e92f4e3e",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 1,
+            "name": "SF1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "sportCategoryId": "12f026de-e4d7-4296-bba8-2b9f6b59404b",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 2,
+            "name": "SM2",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "sportCategoryId": "0193c14d-6b00-4d93-9980-2fd6fa56a871",
+            "ageMin": 8,
+            "ageMax": 9,
+            "priorityTierId": 4,
+            "name": "U9M2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "sportCategoryId": "fc5df597-bb52-47d6-9207-36ba378839ca",
+            "ageMin": 8,
+            "ageMax": 9,
+            "priorityTierId": 3,
+            "name": "U9F2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "sportCategoryId": "50542b65-ef0d-43c9-aacb-27cb8c0b8473",
+            "ageMin": 16,
+            "ageMax": 18,
+            "priorityTierId": 5,
+            "name": "U18F3",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "sportCategoryId": "4c5d8b53-cbe7-456b-8770-79feb8e89c0e",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 3,
+            "name": "U11M2",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "sportCategoryId": "c85455e4-f581-4f56-a72a-d832b9a00d32",
+            "ageMin": 3,
+            "ageMax": 5,
+            "priorityTierId": 5,
+            "name": "Micro Basket",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "sportCategoryId": "0d632f8d-4100-4398-af7a-58529a6507a5",
+            "ageMin": 12,
+            "ageMax": 13,
+            "priorityTierId": 5,
+            "name": "U13F3",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "sportCategoryId": "0193c14d-6b00-4d93-9980-2fd6fa56a871",
+            "ageMin": 8,
+            "ageMax": 9,
+            "priorityTierId": 5,
+            "name": "CEC Groupe 1 (U9F1\/U9F2\/U9M2)",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "77f9a62e-0aad-42a7-a1b8-d7bd871e043a",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Loisir Feminine",
+            "gender": "F",
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "8201f11c-8e0c-47a9-b584-c023429b3065",
+            "sportCategoryId": "336617b7-c291-4ffb-8179-0e273162eeae",
+            "ageMin": 19,
+            "ageMax": 21,
+            "priorityTierId": 4,
+            "name": "U21M2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "82aad080-200b-4042-b39a-fb36eb6a3218",
+            "sportCategoryId": "1eccea54-44b0-4928-bcd4-5dd836c75ed6",
+            "ageMin": 14,
+            "ageMax": 15,
+            "priorityTierId": 5,
+            "name": "U15F3",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "sportCategoryId": "16f443ae-a9a4-4562-8186-81979bb3a8fa",
+            "ageMin": 12,
+            "ageMax": 13,
+            "priorityTierId": 3,
+            "name": "U13M1",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "sportCategoryId": "0193c14d-6b00-4d93-9980-2fd6fa56a871",
+            "ageMin": 8,
+            "ageMax": 9,
+            "priorityTierId": 3,
+            "name": "U9M1",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "93774e29-1091-496d-b16c-50e96aacad42",
+            "sportCategoryId": "5ee3c4be-59d0-4ee0-a5c2-2082e92f4e3e",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 4,
+            "name": "SF3",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "9b93b5c0-032e-4381-9f01-e25ccb6e93ca",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Loisir 1",
+            "gender": null,
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "a5ec677d-4314-4266-bbdb-ce76e70d546d",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "3x3",
+            "gender": "MIXTE",
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "sportCategoryId": "12f026de-e4d7-4296-bba8-2b9f6b59404b",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 4,
+            "name": "SM3",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "b1abb070-5080-4091-b289-bce37aa2e438",
+            "sportCategoryId": "5bf4ff38-01ef-492d-8cb5-cabca2c559d7",
+            "ageMin": 16,
+            "ageMax": 18,
+            "priorityTierId": 3,
+            "name": "U18M1",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 3,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "sportCategoryId": "47623eb7-9c02-446a-87af-e8705e8e413d",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 4,
+            "name": "U11F2",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "b9fbb79c-b71f-4120-b40d-976d5c8dd50b",
+            "sportCategoryId": "56371211-8cbe-4795-a3f5-c08a63c944e8",
+            "ageMin": null,
+            "ageMax": null,
+            "priorityTierId": 5,
+            "name": "Academie U13-U15",
+            "gender": null,
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "sportCategoryId": "5bf4ff38-01ef-492d-8cb5-cabca2c559d7",
+            "ageMin": 16,
+            "ageMax": 18,
+            "priorityTierId": 4,
+            "name": "U18M2",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "sportCategoryId": "336617b7-c291-4ffb-8179-0e273162eeae",
+            "ageMin": 19,
+            "ageMax": 21,
+            "priorityTierId": 3,
+            "name": "U21M1",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "sportCategoryId": "12f026de-e4d7-4296-bba8-2b9f6b59404b",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 1,
+            "name": "SM1",
+            "gender": "M",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "sportCategoryId": "4c5d8b53-cbe7-456b-8770-79feb8e89c0e",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 5,
+            "name": "CEC Groupe 2 (U11F2\/U9M1)",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "sportCategoryId": "50542b65-ef0d-43c9-aacb-27cb8c0b8473",
+            "ageMin": 16,
+            "ageMax": 18,
+            "priorityTierId": 4,
+            "name": "U18F2",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "sportCategoryId": "6472d72f-b049-45cf-93cd-d5677dc4b257",
+            "ageMin": 35,
+            "ageMax": 99,
+            "priorityTierId": 5,
+            "name": "Veterans",
+            "gender": "M",
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "sportCategoryId": "5ee3c4be-59d0-4ee0-a5c2-2082e92f4e3e",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 2,
+            "name": "SF2",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "d879cf6a-e161-4d51-98d8-632a42407cd8",
+            "sportCategoryId": "12f026de-e4d7-4296-bba8-2b9f6b59404b",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 3,
+            "name": "Training Individuel",
+            "gender": "MIXTE",
+            "level": "LOISIR_ADULTE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "sportCategoryId": "690ba028-603c-4e56-9bd3-c8fa10c68819",
+            "ageMin": 6,
+            "ageMax": 7,
+            "priorityTierId": 5,
+            "name": "Baby 2",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "sportCategoryId": "12f026de-e4d7-4296-bba8-2b9f6b59404b",
+            "ageMin": 22,
+            "ageMax": 99,
+            "priorityTierId": 5,
+            "name": "SM4",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "sportCategoryId": "fc5df597-bb52-47d6-9207-36ba378839ca",
+            "ageMin": 8,
+            "ageMax": 9,
+            "priorityTierId": 3,
+            "name": "U9F1",
+            "gender": "M",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "ec341aba-b7f5-4f44-b580-7f17ff29ecf7",
+            "sportCategoryId": "4c5d8b53-cbe7-456b-8770-79feb8e89c0e",
+            "ageMin": 10,
+            "ageMax": 11,
+            "priorityTierId": 5,
+            "name": "CEC Groupe 3 (U11F1\/U11M2)",
+            "gender": "MIXTE",
+            "level": "LOISIR_JEUNE",
+            "sessionsPerWeek": 1,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "sportCategoryId": "0d632f8d-4100-4398-af7a-58529a6507a5",
+            "ageMin": 12,
+            "ageMax": 13,
+            "priorityTierId": 4,
+            "name": "U13F2",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "sportCategoryId": "50542b65-ef0d-43c9-aacb-27cb8c0b8473",
+            "ageMin": 16,
+            "ageMax": 18,
+            "priorityTierId": 3,
+            "name": "U18F1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 3,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "sportCategoryId": "1eccea54-44b0-4928-bcd4-5dd836c75ed6",
+            "ageMin": 14,
+            "ageMax": 15,
+            "priorityTierId": 3,
+            "name": "U15F1",
+            "gender": "F",
+            "level": "REGIONAL",
+            "sessionsPerWeek": 3,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        },
+        {
+            "id": "f3afc608-ac6e-49ff-b463-501f45accff3",
+            "sportCategoryId": "1eccea54-44b0-4928-bcd4-5dd836c75ed6",
+            "ageMin": 14,
+            "ageMax": 15,
+            "priorityTierId": 4,
+            "name": "U15F2",
+            "gender": "F",
+            "level": "DEPARTEMENTAL",
+            "sessionsPerWeek": 2,
+            "minSessionsOverride": null,
+            "matchDay": null,
+            "allowMultipleSessionsPerDay": false,
+            "forcedVenueId": null,
+            "isActive": true,
+            "parentTeamId": null,
+            "tags": []
+        }
+    ],
+    "coaches": [
+        {
+            "id": "04ced046-ba31-4327-8e30-02795f13a5f2",
+            "firstName": "Chris",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "04d34674-df64-4e84-903b-dfe5bc30eb01",
+            "firstName": "Nico",
+            "lastName": "Patin",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "07f4ed67-51fd-408c-937f-cb8e52d6e6da",
+            "firstName": "Ines",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+            "firstName": "Charlie",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "20a621e2-98b5-44c3-8c32-a50655418699",
+            "firstName": "Flo",
+            "lastName": "Tapaunat",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "29894cea-3a4d-48bf-8c99-ffc65806cf97",
+            "firstName": "Marlon",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "3850af64-1940-4ad5-92d2-6b63961614ad",
+            "firstName": "Ambrine",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+            "firstName": "Aela",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "5f200a31-568f-446a-b9d6-c2c7ed2c220c",
+            "firstName": "Cyril",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "606427ba-f7bd-4f0c-898c-553a80225c75",
+            "firstName": "Emerick",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "684e3a84-e7a1-4887-b970-4dfa499e05b3",
+            "firstName": "Mara",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "6ccb5805-99fd-4439-9c10-1258badc989b",
+            "firstName": "Luca",
+            "lastName": "Blanchini",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+            "firstName": "Jordan",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "8affe4fa-e8aa-40b6-90f6-df35aee9d83e",
+            "firstName": "Pierre",
+            "lastName": "Chauvin",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "9b292f4c-1e17-41a3-b1eb-ccf637901c44",
+            "firstName": "Ethan",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "aba05091-5b80-4e03-9999-424c3c4f4bf2",
+            "firstName": "Lionel",
+            "lastName": "Lacroute",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "b0e53ede-183d-4900-b560-7c6545bea67f",
+            "firstName": "Enzo",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "b4be932d-7367-4b1a-bd97-c48f41eed104",
+            "firstName": "Nicolas",
+            "lastName": "Barilleau",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+            "firstName": "Anna",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "c3590ef6-ae45-4ba5-9ee6-ba311b35fbad",
+            "firstName": "Mathis",
+            "lastName": "Bideaux",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "c853834f-522c-41d5-b283-d42ddbd07eda",
+            "firstName": "Julia",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "da751306-9336-4fff-9a4d-f220c32b5772",
+            "firstName": "Maxime",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+            "firstName": "Thomas",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": true,
+            "parentCoachId": null
+        },
+        {
+            "id": "f3bf7c68-0db9-4324-9097-30c35853d3b9",
+            "firstName": "Thalie",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "f4cb8578-81c0-4f8b-80cf-6bd7bc5d0d73",
+            "firstName": "Florian",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        },
+        {
+            "id": "f9d0ba60-55d3-4197-960a-68d7e336ca1d",
+            "firstName": "Maeleen",
+            "lastName": "",
+            "email": null,
+            "phone": null,
+            "maxDaysOverride": null,
+            "maxDaysOverrideConfirmed": false,
+            "acceptableLateMinutes": null,
+            "isActive": true,
+            "isEmployee": false,
+            "parentCoachId": null
+        }
+    ],
+    "constraints": [
+        {
+            "id": "team-coach:0cdbc2d4-b799-4807-a74d-96a7a8e35b0e",
+            "teamId": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+            "metadata": {
+                "coachId": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:14c2aa62-79d7-4451-9ae9-8c940fb3fa91",
+            "teamId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+            "metadata": {
+                "coachId": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:230c7455-1294-44ed-a6f9-f7d0a11bf66c",
+            "teamId": "e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "04ced046-ba31-4327-8e30-02795f13a5f2",
+            "metadata": {
+                "coachId": "04ced046-ba31-4327-8e30-02795f13a5f2",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:2c2d8a73-c42a-400c-9714-c49139e5db75",
+            "teamId": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+            "metadata": {
+                "coachId": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:30b5fd1b-3d43-4ffa-9b37-0f9bcece9216",
+            "teamId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "684e3a84-e7a1-4887-b970-4dfa499e05b3",
+            "metadata": {
+                "coachId": "684e3a84-e7a1-4887-b970-4dfa499e05b3",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:3445ed47-4894-47d7-a383-75e9663b8e27",
+            "teamId": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "3850af64-1940-4ad5-92d2-6b63961614ad",
+            "metadata": {
+                "coachId": "3850af64-1940-4ad5-92d2-6b63961614ad",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:3a013bf0-a6c1-4643-82db-d5f706320e0e",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "04d34674-df64-4e84-903b-dfe5bc30eb01",
+            "metadata": {
+                "coachId": "04d34674-df64-4e84-903b-dfe5bc30eb01",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:3c51e228-25c4-4ede-bc9a-7c57fe41d95b",
+            "teamId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "8affe4fa-e8aa-40b6-90f6-df35aee9d83e",
+            "metadata": {
+                "coachId": "8affe4fa-e8aa-40b6-90f6-df35aee9d83e",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:45f81329-abe7-4665-922d-18f229d839e3",
+            "teamId": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "9b292f4c-1e17-41a3-b1eb-ccf637901c44",
+            "metadata": {
+                "coachId": "9b292f4c-1e17-41a3-b1eb-ccf637901c44",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:4616b2eb-803a-43fd-97da-a8cf090e3a11",
+            "teamId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "20a621e2-98b5-44c3-8c32-a50655418699",
+            "metadata": {
+                "coachId": "20a621e2-98b5-44c3-8c32-a50655418699",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:48b55bc7-3c01-4d04-ab7f-de1a1a4024bf",
+            "teamId": "1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+            "metadata": {
+                "coachId": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:4be4f092-a25a-4f34-805f-1185715e1337",
+            "teamId": "c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+            "metadata": {
+                "coachId": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:535031a9-b5fd-464f-ba42-187a5e91406a",
+            "teamId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "3850af64-1940-4ad5-92d2-6b63961614ad",
+            "metadata": {
+                "coachId": "3850af64-1940-4ad5-92d2-6b63961614ad",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:55a20890-ad21-4e5b-8cb3-b7c0e5eee551",
+            "teamId": "ec341aba-b7f5-4f44-b580-7f17ff29ecf7",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+            "metadata": {
+                "coachId": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:58c83cf5-2d9b-4bd7-979a-6d70e48279a5",
+            "teamId": "864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "5f200a31-568f-446a-b9d6-c2c7ed2c220c",
+            "metadata": {
+                "coachId": "5f200a31-568f-446a-b9d6-c2c7ed2c220c",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:5a350621-c664-41c4-89c0-e85a17ee4976",
+            "teamId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "b0e53ede-183d-4900-b560-7c6545bea67f",
+            "metadata": {
+                "coachId": "b0e53ede-183d-4900-b560-7c6545bea67f",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:5b393ed9-8115-44de-85bc-903443419637",
+            "teamId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "c853834f-522c-41d5-b283-d42ddbd07eda",
+            "metadata": {
+                "coachId": "c853834f-522c-41d5-b283-d42ddbd07eda",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:610c422e-7625-4a5d-9c5d-bb01c64d8378",
+            "teamId": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+            "metadata": {
+                "coachId": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:6bcb2ce1-9b70-4f96-806c-a19f95ac3c9e",
+            "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "da751306-9336-4fff-9a4d-f220c32b5772",
+            "metadata": {
+                "coachId": "da751306-9336-4fff-9a4d-f220c32b5772",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:79c5bef5-6f33-4d90-b9d5-423b0694ee0a",
+            "teamId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "606427ba-f7bd-4f0c-898c-553a80225c75",
+            "metadata": {
+                "coachId": "606427ba-f7bd-4f0c-898c-553a80225c75",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:7eddf6c3-07e8-461a-a850-beea63f9e3d9",
+            "teamId": "cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "07f4ed67-51fd-408c-937f-cb8e52d6e6da",
+            "metadata": {
+                "coachId": "07f4ed67-51fd-408c-937f-cb8e52d6e6da",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:7f494418-a99a-48be-9477-998a04359948",
+            "teamId": "039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "6ccb5805-99fd-4439-9c10-1258badc989b",
+            "metadata": {
+                "coachId": "6ccb5805-99fd-4439-9c10-1258badc989b",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:8e703d1b-ffe4-4d51-b920-4d8dfc9b2450",
+            "teamId": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+            "metadata": {
+                "coachId": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:8e8840e4-6b2c-451a-a768-406caf08abb3",
+            "teamId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+            "metadata": {
+                "coachId": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:8f5e6af2-711e-4116-b0e0-74d43a78b519",
+            "teamId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+            "metadata": {
+                "coachId": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:9cf313f2-edd2-4c2d-a93c-46c1eccd46f1",
+            "teamId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "c853834f-522c-41d5-b283-d42ddbd07eda",
+            "metadata": {
+                "coachId": "c853834f-522c-41d5-b283-d42ddbd07eda",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:9e7dd5b8-4c52-4cdc-9693-2f7a1c859bf1",
+            "teamId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "606427ba-f7bd-4f0c-898c-553a80225c75",
+            "metadata": {
+                "coachId": "606427ba-f7bd-4f0c-898c-553a80225c75",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:a4363649-fc4a-4b62-947a-8a99064ec2e1",
+            "teamId": "8201f11c-8e0c-47a9-b584-c023429b3065",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "29894cea-3a4d-48bf-8c99-ffc65806cf97",
+            "metadata": {
+                "coachId": "29894cea-3a4d-48bf-8c99-ffc65806cf97",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:aa11a0de-cfdb-44fa-b241-9b9651a4ad73",
+            "teamId": "0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "c3590ef6-ae45-4ba5-9ee6-ba311b35fbad",
+            "metadata": {
+                "coachId": "c3590ef6-ae45-4ba5-9ee6-ba311b35fbad",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:b3d061b1-ed8a-4124-ad90-ac5807bf2ae8",
+            "teamId": "64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "f4cb8578-81c0-4f8b-80cf-6bd7bc5d0d73",
+            "metadata": {
+                "coachId": "f4cb8578-81c0-4f8b-80cf-6bd7bc5d0d73",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:ba333362-bed1-46b0-833d-e73c9cea8034",
+            "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "aba05091-5b80-4e03-9999-424c3c4f4bf2",
+            "metadata": {
+                "coachId": "aba05091-5b80-4e03-9999-424c3c4f4bf2",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:c302ebec-9b37-498d-a0f2-58bff2a9f2ef",
+            "teamId": "b1abb070-5080-4091-b289-bce37aa2e438",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "b4be932d-7367-4b1a-bd97-c48f41eed104",
+            "metadata": {
+                "coachId": "b4be932d-7367-4b1a-bd97-c48f41eed104",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:cfde44c2-f936-4660-b4d6-5722cbf0b590",
+            "teamId": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "b0e53ede-183d-4900-b560-7c6545bea67f",
+            "metadata": {
+                "coachId": "b0e53ede-183d-4900-b560-7c6545bea67f",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:d35c6198-0cb5-4747-9545-2e25ce784795",
+            "teamId": "ec341aba-b7f5-4f44-b580-7f17ff29ecf7",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "8affe4fa-e8aa-40b6-90f6-df35aee9d83e",
+            "metadata": {
+                "coachId": "8affe4fa-e8aa-40b6-90f6-df35aee9d83e",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:d518d909-66ba-484a-a819-578416b254ff",
+            "teamId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+            "metadata": {
+                "coachId": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:e8768480-2768-42b5-8bb9-6057b8850752",
+            "teamId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "f9d0ba60-55d3-4197-960a-68d7e336ca1d",
+            "metadata": {
+                "coachId": "f9d0ba60-55d3-4197-960a-68d7e336ca1d",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:ecf338e2-bc29-4d25-9732-553e2631c2b4",
+            "teamId": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "f9d0ba60-55d3-4197-960a-68d7e336ca1d",
+            "metadata": {
+                "coachId": "f9d0ba60-55d3-4197-960a-68d7e336ca1d",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "team-coach:f753d6e7-eb79-4e0f-9c62-09b519b48f3c",
+            "teamId": "82aad080-200b-4042-b39a-fb36eb6a3218",
+            "type": "TEAM_COACH",
+            "severity": "HARD",
+            "value": "f3bf7c68-0db9-4324-9097-30c35853d3b9",
+            "metadata": {
+                "coachId": "f3bf7c68-0db9-4324-9097-30c35853d3b9",
+                "role": "MAIN",
+                "isRequired": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:335c635b-f530-4927-b020-b8bf6ab8c3e5",
+            "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+            "metadata": {
+                "coachId": "523f73d1-0833-4c9b-907b-f462ee578ebc",
+                "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:4c4f88c3-aab2-477b-b9af-ebe2918c66ed",
+            "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "b0e53ede-183d-4900-b560-7c6545bea67f",
+            "metadata": {
+                "coachId": "b0e53ede-183d-4900-b560-7c6545bea67f",
+                "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:67ba6573-3e73-46ad-803a-8560e5ff0716",
+            "teamId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+            "metadata": {
+                "coachId": "c0a4b245-d7b8-4574-85ac-571a44c51a42",
+                "teamId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:6b49f167-934b-49bc-861c-c89565b8ba71",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "b4be932d-7367-4b1a-bd97-c48f41eed104",
+            "metadata": {
+                "coachId": "b4be932d-7367-4b1a-bd97-c48f41eed104",
+                "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:7222abbe-61db-4fff-87dc-17d6f0fab3f1",
+            "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "f3bf7c68-0db9-4324-9097-30c35853d3b9",
+            "metadata": {
+                "coachId": "f3bf7c68-0db9-4324-9097-30c35853d3b9",
+                "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:75438689-8ddb-48be-8784-5674360c1f92",
+            "teamId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "c853834f-522c-41d5-b283-d42ddbd07eda",
+            "metadata": {
+                "coachId": "c853834f-522c-41d5-b283-d42ddbd07eda",
+                "teamId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:9a794b7c-9cbb-4bbf-88d0-b24e650a4da3",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+            "metadata": {
+                "coachId": "72d428f5-718e-4ffb-9aff-d650a897fcd3",
+                "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:a187375c-5dd8-44e0-904d-a1efd7f569fa",
+            "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "6ccb5805-99fd-4439-9c10-1258badc989b",
+            "metadata": {
+                "coachId": "6ccb5805-99fd-4439-9c10-1258badc989b",
+                "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:a68c6965-5dc0-4ee4-b93d-e5ca5d9520b2",
+            "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "3850af64-1940-4ad5-92d2-6b63961614ad",
+            "metadata": {
+                "coachId": "3850af64-1940-4ad5-92d2-6b63961614ad",
+                "teamId": "93774e29-1091-496d-b16c-50e96aacad42",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:bb7c12d2-d8da-4c3e-8c32-182ba3632fd6",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "606427ba-f7bd-4f0c-898c-553a80225c75",
+            "metadata": {
+                "coachId": "606427ba-f7bd-4f0c-898c-553a80225c75",
+                "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:c87611f7-d5d0-4d27-bae2-23ac870bc556",
+            "teamId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+            "metadata": {
+                "coachId": "1edd48d1-0916-462f-9a4c-5aab0d89d604",
+                "teamId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:cd373395-4f6f-4940-9adb-11855195da23",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "684e3a84-e7a1-4887-b970-4dfa499e05b3",
+            "metadata": {
+                "coachId": "684e3a84-e7a1-4887-b970-4dfa499e05b3",
+                "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:e0e4b573-b726-464c-af57-d29acb0dbbf0",
+            "teamId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+            "metadata": {
+                "coachId": "e4ec79e9-3e4e-41aa-bfdb-ac956895b6be",
+                "teamId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:e5132852-819f-454e-bbe0-25fd1d629858",
+            "teamId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "07f4ed67-51fd-408c-937f-cb8e52d6e6da",
+            "metadata": {
+                "coachId": "07f4ed67-51fd-408c-937f-cb8e52d6e6da",
+                "teamId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "coach-player-unavailability:fa05b7a4-ebab-4c6b-b772-c492c3a7c72a",
+            "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "type": "COACH_PLAYER_UNAVAILABILITY",
+            "severity": "HARD",
+            "value": "da751306-9336-4fff-9a4d-f220c32b5772",
+            "metadata": {
+                "coachId": "da751306-9336-4fff-9a4d-f220c32b5772",
+                "teamId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+                "position": null,
+                "isActive": true
+            }
+        },
+        {
+            "id": "priority-tier:1",
+            "teamId": "*",
+            "type": "PRIORITY_TIER",
+            "severity": "SOFT",
+            "value": 10000,
+            "metadata": {
+                "id": 1,
+                "label": "S",
+                "orToolsWeight": 10000,
+                "defaultMinSessions": 3
+            }
+        },
+        {
+            "id": "priority-tier:2",
+            "teamId": "*",
+            "type": "PRIORITY_TIER",
+            "severity": "SOFT",
+            "value": 1000,
+            "metadata": {
+                "id": 2,
+                "label": "A",
+                "orToolsWeight": 1000,
+                "defaultMinSessions": 2
+            }
+        },
+        {
+            "id": "priority-tier:3",
+            "teamId": "*",
+            "type": "PRIORITY_TIER",
+            "severity": "SOFT",
+            "value": 100,
+            "metadata": {
+                "id": 3,
+                "label": "B",
+                "orToolsWeight": 100,
+                "defaultMinSessions": 2
+            }
+        },
+        {
+            "id": "priority-tier:4",
+            "teamId": "*",
+            "type": "PRIORITY_TIER",
+            "severity": "SOFT",
+            "value": 10,
+            "metadata": {
+                "id": 4,
+                "label": "C",
+                "orToolsWeight": 10,
+                "defaultMinSessions": 2
+            }
+        },
+        {
+            "id": "priority-tier:5",
+            "teamId": "*",
+            "type": "PRIORITY_TIER",
+            "severity": "SOFT",
+            "value": 1,
+            "metadata": {
+                "id": 5,
+                "label": "D",
+                "orToolsWeight": 1,
+                "defaultMinSessions": 1
+            }
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "scope": "TEAM",
+            "scopeTargetId": "0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "scope": "TEAM",
+            "scopeTargetId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "scope": "TEAM",
+            "scopeTargetId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "scope": "TEAM",
+            "scopeTargetId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "scope": "TEAM",
+            "scopeTargetId": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "scope": "TEAM",
+            "scopeTargetId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "scope": "TEAM",
+            "scopeTargetId": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:52f71833-8a82-463f-93ac-ff92b069f51a",
+            "scope": "TEAM",
+            "scopeTargetId": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:1ae5dd19-e188-4133-8081-16400169fb95",
+            "scope": "TEAM",
+            "scopeTargetId": "1ae5dd19-e188-4133-8081-16400169fb95",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "scope": "TEAM",
+            "scopeTargetId": "e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "scope": "TEAM",
+            "scopeTargetId": "6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "scope": "TEAM",
+            "scopeTargetId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "07a22153-0b3f-48e6-ba12-1483d4f64100:c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "scope": "TEAM",
+            "scopeTargetId": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB (U9\/U11) - Début au premier créneau (max 17h30)",
+            "config": {
+                "maxStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "0be9a682-a43f-446f-9ac4-40b16d629f45:1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "scope": "TEAM",
+            "scopeTargetId": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "family": "TIME",
+            "ruleType": "PREFERRED",
+            "name": "U13 - Début préféré 17h30",
+            "config": {
+                "minStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "0be9a682-a43f-446f-9ac4-40b16d629f45:ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "scope": "TEAM",
+            "scopeTargetId": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "family": "TIME",
+            "ruleType": "PREFERRED",
+            "name": "U13 - Début préféré 17h30",
+            "config": {
+                "minStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "0be9a682-a43f-446f-9ac4-40b16d629f45:6db085f3-a5af-4653-929d-e27b495d3100",
+            "scope": "TEAM",
+            "scopeTargetId": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "family": "TIME",
+            "ruleType": "PREFERRED",
+            "name": "U13 - Début préféré 17h30",
+            "config": {
+                "minStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "0be9a682-a43f-446f-9ac4-40b16d629f45:864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "scope": "TEAM",
+            "scopeTargetId": "864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "family": "TIME",
+            "ruleType": "PREFERRED",
+            "name": "U13 - Début préféré 17h30",
+            "config": {
+                "minStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "0be9a682-a43f-446f-9ac4-40b16d629f45:0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "scope": "TEAM",
+            "scopeTargetId": "0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "family": "TIME",
+            "ruleType": "PREFERRED",
+            "name": "U13 - Début préféré 17h30",
+            "config": {
+                "minStartTime": "18:00"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "scope": "TEAM",
+            "scopeTargetId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "scope": "TEAM",
+            "scopeTargetId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:93774e29-1091-496d-b16c-50e96aacad42",
+            "scope": "TEAM",
+            "scopeTargetId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "scope": "TEAM",
+            "scopeTargetId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "scope": "TEAM",
+            "scopeTargetId": "cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "scope": "TEAM",
+            "scopeTargetId": "64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "scope": "TEAM",
+            "scopeTargetId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:f3afc608-ac6e-49ff-b463-501f45accff3",
+            "scope": "TEAM",
+            "scopeTargetId": "f3afc608-ac6e-49ff-b463-501f45accff3",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:82aad080-200b-4042-b39a-fb36eb6a3218",
+            "scope": "TEAM",
+            "scopeTargetId": "82aad080-200b-4042-b39a-fb36eb6a3218",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "scope": "TEAM",
+            "scopeTargetId": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "scope": "TEAM",
+            "scopeTargetId": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:6db085f3-a5af-4653-929d-e27b495d3100",
+            "scope": "TEAM",
+            "scopeTargetId": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "scope": "TEAM",
+            "scopeTargetId": "0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "scope": "TEAM",
+            "scopeTargetId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "scope": "TEAM",
+            "scopeTargetId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "scope": "TEAM",
+            "scopeTargetId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1d5424e2-6ccf-4c77-91b7-fe86b7fd3d4d:77f9a62e-0aad-42a7-a1b8-d7bd871e043a",
+            "scope": "TEAM",
+            "scopeTargetId": "77f9a62e-0aad-42a7-a1b8-d7bd871e043a",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Jean Vilar - Pas équipes féminines",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "scope": "TEAM",
+            "scopeTargetId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "scope": "TEAM",
+            "scopeTargetId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "scope": "TEAM",
+            "scopeTargetId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "scope": "TEAM",
+            "scopeTargetId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "scope": "TEAM",
+            "scopeTargetId": "c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:b1abb070-5080-4091-b289-bce37aa2e438",
+            "scope": "TEAM",
+            "scopeTargetId": "b1abb070-5080-4091-b289-bce37aa2e438",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "scope": "TEAM",
+            "scopeTargetId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "scope": "TEAM",
+            "scopeTargetId": "1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "scope": "TEAM",
+            "scopeTargetId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "scope": "TEAM",
+            "scopeTargetId": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "scope": "TEAM",
+            "scopeTargetId": "864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "scope": "TEAM",
+            "scopeTargetId": "0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "scope": "TEAM",
+            "scopeTargetId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "25c62800-86c4-4675-bb4d-2de4c9f2c975:5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "scope": "TEAM",
+            "scopeTargetId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "Matéo - Préféré équipes régionales",
+            "config": {
+                "preferredVenueId": "edf71b47-57d9-424b-9202-b791de393b56"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "scope": "TEAM",
+            "scopeTargetId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "scope": "TEAM",
+            "scopeTargetId": "e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:8201f11c-8e0c-47a9-b584-c023429b3065",
+            "scope": "TEAM",
+            "scopeTargetId": "8201f11c-8e0c-47a9-b584-c023429b3065",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:93774e29-1091-496d-b16c-50e96aacad42",
+            "scope": "TEAM",
+            "scopeTargetId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "scope": "TEAM",
+            "scopeTargetId": "c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "scope": "TEAM",
+            "scopeTargetId": "cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "scope": "TEAM",
+            "scopeTargetId": "64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "scope": "TEAM",
+            "scopeTargetId": "039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:f3afc608-ac6e-49ff-b463-501f45accff3",
+            "scope": "TEAM",
+            "scopeTargetId": "f3afc608-ac6e-49ff-b463-501f45accff3",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:82aad080-200b-4042-b39a-fb36eb6a3218",
+            "scope": "TEAM",
+            "scopeTargetId": "82aad080-200b-4042-b39a-fb36eb6a3218",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "scope": "TEAM",
+            "scopeTargetId": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:6db085f3-a5af-4653-929d-e27b495d3100",
+            "scope": "TEAM",
+            "scopeTargetId": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "scope": "TEAM",
+            "scopeTargetId": "0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "scope": "TEAM",
+            "scopeTargetId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "scope": "TEAM",
+            "scopeTargetId": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "scope": "TEAM",
+            "scopeTargetId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "scope": "TEAM",
+            "scopeTargetId": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e11f8c31-cab6-4dce-a9c2-82cdea78ea4c:52f71833-8a82-463f-93ac-ff92b069f51a",
+            "scope": "TEAM",
+            "scopeTargetId": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "De Barros Annexe - Préféré équipes départementales",
+            "config": {
+                "preferredVenueId": "52c1153a-466d-4617-aee9-2ea306de8b26"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "45425335-4913-450c-bba5-7094cad7e85b",
+            "scope": "TEAM",
+            "scopeTargetId": "9b93b5c0-032e-4381-9f01-e25ccb6e93ca",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Camus - Réservé Loisir 1 exclusivement",
+            "config": {
+                "preferredVenueId": "183b9fbc-33d2-4f02-85e8-838fd5e8e635"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "13a42eb0-19e1-4280-9e1d-932d7fc7cbc8",
+            "scope": "TEAM",
+            "scopeTargetId": "04abafda-556d-4dbf-9c6f-aa6a90ba2565",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Camus - Réservé Loisir 2 exclusivement",
+            "config": {
+                "preferredVenueId": "183b9fbc-33d2-4f02-85e8-838fd5e8e635"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "3ebd50e5-5d49-4af7-9e89-aacbb32d4c07",
+            "scope": "TEAM",
+            "scopeTargetId": "45edbac3-6aa0-46da-b18e-eb453169cc4f",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Camus - Réservé Loisir 3 exclusivement",
+            "config": {
+                "preferredVenueId": "183b9fbc-33d2-4f02-85e8-838fd5e8e635"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "6558e4ae-2e6d-4625-b690-cc242cccdec2",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Veterans - Interdit 183b9fbc-33d2-4f02-85e8-838fd5e8e635",
+            "config": {
+                "forbiddenVenueId": "183b9fbc-33d2-4f02-85e8-838fd5e8e635"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "3064c541-fffa-479f-aaee-db19c5c876cb",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Veterans - Interdit c083c3d1-8a32-4636-9ec7-a47da4f3a8fa",
+            "config": {
+                "forbiddenVenueId": "c083c3d1-8a32-4636-9ec7-a47da4f3a8fa"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "b185046e-879d-4a14-8adb-fd33b1958835",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Veterans - Interdit 5bf180d6-32e0-4954-874c-2c45b0a7d992",
+            "config": {
+                "forbiddenVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "ffdee0bf-0f5a-4dd9-b178-7f1423054170",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Veterans - Interdit a2d8c244-c21f-479c-ac95-96605136ca92",
+            "config": {
+                "forbiddenVenueId": "a2d8c244-c21f-479c-ac95-96605136ca92"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "692e24d6-1352-4046-80c1-ed612c778d76",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Veterans - Interdit d0f96847-9a55-4255-8c9c-1b6dad420589",
+            "config": {
+                "forbiddenVenueId": "d0f96847-9a55-4255-8c9c-1b6dad420589"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "873b1b7f-46ab-43ce-99e3-8acda44daa67",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "Veterans - Vendredi uniquement",
+            "config": {
+                "forcedDays": [
+                    5
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "scope": "TEAM",
+            "scopeTargetId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "scope": "TEAM",
+            "scopeTargetId": "523c92b7-8d6e-4e3c-ad2d-ad9ddf2c04bf",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "scope": "TEAM",
+            "scopeTargetId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "scope": "TEAM",
+            "scopeTargetId": "d1b8a935-1ba6-4c6e-8409-625087880d42",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "scope": "TEAM",
+            "scopeTargetId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "scope": "TEAM",
+            "scopeTargetId": "e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "scope": "TEAM",
+            "scopeTargetId": "cbb5d694-6ae9-4959-9a11-a50bef4506cf",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "scope": "TEAM",
+            "scopeTargetId": "c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:8201f11c-8e0c-47a9-b584-c023429b3065",
+            "scope": "TEAM",
+            "scopeTargetId": "8201f11c-8e0c-47a9-b584-c023429b3065",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:93774e29-1091-496d-b16c-50e96aacad42",
+            "scope": "TEAM",
+            "scopeTargetId": "93774e29-1091-496d-b16c-50e96aacad42",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "f2670e1a-ffb4-476a-8263-a0f5f007b28c:d879cf6a-e161-4d51-98d8-632a42407cd8",
+            "scope": "TEAM",
+            "scopeTargetId": "d879cf6a-e161-4d51-98d8-632a42407cd8",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Adultes - Début minimum 18h50",
+            "config": {
+                "minStartTime": "18:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:b1abb070-5080-4091-b289-bce37aa2e438",
+            "scope": "TEAM",
+            "scopeTargetId": "b1abb070-5080-4091-b289-bce37aa2e438",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "scope": "TEAM",
+            "scopeTargetId": "c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "scope": "TEAM",
+            "scopeTargetId": "edec0d0a-2a9c-48ff-8e59-9bc6ec9db0b2",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "scope": "TEAM",
+            "scopeTargetId": "cb74b055-2aaa-40e7-86b7-f2d48974f068",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "scope": "TEAM",
+            "scopeTargetId": "64cf93c4-30b7-40ff-8e9f-a1af0cf43b50",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "scope": "TEAM",
+            "scopeTargetId": "1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "scope": "TEAM",
+            "scopeTargetId": "039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "scope": "TEAM",
+            "scopeTargetId": "f2c4e7a5-87c1-4b96-adf5-e765ea7beb18",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:f3afc608-ac6e-49ff-b463-501f45accff3",
+            "scope": "TEAM",
+            "scopeTargetId": "f3afc608-ac6e-49ff-b463-501f45accff3",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:82aad080-200b-4042-b39a-fb36eb6a3218",
+            "scope": "TEAM",
+            "scopeTargetId": "82aad080-200b-4042-b39a-fb36eb6a3218",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "scope": "TEAM",
+            "scopeTargetId": "1a95cdba-2e61-4818-982c-38a29635e5c2",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "scope": "TEAM",
+            "scopeTargetId": "ed5676cb-73bd-4fc2-971b-d567f23db325",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:6db085f3-a5af-4653-929d-e27b495d3100",
+            "scope": "TEAM",
+            "scopeTargetId": "6db085f3-a5af-4653-929d-e27b495d3100",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "scope": "TEAM",
+            "scopeTargetId": "864ffc2f-6e31-4fc9-9564-cd7a9def617a",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "85965d09-ca7b-40b9-aeb1-66d7527e423e:0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "scope": "TEAM",
+            "scopeTargetId": "0f5f2c24-c733-4eb8-97fb-168fef2fba5b",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "Jeunes - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "scope": "TEAM",
+            "scopeTargetId": "0a628d4c-9f21-4e8f-8390-695a10fdfc56",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "scope": "TEAM",
+            "scopeTargetId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "scope": "TEAM",
+            "scopeTargetId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "scope": "TEAM",
+            "scopeTargetId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "scope": "TEAM",
+            "scopeTargetId": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "scope": "TEAM",
+            "scopeTargetId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "scope": "TEAM",
+            "scopeTargetId": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:52f71833-8a82-463f-93ac-ff92b069f51a",
+            "scope": "TEAM",
+            "scopeTargetId": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:1ae5dd19-e188-4133-8081-16400169fb95",
+            "scope": "TEAM",
+            "scopeTargetId": "1ae5dd19-e188-4133-8081-16400169fb95",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "scope": "TEAM",
+            "scopeTargetId": "e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "scope": "TEAM",
+            "scopeTargetId": "6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "scope": "TEAM",
+            "scopeTargetId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "21727f3c-09ed-43a0-9fd3-69f80258bc6c:c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "scope": "TEAM",
+            "scopeTargetId": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "name": "EMB - Début maximum 19h50",
+            "config": {
+                "maxStartTime": "19:50"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "51b3fe17-82d6-45c8-9708-2915e4047254",
+            "scope": "TEAM",
+            "scopeTargetId": "1e225aab-cb4f-454e-a191-4fd30fad0931",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U15M1 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "a71370b6-8830-476c-9e3f-11835744f6fc",
+            "scope": "TEAM",
+            "scopeTargetId": "039c76fe-af4d-417f-8ce9-34eedec02c99",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U15M2 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "8ee8678b-9908-4b17-8385-e77464698532",
+            "scope": "TEAM",
+            "scopeTargetId": "b1abb070-5080-4091-b289-bce37aa2e438",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U18M1 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "70a6d587-6c12-4fd5-ac98-b5822e75f453",
+            "scope": "TEAM",
+            "scopeTargetId": "c2840d5f-17c9-44f5-a02d-44d7257469ab",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U18M2 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "6aff0ab0-b4a5-4f81-bde5-10a6350de337",
+            "scope": "TEAM",
+            "scopeTargetId": "c39dbedc-a26b-4ea5-977b-63ebfc0ba230",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U21M1 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "47f3f4c0-d9b3-43c9-b90e-b365d6dc2ee3",
+            "scope": "TEAM",
+            "scopeTargetId": "8201f11c-8e0c-47a9-b584-c023429b3065",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "U21M2 - Jean Vilar préféré",
+            "config": {
+                "preferredVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "c6cd1942-3ee4-48c2-96a6-43967ea238e8",
+            "scope": "TEAM",
+            "scopeTargetId": "e4acf1ce-f5d3-4a9c-8da9-d2071c308a92",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "SM4 - Jean Vilar obligatoire",
+            "config": {
+                "forcedVenueId": "5bf180d6-32e0-4954-874c-2c45b0a7d992"
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "1387a8cb-6e98-4618-ae86-a4f5756be362",
+            "scope": "TEAM",
+            "scopeTargetId": "5052c97a-e39d-42ef-b3d5-3a47fa9c9749",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U11F1 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "c0308350-7c7b-46a9-b1fc-069e50e55df6",
+            "scope": "TEAM",
+            "scopeTargetId": "b5ea8db4-326b-4fe5-9786-cd7339ad72b6",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U11F2 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "555f9e73-a3ff-405f-af1a-bd0708193fef",
+            "scope": "TEAM",
+            "scopeTargetId": "68768f40-fa45-4688-b8fd-b8c4aca5ffdc",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U11M2 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "af89954b-b34b-4789-a782-eae731f41cb9",
+            "scope": "TEAM",
+            "scopeTargetId": "8b9caa7b-1866-44b6-b1a4-276b879a1159",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U9M1 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "04b6ea67-5800-4bd8-8c92-db63b4c3a271",
+            "scope": "TEAM",
+            "scopeTargetId": "52f71833-8a82-463f-93ac-ff92b069f51a",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U9M2 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "e7a49758-55ac-42cb-be13-d8162635ac5e",
+            "scope": "TEAM",
+            "scopeTargetId": "ea93d510-fd8c-43b1-85e5-9a5b92ce3fa4",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U9F1 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        },
+        {
+            "id": "7c1785ee-6619-4e26-bd49-d55cec7b88e1",
+            "scope": "TEAM",
+            "scopeTargetId": "5bca1c57-c376-40b4-916d-57ae38125ae3",
+            "family": "DAY",
+            "ruleType": "HARD",
+            "name": "U9F2 - Pas d'entraînement le mercredi",
+            "config": {
+                "forbiddenDays": [
+                    3
+                ]
+            },
+            "sortOrder": 0,
+            "isActive": true
+        }
+    ],
+    "slotTemplates": [
+        {
+            "id": "2425440f-258a-4869-86b0-7e77f58ceed0",
+            "teamId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "venueId": "3c69ac61-7ea2-4516-8b04-d6eb00f2beb4",
+            "coachId": null,
+            "dayOfWeek": 2,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "258de47a-f6f0-4036-9e48-f964940017e0",
+            "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 4,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "2fc58b98-584e-40ef-9717-95e769fc988d",
+            "teamId": "324580fd-1327-49c3-a89d-1a8f38091504",
+            "venueId": "c083c3d1-8a32-4636-9ec7-a47da4f3a8fa",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "11:30:00",
+            "durationMinutes": 75,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "34e3b612-0757-4c66-8273-5fcde0e278f0",
+            "teamId": "71a71d1f-4b24-4166-b7fd-2614a8f017aa",
+            "venueId": "d0f96847-9a55-4255-8c9c-1b6dad420589",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "17:30:00",
+            "durationMinutes": 90,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "40033a53-6a87-4f65-960a-7e58e6887024",
+            "teamId": "b9fbb79c-b71f-4120-b40d-976d5c8dd50b",
+            "venueId": "c083c3d1-8a32-4636-9ec7-a47da4f3a8fa",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "10:15:00",
+            "durationMinutes": 75,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "4b52f5cf-1384-4da5-8284-a1d7b4106cc0",
+            "teamId": "4090fd9e-56b6-430b-9f8b-9f8bb6af142c",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "09:30:00",
+            "durationMinutes": 75,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "7452fb78-2c43-4447-8f9e-8b1e959ca056",
+            "teamId": "b18d596b-6fd9-4abb-b089-6c510f325c75",
+            "venueId": "c82e22ba-3851-4790-bd9f-99451dfad23f",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "20:15:00",
+            "durationMinutes": 135,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "749ddcbc-7c07-41b6-9a87-e296dfb31ae6",
+            "teamId": "6d4da0b4-9052-4a10-8187-1f4b31c1e95b",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "09:00:00",
+            "durationMinutes": 45,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "918187ea-d058-4516-9265-e4cfa8214bfa",
+            "teamId": "254932d8-b1f8-410b-afcb-12fa56c89002",
+            "venueId": "c083c3d1-8a32-4636-9ec7-a47da4f3a8fa",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "09:00:00",
+            "durationMinutes": 75,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "9417edde-aead-4510-8e88-2aaa88209f83",
+            "teamId": "a5ec677d-4314-4266-bbdb-ce76e70d546d",
+            "venueId": "d0f96847-9a55-4255-8c9c-1b6dad420589",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "9efeb73a-7b1b-47f0-bd95-d8c719104041",
+            "teamId": "c5730275-6673-41ef-b067-4cfe2ebf048b",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 2,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "bc2c1885-26a0-4419-b7af-d78cecdedc67",
+            "teamId": "d879cf6a-e161-4d51-98d8-632a42407cd8",
+            "venueId": "c82e22ba-3851-4790-bd9f-99451dfad23f",
+            "coachId": null,
+            "dayOfWeek": 1,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "c34380c3-7897-4a77-b7ad-c20b584d9d24",
+            "teamId": "e0493c57-ae11-4de6-ab8b-aaf8c1d54518",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "10:45:00",
+            "durationMinutes": 60,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "d5f2ef26-3856-4bd4-a9a6-793d190e7a3a",
+            "teamId": "ec341aba-b7f5-4f44-b580-7f17ff29ecf7",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "17:30:00",
+            "durationMinutes": 90,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "de71462a-13bd-462d-98fd-70a0c329e6b5",
+            "teamId": "1ae5dd19-e188-4133-8081-16400169fb95",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 6,
+            "startTime": "09:45:00",
+            "durationMinutes": 60,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "f0e7b519-23c3-4104-a5f3-d36112b5ec40",
+            "teamId": "520cda07-6baf-4b94-9dd9-f18bf411e940",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "f33b48ca-d67c-4e36-ab6a-43dc94c7eb64",
+            "teamId": "c860c497-0c22-48c8-9406-ae5a9a2a53fe",
+            "venueId": "edf71b47-57d9-424b-9202-b791de393b56",
+            "coachId": null,
+            "dayOfWeek": 3,
+            "startTime": "16:00:00",
+            "durationMinutes": 90,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        },
+        {
+            "id": "f3ed7541-ac45-4c8b-9670-b7d304bd6d37",
+            "teamId": "77f9a62e-0aad-42a7-a1b8-d7bd871e043a",
+            "venueId": "3c69ac61-7ea2-4516-8b04-d6eb00f2beb4",
+            "coachId": null,
+            "dayOfWeek": 4,
+            "startTime": "20:30:00",
+            "durationMinutes": 120,
+            "lockLevel": "HARD",
+            "temporaryLock": false,
+            "temporaryLockFor": null,
+            "temporaryMinSessionsOverride": null,
+            "pendingConstraintSuggestion": null
+        }
+    ]
+}
