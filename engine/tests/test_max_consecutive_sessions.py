@@ -1,8 +1,9 @@
 """Tests for the max-consecutive-sessions hard constraint (TDD: RED -> GREEN).
 
 A coach (coaching or playing) may not be assigned to all 3 slots in a
-consecutive triple (A, B, C) where A.end == B.start and B.end == C.start
-within the same venue. At most 2 of the 3 are allowed.
+consecutive triple (A, B, C) where A.end == B.start and B.end == C.start.
+The constraint applies both within the same venue and cross-venue (grouped
+by person_id + day). At most 2 of the 3 are allowed.
 """
 
 from __future__ import annotations
@@ -221,11 +222,12 @@ class TestMaxConsecutiveSessions:
             f"Non-consecutive slots should be feasible, got {status}"
         )
 
-    def test_different_venues_not_constrained(self) -> None:
-        """Consecutive slots in different venues are NOT constrained as a triple.
+    def test_different_venues_are_constrained_cross_venue(self) -> None:
+        """Consecutive slots in different venues ARE constrained as a triple (BUG-3 fix).
 
-        Coach-1 in 3 consecutive time slots but across 2 different venues.
-        The constraint only applies within the same venue.
+        Coach-1 in 3 consecutive time slots across 2 different venues.
+        The cross-venue grouping by (person_id, day) detects this chain
+        and adds sum(varA + varB + varC) <= 2, making it INFEASIBLE.
         """
         model = cp_model.CpModel()
         a = _assignment(
@@ -256,8 +258,8 @@ class TestMaxConsecutiveSessions:
         model.Add(c.var == 1)
 
         status = _solve(model)
-        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
-            f"Slots across different venues should be feasible, got {status}"
+        assert status == cp_model.INFEASIBLE, (
+            f"Coach in 3 consecutive cross-venue slots should be INFEASIBLE, got {status}"
         )
 
     def test_no_coaches_means_zero_constraints(self) -> None:

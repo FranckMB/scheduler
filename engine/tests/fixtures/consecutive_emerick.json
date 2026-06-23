@@ -1,1 +1,165 @@
-{}
+{
+  "clubId": "club-consecutive-emerick",
+  "seasonId": "season-2026",
+  "version": "2.0",
+  "solverSeed": 42,
+  "solverTimeoutSeconds": 10,
+  "venues": [
+    {
+      "id": "gymnase-armand",
+      "name": "Gymnase Armand",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 2,
+          "startTime": "17:30",
+          "durationMinutes": 90,
+          "capacity": 1
+        }
+      ]
+    },
+    {
+      "id": "debarros",
+      "name": "Debarros",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 2,
+          "startTime": "19:00",
+          "durationMinutes": 90,
+          "capacity": 1
+        },
+        {
+          "dayOfWeek": 2,
+          "startTime": "20:30",
+          "durationMinutes": 120,
+          "capacity": 1
+        }
+      ]
+    },
+    {
+      "id": "mateo",
+      "name": "Matéo",
+      "isActive": true,
+      "trainingSlots": [
+        {
+          "dayOfWeek": 3,
+          "startTime": "19:00",
+          "durationMinutes": 90,
+          "capacity": 1
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "u15f1",
+      "sportCategoryId": "cat-u15",
+      "priorityTierId": 3,
+      "name": "U15F1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "sm2",
+      "sportCategoryId": "cat-senior",
+      "priorityTierId": 2,
+      "name": "SM2",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    },
+    {
+      "id": "sf1",
+      "sportCategoryId": "cat-senior",
+      "priorityTierId": 1,
+      "name": "SF1",
+      "sessionsPerWeek": 1,
+      "isActive": true
+    }
+  ],
+  "coaches": [
+    {
+      "id": "emerick",
+      "firstName": "Emerick",
+      "lastName": "Test",
+      "isActive": true
+    }
+  ],
+  "slotTemplates": [],
+  "constraints": [
+    {
+      "id": "tc-u15f1-emerick",
+      "type": "TEAM_COACH",
+      "teamId": "u15f1",
+      "severity": "HARD",
+      "value": "emerick",
+      "metadata": {
+        "coachId": "emerick",
+        "role": "MAIN",
+        "isRequired": true
+      }
+    },
+    {
+      "id": "tc-sf1-emerick",
+      "type": "TEAM_COACH",
+      "teamId": "sf1",
+      "severity": "HARD",
+      "value": "emerick",
+      "metadata": {
+        "coachId": "emerick",
+        "role": "MAIN",
+        "isRequired": true
+      }
+    },
+    {
+      "id": "cpu-sm2-emerick",
+      "type": "COACH_PLAYER_UNAVAILABILITY",
+      "teamId": "sm2",
+      "severity": "HARD",
+      "value": "emerick",
+      "metadata": {
+        "coachId": "emerick",
+        "teamId": "sm2",
+        "position": null,
+        "isActive": true
+      }
+    },
+    {
+      "id": "fv-u15f1",
+      "family": "FACILITY",
+      "ruleType": "HARD",
+      "scope": "TEAM",
+      "scopeTargetId": "u15f1",
+      "config": {
+        "forcedVenueId": "gymnase-armand"
+      }
+    },
+    {
+      "id": "fv-sm2",
+      "family": "FACILITY",
+      "ruleType": "HARD",
+      "scope": "TEAM",
+      "scopeTargetId": "sm2",
+      "config": {
+        "forcedVenueId": "debarros"
+      }
+    },
+    {
+      "id": "fv-sf1",
+      "family": "FACILITY",
+      "ruleType": "HARD",
+      "scope": "TEAM",
+      "scopeTargetId": "sf1",
+      "config": {
+        "forcedVenueId": "debarros"
+      }
+    }
+  ],
+  "priorityTiers": [
+    { "id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2 },
+    { "id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2 },
+    { "id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 1 },
+    { "id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 1 },
+    { "id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1 }
+  ]
+}

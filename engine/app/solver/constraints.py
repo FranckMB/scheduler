@@ -563,11 +563,20 @@ def add_max_consecutive_sessions_constraints(
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
 ) -> int:
-    """Constraint 3d: a coach may not be in all 3 slots of a consecutive triple.
+    """Constraint 3d: a person may not be in all 3 slots of a consecutive triple.
 
-    For each venue, identifies consecutive slot triples (A, B, C) where
-    A.end == B.start and B.end == C.start. For each coach, the sum of
-    their assignments (coaching + playing) across the triple must be <= 2.
+    Two grouping strategies are applied:
+
+    1. **Same-venue** (preserved): for each ``(venue_id, day)``, identifies
+       consecutive slot triples (A, B, C) where A.end == B.start and
+       B.end == C.start.  For each coach, the sum of their assignments
+       (coaching + playing) across the triple must be <= 2.
+
+    2. **Cross-venue** (BUG-3 fix): for each ``(person_id, day)``, collects
+       all assignments across all venues where the person appears (coach via
+       ``team_coach_map`` or player via ``team_player_map``).  Detects
+       back-to-back chains A->B->C that span different venues and adds
+       ``sum(varA + varB + varC) <= 2`` for each triple.
 
     Coaches and players are looked up from ``team_coach_map`` and
     ``team_player_map`` when available, falling back to assignment attributes.
@@ -583,11 +592,14 @@ def add_max_consecutive_sessions_constraints(
         return 0
 
     venue_day_slots: dict[tuple[str, str], list[tuple[int, int, AssignmentLike]]] = defaultdict(list)
+    # Deduplicate by variable so a person who is both coach and player on the
+    # same team does not get duplicate entries that could mask real triples.
+    person_day_entries: dict[tuple[str, str], dict[int, tuple[int, int, AssignmentLike]]] = defaultdict(dict)
 
     for assignment in assignments:
         venue_id = _venue_id(assignment)
         slot_id = _slot_id(assignment)
-        if venue_id is None or slot_id is None:
+        if slot_id is None:
             continue
 
         slot_id_str = str(slot_id)
@@ -604,23 +616,44 @@ def add_max_consecutive_sessions_constraints(
         start_minutes = int(start) if not isinstance(start, int) else start
         end_minutes = int(end) if not isinstance(end, int) else end
 
-        venue_day_slots[(str(venue_id), day)].append((start_minutes, end_minutes, assignment))
+        if venue_id is not None:
+            venue_day_slots[(str(venue_id), day)].append((start_minutes, end_minutes, assignment))
+
+        team_id = _team_id(assignment)
+        team_id_str = str(team_id) if team_id is not None else None
+
+        person_ids: set[str] = set()
+        if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
+            for cid in team_coach_map[team_id_str]:
+                if cid in coach_ids:
+                    person_ids.add(cid)
+        else:
+            cid = _coach_id(assignment)
+            if cid is not None and str(cid) in coach_ids:
+                person_ids.add(str(cid))
+
+        if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
+            for pid in team_player_map[team_id_str]:
+                if pid in coach_ids:
+                    person_ids.add(pid)
+        else:
+            for pid in _player_ids(assignment):
+                if str(pid) in coach_ids:
+                    person_ids.add(str(pid))
+
+        var = _var(assignment)
+        var_key = var.Index() if hasattr(var, "Index") else id(var)
+        for person_id in person_ids:
+            person_day_entries[(person_id, day)][var_key] = (start_minutes, end_minutes, assignment)
 
     added = 0
-    for (venue_key, day_key), slot_entries in venue_day_slots.items():
-        slot_entries.sort(key=lambda x: x[0])
 
-        for i in range(len(slot_entries) - 2):
-            start_a, end_a, _ = slot_entries[i]
-            start_b, end_b, _ = slot_entries[i + 1]
-            start_c, end_c, _ = slot_entries[i + 2]
-
-            if end_a != start_b or end_b != start_c:
-                continue
-
+    # --- Same-venue grouping (existing behavior, preserved) ---
+    for slot_entries in venue_day_slots.values():
+        for a, b, c in _find_consecutive_triples(slot_entries):
             coach_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
 
-            for _, _, assignment in slot_entries[i : i + 3]:
+            for _, _, assignment in (a, b, c):
                 team_id = _team_id(assignment)
                 team_id_str = str(team_id) if team_id is not None else None
 
@@ -642,11 +675,20 @@ def add_max_consecutive_sessions_constraints(
                         if str(pid) in coach_ids:
                             coach_vars[str(pid)].append(_var(assignment))
 
-            for cid, vars_list in coach_vars.items():
+            for vars_list in coach_vars.values():
                 deduped = _dedupe_variables(vars_list)
                 if len(deduped) >= 3:
                     cast(Any, model).Add(sum(deduped) <= 2)
                     added += 1
+
+    # --- Cross-venue grouping by (person_id, day) — BUG-3 fix ---
+    for entries_dict in person_day_entries.values():
+        slot_entries = list(entries_dict.values())
+        for a, b, c in _find_consecutive_triples(slot_entries):
+            deduped = _dedupe_variables([_var(a[2]), _var(b[2]), _var(c[2])])
+            if len(deduped) >= 3:
+                cast(Any, model).Add(sum(deduped) <= 2)
+                added += 1
 
     return added
 
@@ -1165,6 +1207,36 @@ def _add_interval_at_most_one(
                         model.Add(var_a + var_b <= 1)
                         added += 1
     return added
+
+
+def _find_consecutive_triples(
+    entries: list[tuple[int, int, AssignmentLike]],
+) -> list[tuple[tuple[int, int, AssignmentLike], tuple[int, int, AssignmentLike], tuple[int, int, AssignmentLike]]]:
+    """Find consecutive triples A->B->C where A.end == B.start and B.end == C.start.
+
+    Uses a start-time index so that multiple entries sharing the same start
+    (e.g. the same slot at different venues) are all considered as candidates.
+    """
+    by_start: dict[int, list[tuple[int, int, AssignmentLike]]] = defaultdict(list)
+    for entry in entries:
+        by_start[entry[0]].append(entry)
+
+    triples: list[
+        tuple[
+            tuple[int, int, AssignmentLike],
+            tuple[int, int, AssignmentLike],
+            tuple[int, int, AssignmentLike],
+        ]
+    ] = []
+    for a in entries:
+        for b in by_start.get(a[1], []):
+            if b is a:
+                continue
+            for c in by_start.get(b[1], []):
+                if c is a or c is b:
+                    continue
+                triples.append((a, b, c))
+    return triples
 
 
 def _player_ids(assignment: AssignmentLike) -> list[Any]:
