@@ -11,6 +11,8 @@
 | `backend/` | PHP 8.4 | Symfony 7 + API Platform | `public/index.php` |
 | `frontend/` | TypeScript ~6.0 | React 18 + Vite 8 | `src/main.tsx` |
 | `engine/` | Python 3.12 | FastAPI + OR-Tools CP-SAT | `app/main.py` |
+| `specs/` | Markdown | Living specs — initiales/courantes/evolution (`specs/initiales/`, `specs/courantes/`, `specs/evolution/`) | `specs/README.md` |
+| `docs/technique/` | Markdown | Technical runbook | `docs/technique/DEVELOPMENT.md` |
 | `contracts/` | — | Shared API schemas (currently empty) | — |
 | `tests/` | — | Cross-cutting / E2E test assets (currently empty) | — |
 
@@ -169,13 +171,14 @@ Browser ──► frontend:8081 (Nginx) ──► backend:8080 (nginx → php-fp
 6. **Contracts directory is empty:** There is no shared codegen yet. The API contract between backend and engine is manually kept in sync via Pydantic schemas (engine) and API Platform resources (backend). The `ContractSchemaTest` is the guardrail.
 7. **Tests directory is empty:** Cross-cutting tests are currently inside `backend/tests/`. The top-level `tests/` directory is reserved for future E2E or cross-service tests.
 8. **Rector targets PHP 8.3:** `rector.php` specifies `withPhpVersion(80300)` even though the project requires PHP 8.4. This is intentional — do not change without verifying the Rector rule set supports 8.4.
-9. **No existing agent instruction files:** There is no `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, or `.cursor/rules/` in this repo. This file is the first one.
+9. **CLAUDE.md is a 1-line pointer:** real onboarding lives in `AGENTS.md` and execution specs live in `specs/courantes/`.
 10. **Dev vs prod proxy:** The Vite dev server proxies API calls. In production, the frontend Nginx container proxies `/api` to the backend Nginx container. Do not hardcode `localhost:8080` in frontend API calls.
 
 ---
 
 ## Quick Reference
 
+| 3-tier living spec system | `specs/README.md` | `specs/initiales/`, `specs/courantes/`, `specs/evolution/` | overview |
 | Task | Command |
 |------|---------|
 | Start stack | `make start` |
