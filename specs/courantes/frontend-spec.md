@@ -249,8 +249,8 @@ function useScheduleSSE(scheduleId: string) {
 
 ## 6. Besoins identifiés par l'expérience (forward)
 
-Cette section capture les besoins frontend qui émergent de l'expérience produit, pas de
-l'ancien code. Ils guident le rebuild.
+Cette section capture les besoins frontend qui émergent de l'expérience produit, pas du
+code existant. Ils guident le rebuild.
 
 ### 6.1 Onboarding guidé non-négociable
 
