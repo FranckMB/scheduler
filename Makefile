@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 start: ## Start all Docker services
+	@if [ ! -f .env ]; then cp .env.dist .env; fi
 	docker compose --env-file .env up -d --wait
 
 stop: ## Stop all Docker services
