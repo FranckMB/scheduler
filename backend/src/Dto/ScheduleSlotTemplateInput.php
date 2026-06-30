@@ -34,7 +34,7 @@ class ScheduleSlotTemplateInput
     public DateTimeImmutable $startTime;
 
     #[Groups(['write'])]
-    public ?int $durationMinutes = null;
+    public ?int $durationMinutes = 90;
 
     #[Groups(['write'])]
     public ?LockLevel $lockLevel = null;

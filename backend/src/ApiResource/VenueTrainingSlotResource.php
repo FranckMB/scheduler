@@ -51,7 +51,7 @@ class VenueTrainingSlotResource
     public DateTimeImmutable $startTime;
 
     #[Groups(['read'])]
-    public int $durationMinutes = 0;
+    public int $durationMinutes = 90;
 
     #[Groups(['read'])]
     public int $capacity = 1;

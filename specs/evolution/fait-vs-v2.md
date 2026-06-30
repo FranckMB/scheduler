@@ -56,7 +56,7 @@ The task specifies "33 plans" but `.omo/plans/` contains **34 files**. All 34 ar
 | 17 | fix-min-session-duration-constraint | chaîne de suffixes -> bloc minimum | NOT_TRACKED | 9c492a5 | YES | NO | Suffix chain replaced with use_here block-minimum in min_session_duration. |
 | 18 | fix-minsessions-lockedslots | conflit min_sessions vs max_cap fully-locked | NOT_TRACKED | 8c25436 | YES | NO | min_sessions adjusted for locked slots to prevent INFEASIBLE. |
 | 19 | fix-session-fragmentation-constraints | Session fragmentation, late-start, LOISIR split | NOT_TRACKED | b9c835e, becf9bc, b1388c6, df0a38c, 72f26a9, fee099e | YES | NO | Continuous session blocks, no-late-start (>=21:00), session_too_short warning, LOISIR_ADULTE added to _ADULT_LEVELS, strict session contiguity via no-gap triple constraint, LOISIR split in TeamTagService. |
-| 20 | fix-test-5-default-duration | Default session duration to 90 minutes | NOT_TRACKED | 9601c5b | YES | NO | DEFAULT_SESSION_MINUTES=90, 15-min CP-SAT slots merged into contiguous blocks. |
+| 20 | fix-test-5-default-duration | Default session duration to 90 minutes | NOT_TRACKED | 9601c5b | YES | NO | **COMPLETED 2026-06-30.** Backend defaults changed from `0`/`null` to `90` in 4 files. `DEFAULT_SESSION_MINUTES=90` remains active in the solver as a fallback. |
 | 21 | fixture-harmonisation | Harmonisation des fixtures BCCL | NOT_TRACKED | 6691e1b, fd5eb3f, a63ebb0, f828ed1 | YES | NO | BCCL fixture data harmonized, hardcoded UUIDs removed (Club first + getId), dead $u9F/$u11M category fetches removed, Loisir Camus slots added. |
 | 22 | frontend-dockerization | Dockerization du frontend React | NOT_TRACKED | a5b6b71, faefd79, b575032, 05fa495 | YES | NO | Multi-stage Dockerfile, Nginx config, Makefile, relative URLs, API client updated for containerized environment. |
 | 23 | frontend-raz-cleanup | Frontend RAZ cleanup + specs vivantes préparatoires | active | 4f0e930, 1bebbf2, 9ae3b8e, 3125430 | YES | YES — the actual frontend raz/rebuild is V2 work | Cleanup done (AI tooling dirs deleted, MCP/skills migrated), specs written (frontend-spec.md, frontend-wizard.md, frontend-strategy.md, openapi-snapshot.json, backend-inventory.md, engine-inventory.md). Boulder: 7 task sessions completed, plan still active. The plan's own scope is prep-only; the raz itself is delegated to V2. |
@@ -106,6 +106,22 @@ The vast majority of plans were fully executed in V1. Key deliverables exist on 
 
 **venue-availability** (plan #33): Fully executed — VenueAvailability entity, repository, DTO, API CRUD, and migration were all created. However, the entire feature was then replaced by VenueTrainingSlot (plan #34) in commit 4d965d0. The VenueAvailability files were deleted from the codebase. This is not a failure — it was a deliberate architectural replacement.
 
+### Subsumed / Obsolete (7 plans)
+
+These plans were **executed but their scope was absorbed into broader plans** without being formally closed. The original plan files remain in `.omo/plans/` but their deliverables are now part of other, more comprehensive implementations. **There is a drift between the original plan specifications and the actual code** — the original plans describe narrower or different approaches than what was ultimately implemented.
+
+| Plan | Subsumed by | Drift / Why obsolete |
+|------|-------------|---------------------|
+| **time-constraints** (#32) | constraint-fixes (#6) | TIME/DAY constraints were implemented as part of the broader constraint-fixes wave. The original plan focused narrowly on TIME/DAY; the actual implementation includes forcedDays, preferredDays, forbiddenDays, and minStartTime/maxStartTime in a unified constraint pipeline. |
+| **implicit-solver-rules** (#25) | fix-implicit-rules (#14) | The 3 implicit rules were implemented and then **fixed** in the fix-implicit-rules wave which also added overlap detection, consecutive session limits, and SCORE_FORMULA_VERSION=V3. The original plan did not anticipate the bugs that required the fix wave. |
+| **min-session-duration** (#26) | fix-min-session-duration-constraint (#17) | The initial suffix-chain algorithm was replaced by the `use_here` block-minimum approach. The original plan's algorithm was buggy and was superseded by the fix plan's implementation. |
+| **fix-maxcap-minSessionMinutes** (#16) | constraint-fixes (#6) | This plan became obsolete when `minSessionMinutes` was **removed entirely** from the engine (not just fixed). The max-cap logic was rewritten to use `SLOT_MINUTES=15` slices. |
+| **fix-minsessions-lockedslots** (#18) | constraint-fixes (#6) | The conflict between min_sessions and locked slots was resolved in the broader constraint-fixes wave via `adjusted_min_by_team`. The standalone plan was never needed. |
+| **fix-session-fragmentation-constraints** (#19) | constraint-fixes (#6) | Session fragmentation, late-start detection, and LOISIR split were all implemented in the broader constraint-fixes and fix-implicit-rules waves. The standalone plan was redundant. |
+| **fix-test-5-default-duration** (#20) | — | **COMPLETED 2026-06-30.** Backend defaults changed from `0`/`null` to `90` in 4 files. `DEFAULT_SESSION_MINUTES=90` remains active in the solver as a fallback. |
+
+> **⚠️ Note on drift:** These 7 plans (and potentially others) describe **V1-era specifications** that do not match the current codebase. When writing `specs/courantes/` documentation, **do not copy from these plan files** — instead, read the actual code (backend/src/, engine/app/, frontend/src/) and document what is *actually* implemented. The plans are historical artifacts, not specifications.
+
 ### Never executed (0 plans)
 
 No plans were left completely unexecuted. Every plan in `.omo/plans/` has at least some evidence of work done.
@@ -118,4 +134,5 @@ Only 5 of 34 plans (15%) have boulder.json entries. The remaining 29 were execut
 
 Based on this traceability analysis, V2 scope is:
 1. **Frontend rebuild** (from frontend-raz-cleanup): Execute the raz and rebuild using the specs written in V1 (frontend-spec.md, frontend-wizard.md, frontend-strategy.md).
-2. **dev-token completion** (optional): If dev workflow still needs it, create GenerateDevTokenCommand.php and login.sh. Currently abandoned, not formally delegated.
+2. **Spec drift cleanup** (from subsumed plans #32, #25, #26, #16, #18, #19, #20): Write `specs/courantes/` documentation that reflects the **actual code**, not the original plan files. The 7 subsumed plans describe V1-era approaches that were replaced by broader implementations. New specs must be derived from reading `backend/src/`, `engine/app/`, and `frontend/src/` — not from `.omo/plans/`.
+3. **dev-token completion** (optional): If dev workflow still needs it, create GenerateDevTokenCommand.php and login.sh. Currently abandoned, not formally delegated.
