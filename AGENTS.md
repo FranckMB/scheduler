@@ -178,7 +178,8 @@ Browser ──► frontend:8081 (Nginx) ──► backend:8080 (nginx → php-fp
 
 ## Quick Reference
 
-| 3-tier living spec system | `specs/README.md` | `specs/initiales/`, `specs/courantes/`, `specs/evolution/` | overview |
+See `specs/README.md` for the 3-tier living spec system (`specs/initiales/`, `specs/courantes/`, `specs/evolution/`).
+
 | Task | Command |
 |------|---------|
 | Start stack | `make start` |
