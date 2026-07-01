@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\MessageHandler;
 
+use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
@@ -190,6 +191,16 @@ final class GenerateScheduleHandler
         $this->persistDiagnostics($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
         $this->assignBaselineIfFirst($schedule);
+        $this->completeOnboarding($schedule);
+    }
+
+    /** The first successful generation marks the club as onboarded (wizard done). */
+    private function completeOnboarding(Schedule $schedule): void
+    {
+        $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
+        if ($club instanceof Club && !$club->getOnboardingCompleted()) {
+            $club->setOnboardingCompleted(true);
+        }
     }
 
     /**
