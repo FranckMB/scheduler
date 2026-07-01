@@ -135,3 +135,34 @@ export const listCoachPlayers = (): Promise<CoachPlayerMembership[]> => collecti
 export const createCoachPlayer = (body: { teamId: string; coachId: string; isActive: boolean }): Promise<CoachPlayerMembership> =>
   api.post("coach_player_memberships", { json: body }).json();
 export const deleteCoachPlayer = (id: string): Promise<void> => api.delete(`coach_player_memberships/${id}`).then(() => undefined);
+
+// --- Constraints (W4) ---
+
+export type ConstraintFamily = "TIME" | "DAY" | "FACILITY" | "COACH_AVAILABILITY" | "FACILITY_CAPACITY";
+export type ConstraintScope = "CLUB" | "TEAM" | "COACH" | "FACILITY";
+export type ConstraintRuleType = "HARD" | "PREFERRED" | "BONUS" | "LOCK";
+
+export interface Constraint {
+  id: string;
+  name: string;
+  scope: ConstraintScope;
+  scopeTargetId: string | null;
+  family: ConstraintFamily;
+  ruleType: ConstraintRuleType;
+  config: Record<string, unknown>;
+  isActive: boolean;
+}
+
+export interface ConstraintPayload {
+  name: string;
+  scope: ConstraintScope;
+  scopeTargetId?: string | null;
+  family: ConstraintFamily;
+  ruleType: ConstraintRuleType;
+  config: Record<string, unknown>;
+  isActive?: boolean;
+}
+
+export const listConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");
+export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
+export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);

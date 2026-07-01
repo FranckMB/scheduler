@@ -42,6 +42,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.screenshot({ path: `${OUT}/wizard-coaches.png` });
   console.log("shot wizard-coaches");
 
+  await goStep("Contraintes");
+  await page.screenshot({ path: `${OUT}/wizard-constraints.png` });
+  console.log("shot wizard-constraints");
+
   await browser.close();
 })().catch((e) => {
   console.error(e.message);

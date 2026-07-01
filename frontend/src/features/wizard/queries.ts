@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { CoachPayload, SlotPayload, TeamCoachRole, TeamPayload, VenuePayload } from "./api";
+import type { CoachPayload, ConstraintPayload, SlotPayload, TeamCoachRole, TeamPayload, VenuePayload } from "./api";
 import * as wizardApi from "./api";
 
 export function useWizardTeams() {
@@ -165,5 +165,27 @@ export function useDeleteCoachPlayer() {
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteCoachPlayer(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "coach_players"] }),
+  });
+}
+
+// --- Constraints (W4) ---
+
+export function useWizardConstraints() {
+  return useQuery({ queryKey: ["wizard", "constraints"], queryFn: wizardApi.listConstraints, staleTime: 30_000 });
+}
+
+export function useCreateConstraint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ConstraintPayload) => wizardApi.createConstraint(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
+  });
+}
+
+export function useDeleteConstraint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteConstraint(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
   });
 }

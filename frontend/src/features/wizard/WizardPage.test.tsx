@@ -32,6 +32,9 @@ vi.mock("./api", () => ({
   deleteTeamCoach: vi.fn(() => Promise.resolve()),
   createCoachPlayer: vi.fn(() => Promise.resolve({})),
   deleteCoachPlayer: vi.fn(() => Promise.resolve()),
+  listConstraints: vi.fn(() => Promise.resolve([])),
+  createConstraint: vi.fn(() => Promise.resolve({})),
+  deleteConstraint: vi.fn(() => Promise.resolve()),
 }));
 
 beforeEach(() => {

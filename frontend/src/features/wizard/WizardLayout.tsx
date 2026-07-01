@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
 import { CoachesStep } from "./steps/CoachesStep";
+import { ConstraintsStep } from "./steps/ConstraintsStep";
 import { PlaceholderStep } from "./steps/PlaceholderStep";
 import { TeamsStep } from "./steps/TeamsStep";
 import { VenuesStep } from "./steps/VenuesStep";
@@ -20,7 +21,7 @@ function StepContent({ stepId }: { stepId: WizardStepId }) {
     case "coaches":
       return <CoachesStep />;
     case "constraints":
-      return <PlaceholderStep title="Contraintes" />;
+      return <ConstraintsStep />;
     case "recap":
       return <PlaceholderStep title="Récapitulatif" />;
   }
