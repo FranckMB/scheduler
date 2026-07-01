@@ -31,8 +31,8 @@ export default defineConfig([
           message: 'ReactDOM.render is removed in React 19 — use createRoot().render().',
         },
         {
-          selector: "Property[key.name='onSuccess'][parent.parent.callee.name=/^use(Query|Mutation)$/]",
-          message: 'onSuccess was removed from useQuery/useMutation in TanStack Query v5 — use useEffect on data/isSuccess.',
+          selector: "Property[key.name='onSuccess'][parent.parent.callee.name='useQuery']",
+          message: 'onSuccess was removed from useQuery in TanStack Query v5 — use useEffect on data, or select (useMutation.onSuccess is still valid).',
         },
       ],
     },
