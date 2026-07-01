@@ -1,4 +1,4 @@
-import { useVenueSlots, useWizardTeams, useWizardVenues } from "../queries";
+import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
 /**
@@ -10,6 +10,9 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: teams = [] } = useWizardTeams();
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
+  const { data: coaches = [] } = useWizardCoaches();
+  const { data: teamCoaches = [] } = useWizardTeamCoaches();
+  const { data: coachPlayers = [] } = useWizardCoachPlayers();
 
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
@@ -25,6 +28,14 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
     }
     return { errors, warnings: [] };
+  }
+  if ("coaches" === stepId) {
+    const linked = new Set([...teamCoaches.map((l) => l.coachId), ...coachPlayers.map((l) => l.coachId)]);
+    const unlinked = coaches.filter((c) => !linked.has(c.id));
+    return {
+      errors: 0 === coaches.length ? ["Ajoutez au moins un coach."] : [],
+      warnings: unlinked.length > 0 ? [`Coach(s) sans équipe : ${unlinked.map((c) => `${c.firstName} ${c.lastName}`.trim()).join(", ")}.`] : [],
+    };
   }
   return okValidation();
 }

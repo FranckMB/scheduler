@@ -86,3 +86,52 @@ export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => a
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
 export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
+
+// --- Coaches + links (W3) ---
+
+export type TeamCoachRole = "MAIN" | "ASSISTANT";
+
+export interface Coach {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  isEmployee: boolean;
+  isActive: boolean;
+}
+
+export interface TeamCoach {
+  id: string;
+  teamId: string;
+  coachId: string;
+  role: TeamCoachRole;
+}
+
+export interface CoachPlayerMembership {
+  id: string;
+  teamId: string;
+  coachId: string;
+  isActive: boolean;
+}
+
+export interface CoachPayload {
+  firstName: string;
+  lastName?: string | null;
+  email?: string | null;
+  isEmployee?: boolean;
+  isActive?: boolean;
+}
+
+export const listCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
+export const createCoach = (body: CoachPayload): Promise<Coach> => api.post("coaches", { json: body }).json();
+export const updateCoach = (id: string, body: CoachPayload): Promise<Coach> => api.put(`coaches/${id}`, { json: body }).json();
+export const deleteCoach = (id: string): Promise<void> => api.delete(`coaches/${id}`).then(() => undefined);
+
+export const listTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");
+export const createTeamCoach = (body: { teamId: string; coachId: string; role: TeamCoachRole }): Promise<TeamCoach> => api.post("team_coaches", { json: body }).json();
+export const deleteTeamCoach = (id: string): Promise<void> => api.delete(`team_coaches/${id}`).then(() => undefined);
+
+export const listCoachPlayers = (): Promise<CoachPlayerMembership[]> => collectionAll<CoachPlayerMembership>("coach_player_memberships");
+export const createCoachPlayer = (body: { teamId: string; coachId: string; isActive: boolean }): Promise<CoachPlayerMembership> =>
+  api.post("coach_player_memberships", { json: body }).json();
+export const deleteCoachPlayer = (id: string): Promise<void> => api.delete(`coach_player_memberships/${id}`).then(() => undefined);

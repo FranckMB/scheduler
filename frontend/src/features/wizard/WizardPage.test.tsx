@@ -22,6 +22,16 @@ vi.mock("./api", () => ({
   deleteVenue: vi.fn(() => Promise.resolve()),
   createSlot: vi.fn(() => Promise.resolve({})),
   deleteSlot: vi.fn(() => Promise.resolve()),
+  listCoaches: vi.fn(() => Promise.resolve([])),
+  listTeamCoaches: vi.fn(() => Promise.resolve([])),
+  listCoachPlayers: vi.fn(() => Promise.resolve([])),
+  createCoach: vi.fn(() => Promise.resolve({})),
+  updateCoach: vi.fn(() => Promise.resolve({})),
+  deleteCoach: vi.fn(() => Promise.resolve()),
+  createTeamCoach: vi.fn(() => Promise.resolve({})),
+  deleteTeamCoach: vi.fn(() => Promise.resolve()),
+  createCoachPlayer: vi.fn(() => Promise.resolve({})),
+  deleteCoachPlayer: vi.fn(() => Promise.resolve()),
 }));
 
 beforeEach(() => {
