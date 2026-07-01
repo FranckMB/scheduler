@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CalendarX2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useMe } from "@/features/auth/queries";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
@@ -9,7 +10,7 @@ import type { Diagnostic } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useVenues } from "./queries";
+import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
@@ -59,10 +60,14 @@ export function PlanningPage() {
   const { data: coaches = [] } = useCoaches();
   const { data: categories = [] } = useCategories();
 
+  const { data: me } = useMe();
+  const baselineScheduleId = me?.baselineScheduleId ?? null;
+
   const queryClient = useQueryClient();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const generateMutation = useGenerate();
+  const validateMutation = useValidateSchedule();
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
@@ -141,13 +146,16 @@ export function PlanningPage() {
             onViewMode={setViewMode}
             isGenerating={isGenerating}
             onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
+            baselineScheduleId={baselineScheduleId}
+            isValidating={validateMutation.isPending}
+            onValidate={() => validScheduleId && validateMutation.mutate(validScheduleId)}
           />
 
           {0 === slots.length ? (
             <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-              <div className="relative">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+              <div className="relative min-w-0">
                 {isGenerating ? (
                   <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
                     Génération en cours…

@@ -5,7 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import type { Slot, SlotMovePatch, Venue } from "./api";
-import { DAYS, type GridCell } from "./lib/grid";
+import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
 
 interface SlotDetailProps {
   cell: GridCell;
@@ -29,10 +29,10 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function SlotDetail({ cell, slot, venues, categoryLabel, busy, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
-  const [time, setTime] = useState(slot.startTime.slice(0, 5));
+  const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
 
-  const dirty = day !== slot.dayOfWeek || time !== slot.startTime.slice(0, 5) || venueId !== slot.venueId;
+  const dirty = day !== slot.dayOfWeek || time !== toHourMinute(slot.startTime) || venueId !== slot.venueId;
 
   return (
     <Card>

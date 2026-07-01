@@ -9,6 +9,7 @@ export interface MeResponse {
   membershipStatus: MembershipStatus;
   role: string | null;
   club: { id: string; name: string } | null;
+  baselineScheduleId: string | null;
   hasGenerated: boolean;
 }
 

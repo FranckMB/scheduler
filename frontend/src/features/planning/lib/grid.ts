@@ -13,10 +13,25 @@ export const DAYS: { n: number; label: string }[] = [
 
 export const NO_COACH = "__none__";
 
-/** "18:00" or "18:00:00" → minutes since midnight. */
+/** Extract the first HH:MM from a time-ish string ("18:00:00", "1970-01-01T18:00:00+00:00", "18:00"). */
+function firstHourMinute(time: string): [number, number] {
+  const match = time.match(/(\d{1,2}):(\d{2})/);
+  if (null === match) {
+    return [0, 0];
+  }
+  return [Number(match[1]), Number(match[2])];
+}
+
+/** Time-ish string → minutes since midnight (tolerates ISO datetimes from the API). */
 export function parseTimeToMinutes(time: string): number {
-  const [h, m] = time.split(":");
-  return Number(h) * 60 + Number(m ?? 0);
+  const [h, m] = firstHourMinute(time);
+  return h * 60 + m;
+}
+
+/** Time-ish string → "HH:MM" (zero-padded). */
+export function toHourMinute(time: string): string {
+  const [h, m] = firstHourMinute(time);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 /** minutes → "HH:MM" (zero-padded). */

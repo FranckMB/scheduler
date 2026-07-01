@@ -79,3 +79,14 @@ export function useGenerate() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }
+
+export function useValidateSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (scheduleId: string) => planningApi.validateSchedule(scheduleId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    },
+  });
+}

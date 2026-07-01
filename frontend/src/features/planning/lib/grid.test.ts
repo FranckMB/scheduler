@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Coach, Slot, Team, Venue } from "../api";
-import { buildGrid, computeTimeBounds, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeyForSlot } from "./grid";
+import { buildGrid, computeTimeBounds, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeyForSlot, toHourMinute } from "./grid";
 
 function slot(over: Partial<Slot>): Slot {
   return {
@@ -35,6 +35,9 @@ describe("time helpers", () => {
   it("parses and formats", () => {
     expect(parseTimeToMinutes("18:00:00")).toBe(1080);
     expect(parseTimeToMinutes("18:30")).toBe(1110);
+    // The API serializes TimeImmutable as an ISO datetime — the time must still parse.
+    expect(parseTimeToMinutes("1970-01-01T18:30:00+00:00")).toBe(1110);
+    expect(toHourMinute("1970-01-01T18:05:00+00:00")).toBe("18:05");
     expect(formatMinutes(1080)).toBe("18:00");
     expect(formatMinutes(1110)).toBe("18:30");
   });

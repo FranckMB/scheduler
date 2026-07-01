@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Star } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -20,10 +20,25 @@ interface PlanningToolbarProps {
   onViewMode: (mode: ViewMode) => void;
   onRegenerate: () => void;
   isGenerating: boolean;
+  baselineScheduleId: string | null;
+  onValidate: () => void;
+  isValidating: boolean;
 }
 
-export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedule, viewMode, onViewMode, onRegenerate, isGenerating }: PlanningToolbarProps) {
+export function PlanningToolbar({
+  schedules,
+  selectedScheduleId,
+  onSelectSchedule,
+  viewMode,
+  onViewMode,
+  onRegenerate,
+  isGenerating,
+  baselineScheduleId,
+  onValidate,
+  isValidating,
+}: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
+  const isBaseline = null !== selected && selected.id === baselineScheduleId;
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -37,6 +52,7 @@ export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedul
           {schedules.map((schedule) => (
             <option key={schedule.id} value={schedule.id}>
               {schedule.name}
+              {schedule.id === baselineScheduleId ? " ★" : ""}
             </option>
           ))}
         </select>
@@ -44,6 +60,12 @@ export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedul
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="rounded-full bg-muted px-2 py-0.5">{selected.status}</span>
             {null !== selected.score ? <span>score {selected.score}</span> : null}
+            {isBaseline ? (
+              <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
+                <Star className="size-3" />
+                Base
+              </span>
+            ) : null}
           </span>
         ) : null}
       </div>
@@ -62,6 +84,12 @@ export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedul
             </Button>
           ))}
         </div>
+        {null !== selected && "COMPLETED" === selected.status && !isBaseline ? (
+          <Button size="sm" variant="outline" className="h-8" disabled={isValidating} onClick={onValidate}>
+            <Star className="size-4" />
+            Définir comme base
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
           <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
           {isGenerating ? "Génération…" : "Régénérer"}
