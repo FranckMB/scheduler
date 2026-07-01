@@ -36,5 +36,8 @@ class CoachInput
     public ?bool $isActive = null;
 
     #[Groups(['write'])]
+    public ?bool $isEmployee = null;
+
+    #[Groups(['write'])]
     public ?string $parentCoachId = null;
 }

@@ -68,6 +68,9 @@ class CoachResource
     public bool $isActive = false;
 
     #[Groups(['read'])]
+    public bool $isEmployee = false;
+
+    #[Groups(['read'])]
     public ?string $parentCoachId = null;
 
     public static function fromEntity(Coach $entity): self
@@ -85,6 +88,7 @@ class CoachResource
         $dto->maxDaysOverrideConfirmed = $entity->getMaxDaysOverrideConfirmed();
         $dto->acceptableLateMinutes = $entity->getAcceptableLateMinutes();
         $dto->isActive = $entity->getIsActive();
+        $dto->isEmployee = $entity->isEmployee();
         $dto->parentCoachId = $entity->getParentCoachId();
 
         return $dto;
