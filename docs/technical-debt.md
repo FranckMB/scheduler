@@ -39,10 +39,11 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 - **Context:** surfaced only after B2 repaired the CI PHPUnit path — the previously-broken `phpunit-9.6-0` binary never ran, so these were invisible.
 - **Action:** enable deprecation detail, migrate the flagged test code to PHPUnit 11 attributes/APIs. Own plan (engine-cleanup-analogue for backend tests). Low priority — non-blocking.
 
-### 🟦 B7 — Fixture references removed system tag `LOISIR`
-- **Where:** `backend/src/DataFixtures/BasketballInit.php:963` → `'targetTag' => 'LOISIR'`. Plain `LOISIR` no longer exists in the system tags (split into `LOISIR_ADULTE` / `LOISIR_JEUNE` by commit `fee099e`).
-- **Proof:** `ScheduleConstraintBuilder::resolveTagToTeamIds` (`src/Service/ScheduleConstraintBuilder.php:524–528`) looks up the tag by name; unknown → logs `Tag 'LOISIR' not found … constraint will be ignored` and **silently drops that CLUB constraint** in the seeded demo data.
-- **Action:** point the fixture at a real tag (`LOISIR_ADULTE` and/or `LOISIR_JEUNE`) or remove the constraint. Demo-data only, no prod impact. Own plan.
+### ✅ B7 — Fixture LOISIR tag — RESOLVED 2026-07-01
+- **Was:** `backend/src/DataFixtures/BasketballInit.php` "De Barros Annexe - Préféré loisir" used a hardcoded `'targetTag' => 'LOISIR'`; plain `LOISIR` no longer exists (split into `LOISIR_ADULTE` / `LOISIR_JEUNE` by `fee099e`), so `ScheduleConstraintBuilder::resolveTagToTeamIds` logged `Tag 'LOISIR' not found … constraint will be ignored` and silently dropped it.
+- **Fix:** replaced the single constraint with a loop over `TeamLevel::LOISIR_ADULTE` / `TeamLevel::LOISIR_JEUNE`, using `$loisirLevel->value` as the tag (the **enum**, not a hardcoded string — the root cause of the drift). Two constraints now created, one per loisir level.
+- **Verified:** fixtures reload OK, CS-Fixer + PHPStan clean, `smoke-solver.sh` → COMPLETED, and the `Tag 'LOISIR' not found` warning is gone.
+- **Follow-up (out of B7 scope):** six other `targetTag` strings in the fixture are still hardcoded (`EMB`, `FEMININE`, `REGIONAL`, `DEPARTEMENTAL`, `SENIOR`, `JEUNE`) — all currently valid tags, but the level-based ones could likewise use the `TeamLevel` enum to prevent future drift.
 
 > Backend findings B6/B7 were discovered on 2026-07-01 while resolving B2 (CI repair exposing the real test state). The stale `TeamTagServiceTest` (expected 20 tags, wrong `LOISIR` assertion) found at the same time was **fixed** in that pass, not left as debt.
 
@@ -86,6 +87,6 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 ---
 
 ## Suggested priority
-1. **E2** (divergent duplicate logic, correctness risk) → 2. **E3 / B3** (decisions to confirm + ADRs) → 3. **E1 / E4 / E5 / E6 / B4 / B7** (cleanups & doc/fixture fixes) → 4. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2 resolved 2026-07-01.)*
+1. **E2** (divergent duplicate logic, correctness risk) → 2. **E3 / B3** (decisions to confirm + ADRs) → 3. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 4. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7 resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.

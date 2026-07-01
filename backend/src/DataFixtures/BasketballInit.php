@@ -946,12 +946,16 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($c);
         }
 
-        // 9h — De Barros Annexe preferred for loisir (PREFERRED)
-        $existing = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'De Barros Annexe - Préféré loisir',
-        ]);
-        if (!$existing instanceof Constraint) {
+        // 9h — De Barros Annexe preferred for loisir teams (PREFERRED), one constraint per loisir level
+        foreach ([TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE] as $loisirLevel) {
+            $constraintName = 'De Barros Annexe - Préféré ' . $loisirLevel->value;
+            $existing = $manager->getRepository(Constraint::class)->findOneBy([
+                'clubId' => $club->getId(),
+                'name' => $constraintName,
+            ]);
+            if ($existing instanceof Constraint) {
+                continue;
+            }
             $c = new Constraint;
             $c->setClubId($club->getId());
             $c->setSeasonId($season->getId());
@@ -959,8 +963,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $c->setScopeTargetId(null);
             $c->setFamily(ConstraintFamily::FACILITY);
             $c->setRuleType(ConstraintRuleType::PREFERRED);
-            $c->setName('De Barros Annexe - Préféré loisir');
-            $c->setConfig(['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'LOISIR']);
+            $c->setName($constraintName);
+            $c->setConfig(['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
             $c->setIsActive(true);
             $manager->persist($c);
         }
