@@ -20,8 +20,10 @@ final class ScheduleConstraintBuilderTest extends TestCase
 
     private EntityManagerInterface&MockObject $entityManager;
 
+    /** @var EntityRepository<TeamTag>&MockObject */
     private EntityRepository&MockObject $teamTagRepository;
 
+    /** @var EntityRepository<TeamTagAssignment>&MockObject */
     private EntityRepository&MockObject $teamTagAssignmentRepository;
 
     private LoggerInterface&MockObject $logger;
@@ -99,11 +101,13 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager);
     }
 
+    /** @return list<string> */
     private function invokeResolveTagToTeamIds(string $targetTag, string $seasonId, string $clubId): array
     {
         $method = new ReflectionMethod($this->builder, 'resolveTagToTeamIds');
         $method->setAccessible(true);
 
+        /** @var list<string> $result */
         $result = $method->invoke($this->builder, $targetTag, $seasonId, $clubId);
 
         return $result;

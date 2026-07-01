@@ -36,7 +36,7 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 ### ✅ B6 — PHPUnit 11 doc-comment metadata → attributes — RESOLVED 2026-07-01
 - **Was:** 9 "Metadata found in doc-comment" deprecations (visible via `--display-phpunit-deprecations`) — 9 `tests/Unit/` classes declared `@group unit` in a class doc-comment, deprecated and removed in PHPUnit 12.
 - **Fix:** converted all 9 to the `#[Group('unit')]` attribute (+ `use PHPUnit\Framework\Attributes\Group;`). `--display-phpunit-deprecations` now reports **0**; `--group unit` still selects them (55 tests); full suite 87 tests / 361 assertions green.
-- **Follow-up (out of scope):** `tests/` is not in the CI PHPStan scope (`phpstan.neon` analyses `src` only); running `phpstan analyse tests/Unit` surfaces ~12 pre-existing mock-typing / generic-type issues, unrelated to this change.
+- **Follow-up (done 2026-07-01):** `tests/` is not in the CI PHPStan scope (`phpstan.neon` analyses `src` only), but the 12 pre-existing `phpstan analyse tests/Unit` issues were fixed too — mock intersection type on `TeamTagServiceTest::$entityManager`, `EntityRepository<T>` generics in the `ScheduleConstraintBuilder*` tests, and a helper `@return list<string>`. `phpstan analyse tests/Unit` is now clean.
 
 ### ✅ B7 — Fixture LOISIR tag — RESOLVED 2026-07-01
 - **Was:** `backend/src/DataFixtures/BasketballInit.php` "De Barros Annexe - Préféré loisir" used a hardcoded `'targetTag' => 'LOISIR'`; plain `LOISIR` no longer exists (split into `LOISIR_ADULTE` / `LOISIR_JEUNE` by `fee099e`), so `ScheduleConstraintBuilder::resolveTagToTeamIds` logged `Tag 'LOISIR' not found … constraint will be ignored` and silently dropped it.

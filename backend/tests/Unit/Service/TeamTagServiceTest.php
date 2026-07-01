@@ -21,6 +21,7 @@ final class TeamTagServiceTest extends TestCase
 {
     private TeamTagService $service;
 
+    /** @var EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject */
     private EntityManagerInterface $entityManager;
 
     /** @var EntityRepository<TeamTagAssignment>&\PHPUnit\Framework\MockObject\MockObject */

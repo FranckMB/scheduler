@@ -19,6 +19,7 @@ final class ScheduleConstraintBuilderAgeFieldsTest extends TestCase
 
     private EntityManagerInterface&MockObject $entityManager;
 
+    /** @var EntityRepository<SportCategory>&MockObject */
     private EntityRepository&MockObject $sportCategoryRepository;
 
     private LoggerInterface&MockObject $logger;
