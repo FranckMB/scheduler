@@ -3,12 +3,12 @@
 > Canonical agent cheat-sheet for this monorepo. Short on purpose (< 200 lines).
 > Detail lives in `docs/`. If a fact is obvious from filenames, it is not here.
 > Agent read order: **this file → `docs/project-map.md` (detail) → `specs/courantes/` (execution specs)**.
-> Scope note: the current `frontend/` is slated for **deletion + a from-scratch React rebuild**. It is excluded from the code-review-graph index and the technical-debt audit until the rebuild starts.
+> Scope note: `frontend/` has been **rebuilt from scratch** (React 19 · Vite · Tailwind 4) and is **active** — it is indexed by the code-review-graph and Serena. Delivered: auth, the **planning work-loop** (`src/features/planning`) and the **data-entry wizard** (`src/features/wizard`).
 
 ## 1. What this is
 
 ClubScheduler generates per-club, per-season training schedules for basketball clubs (FFBB).
-A constraint solver (OR-Tools CP-SAT) places teams into venue time-slots under hard rules + a soft scoring objective. **Backend** orchestrates/persists/exposes the API, **engine** solves, **frontend** renders (being rebuilt).
+A constraint solver (OR-Tools CP-SAT) places teams into venue time-slots under hard rules + a soft scoring objective. **Backend** orchestrates/persists/exposes the API, **engine** solves, **frontend** renders (wizard to enter data → generate → work-loop to adjust/regenerate).
 
 ## 2. Stack & zones
 
@@ -16,7 +16,7 @@ A constraint solver (OR-Tools CP-SAT) places teams into venue time-slots under h
 |------|----------------|-------------|------|
 | `backend/` | PHP 8.4 · Symfony 7.4 · API Platform 4.3 · Doctrine ORM 3.6 | `public/index.php` | API, persistence, async orchestration |
 | `engine/` | Python 3.12 · FastAPI · OR-Tools CP-SAT | `app/main.py` | Schedule solver (`POST /generate`) |
-| `frontend/` | TS · React 18 · Vite | `src/main.tsx` | UI — **being rebuilt; do not invest** |
+| `frontend/` | TS · React 19 · Vite · Tailwind 4 | `src/main.tsx` | UI — auth · planning work-loop · data-entry wizard |
 | `specs/` | Markdown | `specs/README.md` | Living specs (initiales/courantes/evolution) |
 
 **Boundaries (critical — never cross these):**
@@ -48,7 +48,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 ## 6. Critical mechanisms
 
-- **Multi-tenant isolation** (backend): Doctrine `TenantFilter` + `TenantFilterListener` (resolves club from `_club_id` / `X-Club-Id`, requires an active `ClubUser` membership → 403 otherwise) + PostgreSQL RLS `SET LOCAL app.club_id`. Guarded by `TenantIsolationTest`. See `backend/docs/TENANT.md`, `backend/docs/RLS.md`.
+- **Multi-tenant isolation** (backend): Doctrine `TenantFilter` + `TenantFilterListener` (**priority 7, AFTER the firewall**) resolves club from `_club_id` / `X-Club-Id` / else the **authenticated JWT user's active `ClubUser` membership** (the frontend sends no header); active season resolved likewise; spoofed header → 403 + PostgreSQL RLS `SET LOCAL app.club_id`. ⚠️ Running before auth left the tenant unresolved on header-less reads → cross-club leak (fixed). Guarded by `TenantIsolationTest`, `TenantJwtIsolationTest`, `OnboardingFlowTest`. See `backend/docs/TENANT.md`.
 - **Concurrency**: backend `ClubGenerationLock` (Redis `SETEX NX` + release token); engine per-club `asyncio.Lock`. Guarded by `ConcurrentGenerationTest`.
 - **Async generation**: `GenerateScheduleController` → `GenerateScheduleMessage` → `GenerateScheduleHandler` (frozen snapshot → POST engine → import results → Mercure publish). Symfony Messenger over Redis, `messenger-worker` container.
 - **Backend↔engine contract**: engine Pydantic schemas ⇄ backend payload; version in `engine/CONTRACT_VERSION`. **No codegen — synced manually.** Guarded by `ContractSchemaTest`.
@@ -84,6 +84,6 @@ Feature cycle: need → *(I read this file, then enter `/plan` injecting the sco
 1. Backend & engine commands fail on the host — they must run inside the containers. Frontend dev is host-only.
 2. PHPUnit = `vendor/bin/phpunit` (PHPUnit 11) everywhere (CI, `Makefile`, `composer test`). `make phpunit` adds `--group phase1`. The suite needs the test DB — run `make db-init-test` first (CI brings it up via `docker compose up -d --wait`).
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
-4. Frontend is being deleted/rebuilt — excluded from the graph index (`.code-review-graphignore`) and the debt audit.
+4. Frontend is rebuilt + **active** — indexed by the graph (only its build artifacts `dist`/`node_modules`/`storybook-static` are ignored). Tenant is resolved server-side from the JWT: the frontend sends **no** `X-Club-Id` header.
 
 **Pointers:** `docs/project-map.md` · `docs/testing/testing-strategy.md` · `docs/technical-debt.md` · `docs/cleanup-candidates.md` · `docs/architecture/adr-index.md` · `specs/README.md`

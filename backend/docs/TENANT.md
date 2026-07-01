@@ -24,12 +24,15 @@ This defence-in-depth strategy guarantees that a bug or misconfiguration in one 
 
 **File:** `backend/src/EventListener/TenantFilterListener.php`
 
-- Subscribes to `kernel.request` (priority 8, before the security firewall).
+- Subscribes to `kernel.request` at **priority 7 — AFTER the security firewall** (priority 8), so the JWT user is authenticated by the time the tenant is resolved.
 - On each **main HTTP request**:
-  1. Resolves the current `club_id` (Phase 1 stub — later from JWT).
-  2. Enables the `tenant_filter` SQL filter and sets its `club_id` parameter.
-  3. Executes `SET LOCAL app.club_id = '<uuid>'` on the PostgreSQL connection so that RLS policies are satisfied.
+  1. Resolves the current `club_id`: `_club_id` route attribute → `X-Club-Id` header → **the authenticated JWT user's single active `ClubUser` membership** (the frontend sends no header — the club is derived from the token). The active season is resolved the same way (`_season_id` → `X-Season-Id` → the club's active `Season`).
+  2. If a club came from a header/attribute and a user is present, validates the membership (403 if the user is not an active member — blocks a spoofed `X-Club-Id`).
+  3. Enables the `tenant_filter` SQL filter and sets its `club_id` parameter.
+  4. Executes `SET LOCAL app.club_id = '<uuid>'` on the PostgreSQL connection so that RLS policies are satisfied.
 - **Safety rule:** if no `club_id` can be resolved, the filter is **not** enabled and `SET LOCAL` is **not** executed. This prevents accidental cross-tenant queries.
+
+> **Ordering is load-bearing (fixed in tranche 3).** When this listener ran *before* the firewall (priority 8, same as the firewall — order undefined), a header-less request had no authenticated user yet → no club → the SQL filter stayed disabled and no RLS scope was set → **collection reads leaked every club's data**. It only surfaced without an `X-Club-Id` header, i.e. exactly the real frontend flow (`TenantFromJwtTest` used `loginUser`, which pre-injects the token and hid the ordering). Guarded now by `TenantJwtIsolationTest` (a real Bearer JWT) and `OnboardingFlowTest`.
 
 ### 3. CLI Context
 

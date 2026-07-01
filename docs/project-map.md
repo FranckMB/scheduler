@@ -1,6 +1,6 @@
 # Project Map — ClubScheduler (engine + backend)
 
-Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend is excluded (slated for deletion + React rebuild). Generated/verified during onboarding against the real code and the `code-review-graph` knowledge graph (1906 nodes / 10 629 edges, 28 communities).
+Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend has been **rebuilt (React 19) and is active** — features `auth`, `planning` (work-loop) and `wizard` (data entry); see `specs/courantes/frontend-wizard.md`. Generated/verified during onboarding against the real code and the `code-review-graph` knowledge graph.
 
 ---
 
@@ -9,7 +9,7 @@ Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend 
 ```
 backend/   PHP 8.4 · Symfony 7.4 · API Platform 4.3 · Doctrine ORM 3.6 · Messenger · Mercure · JWT
 engine/    Python 3.12 · FastAPI · OR-Tools CP-SAT
-frontend/  TS · React 18 · Vite        (being rebuilt — excluded from graph + debt audit)
+frontend/  TS · React 19 · Vite · TW4  (active: auth · planning work-loop · wizard)
 specs/     Living specs (initiales / courantes / evolution) — see specs/README.md
 docs/      This documentation set + docs/technique/
 docker/    Per-service Dockerfiles (php, pdf-worker, …)
