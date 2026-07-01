@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { TeamPayload } from "./api";
+import type { SlotPayload, TeamPayload, VenuePayload } from "./api";
 import * as wizardApi from "./api";
 
 export function useWizardTeams() {
@@ -38,5 +38,58 @@ export function useDeleteTeam() {
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteTeam(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+  });
+}
+
+// --- Venues + slots (W2) ---
+
+export function useWizardVenues() {
+  return useQuery({ queryKey: ["wizard", "venues"], queryFn: wizardApi.listVenues, staleTime: 30_000 });
+}
+
+export function useVenueSlots() {
+  return useQuery({ queryKey: ["wizard", "venue_slots"], queryFn: wizardApi.listVenueSlots, staleTime: 30_000 });
+}
+
+export function useCreateVenue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: VenuePayload) => wizardApi.createVenue(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] }),
+  });
+}
+
+export function useUpdateVenue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: VenuePayload }) => wizardApi.updateVenue(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] }),
+  });
+}
+
+export function useDeleteVenue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteVenue(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] });
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "venue_slots"] });
+    },
+  });
+}
+
+export function useCreateSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SlotPayload) => wizardApi.createSlot(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venue_slots"] }),
+  });
+}
+
+export function useDeleteSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteSlot(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venue_slots"] }),
   });
 }
