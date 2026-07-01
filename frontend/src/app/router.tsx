@@ -8,7 +8,7 @@ import { PendingMembersPage } from "@/features/auth/PendingMembersPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
-import { DashboardHome } from "@/features/dashboard/DashboardHome";
+import { PlanningPage } from "@/features/planning/PlanningPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 
 export const router = createBrowserRouter([
@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { path: "/", element: <DashboardHome /> },
+          { path: "/", element: <PlanningPage /> },
           { path: "/profile", element: <ProfilePage /> },
           { path: "/pending-members", element: <PendingMembersPage /> },
         ],
