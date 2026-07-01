@@ -51,8 +51,8 @@ backend/
 
 - **PHPStan** level 8 (includes Doctrine + Symfony extensions).
 - **PHP-CS-Fixer** `@PSR12` + `@Symfony` + `strict_comparison` + `yoda_style` (equal/identical only).
-- **Rector** targets PHP 8.3 (`withPhpVersion(80300)`) — intentional, do not change without verifying Rector 8.4 support.
-- **PHPUnit** via `symfony/phpunit-bridge` — binary at `vendor/bin/.phpunit/phpunit-9.6-0/phpunit`.
+- **Rector** targets PHP 8.4 (`withPhpVersion(80400)`), aligned with the composer `>=8.4` requirement.
+- **PHPUnit** 11 via the direct `phpunit/phpunit` dep — binary at `vendor/bin/phpunit` (same in CI, `Makefile`, `composer test`).
 - **Doctrine** migrations in `migrations/`. Run `make migration-migrate` or `php bin/console doctrine:migrations:migrate`.
 
 ---
@@ -106,10 +106,10 @@ php bin/console cache:clear                  # Clear cache
 
 ## Gotchas
 
-1. **PHPUnit binary path** is `vendor/bin/.phpunit/phpunit-9.6-0/phpunit` — not `vendor/bin/phpunit`.
+1. **PHPUnit binary** is `vendor/bin/phpunit` (PHPUnit 11), identical in CI, `Makefile` and `composer test`. The suite needs the test DB — run `make db-init-test` first.
 2. **All commands run in container** — `backend/Makefile` wraps everything with `docker compose exec`. Running `composer` or `php bin/console` directly on host will fail.
 3. **Blocking tests** use `--group phase1` and must pass before the rest of the suite in CI.
-4. **Rector targets PHP 8.3** despite project requiring PHP 8.4 — do not change without verifying Rector 8.4 support.
+4. **Rector targets PHP 8.4** (`withPhpVersion(80400)`), aligned with the project requirement.
 5. **Redis lock** in `ClubGenerationLock` prevents concurrent generation for the same club. Uses `nx` + `ex` atomically.
 6. **Cache pool** `cache.schedule` is a dedicated Redis cache pool for schedule input payloads (TTL 4h).
 7. **Soft lock penalty** is 10,000 points in the solver objective (defined in `ScheduleConstraintBuilder`).

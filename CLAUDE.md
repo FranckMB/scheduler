@@ -39,7 +39,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 `lint → phpstan → blocking-tests → {unit, functional} → engine-tests → build-docker`
 
-**blocking-tests** (must pass first, all `--group phase1`): `Security/TenantIsolationTest`, `Security/TenantCacheIsolationTest` *(currently skipped — deferred)*, `Queue/ConcurrentGenerationTest`, `CrossStack/ContractSchemaTest`. Detail: `docs/testing/testing-strategy.md`.
+**blocking-tests** (must pass first, all `--group phase1`): `Security/TenantIsolationTest`, `Security/TenantCacheIsolationTest`, `Queue/ConcurrentGenerationTest`, `CrossStack/ContractSchemaTest`. Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (essentials)
 
@@ -52,7 +52,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 - **Concurrency**: backend `ClubGenerationLock` (Redis `SETEX NX` + release token); engine per-club `asyncio.Lock`. Guarded by `ConcurrentGenerationTest`.
 - **Async generation**: `GenerateScheduleController` → `GenerateScheduleMessage` → `GenerateScheduleHandler` (frozen snapshot → POST engine → import results → Mercure publish). Symfony Messenger over Redis, `messenger-worker` container.
 - **Backend↔engine contract**: engine Pydantic schemas ⇄ backend payload; version in `engine/CONTRACT_VERSION`. **No codegen — synced manually.** Guarded by `ContractSchemaTest`.
-- **Solver**: CP-SAT, default **timeout 650 s** + seed 42, both from the input payload (`solver_timeout_seconds` / `solver_seed`). *(NB: `engine/app/solver/AGENTS.md` still says "10s" — stale, see debt.)*
+- **Solver**: CP-SAT, single pass, default **timeout 650 s** + seed 42, both from the input payload (`solver_timeout_seconds` / `solver_seed`). No silent fallback — INFEASIBLE → `status="failed"` + diagnostics (see `docs/architecture/adr-0001-single-pass-solve.md`).
 
 ## 7. Workflow rules (orchestrator)
 

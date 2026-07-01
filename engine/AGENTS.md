@@ -37,7 +37,7 @@ engine/
 - **Pydantic v2** for all request/response schemas.
 - **FastAPI** with auto-generated OpenAPI docs.
 - **Solver pipeline** is pure functions: `build_model` → `add_level_1_hard_constraints` → `add_level_2_objective` → `cp_model.CpSolver().Solve()` → `build_result`.
-- **Solver timeout** is hardcoded to `10s` in `main.py` (`solver.parameters.max_time_in_seconds = 10`).
+- **Solver timeout** comes from the input payload `solver_timeout_seconds` (default 650s), applied in `main.py` (`solver.parameters.max_time_in_seconds`). See ADR-0001 (single-pass solve).
 - **Per-club asyncio locks** prevent concurrent generation for the same club (`_club_locks` dict in `main.py`).
 - **Contract version** is read from `CONTRACT_VERSION` file (root of engine package).
 
@@ -138,7 +138,7 @@ Maximize weighted score. Fixed T24 weights (changing them requires new `SCORE_FO
 ## Gotchas
 
 1. **All commands run in container** — `engine/Makefile` wraps everything with `docker compose exec`. Running `pytest` or `ruff` on host will fail unless Python venv is set up locally.
-2. **Solver timeout is 10s** — hardcoded in `main.py`. Changing it requires editing the source.
+2. **Solver timeout is payload-driven** — `solver_timeout_seconds` (default 650s) from the request, applied in `main.py`.
 3. **Per-club locks** — `asyncio.Lock` per `club_id` prevents concurrent requests for the same club. Lock is acquired in `generate_schedule` endpoint.
 4. **Contract version** — read from `CONTRACT_VERSION` file at engine root. If missing, falls back to settings default.
 5. **MVP stubs** — `travel_feasibility` and `required_bridge` constraints are stubs (return 0 constraints). They will be implemented when data exists.

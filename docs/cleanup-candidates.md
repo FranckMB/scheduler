@@ -1,6 +1,6 @@
 # Cleanup Candidates — ClubScheduler
 
-Concrete, **proof-backed** removal/simplification candidates surfaced by the onboarding audit. This is a shortlist of the safest items from [`technical-debt.md`](technical-debt.md). **Nothing here has been removed.** Each requires an explicit scoped plan + validation before action. Perimeter: backend + engine (frontend excluded).
+Concrete, **proof-backed** removal/simplification candidates surfaced by the onboarding audit. This is a shortlist of the safest items from [`technical-debt.md`](technical-debt.md). **Update 2026-07-01: all candidates below are now resolved** — C1→E1 (aliases deleted), C2→E4 (comment removed), C3→E5 (doc fixed), C4→E2 (`helpers.py`), C5→E3 (documented, ADR-0001). See `technical-debt.md`. Each requires an explicit scoped plan + validation before action. Perimeter: backend + engine (frontend excluded).
 
 | # | Candidate | Location | Proof | Suggested action | Risk |
 |---|-----------|----------|-------|------------------|------|

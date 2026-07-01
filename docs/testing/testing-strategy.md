@@ -72,6 +72,5 @@ Backend & engine tests run **inside Docker** — running `phpunit`/`pytest` on t
 
 ---
 
-## 5. Known testing gaps (tracked in `../technical-debt.md`)
-- `TenantCacheIsolationTest` is a blocking job but currently a no-op (skipped) — false sense of coverage on cache isolation.
-- 9 PHPUnit 11 deprecations remain in the test suite (see `../technical-debt.md` B6) — non-blocking.
+## 5. Known testing gaps
+- None outstanding. `TenantCacheIsolationTest` is implemented (B3) and the 9 PHPUnit 11 doc-comment deprecations were migrated to attributes (B6) — both resolved 2026-07-01 (see `../technical-debt.md`).
