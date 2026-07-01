@@ -10,6 +10,7 @@ import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
+import { WizardPage } from "@/features/wizard/WizardLayout";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { path: "/", element: <PlanningPage /> },
+          { path: "/wizard", element: <WizardPage /> },
           { path: "/profile", element: <ProfilePage /> },
           { path: "/pending-members", element: <PendingMembersPage /> },
         ],
