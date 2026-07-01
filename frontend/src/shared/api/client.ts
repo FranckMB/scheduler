@@ -1,42 +1,32 @@
-import ky from 'ky'
-import type { BeforeRequestHook, AfterResponseHook } from 'ky'
-import { useAuthStore } from '@/features/auth/authStore'
+import ky from "ky";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+import { useAuthStore } from "@/shared/stores/authStore";
 
-const authHook: BeforeRequestHook = ({ request }) => {
-  const { token, club, seasonId } = useAuthStore.getState()
-
-  if (token) {
-    request.headers.set('Authorization', `Bearer ${token}`)
-  }
-
-  if (club?.id) {
-    request.headers.set('X-Club-Id', club.id)
-  }
-
-  if (seasonId) {
-    request.headers.set('X-Season-Id', seasonId)
-  }
-
-  request.headers.set('Content-Type', 'application/json')
-  request.headers.set('Accept', 'application/json')
-}
-
-const errorHook: AfterResponseHook = ({ response }) => {
-  if (response.status === 401) {
-    useAuthStore.getState().clearAuth()
-    window.location.href = '/login'
-  }
-}
-
-export const apiClient = ky.create({
-  prefix: API_BASE_URL,
-  timeout: 15000,
+/**
+ * Configured HTTP client. Relative `/api` prefix only (Vite proxy in dev, Nginx
+ * in prod — never hardcode hosts). Injects the Bearer token; clears auth on 401.
+ * ky 2.x hooks receive a single `state` object ({ request, response, ... }).
+ */
+export const api = ky.create({
+  prefix: "/api",
   hooks: {
-    beforeRequest: [authHook],
-    afterResponse: [errorHook],
+    beforeRequest: [
+      (state) => {
+        const token = useAuthStore.getState().token;
+        if (token) {
+          state.request.headers.set("Authorization", `Bearer ${token}`);
+        }
+      },
+    ],
+    afterResponse: [
+      (state) => {
+        if (state.response.status === 401) {
+          useAuthStore.getState().clear();
+          if (typeof window !== "undefined") {
+            window.location.assign("/login");
+          }
+        }
+      },
+    ],
   },
-})
-
-export default apiClient
+});
