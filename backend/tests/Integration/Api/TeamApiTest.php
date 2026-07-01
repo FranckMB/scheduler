@@ -65,6 +65,45 @@ final class TeamApiTest extends WebTestCase
         self::assertTrue($data['isActive']);
     }
 
+    public function testTierOrderIsWritableOnCreate(): void
+    {
+        $client = $this->client;
+        $client->loginUser($this->user);
+
+        $client->request('POST', '/api/teams', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Ranked',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'tierOrder' => 5,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame(5, json_decode((string) $client->getResponse()->getContent(), true)['tierOrder']);
+    }
+
+    public function testTierOrderIsWritableOnUpdate(): void
+    {
+        $client = $this->client;
+        $team = $this->createTeam('Ranked');
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Ranked',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'tierOrder' => 2,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        self::assertSame(2, json_decode((string) $client->getResponse()->getContent(), true)['tierOrder']);
+    }
+
     public function testListTeams(): void
     {
         $client = $this->client;

@@ -1,41 +1,38 @@
-import { useEffect } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-import { useAuthStore } from '@/features/auth/authStore'
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner'
+import { useMe } from "@/features/auth/queries";
+import { FullPageSpinner } from "@/shared/components/ui/spinner";
+import { useAuthStore } from "@/shared/stores/authStore";
 
-type AuthStoreWithInit = ReturnType<typeof useAuthStore.getState> & {
-  initAuth?: () => void | Promise<void>
-}
+/**
+ * Gate for authenticated routes:
+ * - no token            -> /login
+ * - token + loading     -> spinner
+ * - token + active      -> render app
+ * - token + pending/none-> /waiting
+ * - token + auth error  -> /login (stale/invalid token)
+ */
+export function AuthGuard() {
+  const token = useAuthStore((state) => state.token);
+  const { data, isLoading, isError } = useMe();
+  const location = useLocation();
 
-export default function AuthGuard() {
-  const location = useLocation()
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const isAuthInitialized = useAuthStore((state) => state.isAuthInitialized)
-
-  useEffect(() => {
-    const { initAuth } = useAuthStore.getState() as AuthStoreWithInit
-
-    if (!initAuth) {
-      return
-    }
-
-    void initAuth()
-  }, [])
-
-  if (!isAuthInitialized) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    )
+  if (null === token) {
+    return <Navigate to="/login" replace />;
+  }
+  if (isLoading) {
+    return <FullPageSpinner />;
+  }
+  if (isError || !data) {
+    return <Navigate to="/login" replace />;
+  }
+  if (data.membershipStatus !== "active") {
+    return <Navigate to="/waiting" replace />;
+  }
+  // First-time club: guide through the wizard until the first generation.
+  if (data.club && !data.club.onboardingCompleted && location.pathname !== "/wizard") {
+    return <Navigate to="/wizard" replace />;
   }
 
-  if (!isAuthenticated) {
-    const redirect = `${location.pathname}${location.search}${location.hash}`
-
-    return <Navigate replace to={`/login?redirect=${encodeURIComponent(redirect)}`} />
-  }
-
-  return <Outlet />
+  return <Outlet />;
 }

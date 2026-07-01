@@ -51,6 +51,9 @@ class TeamResource
     public int $priorityTierId = 0;
 
     #[Groups(['read'])]
+    public int $tierOrder = 0;
+
+    #[Groups(['read'])]
     public string $name = '';
 
     #[Groups(['read'])]
@@ -86,6 +89,7 @@ class TeamResource
         $dto->updatedAt = $entity->getUpdatedAt();
         $dto->sportCategoryId = $entity->getSportCategoryId();
         $dto->priorityTierId = $entity->getPriorityTierId();
+        $dto->tierOrder = $entity->getTierOrder();
         $dto->name = $entity->getName();
         $dto->gender = $entity->getGender();
         $dto->sessionsPerWeek = $entity->getSessionsPerWeek();

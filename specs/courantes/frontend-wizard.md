@@ -1,14 +1,28 @@
-# FORWARD Wizard Spec — Onboarding 4 étapes "Draft hybride"
+# Wizard — saisie des données (tranche 3, LIVRÉ)
 
-Last verified @ 6e35a6ce 2026-06-30
+> ⚠️ **Réalité livrée — canonique.** Le draft "4 étapes" plus bas est **historique/superseded** : le wizard a été reconstruit dans `frontend/src/features/wizard` avec un flux plus granulaire, décidé avec le PO. Les sections 1+ ci-dessous ne décrivent plus l'implémentation.
 
-> Spécification forward du wizard d'onboarding initial. Décrit ce qui doit être
-> construit, pas ce qui existait avant. Le pattern "Draft hybride" 4 étapes est
-> figé — ne pas rouvrir le débat (voir `frontend-spec.md` §6.1).
+## Flux réel (5 étapes, `WizardLayout` + registre `lib/steps.ts`)
+
+1. **Équipes** — CRUD + classement : groupées par tier (`PriorityTier` S/A/B/C/D), ordre **intra-tier** via le nouveau champ `Team.tierOrder` (monter/descendre) ; le numéro global dérive de (tier, tierOrder). Validation : ≥1 équipe.
+2. **Gymnases** — CRUD + **grille hebdo cliquable par gymnase** (`VenueAvailabilityGrid`) : clic sur une case = pose un créneau `VenueTrainingSlot` (durée/capacité par défaut), clic sur un créneau = l'édite (jour/début/durée/capacité). Validation : chaque gymnase a ≥1 créneau.
+3. **Coachs** — CRUD (+ `Coach.isEmployee` salarié, désormais writable) + liens `TeamCoach` (coach/adjoint) et `CoachPlayerMembership` (joueur). Validation : ≥1 coach ; coach sans équipe = warning.
+4. **Contraintes** — panneau à **onglets par famille** (TIME/DAY/FACILITY/COACH_AVAILABILITY/FACILITY_CAPACITY), un intent simple par onglet (portée implicite), **nom auto-généré**, règle par défaut **PREFERRED**. Rappel : le solveur gère déjà l'implicite (`ImplicitConstraintConfig`) — ici seulement les préférences/restrictions explicites.
+5. **Récapitulatif** — compteurs (équipes/gymnases/coachs/salariés/contraintes dures) + accordéon + **gate pré-solveur** (`POST /api/constraints/validate`) + bouton **Générer** → crée un `Schedule` DRAFT, lance la génération, atterrit sur la **boucle de travail** (`/`).
+
+**Principes actés (divergent du draft historique) :**
+- **Sauvegarde au fil de l'eau, par entité** (POST/PUT/DELETE immédiats, mutations TanStack). « Suivant » ne fait que **valider + naviguer**. → **pas** de draft-blob (`/api/clubs/{id}/draft` **abandonné**, jamais implémenté).
+- **2 modes, mêmes écrans** : *libre* (club onboardé) vs *onboarding guidé* (nav verrouillée vers l'avant + redirection `/wizard`) selon `club.onboardingCompleted`, exposé dans `/api/me`. Bascule à `true` **au lancement** de la 1ère génération (`GenerateScheduleController`).
+- **Tenant** : le front n'envoie **aucun** header `X-Club-Id` (club résolu serveur depuis le JWT — voir `backend/docs/TENANT.md`).
+- **URIs API** : snake_case (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`…), **pas** les tirets du draft.
+- **Différé (évolution)** : import Excel/CSV, mode démo, fermetures exceptionnelles.
+- Garanti par : `backend/tests/.../OnboardingFlowTest`, `backend/scripts/onboarding-smoke.sh`, `frontend/.../WizardPage.test`.
 
 ---
 
-## 1. Wizard Decision — Draft hybride, 4 étapes
+<details><summary>Historique — draft "4 étapes" (superseded, conservé pour trace)</summary>
+
+## 1. Wizard Decision — Draft hybride, 4 étapes (HISTORIQUE)
 
 ### Décision
 
@@ -765,3 +779,5 @@ frontend/src/
 
 > Aucun fichier `.test.ts` ou `.test.tsx` n'est créé dans le cadre de cette
 > spécification. Les test cases sont en prose Given/When/Then dans ce fichier.
+
+</details>

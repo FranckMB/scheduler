@@ -1,8 +1,11 @@
-# Scope the code-review-graph to backend + engine only.
-# Frontend is slated for deletion + a from-scratch React rebuild — excluded on purpose.
-frontend/**
+# Scope the code-review-graph to the application code (backend + engine + frontend).
+# Frontend is an active React/TS app (rebuild started) — indexed; only its build
+# artifacts are excluded below.
+frontend/dist/**
+frontend/node_modules/**
+frontend/storybook-static/**
 
-# Non-code / non-target areas (keep the graph focused on backend + engine).
+# Non-code / non-target areas.
 docker/**
 docs/**
 specs/**

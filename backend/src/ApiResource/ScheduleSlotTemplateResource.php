@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
@@ -25,6 +27,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Put,
     new Delete,
 ], input: ScheduleSlotTemplateInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleSlotTemplateStateProvider::class, processor: ScheduleSlotTemplateStateProcessor::class)]
+#[ApiFilter(SearchFilter::class, properties: ['scheduleId' => 'exact'])]
 class ScheduleSlotTemplateResource
 {
     #[Groups(['read'])]

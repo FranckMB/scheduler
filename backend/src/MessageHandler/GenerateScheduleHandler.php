@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\MessageHandler;
 
+use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\Venue;
 use App\Enum\ScheduleDiagnosticSeverity;
@@ -188,6 +190,30 @@ final class GenerateScheduleHandler
         $this->resultImporter->import($schedule, $result);
         $this->persistDiagnostics($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
+        $this->assignBaselineIfFirst($schedule);
+        $this->completeOnboarding($schedule);
+    }
+
+    /** The first successful generation marks the club as onboarded (wizard done). */
+    private function completeOnboarding(Schedule $schedule): void
+    {
+        $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
+        if ($club instanceof Club && !$club->getOnboardingCompleted()) {
+            $club->setOnboardingCompleted(true);
+        }
+    }
+
+    /**
+     * The first successful schedule of a season becomes its baseline (the "main"
+     * plan) automatically. Later generations do not steal it (re-designation is
+     * an explicit user action via POST /api/schedules/{id}/validate).
+     */
+    private function assignBaselineIfFirst(Schedule $schedule): void
+    {
+        $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+        if ($season instanceof Season && null === $season->getBaselineScheduleId()) {
+            $season->setBaselineScheduleId($schedule->getId());
+        }
     }
 
     /** @param array<string, mixed> $result */

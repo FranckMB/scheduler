@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
@@ -43,6 +44,15 @@ final class GenerateScheduleController extends AbstractController
         }
 
         $schedule->setStatus(ScheduleStatus::PENDING);
+
+        // Launching the first generation completes onboarding (the wizard is done);
+        // done at queue time so the UI can leave /wizard for the work loop right away,
+        // regardless of whether the solve ends up feasible.
+        $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
+        if ($club instanceof Club && !$club->getOnboardingCompleted()) {
+            $club->setOnboardingCompleted(true);
+        }
+
         $this->entityManager->flush();
 
         $this->messageBus->dispatch(

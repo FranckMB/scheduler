@@ -1,0 +1,194 @@
+import { HTTPError } from "ky";
+
+import { api } from "@/shared/api/client";
+import { collection, collectionAll } from "@/shared/api/collection";
+
+export type Gender = "M" | "F" | "MIXTE";
+
+export interface Team {
+  id: string;
+  name: string;
+  sportCategoryId: string;
+  priorityTierId: number;
+  tierOrder: number;
+  gender: Gender | null;
+  sessionsPerWeek: number;
+  isActive: boolean;
+}
+
+export interface SportCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface PriorityTier {
+  id: number;
+  label: string;
+  name: string;
+  color: string | null;
+}
+
+export interface TeamPayload {
+  name: string;
+  sportCategoryId?: string;
+  priorityTierId?: number;
+  tierOrder?: number;
+  gender?: Gender | null;
+  sessionsPerWeek?: number;
+  isActive?: boolean;
+}
+
+export const listTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
+export const listSportCategories = (): Promise<SportCategory[]> => collection<SportCategory>("sport_categories");
+export const listPriorityTiers = (): Promise<PriorityTier[]> => collection<PriorityTier>("priority_tiers");
+
+export const createTeam = (body: TeamPayload): Promise<Team> => api.post("teams", { json: body }).json();
+export const updateTeam = (id: string, body: TeamPayload): Promise<Team> => api.put(`teams/${id}`, { json: body }).json();
+export const deleteTeam = (id: string): Promise<void> => api.delete(`teams/${id}`).then(() => undefined);
+
+// --- Venues + availability slots (W2) ---
+
+export interface Venue {
+  id: string;
+  name: string;
+  color: string | null;
+  canSplit: boolean;
+  isActive: boolean;
+}
+
+export interface VenueTrainingSlot {
+  id: string;
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  capacity: number;
+}
+
+export interface VenuePayload {
+  name: string;
+  color?: string | null;
+  canSplit?: boolean;
+  isActive?: boolean;
+}
+
+export interface SlotPayload {
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  capacity: number;
+}
+
+export const listVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
+export const listVenueSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
+export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("venues", { json: { source: "manual", ...body } }).json();
+export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
+export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
+export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
+export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
+export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
+
+// --- Coaches + links (W3) ---
+
+export type TeamCoachRole = "MAIN" | "ASSISTANT";
+
+export interface Coach {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  isEmployee: boolean;
+  isActive: boolean;
+}
+
+export interface TeamCoach {
+  id: string;
+  teamId: string;
+  coachId: string;
+  role: TeamCoachRole;
+}
+
+export interface CoachPlayerMembership {
+  id: string;
+  teamId: string;
+  coachId: string;
+  isActive: boolean;
+}
+
+export interface CoachPayload {
+  firstName: string;
+  lastName?: string | null;
+  email?: string | null;
+  isEmployee?: boolean;
+  isActive?: boolean;
+}
+
+export const listCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
+export const createCoach = (body: CoachPayload): Promise<Coach> => api.post("coaches", { json: body }).json();
+export const updateCoach = (id: string, body: CoachPayload): Promise<Coach> => api.put(`coaches/${id}`, { json: body }).json();
+export const deleteCoach = (id: string): Promise<void> => api.delete(`coaches/${id}`).then(() => undefined);
+
+export const listTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");
+export const createTeamCoach = (body: { teamId: string; coachId: string; role: TeamCoachRole }): Promise<TeamCoach> => api.post("team_coaches", { json: body }).json();
+export const deleteTeamCoach = (id: string): Promise<void> => api.delete(`team_coaches/${id}`).then(() => undefined);
+
+export const listCoachPlayers = (): Promise<CoachPlayerMembership[]> => collectionAll<CoachPlayerMembership>("coach_player_memberships");
+export const createCoachPlayer = (body: { teamId: string; coachId: string; isActive: boolean }): Promise<CoachPlayerMembership> =>
+  api.post("coach_player_memberships", { json: body }).json();
+export const deleteCoachPlayer = (id: string): Promise<void> => api.delete(`coach_player_memberships/${id}`).then(() => undefined);
+
+// --- Constraints (W4) ---
+
+export type ConstraintFamily = "TIME" | "DAY" | "FACILITY" | "COACH_AVAILABILITY" | "FACILITY_CAPACITY";
+export type ConstraintScope = "CLUB" | "TEAM" | "COACH" | "FACILITY";
+export type ConstraintRuleType = "HARD" | "PREFERRED" | "BONUS" | "LOCK";
+
+export interface Constraint {
+  id: string;
+  name: string;
+  scope: ConstraintScope;
+  scopeTargetId: string | null;
+  family: ConstraintFamily;
+  ruleType: ConstraintRuleType;
+  config: Record<string, unknown>;
+  isActive: boolean;
+}
+
+export interface ConstraintPayload {
+  name: string;
+  scope: ConstraintScope;
+  scopeTargetId?: string | null;
+  family: ConstraintFamily;
+  ruleType: ConstraintRuleType;
+  config: Record<string, unknown>;
+  isActive?: boolean;
+}
+
+export const listConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");
+export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
+export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
+
+// --- Recap + generate (W5) ---
+
+export interface ValidateResult {
+  valid: boolean;
+  errors: Record<string, string[]>;
+  conflicts: { constraint1Id: string; constraint2Id: string; reason: string }[];
+}
+
+/** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). */
+export async function validateConstraints(): Promise<ValidateResult> {
+  try {
+    return await api.post("constraints/validate").json<ValidateResult>();
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      return (await error.response.json()) as ValidateResult;
+    }
+    throw error;
+  }
+}
+
+export const createSchedule = (name: string): Promise<{ id: string }> => api.post("schedules", { json: { name, status: "DRAFT" } }).json();
+export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();

@@ -1,6 +1,6 @@
 # Technical Debt Audit — ClubScheduler (engine + backend)
 
-Perimeter: **backend + engine only** (frontend excluded — slated for deletion + React rebuild). This is a whole-perimeter audit, not a diff. **Every item carries hard evidence** (file:line + proof). Items without proof are not listed. *"Unclear to a reader" is never evidence.* **No deletion or refactor has been performed** — this is analysis only.
+Perimeter: **backend + engine only** (this audit predates the React frontend rebuild; the frontend is now active but was out of this audit's scope). This is a whole-perimeter audit, not a diff. **Every item carries hard evidence** (file:line + proof). Items without proof are not listed. *"Unclear to a reader" is never evidence.* **No deletion or refactor has been performed** — this is analysis only.
 
 Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (listed when previously suspected but proven fine).
 
