@@ -108,7 +108,7 @@ def add_level_1_hard_constraints(
     *,
     teams: Iterable[Any] = (),
     coaches: Iterable[Any] = (),
-    min_sessions_by_team: Mapping[Any, int] | None = None,  # unused — kept for API compatibility
+    min_sessions_by_team: Mapping[Any, int] | None = None,
     fixed_assignments: Iterable[Any] = (),
     forbidden_assignments: Iterable[Any] = (),
     coach_unavailability: RuleCollection = (),
@@ -777,7 +777,7 @@ def add_time_window_constraints(
         rule_type = constraint.get("ruleType") or constraint.get("rule_type")
         family = constraint.get("family")
         if rule_type == "PREFERRED" and family == "TIME":
-            # TODO: PREFERRED TIME not implemented
+            # PREFERRED TIME not implemented — backlog: specs/evolution/features-futures.md
             continue
         if rule_type != "HARD" or family not in ("TIME", "DAY"):
             continue

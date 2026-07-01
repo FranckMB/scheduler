@@ -51,10 +51,9 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 
 ## Engine
 
-### 🟥 E1 — Three redundant public aliases of `add_level_2_objective`
-- **Where:** `engine/app/solver/objective.py:449–464` → `apply_level_2_objective`, `add_objective`, `set_level_2_objective` each just `return add_level_2_objective(*args, **kwargs)`; exported in `objective.py` `__all__` (728–731) and `solver/__init__.py`.
-- **Proof:** grep shows **no internal caller** within `engine/`; they only widen the public surface.
-- **Action:** delete (and trim `__all__` / `__init__` exports) after confirming no external import relies on them. See `cleanup-candidates.md`.
+### ✅ E1 — Redundant `add_level_2_objective` aliases removed — RESOLVED 2026-07-01
+- **Was:** `apply_level_2_objective`, `add_objective`, `set_level_2_objective` (pure pass-throughs) in `objective.py`, exported via its `__all__` and (`apply_*`) `solver/__init__.py`; no internal or test caller.
+- **Fix:** deleted the three defs and trimmed the `__all__` / `solver/__init__.py` exports. `make -C engine lint` clean + 138 pytest passed after removal.
 
 ### ✅ E2 — Solver helpers de-duplicated into `helpers.py` — RESOLVED 2026-07-01
 - **Was:** `constraints.py` and `objective.py` each carried near-identical `_get`, `_scalar_id`, `_var`, `_team_id` (+ a distinct `_MISSING` sentinel), with **subtle divergences** — the real hazard was a fix landing in only one copy. Key divergence: `objective._get` skipped `None` values (treated as absent) while `constraints._get` returned them; field-name/tuple-index lists also differed (`literal`, `teamId`, `x`, `priority_tier*`).
@@ -70,26 +69,23 @@ _The dormant two-pass fallback is an intentional, documented single-pass design;
 - **Proof:** only `tests/` exercise the fallback path; production solve always runs pass 1.
 - **Action:** document *why* the fallback is dormant (intentional?) in a code comment, or wire it into the solve path. Decide — don't leave it ambiguous. Candidate ADR.
 
-### 🟦 E4 — Misleading "unused" comment
-- **Where:** `engine/app/solver/constraints.py:110` → `min_sessions_by_team: … = None,  # unused — kept for API compatibility`, but it **is** used at `constraints.py:889–890`.
-- **Proof:** the parameter is iterated in `add_min_sessions_constraints()`.
-- **Action:** remove the false comment.
+### ✅ E4 — Misleading "unused" comment removed — RESOLVED 2026-07-01
+- **Was:** `constraints.py` `min_sessions_by_team` carried `# unused — kept for API compatibility` though it **is** used in `add_min_sessions_constraints()`.
+- **Fix:** removed the false comment.
 
-### 🟦 E5 — Stale solver doc: timeout says 10s, real default is 650s
-- **Where:** `engine/app/solver/AGENTS.md:26` → "Timeout — 10s hardcoded in `main.py`." Reality: `input_schema.py:134 solver_timeout_seconds = 650`, applied at `main.py:269` (`max_time_in_seconds`).
-- **Proof:** code default is 650 and is payload-driven, not hardcoded to 10.
-- **Action:** correct the nested `AGENTS.md` (and any 10s reference) via the `documentation-update` skill. *(Not edited here: onboarding is read-only over application/doc code; this is logged for a follow-up doc pass.)*
+### ✅ E5 — Stale solver-timeout doc corrected — RESOLVED 2026-07-01
+- **Was:** `engine/app/solver/AGENTS.md` said "Timeout — 10s hardcoded in `main.py`"; the real default is payload-driven `solver_timeout_seconds` = 650s.
+- **Fix:** corrected the line (650s, payload-driven, `max_time_in_seconds`, points to ADR-0001).
 
-### 🟦 E6 — `TODO: PREFERRED TIME not implemented`
-- **Where:** `engine/app/solver/objective.py:305` and `engine/app/solver/constraints.py:779`.
-- **Proof:** explicit TODOs for an unimplemented feature, duplicated in two places.
-- **Action:** track in the backlog (`specs/evolution/`) with an issue id; tie both sites to it.
+### ✅ E6 — PREFERRED TIME TODOs moved to backlog — RESOLVED 2026-07-01
+- **Was:** two `# TODO: PREFERRED TIME not implemented` in `objective.py` + `constraints.py`.
+- **Fix:** replaced both with a pointer to a new backlog entry in `specs/evolution/features-futures.md` ("Backlog — PREFERRED TIME"), which lists both code sites.
 
 > No dead modules, no obsolete files, no import cycles in `engine/`.
 
 ---
 
 ## Suggested priority
-1. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 2. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7, E2, E3, B3 resolved 2026-07-01.)*
+1. **B4** (low — extract a Mercure notifier only if a 3rd publisher appears) → 2. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B3, B7, E1, E2, E3, E4, E5, E6 resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.

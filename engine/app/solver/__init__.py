@@ -12,7 +12,6 @@ from app.solver.objective import (
     SCORE_FORMULA_VERSION,
     Level2ObjectiveStats,
     add_level_2_objective,
-    apply_level_2_objective,
 )
 from app.solver.result_builder import build_result
 
@@ -25,7 +24,6 @@ __all__ = [
     "add_level_1_hard_constraints",
     "add_level_2_objective",
     "add_team_no_overlap",
-    "apply_level_2_objective",
     "build_result",
     "parse_v2_constraints",
 ]

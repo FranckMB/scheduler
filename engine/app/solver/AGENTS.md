@@ -23,7 +23,7 @@ ScheduleInputSchema → build_model() → add_constraints() → add_objective() 
 - **Boolean variables** — `x[team, venue, day, slot]` ∈ {0, 1}
 - **Hard constraints** — Level 1. Must be satisfied (feasibility).
 - **Soft objective** — Level 2. Maximizes weighted score. Fixed T24 weights.
-- **Timeout** — 10s hardcoded in `main.py`.
+- **Timeout** — from the input payload `solver_timeout_seconds` (default 650s), applied in `main.py` (`solver.parameters.max_time_in_seconds`). See ADR-0001 (single-pass solve).
 
 ## Critical Gotchas
 

@@ -198,3 +198,13 @@ Le draft original `.omo/drafts/features-futures.md` est préservé intact comme 
 - **Plan** : `.omo/plans/mvp-critique.md`
 - **Scope** : Export PDF + Diagnostics métier + Wizard refondu + Import Excel + Création compte + Édition manuelle
 - **Date** : 2026-06-10
+
+---
+
+## Backlog — PREFERRED TIME (contrainte solveur, engine)
+
+- **Statut** : non implémenté. Le solveur gère `PREFERRED DAY` mais pas `PREFERRED TIME` (préférence d'un créneau horaire, pas seulement d'un jour).
+- **Sites code** (les deux pointent ici) :
+  - `engine/app/solver/objective.py` — bonus soft, branche `family != "DAY"`.
+  - `engine/app/solver/constraints.py` — `rule_type == "PREFERRED" and family == "TIME"`.
+- **Besoin** : prendre en compte une fenêtre/horaire préféré comme terme soft de l'objectif (analogue au `add_preferred_day_bonus` existant).

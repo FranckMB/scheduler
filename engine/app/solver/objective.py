@@ -304,7 +304,7 @@ def add_preferred_day_bonus(
 
         family = _get(time_window, "family", default=None)
         if family != "DAY":
-            # TODO: PREFERRED TIME not implemented
+            # PREFERRED TIME not implemented — backlog: specs/evolution/features-futures.md
             continue
 
         team_id = _scalar_id(
@@ -446,24 +446,6 @@ def add_chaining_bonus(
                     chaining_terms += 1
 
     return chaining_terms
-
-
-def apply_level_2_objective(*args: Any, **kwargs: Any) -> Level2ObjectiveStats:
-    """Compatibility alias for callers that use an apply_* naming style."""
-
-    return add_level_2_objective(*args, **kwargs)
-
-
-def add_objective(*args: Any, **kwargs: Any) -> Level2ObjectiveStats:
-    """Compatibility alias for the solver entry point."""
-
-    return add_level_2_objective(*args, **kwargs)
-
-
-def set_level_2_objective(*args: Any, **kwargs: Any) -> Level2ObjectiveStats:
-    """Compatibility alias for T24 naming."""
-
-    return add_level_2_objective(*args, **kwargs)
 
 
 def _normalise_assignments(
@@ -679,8 +661,5 @@ __all__ = [
     "add_chaining_bonus",
     "add_level_2_objective",
     "add_preferred_day_bonus",
-    "add_objective",
-    "apply_level_2_objective",
     "is_team_satisfied_by_hard_locks",
-    "set_level_2_objective",
 ]
