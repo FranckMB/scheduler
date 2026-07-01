@@ -27,8 +27,12 @@ class TenantFilterListener implements EventSubscriberInterface
 
     public static function getSubscribedEvents(): array
     {
+        // Priority 7: AFTER the security firewall (priority 8) so the JWT user is
+        // authenticated — the club is derived from the user's membership when no
+        // X-Club-Id header is sent. Running before auth left the tenant unresolved
+        // (no RLS) and leaked other clubs' data on collection reads.
         return [
-            KernelEvents::REQUEST => ['onKernelRequest', 8],
+            KernelEvents::REQUEST => ['onKernelRequest', 7],
         ];
     }
 
