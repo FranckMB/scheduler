@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Enum;
 
 use App\Enum\TeamLevel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ValueError;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class TeamLevelTest extends TestCase
 {
     public function testAllCasesExist(): void

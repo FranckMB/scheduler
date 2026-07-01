@@ -7,11 +7,10 @@ namespace App\Tests\Unit\Enum;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class ConstraintEnumsTest extends TestCase
 {
     public function testConstraintScopeValues(): void

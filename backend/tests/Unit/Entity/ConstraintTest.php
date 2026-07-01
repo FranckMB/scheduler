@@ -8,11 +8,10 @@ use App\Entity\Constraint;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class ConstraintTest extends TestCase
 {
     public function testUuidGeneratedOnConstruct(): void

@@ -33,11 +33,10 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 
 > No dead controllers (all 7 are routed), no orphan entities/services, no `TODO/FIXME/HACK` in `backend/src/`.
 
-### 🟦 B6 — 9 PHPUnit 11 deprecations in the test suite
-- **Where:** whole backend suite. `php vendor/bin/phpunit tests/ --group phase1` reports `PHPUnit Deprecations: 9` (and the full suite reports 9 too).
-- **Proof:** counter emitted by PHPUnit 11.5.55. Detail block is suppressed by the current `phpunit.xml.dist` (no `displayDetailsOnTestsThatTriggerDeprecations`); run `php vendor/bin/phpunit tests/ --display-deprecations` in the `php-fpm` container to enumerate. Typical PHPUnit 11 deprecations: doc-comment metadata instead of `#[Attributes]`, deprecated assertions.
-- **Context:** surfaced only after B2 repaired the CI PHPUnit path — the previously-broken `phpunit-9.6-0` binary never ran, so these were invisible.
-- **Action:** enable deprecation detail, migrate the flagged test code to PHPUnit 11 attributes/APIs. Own plan (engine-cleanup-analogue for backend tests). Low priority — non-blocking.
+### ✅ B6 — PHPUnit 11 doc-comment metadata → attributes — RESOLVED 2026-07-01
+- **Was:** 9 "Metadata found in doc-comment" deprecations (visible via `--display-phpunit-deprecations`) — 9 `tests/Unit/` classes declared `@group unit` in a class doc-comment, deprecated and removed in PHPUnit 12.
+- **Fix:** converted all 9 to the `#[Group('unit')]` attribute (+ `use PHPUnit\Framework\Attributes\Group;`). `--display-phpunit-deprecations` now reports **0**; `--group unit` still selects them (55 tests); full suite 87 tests / 361 assertions green.
+- **Follow-up (out of scope):** `tests/` is not in the CI PHPStan scope (`phpstan.neon` analyses `src` only); running `phpstan analyse tests/Unit` surfaces ~12 pre-existing mock-typing / generic-type issues, unrelated to this change.
 
 ### ✅ B7 — Fixture LOISIR tag — RESOLVED 2026-07-01
 - **Was:** `backend/src/DataFixtures/BasketballInit.php` "De Barros Annexe - Préféré loisir" used a hardcoded `'targetTag' => 'LOISIR'`; plain `LOISIR` no longer exists (split into `LOISIR_ADULTE` / `LOISIR_JEUNE` by `fee099e`), so `ScheduleConstraintBuilder::resolveTagToTeamIds` logged `Tag 'LOISIR' not found … constraint will be ignored` and silently dropped it.
@@ -86,6 +85,6 @@ _The dormant two-pass fallback is an intentional, documented single-pass design;
 ---
 
 ## Suggested priority
-1. **B4** (low — extract a Mercure notifier only if a 3rd publisher appears) → 2. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B3, B7, E1, E2, E3, E4, E5, E6 resolved 2026-07-01.)*
+Only **B4** remains — a deliberate defer (`🟩` keep): extract a shared Mercure notifier only if a 3rd publisher appears; no action now. *(B1, B2, B3, B6, B7, E1, E2, E3, E4, E5, E6 all resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.

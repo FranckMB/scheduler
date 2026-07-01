@@ -13,11 +13,10 @@ use App\Enum\TeamLevel;
 use App\Service\TeamTagService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class TeamTagServiceTest extends TestCase
 {
     private TeamTagService $service;

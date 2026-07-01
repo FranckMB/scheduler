@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Entity;
 
 use App\Entity\TeamTag;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class TeamTagTest extends TestCase
 {
     public function testUuidGeneratedOnConstruct(): void

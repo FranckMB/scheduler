@@ -9,11 +9,10 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Service\ConstraintSerializer;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
-/**
- * @group unit
- */
+#[Group('unit')]
 final class ConstraintSerializerTest extends TestCase
 {
     private ConstraintSerializer $serializer;
