@@ -1,0 +1,12 @@
+# Scope the code-review-graph to backend + engine only.
+# Frontend is slated for deletion + a from-scratch React rebuild — excluded on purpose.
+frontend/**
+
+# Non-code / non-target areas (keep the graph focused on backend + engine).
+docker/**
+docs/**
+specs/**
+.github/**
+.idea/**
+.playwright-mcp/**
+.claude/**
