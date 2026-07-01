@@ -68,22 +68,36 @@ export interface Lookups {
   coaches: Map<string, Coach>;
   /** teamId → main coachId. The engine leaves slot.coachId empty; the coach is the team's coach. */
   teamCoach: Map<string, string>;
+  /** teamId → coachIds that are PLAYERS of the team (a coach can also play elsewhere). */
+  teamPlayerCoaches: Map<string, string[]>;
 }
 
-/** The coach of a slot: the slot's own coach if set, else its team's main coach. */
+/** The (main) coach of a slot: the slot's own coach if set, else its team's main coach. */
 export function slotCoachId(slot: Slot, lookups: Lookups): string | null {
   return slot.coachId ?? lookups.teamCoach.get(slot.teamId) ?? null;
 }
 
-/** The resource id a slot belongs to for the current view axis. */
-export function resourceKeyForSlot(slot: Slot, viewMode: ViewMode, lookups: Lookups): string {
+/**
+ * The resource ids a slot belongs to for the current view. Usually one; in the
+ * coach view a slot appears under EVERY coach concerned by the team — its main
+ * coach AND the coaches who play in it — so a coach sees his full schedule.
+ */
+export function resourceKeysForSlot(slot: Slot, viewMode: ViewMode, lookups: Lookups): string[] {
   if ("gymnase" === viewMode) {
-    return slot.venueId;
+    return [slot.venueId];
   }
-  if ("coach" === viewMode) {
-    return slotCoachId(slot, lookups) ?? NO_COACH;
+  if ("equipe" === viewMode) {
+    return [slot.teamId];
   }
-  return slot.teamId;
+  const keys = new Set<string>();
+  const main = slotCoachId(slot, lookups);
+  if (null !== main) {
+    keys.add(main);
+  }
+  for (const player of lookups.teamPlayerCoaches.get(slot.teamId) ?? []) {
+    keys.add(player);
+  }
+  return keys.size > 0 ? [...keys] : [NO_COACH];
 }
 
 function coachName(coaches: Map<string, Coach>, coachId: string | null): string {
@@ -111,7 +125,7 @@ export interface GridResource {
 
 /** Distinct resources present across the schedule for the current view (for the filter picker). */
 export function availableResources(slots: Slot[], viewMode: ViewMode, lookups: Lookups): GridResource[] {
-  const ids = [...new Set(slots.map((s) => resourceKeyForSlot(s, viewMode, lookups)))];
+  const ids = [...new Set(slots.flatMap((s) => resourceKeysForSlot(s, viewMode, lookups)))];
   return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
 }
 
@@ -132,6 +146,8 @@ export interface DayGroup {
 }
 
 export interface GridCell {
+  /** Unique per rendered cell (a slot may appear in several coach columns). */
+  key: string;
   slotId: string;
   gridColumn: number;
   gridRowStart: number;
@@ -139,6 +155,11 @@ export interface GridCell {
   /** Horizontal lane within the column for time-overlapping slots (side-by-side). */
   lane: number;
   laneCount: number;
+  /** Contextual labels shown on the slot: the two dimensions other than the view axis. */
+  primaryLabel: string;
+  secondaryLabel: string;
+  /** In the coach view, "joueur" when the coach is a player (not the team's coach) of this slot. */
+  roleTag: string | null;
   teamLabel: string;
   venueLabel: string;
   venueColor: string | null;
@@ -223,7 +244,7 @@ export interface GridModel {
  */
 export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, filter: Set<string> = new Set(), stepMin = 15): GridModel {
   const visible = slots.filter(
-    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || filter.has(resourceKeyForSlot(s, viewMode, lookups))),
+    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || resourceKeysForSlot(s, viewMode, lookups).some((k) => filter.has(k))),
   );
 
   const bounds = computeTimeBounds(visible);
@@ -237,7 +258,8 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     if (0 === daySlots.length) {
       continue; // hide days with no slot
     }
-    const resourceIds = [...new Set(daySlots.map((s) => resourceKeyForSlot(s, viewMode, lookups)))]
+    const idSet = new Set(daySlots.flatMap((s) => resourceKeysForSlot(s, viewMode, lookups)));
+    const resourceIds = [...idSet]
       .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
 
@@ -259,30 +281,55 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
   const cells: GridCell[] = [];
   const intervals: Interval[] = [];
   for (const slot of visible) {
-    const idx = columnIndex.get(`${slot.dayOfWeek}:${resourceKeyForSlot(slot, viewMode, lookups)}`);
-    if (undefined === idx) {
-      continue;
-    }
     const start = parseTimeToMinutes(slot.startTime);
     const venue = lookups.venues.get(slot.venueId);
-    const cell: GridCell = {
-      slotId: slot.id,
-      gridColumn: 2 + idx,
-      gridRowStart: 3 + Math.round((start - bounds.startMin) / stepMin),
-      gridRowSpan: Math.max(1, Math.round(slot.durationMinutes / stepMin)),
-      lane: 0,
-      laneCount: 1,
-      teamLabel: lookups.teams.get(slot.teamId)?.name ?? "Équipe ?",
-      venueLabel: venue?.name ?? "Gymnase ?",
-      venueColor: venue?.color ?? null,
-      coachLabel: coachName(lookups.coaches, slotCoachId(slot, lookups)),
-      day: slot.dayOfWeek,
-      startLabel: formatMinutes(start),
-      endLabel: formatMinutes(start + slot.durationMinutes),
-      locked: "NONE" !== slot.lockLevel || slot.temporaryLock,
-    };
-    cells.push(cell);
-    intervals.push({ startMin: start, endMin: start + slot.durationMinutes, cell });
+    const teamLabel = lookups.teams.get(slot.teamId)?.name ?? "Équipe ?";
+    const venueLabel = venue?.name ?? "Gymnase ?";
+    const mainCoachId = slotCoachId(slot, lookups);
+    const coachLabel = coachName(lookups.coaches, mainCoachId);
+
+    for (const key of resourceKeysForSlot(slot, viewMode, lookups)) {
+      const idx = columnIndex.get(`${slot.dayOfWeek}:${key}`);
+      if (undefined === idx) {
+        continue;
+      }
+
+      // Show the two dimensions OTHER than the view axis.
+      let primaryLabel = teamLabel;
+      let secondaryLabel = coachLabel;
+      let roleTag: string | null = null;
+      if ("coach" === viewMode) {
+        primaryLabel = teamLabel;
+        secondaryLabel = venueLabel;
+        roleTag = key !== mainCoachId ? "joueur" : null;
+      } else if ("equipe" === viewMode) {
+        primaryLabel = venueLabel;
+        secondaryLabel = coachLabel;
+      }
+
+      const cell: GridCell = {
+        key: `${slot.id}@${idx}`,
+        slotId: slot.id,
+        gridColumn: 2 + idx,
+        gridRowStart: 3 + Math.round((start - bounds.startMin) / stepMin),
+        gridRowSpan: Math.max(1, Math.round(slot.durationMinutes / stepMin)),
+        lane: 0,
+        laneCount: 1,
+        primaryLabel,
+        secondaryLabel,
+        roleTag,
+        teamLabel,
+        venueLabel,
+        venueColor: venue?.color ?? null,
+        coachLabel,
+        day: slot.dayOfWeek,
+        startLabel: formatMinutes(start),
+        endLabel: formatMinutes(start + slot.durationMinutes),
+        locked: "NONE" !== slot.lockLevel || slot.temporaryLock,
+      };
+      cells.push(cell);
+      intervals.push({ startMin: start, endMin: start + slot.durationMinutes, cell });
+    }
   }
   assignLanes(intervals);
 

@@ -10,6 +10,7 @@ const lookups: Lookups = {
   venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
   coaches: new Map<string, Coach>(),
   teamCoach: new Map<string, string>(),
+  teamPlayerCoaches: new Map<string, string[]>(),
 };
 
 const slot: Slot = {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Coach, Slot, Team, Venue } from "../api";
-import { availableResources, buildGrid, computeTimeBounds, concernedSlots, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeyForSlot, toHourMinute } from "./grid";
+import { availableResources, buildGrid, computeTimeBounds, concernedSlots, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeysForSlot, toHourMinute } from "./grid";
 
 function slot(over: Partial<Slot>): Slot {
   return {
@@ -33,6 +33,7 @@ const lookups: Lookups = {
     ["c9", { id: "c9", firstName: "Team", lastName: "Coach" }],
   ]),
   teamCoach: new Map<string, string>(),
+  teamPlayerCoaches: new Map<string, string[]>(),
 };
 
 describe("time helpers", () => {
@@ -53,19 +54,23 @@ describe("time helpers", () => {
   });
 });
 
-describe("resourceKeyForSlot", () => {
+describe("resourceKeysForSlot", () => {
   const s = slot({ venueId: "v1", coachId: "c1", teamId: "t1" });
-  it("maps per view", () => {
-    expect(resourceKeyForSlot(s, "gymnase", lookups)).toBe("v1");
-    expect(resourceKeyForSlot(s, "coach", lookups)).toBe("c1");
-    expect(resourceKeyForSlot(s, "equipe", lookups)).toBe("t1");
+  it("maps per view (single key)", () => {
+    expect(resourceKeysForSlot(s, "gymnase", lookups)).toEqual(["v1"]);
+    expect(resourceKeysForSlot(s, "coach", lookups)).toEqual(["c1"]);
+    expect(resourceKeysForSlot(s, "equipe", lookups)).toEqual(["t1"]);
   });
   it("buckets a coachless slot with no team coach", () => {
-    expect(resourceKeyForSlot(slot({ coachId: null }), "coach", lookups)).toBe(NO_COACH);
+    expect(resourceKeysForSlot(slot({ coachId: null }), "coach", lookups)).toEqual([NO_COACH]);
   });
   it("falls back to the team's main coach when the slot has none", () => {
     const withTeamCoach = { ...lookups, teamCoach: new Map([["t1", "c9"]]) };
-    expect(resourceKeyForSlot(slot({ coachId: null, teamId: "t1" }), "coach", withTeamCoach)).toBe("c9");
+    expect(resourceKeysForSlot(slot({ coachId: null, teamId: "t1" }), "coach", withTeamCoach)).toEqual(["c9"]);
+  });
+  it("also surfaces the coach under teams where he is a player", () => {
+    const withPlayers = { ...lookups, teamCoach: new Map([["t1", "c9"]]), teamPlayerCoaches: new Map([["t1", ["p1"]]]) };
+    expect(resourceKeysForSlot(slot({ coachId: null, teamId: "t1" }), "coach", withPlayers).sort()).toEqual(["c9", "p1"]);
   });
 });
 

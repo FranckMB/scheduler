@@ -57,6 +57,10 @@ export function useTeamCoaches() {
   return useQuery({ queryKey: ["team_coaches"], queryFn: planningApi.getTeamCoaches, staleTime: 300_000 });
 }
 
+export function useCoachPlayers() {
+  return useQuery({ queryKey: ["coach_player_memberships"], queryFn: planningApi.getCoachPlayers, staleTime: 300_000 });
+}
+
 // --- 2b: adjust + regenerate loop ---------------------------------------------
 
 export function useLockSlot() {

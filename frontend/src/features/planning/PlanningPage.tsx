@@ -9,7 +9,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeamCoaches, useTeams, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeamCoaches, useTeams, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
@@ -64,6 +64,7 @@ export function PlanningPage() {
   const { data: coaches = [] } = useCoaches();
   const { data: categories = [] } = useCategories();
   const { data: teamCoaches = [] } = useTeamCoaches();
+  const { data: coachPlayers = [] } = useCoachPlayers();
 
   const queryClient = useQueryClient();
   const lockMutation = useLockSlot();
@@ -95,13 +96,21 @@ export function PlanningPage() {
         teamCoach.set(link.teamId, link.coachId);
       }
     }
+    // teamId → coachIds that are players of the team (coach view shows these too).
+    const teamPlayerCoaches = new Map<string, string[]>();
+    for (const link of coachPlayers) {
+      if (link.isActive) {
+        teamPlayerCoaches.set(link.teamId, [...(teamPlayerCoaches.get(link.teamId) ?? []), link.coachId]);
+      }
+    }
     return {
       teams: new Map(teams.map((t) => [t.id, t])),
       venues: new Map(venues.map((v) => [v.id, v])),
       coaches: new Map(coaches.map((c) => [c.id, c])),
       teamCoach,
+      teamPlayerCoaches,
     };
-  }, [teams, venues, coaches, teamCoaches]);
+  }, [teams, venues, coaches, teamCoaches, coachPlayers]);
 
   const resources = useMemo(() => availableResources(slots, viewMode, lookups), [slots, viewMode, lookups]);
   const model = useMemo(() => buildGrid(slots, viewMode, lookups, new Set(resourceFilter)), [slots, viewMode, lookups, resourceFilter]);

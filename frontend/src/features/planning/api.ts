@@ -108,6 +108,13 @@ export interface TeamCoach {
   role: "MAIN" | "ASSISTANT";
 }
 
+export interface CoachPlayerMembership {
+  id: string;
+  teamId: string;
+  coachId: string;
+  isActive: boolean;
+}
+
 export interface SlotMovePatch {
   dayOfWeek?: number;
   startTime?: string;
@@ -136,3 +143,4 @@ export const getVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
 export const getCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
 export const getCategories = (): Promise<Category[]> => collectionAll<Category>("sport_categories");
 export const getTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");
+export const getCoachPlayers = (): Promise<CoachPlayerMembership[]> => collectionAll<CoachPlayerMembership>("coach_player_memberships");

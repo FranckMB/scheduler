@@ -112,10 +112,10 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           const dimmed = highlightSlotIds && highlightSlotIds.size > 0 && !highlightSlotIds.has(cell.slotId);
           return (
             <button
-              key={cell.slotId}
+              key={cell.key}
               type="button"
               onClick={() => onSelectSlot(cell.slotId)}
-              title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.startLabel}–${cell.endLabel}`}
+              title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
               className={cn(
                 "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight transition",
                 "hover:ring-1 hover:ring-accent",
@@ -133,10 +133,11 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
               }}
             >
               <span className="flex w-full items-center gap-1 font-medium">
-                <span className="truncate">{cell.teamLabel}</span>
-                {cell.locked ? <Lock className="size-3 shrink-0 text-muted-foreground" /> : null}
+                <span className="truncate">{cell.primaryLabel}</span>
+                {cell.roleTag ? <span className="shrink-0 rounded-sm bg-accent/20 px-1 text-[9px] text-accent-foreground">{cell.roleTag}</span> : null}
+                {cell.locked ? <Lock className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
-              <span className="truncate text-[10px] text-muted-foreground">{cell.startLabel}</span>
+              <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
             </button>
           );
         })}

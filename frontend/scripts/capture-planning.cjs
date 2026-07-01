@@ -25,7 +25,7 @@ async function clickByText(page, text) {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
   const page = await browser.newPage();
-  await page.setViewport({ width: 1400, height: 900 });
+  await page.setViewport({ width: 1400, height: 1250 });
 
   // Login.
   await page.goto(BASE + "/login", { waitUntil: "networkidle0", timeout: 20000 });
