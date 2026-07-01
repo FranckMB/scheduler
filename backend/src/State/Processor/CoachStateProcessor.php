@@ -27,9 +27,8 @@ class CoachStateProcessor extends AbstractStateProcessor
         if (null !== $input->firstName) {
             $entity->setFirstName($input->firstName);
         }
-        if (null !== $input->lastName) {
-            $entity->setLastName($input->lastName);
-        }
+        // last_name is NOT NULL in the schema; a coach may have only a first name.
+        $entity->setLastName($input->lastName ?? '');
         if (null !== $input->email) {
             $entity->setEmail($input->email);
         }
