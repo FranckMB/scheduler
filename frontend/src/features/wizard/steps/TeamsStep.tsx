@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronsDown, ChevronsUp, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -159,8 +159,12 @@ export function TeamsStep() {
   return (
     <div>
       <h2 className="mb-1 text-xl font-semibold">Équipes</h2>
+      <p className="mb-1 text-sm text-muted-foreground">
+        Une équipe par catégorie suffit souvent (ex. 2 seniors M, 1 senior F, puis U18 → U11).
+      </p>
       <p className="mb-4 text-sm text-muted-foreground">
-        Ajoutez vos équipes, classez-les par tier (S &gt; A &gt; B &gt; C &gt; D) et ordonnez-les dans chaque tier — les plus importantes remontent en tête.
+        Le <strong>tier</strong> classe l'importance : <strong>S</strong> (élite) &gt; A &gt; B &gt; C &gt; <strong>D</strong> (loisir). Dans un tier, montez/descendez les équipes ; le
+        <strong> numéro</strong> à gauche est leur rang global (1 = plus importante) — c'est l'ordre où on les traitera.
       </p>
 
       <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
@@ -197,6 +201,15 @@ export function TeamsStep() {
         <p className="text-sm text-muted-foreground">Aucune équipe pour le moment.</p>
       ) : (
         <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
+            <span className="w-6 text-center">#</span>
+            <span className="flex-1">Nom de l'équipe</span>
+            <span className="w-32">Catégorie</span>
+            <span className="w-20">Genre</span>
+            <span className="w-16">Séances</span>
+            <span className="w-16">Tier</span>
+            <span className="w-[104px] text-right">Ordre · Suppr.</span>
+          </div>
           {tierGroups.map((tier) => {
             const group = teamsOfTier(teams, tier.id);
             return (
@@ -225,6 +238,17 @@ export function TeamsStep() {
           })}
         </div>
       )}
+
+      {teams.length > 8 ? (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-1">
+          <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <ChevronsUp className="size-4" />
+          </Button>
+          <Button size="icon" variant="outline" aria-label="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+            <ChevronsDown className="size-4" />
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
