@@ -28,7 +28,11 @@ const lookups: Lookups = {
     ["v1", { id: "v1", name: "Alpha", color: "#ff0000" }],
     ["v2", { id: "v2", name: "Beta", color: null }],
   ]),
-  coaches: new Map<string, Coach>([["c1", { id: "c1", firstName: "Jean", lastName: "Paul" }]]),
+  coaches: new Map<string, Coach>([
+    ["c1", { id: "c1", firstName: "Jean", lastName: "Paul" }],
+    ["c9", { id: "c9", firstName: "Team", lastName: "Coach" }],
+  ]),
+  teamCoach: new Map<string, string>(),
 };
 
 describe("time helpers", () => {
@@ -52,12 +56,16 @@ describe("time helpers", () => {
 describe("resourceKeyForSlot", () => {
   const s = slot({ venueId: "v1", coachId: "c1", teamId: "t1" });
   it("maps per view", () => {
-    expect(resourceKeyForSlot(s, "gymnase")).toBe("v1");
-    expect(resourceKeyForSlot(s, "coach")).toBe("c1");
-    expect(resourceKeyForSlot(s, "equipe")).toBe("t1");
+    expect(resourceKeyForSlot(s, "gymnase", lookups)).toBe("v1");
+    expect(resourceKeyForSlot(s, "coach", lookups)).toBe("c1");
+    expect(resourceKeyForSlot(s, "equipe", lookups)).toBe("t1");
   });
-  it("buckets a coachless slot", () => {
-    expect(resourceKeyForSlot(slot({ coachId: null }), "coach")).toBe(NO_COACH);
+  it("buckets a coachless slot with no team coach", () => {
+    expect(resourceKeyForSlot(slot({ coachId: null }), "coach", lookups)).toBe(NO_COACH);
+  });
+  it("falls back to the team's main coach when the slot has none", () => {
+    const withTeamCoach = { ...lookups, teamCoach: new Map([["t1", "c9"]]) };
+    expect(resourceKeyForSlot(slot({ coachId: null, teamId: "t1" }), "coach", withTeamCoach)).toBe("c9");
   });
 });
 

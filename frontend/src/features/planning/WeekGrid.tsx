@@ -1,4 +1,5 @@
 import { Lock } from "lucide-react";
+import { type UIEvent, useRef } from "react";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -22,8 +23,15 @@ interface WeekGridProps {
   highlightSlotIds?: Set<string>;
 }
 
+/**
+ * The frozen header row + time column are kept in place by syncing a transform to
+ * the scroll offset (CSS vars --sx/--sy). `position: sticky` can't be used here:
+ * a sticky grid item is clamped to its own cell, so it detaches once that narrow
+ * cell scrolls out of view.
+ */
 export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
+  const gridRef = useRef<HTMLDivElement>(null);
 
   if (0 === columns.length) {
     return (
@@ -36,29 +44,41 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
   const gridTemplateColumns = `4rem repeat(${columns.length}, minmax(6rem, 1fr))`;
   const gridTemplateRows = `${HEADER_ROW} ${HEADER_ROW} repeat(${rows.length}, ${ROW_HEIGHT}px)`;
 
-  return (
-    <div className="h-full overflow-auto rounded-lg border border-border bg-card">
-      <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
-        {/* Corner — sticky both axes */}
-        <div className="sticky left-0 top-0 z-40 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: "1 / 3" }} />
+  function onScroll(event: UIEvent<HTMLDivElement>) {
+    const el = gridRef.current;
+    if (null !== el) {
+      el.style.setProperty("--sx", `${event.currentTarget.scrollLeft}px`);
+      el.style.setProperty("--sy", `${event.currentTarget.scrollTop}px`);
+    }
+  }
 
-        {/* Day headers — sticky top, span the day's used resource sub-columns */}
+  const freezeX = { transform: "translateX(var(--sx, 0))" };
+  const freezeY = { transform: "translateY(var(--sy, 0))" };
+  const freezeXY = { transform: "translate(var(--sx, 0), var(--sy, 0))" };
+
+  return (
+    <div className="h-full overflow-auto rounded-lg border border-border bg-card" onScroll={onScroll}>
+      <div ref={gridRef} className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
+        {/* Corner — frozen both axes */}
+        <div className="z-40 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: "1 / 3", ...freezeXY }} />
+
+        {/* Day headers — frozen top, span the day's used resource sub-columns */}
         {dayGroups.map((group) => (
           <div
             key={`day-${group.day}`}
-            className="sticky top-0 z-30 border-b border-l border-border bg-muted px-2 py-1 text-center font-semibold"
-            style={{ gridColumn: `${group.startColumn} / span ${group.span}`, gridRow: 1 }}
+            className="z-30 border-b border-l border-border bg-muted px-2 py-1 text-center font-semibold"
+            style={{ gridColumn: `${group.startColumn} / span ${group.span}`, gridRow: 1, ...freezeY }}
           >
             {group.label}
           </div>
         ))}
 
-        {/* Resource sub-headers — sticky below the day row */}
+        {/* Resource sub-headers — frozen top */}
         {columns.map((column, i) => (
           <div
             key={column.key}
-            className="sticky z-30 flex items-center justify-center gap-1 truncate border-b border-l border-border bg-card px-1 text-center text-muted-foreground"
-            style={{ gridColumn: 2 + i, gridRow: 2, top: HEADER_ROW }}
+            className="z-30 flex items-center justify-center gap-1 truncate border-b border-l border-border bg-card px-1 text-center text-muted-foreground"
+            style={{ gridColumn: 2 + i, gridRow: 2, ...freezeY }}
             title={column.label}
           >
             {null !== column.color ? <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: column.color }} /> : null}
@@ -66,12 +86,12 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           </div>
         ))}
 
-        {/* Time gutter — sticky left, label only on half-hours */}
+        {/* Time gutter — frozen left, label only on half-hours */}
         {rows.map((row, i) => (
           <div
             key={`time-${i}`}
-            className="sticky left-0 z-20 border-r border-border bg-card px-1 text-right text-[10px] text-muted-foreground"
-            style={{ gridColumn: 1, gridRow: 3 + i }}
+            className="z-20 border-r border-border bg-card px-1 text-right text-[10px] text-muted-foreground"
+            style={{ gridColumn: 1, gridRow: 3 + i, ...freezeX }}
           >
             {row.label}
           </div>
@@ -98,8 +118,8 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
               title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.startLabel}–${cell.endLabel}`}
               className={cn(
                 "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight transition",
-                "hover:z-20 hover:ring-1 hover:ring-accent",
-                selected ? "z-20 ring-2 ring-accent" : "",
+                "hover:ring-1 hover:ring-accent",
+                selected ? "ring-2 ring-accent" : "",
                 dimmed ? "opacity-30" : "",
               )}
               style={{

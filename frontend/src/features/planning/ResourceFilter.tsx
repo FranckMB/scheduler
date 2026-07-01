@@ -46,8 +46,8 @@ export function ResourceFilter({ viewMode, resources, selected, onToggle, onClea
 
       {open ? (
         <>
-          <button type="button" aria-hidden className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute z-40 mt-1 w-72 rounded-md border border-border bg-card shadow-md">
+          <button type="button" aria-hidden className="fixed inset-0 z-50 cursor-default" onClick={() => setOpen(false)} />
+          <div className="absolute z-[60] mt-1 w-72 rounded-md border border-border bg-card shadow-md">
             <div className="border-b border-border p-2">
               <input
                 autoFocus

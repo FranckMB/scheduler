@@ -62,21 +62,28 @@ export function computeTimeBounds(slots: Slot[], fallback: TimeBounds = { startM
   return { startMin: Math.floor(min / 60) * 60, endMin: Math.ceil(max / 60) * 60 };
 }
 
-/** The resource id a slot belongs to for the current view axis. */
-export function resourceKeyForSlot(slot: Slot, viewMode: ViewMode): string {
-  if ("gymnase" === viewMode) {
-    return slot.venueId;
-  }
-  if ("coach" === viewMode) {
-    return slot.coachId ?? NO_COACH;
-  }
-  return slot.teamId;
-}
-
 export interface Lookups {
   teams: Map<string, Team>;
   venues: Map<string, Venue>;
   coaches: Map<string, Coach>;
+  /** teamId → main coachId. The engine leaves slot.coachId empty; the coach is the team's coach. */
+  teamCoach: Map<string, string>;
+}
+
+/** The coach of a slot: the slot's own coach if set, else its team's main coach. */
+export function slotCoachId(slot: Slot, lookups: Lookups): string | null {
+  return slot.coachId ?? lookups.teamCoach.get(slot.teamId) ?? null;
+}
+
+/** The resource id a slot belongs to for the current view axis. */
+export function resourceKeyForSlot(slot: Slot, viewMode: ViewMode, lookups: Lookups): string {
+  if ("gymnase" === viewMode) {
+    return slot.venueId;
+  }
+  if ("coach" === viewMode) {
+    return slotCoachId(slot, lookups) ?? NO_COACH;
+  }
+  return slot.teamId;
 }
 
 function coachName(coaches: Map<string, Coach>, coachId: string | null): string {
@@ -104,7 +111,7 @@ export interface GridResource {
 
 /** Distinct resources present across the schedule for the current view (for the filter picker). */
 export function availableResources(slots: Slot[], viewMode: ViewMode, lookups: Lookups): GridResource[] {
-  const ids = [...new Set(slots.map((s) => resourceKeyForSlot(s, viewMode)))];
+  const ids = [...new Set(slots.map((s) => resourceKeyForSlot(s, viewMode, lookups)))];
   return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
 }
 
@@ -216,7 +223,7 @@ export interface GridModel {
  */
 export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, filter: Set<string> = new Set(), stepMin = 15): GridModel {
   const visible = slots.filter(
-    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || filter.has(resourceKeyForSlot(s, viewMode))),
+    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || filter.has(resourceKeyForSlot(s, viewMode, lookups))),
   );
 
   const bounds = computeTimeBounds(visible);
@@ -230,7 +237,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     if (0 === daySlots.length) {
       continue; // hide days with no slot
     }
-    const resourceIds = [...new Set(daySlots.map((s) => resourceKeyForSlot(s, viewMode)))]
+    const resourceIds = [...new Set(daySlots.map((s) => resourceKeyForSlot(s, viewMode, lookups)))]
       .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
 
@@ -252,7 +259,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
   const cells: GridCell[] = [];
   const intervals: Interval[] = [];
   for (const slot of visible) {
-    const idx = columnIndex.get(`${slot.dayOfWeek}:${resourceKeyForSlot(slot, viewMode)}`);
+    const idx = columnIndex.get(`${slot.dayOfWeek}:${resourceKeyForSlot(slot, viewMode, lookups)}`);
     if (undefined === idx) {
       continue;
     }
@@ -268,7 +275,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       teamLabel: lookups.teams.get(slot.teamId)?.name ?? "Équipe ?",
       venueLabel: venue?.name ?? "Gymnase ?",
       venueColor: venue?.color ?? null,
-      coachLabel: coachName(lookups.coaches, slot.coachId),
+      coachLabel: coachName(lookups.coaches, slotCoachId(slot, lookups)),
       day: slot.dayOfWeek,
       startLabel: formatMinutes(start),
       endLabel: formatMinutes(start + slot.durationMinutes),

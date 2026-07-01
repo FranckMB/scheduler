@@ -53,6 +53,10 @@ export function useCategories() {
   return useQuery({ queryKey: ["categories"], queryFn: planningApi.getCategories, staleTime: 300_000 });
 }
 
+export function useTeamCoaches() {
+  return useQuery({ queryKey: ["team_coaches"], queryFn: planningApi.getTeamCoaches, staleTime: 300_000 });
+}
+
 // --- 2b: adjust + regenerate loop ---------------------------------------------
 
 export function useLockSlot() {

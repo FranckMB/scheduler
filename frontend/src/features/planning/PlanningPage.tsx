@@ -9,7 +9,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useVenues } from "./queries";
+import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeamCoaches, useTeams, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
@@ -63,6 +63,7 @@ export function PlanningPage() {
   const { data: venues = [] } = useVenues();
   const { data: coaches = [] } = useCoaches();
   const { data: categories = [] } = useCategories();
+  const { data: teamCoaches = [] } = useTeamCoaches();
 
   const queryClient = useQueryClient();
   const lockMutation = useLockSlot();
@@ -86,14 +87,21 @@ export function PlanningPage() {
 
   const selectedSlot = slots.find((s) => s.id === selectedSlotId) ?? null;
 
-  const lookups: Lookups = useMemo(
-    () => ({
+  const lookups: Lookups = useMemo(() => {
+    // teamId → main coachId (the engine leaves slot.coachId empty).
+    const teamCoach = new Map<string, string>();
+    for (const link of teamCoaches) {
+      if ("MAIN" === link.role && !teamCoach.has(link.teamId)) {
+        teamCoach.set(link.teamId, link.coachId);
+      }
+    }
+    return {
       teams: new Map(teams.map((t) => [t.id, t])),
       venues: new Map(venues.map((v) => [v.id, v])),
       coaches: new Map(coaches.map((c) => [c.id, c])),
-    }),
-    [teams, venues, coaches],
-  );
+      teamCoach,
+    };
+  }, [teams, venues, coaches, teamCoaches]);
 
   const resources = useMemo(() => availableResources(slots, viewMode, lookups), [slots, viewMode, lookups]);
   const model = useMemo(() => buildGrid(slots, viewMode, lookups, new Set(resourceFilter)), [slots, viewMode, lookups, resourceFilter]);

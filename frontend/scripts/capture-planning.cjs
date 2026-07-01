@@ -42,6 +42,33 @@ async function clickByText(page, text) {
   await page.screenshot({ path: `${OUT}/planning-gymnase.png` });
   console.log("shot gymnase");
 
+  // Scroll the grid horizontally to check the time gutter + headers stay pinned.
+  await page.evaluate(() => {
+    const scroller = document.querySelector(".grid")?.parentElement;
+    if (scroller) scroller.scrollLeft = 900;
+  });
+  await sleep(400);
+  await page.screenshot({ path: `${OUT}/planning-scrolled.png` });
+  console.log("shot scrolled");
+  await page.evaluate(() => {
+    const scroller = document.querySelector(".grid")?.parentElement;
+    if (scroller) scroller.scrollLeft = 0;
+  });
+
+  // Open the resource multi-select to check it floats above the grid corner.
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find((b) => /Gymnases\s*:/.test(b.textContent));
+    if (el) el.click();
+  });
+  await sleep(400);
+  await page.screenshot({ path: `${OUT}/planning-filter.png` });
+  console.log("shot filter");
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.evaluate(() => {
+    const bd = document.querySelector(".fixed.inset-0");
+    if (bd) bd.click();
+  });
+
   await clickByText(page, "Par coach");
   await sleep(600);
   await page.screenshot({ path: `${OUT}/planning-coach.png` });
