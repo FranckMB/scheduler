@@ -26,6 +26,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.screenshot({ path: `${OUT}/wizard-teams.png` });
   console.log("shot wizard-teams");
 
+  const goStep = async (label) => {
+    await page.evaluate((t) => {
+      const el = [...document.querySelectorAll("nav button")].find((b) => b.textContent.includes(t));
+      if (el) el.click();
+    }, label);
+    await sleep(700);
+  };
+
+  await goStep("Gymnases");
+  await page.screenshot({ path: `${OUT}/wizard-venues.png` });
+  console.log("shot wizard-venues");
+
+  await goStep("Coachs");
+  await page.screenshot({ path: `${OUT}/wizard-coaches.png` });
+  console.log("shot wizard-coaches");
+
   await browser.close();
 })().catch((e) => {
   console.error(e.message);
