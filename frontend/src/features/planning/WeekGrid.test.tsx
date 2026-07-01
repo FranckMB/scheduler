@@ -31,8 +31,8 @@ describe("WeekGrid", () => {
     render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} />);
 
     expect(screen.getByText("Lun")).toBeInTheDocument();
-    // The resource sub-column header repeats under each of the 6 day super-columns.
-    expect(screen.getAllByText("Gymnase Alpha")).toHaveLength(6);
+    // Only Monday has a slot → only its used gymnase column is rendered (empty columns hidden).
+    expect(screen.getAllByText("Gymnase Alpha")).toHaveLength(1);
 
     const cell = screen.getByText("U11");
     cell.click();

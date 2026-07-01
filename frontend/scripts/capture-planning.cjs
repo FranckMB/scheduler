@@ -64,6 +64,15 @@ async function clickByText(page, text) {
   await page.screenshot({ path: `${OUT}/planning-slot-detail.png` });
   console.log("shot slot-detail", clicked);
 
+  // Expand the first diagnostics group to reveal when + which teams conflict.
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find((b) => /conflict|unused|warning/i.test(b.textContent));
+    if (el) el.click();
+  });
+  await sleep(500);
+  await page.screenshot({ path: `${OUT}/planning-diagnostics.png` });
+  console.log("shot diagnostics");
+
   await browser.close();
 })().catch((e) => {
   console.error(e.message);

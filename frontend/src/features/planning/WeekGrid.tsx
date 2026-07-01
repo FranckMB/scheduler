@@ -4,7 +4,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { GridModel } from "./lib/grid";
 
-const ROW_HEIGHT = 30; // px per 30-min step
+const ROW_HEIGHT = 16; // px per 15-min step (1h = 64px)
 
 /** hex colour → subtle translucent fill; non-hex falls back to no tint. */
 function tint(color: string | null): string | undefined {
@@ -22,11 +22,18 @@ interface WeekGridProps {
 }
 
 export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds }: WeekGridProps) {
-  const { days, resources, rowLabels, cells } = model;
-  const resCount = resources.length;
+  const { columns, dayGroups, rows, cells } = model;
 
-  const gridTemplateColumns = `4rem repeat(${days.length * resCount}, minmax(6rem, 1fr))`;
-  const gridTemplateRows = `auto auto repeat(${rowLabels.length}, ${ROW_HEIGHT}px)`;
+  if (0 === columns.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+        Aucun créneau à afficher pour cette sélection.
+      </div>
+    );
+  }
+
+  const gridTemplateColumns = `4rem repeat(${columns.length}, minmax(6rem, 1fr))`;
+  const gridTemplateRows = `auto auto repeat(${rows.length}, ${ROW_HEIGHT}px)`;
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -34,48 +41,47 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
         {/* Corner */}
         <div className="sticky left-0 z-10 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: "1 / 3" }} />
 
-        {/* Day headers — each spans its resource sub-columns */}
-        {days.map((day, dayIndex) => (
+        {/* Day headers — span the day's used resource sub-columns */}
+        {dayGroups.map((group) => (
           <div
-            key={`day-${day.n}`}
+            key={`day-${group.day}`}
             className="border-b border-l border-border bg-muted px-2 py-1 text-center font-semibold"
-            style={{ gridColumn: `${2 + dayIndex * resCount} / span ${resCount}`, gridRow: 1 }}
+            style={{ gridColumn: `${group.startColumn} / span ${group.span}`, gridRow: 1 }}
           >
-            {day.label}
+            {group.label}
           </div>
         ))}
 
-        {/* Resource sub-headers under each day */}
-        {days.map((day, dayIndex) =>
-          resources.map((res, ri) => (
-            <div
-              key={`res-${day.n}-${res.id}`}
-              className="truncate border-b border-l border-border bg-card px-1 py-1 text-center text-muted-foreground"
-              style={{ gridColumn: 2 + dayIndex * resCount + ri, gridRow: 2 }}
-              title={res.label}
-            >
-              {res.label}
-            </div>
-          )),
-        )}
-
-        {/* Time gutter */}
-        {rowLabels.map((label, i) => (
+        {/* Resource sub-headers */}
+        {columns.map((column, i) => (
           <div
-            key={`time-${label}`}
-            className="sticky left-0 z-10 border-r border-border bg-card px-1 text-right text-[10px] text-muted-foreground"
+            key={column.key}
+            className="flex items-center justify-center gap-1 truncate border-b border-l border-border bg-card px-1 py-1 text-center text-muted-foreground"
+            style={{ gridColumn: 2 + i, gridRow: 2 }}
+            title={column.label}
+          >
+            {null !== column.color ? <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: column.color }} /> : null}
+            <span className="truncate">{column.label}</span>
+          </div>
+        ))}
+
+        {/* Time gutter — label only on half-hours */}
+        {rows.map((row, i) => (
+          <div
+            key={`time-${i}`}
+            className={cn("sticky left-0 z-10 border-r border-border bg-card px-1 text-right text-[10px] text-muted-foreground", row.major ? "" : "")}
             style={{ gridColumn: 1, gridRow: 3 + i }}
           >
-            {label}
+            {row.label}
           </div>
         ))}
 
-        {/* Row grid lines (visual guide, one span per day-group) */}
-        {rowLabels.map((label, i) => (
+        {/* Row grid lines — stronger on the hour */}
+        {rows.map((row, i) => (
           <div
-            key={`line-${label}`}
-            className="border-b border-l border-border/50"
-            style={{ gridColumn: `2 / span ${days.length * resCount}`, gridRow: 3 + i }}
+            key={`line-${i}`}
+            className={cn("border-l", row.major ? "border-b border-border/70" : "border-b border-border/30")}
+            style={{ gridColumn: `2 / span ${columns.length}`, gridRow: 3 + i }}
           />
         ))}
 

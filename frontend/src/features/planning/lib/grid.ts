@@ -28,16 +28,16 @@ export function parseTimeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
-/** Time-ish string → "HH:MM" (zero-padded). */
-export function toHourMinute(time: string): string {
-  const [h, m] = firstHourMinute(time);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
 /** minutes → "HH:MM" (zero-padded). */
 export function formatMinutes(total: number): string {
   const h = Math.floor(total / 60);
   const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Time-ish string → "HH:MM" (zero-padded). */
+export function toHourMinute(time: string): string {
+  const [h, m] = firstHourMinute(time);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
@@ -79,39 +79,7 @@ export interface Lookups {
   coaches: Map<string, Coach>;
 }
 
-export interface GridResource {
-  id: string;
-  label: string;
-}
-
-export interface GridCell {
-  slotId: string;
-  day: number;
-  resourceId: string;
-  /** 1-based CSS grid column (1 = time gutter). */
-  gridColumn: number;
-  /** 1-based CSS grid row (1 = day header, 2 = resource header). */
-  gridRowStart: number;
-  gridRowSpan: number;
-  teamLabel: string;
-  venueLabel: string;
-  venueColor: string | null;
-  coachLabel: string;
-  startLabel: string;
-  endLabel: string;
-  locked: boolean;
-}
-
-export interface GridModel {
-  days: { n: number; label: string }[];
-  resources: GridResource[];
-  bounds: TimeBounds;
-  stepMin: number;
-  rowLabels: string[];
-  cells: GridCell[];
-}
-
-function coachLabel(coaches: Map<string, Coach>, coachId: string | null): string {
+function coachName(coaches: Map<string, Coach>, coachId: string | null): string {
   if (null === coachId) {
     return "Sans coach";
   }
@@ -124,60 +92,179 @@ function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string
     return lookups.venues.get(id)?.name ?? "Gymnase ?";
   }
   if ("coach" === viewMode) {
-    return id === NO_COACH ? "Sans coach" : coachLabel(lookups.coaches, id);
+    return id === NO_COACH ? "Sans coach" : coachName(lookups.coaches, id);
   }
   return lookups.teams.get(id)?.name ?? "Équipe ?";
 }
 
+export interface GridResource {
+  id: string;
+  label: string;
+}
+
+/** Distinct resources present across the schedule for the current view (for the filter picker). */
+export function availableResources(slots: Slot[], viewMode: ViewMode, lookups: Lookups): GridResource[] {
+  const ids = [...new Set(slots.map((s) => resourceKeyForSlot(s, viewMode)))];
+  return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+
+export interface GridColumn {
+  key: string;
+  day: number;
+  resourceId: string;
+  label: string;
+  color: string | null;
+}
+
+export interface DayGroup {
+  day: number;
+  label: string;
+  /** 1-based CSS grid column where this day's block starts (col 1 = time gutter). */
+  startColumn: number;
+  span: number;
+}
+
+export interface GridCell {
+  slotId: string;
+  gridColumn: number;
+  gridRowStart: number;
+  gridRowSpan: number;
+  teamLabel: string;
+  venueLabel: string;
+  venueColor: string | null;
+  coachLabel: string;
+  day: number;
+  startLabel: string;
+  endLabel: string;
+  locked: boolean;
+}
+
+export interface GridRow {
+  /** Displayed only on hour / half-hour rows; null elsewhere (keeps the grid line). */
+  label: string | null;
+  /** True on the hour — drawn with a stronger separator. */
+  major: boolean;
+}
+
+export interface GridModel {
+  columns: GridColumn[];
+  dayGroups: DayGroup[];
+  bounds: TimeBounds;
+  stepMin: number;
+  rows: GridRow[];
+  cells: GridCell[];
+}
+
 /**
- * Pure layout: maps slots to grid cells for the chosen view. A day is a
- * super-column split into one sub-column per resource; changing the view only
- * changes which resource forms the sub-columns (same slots, re-grouped).
+ * Pure layout. A day is a super-column split into one sub-column per resource —
+ * but ONLY the resources actually used that day are shown (empty columns are
+ * hidden). An optional resource filter narrows what is displayed. Changing the
+ * view only changes which resource forms the sub-columns (same slots, re-grouped).
  */
-export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, stepMin = 30): GridModel {
-  const bounds = computeTimeBounds(slots);
+export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, filter: Set<string> = new Set(), stepMin = 15): GridModel {
+  const visible = slots.filter(
+    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || filter.has(resourceKeyForSlot(s, viewMode))),
+  );
 
-  const resourceIds = [...new Set(slots.map((s) => resourceKeyForSlot(s, viewMode)))];
-  const resources: GridResource[] = resourceIds
-    .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
-    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  const bounds = computeTimeBounds(visible);
 
-  const resIndex = new Map(resources.map((r, i) => [r.id, i]));
+  const columns: GridColumn[] = [];
+  const dayGroups: DayGroup[] = [];
+  let cssColumn = 2; // col 1 is the time gutter
+
+  for (const day of DAYS) {
+    const daySlots = visible.filter((s) => s.dayOfWeek === day.n);
+    if (0 === daySlots.length) {
+      continue; // hide days with no slot
+    }
+    const resourceIds = [...new Set(daySlots.map((s) => resourceKeyForSlot(s, viewMode)))]
+      .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+
+    dayGroups.push({ day: day.n, label: day.label, startColumn: cssColumn, span: resourceIds.length });
+    for (const { id, label } of resourceIds) {
+      columns.push({
+        key: `${day.n}:${id}`,
+        day: day.n,
+        resourceId: id,
+        label,
+        color: "gymnase" === viewMode ? (lookups.venues.get(id)?.color ?? null) : null,
+      });
+      cssColumn += 1;
+    }
+  }
+
+  const columnIndex = new Map(columns.map((c, i) => [c.key, i]));
 
   const cells: GridCell[] = [];
-  for (const slot of slots) {
-    if (slot.dayOfWeek < 1 || slot.dayOfWeek > 6) {
-      continue;
-    }
-    const dayIndex = slot.dayOfWeek - 1;
-    const rid = resourceKeyForSlot(slot, viewMode);
-    const ri = resIndex.get(rid);
-    if (undefined === ri) {
+  for (const slot of visible) {
+    const idx = columnIndex.get(`${slot.dayOfWeek}:${resourceKeyForSlot(slot, viewMode)}`);
+    if (undefined === idx) {
       continue;
     }
     const start = parseTimeToMinutes(slot.startTime);
     const venue = lookups.venues.get(slot.venueId);
     cells.push({
       slotId: slot.id,
-      day: slot.dayOfWeek,
-      resourceId: rid,
-      gridColumn: 2 + dayIndex * resources.length + ri,
+      gridColumn: 2 + idx,
       gridRowStart: 3 + Math.round((start - bounds.startMin) / stepMin),
       gridRowSpan: Math.max(1, Math.round(slot.durationMinutes / stepMin)),
       teamLabel: lookups.teams.get(slot.teamId)?.name ?? "Équipe ?",
       venueLabel: venue?.name ?? "Gymnase ?",
       venueColor: venue?.color ?? null,
-      coachLabel: coachLabel(lookups.coaches, slot.coachId),
+      coachLabel: coachName(lookups.coaches, slot.coachId),
+      day: slot.dayOfWeek,
       startLabel: formatMinutes(start),
       endLabel: formatMinutes(start + slot.durationMinutes),
       locked: "NONE" !== slot.lockLevel || slot.temporaryLock,
     });
   }
 
-  const rowLabels: string[] = [];
+  const rows: GridRow[] = [];
   for (let t = bounds.startMin; t < bounds.endMin; t += stepMin) {
-    rowLabels.push(formatMinutes(t));
+    const onHalfHour = 0 === t % 30;
+    rows.push({ label: onHalfHour ? formatMinutes(t) : null, major: 0 === t % 60 });
   }
 
-  return { days: DAYS, resources, bounds, stepMin, rowLabels, cells };
+  return { columns, dayGroups, bounds, stepMin, rows, cells };
+}
+
+export interface ConcernedSlot {
+  slotId: string;
+  dayLabel: string;
+  timeLabel: string;
+  teamLabel: string;
+  venueLabel: string;
+}
+
+const dayLabelOf = (day: number): string => DAYS.find((d) => d.n === day)?.label ?? "?";
+
+/**
+ * The slots a diagnostic points at (its team / venue / coach), sorted by day+time
+ * so the "when + which teams" of a conflict is spelled out instead of implied.
+ */
+export function concernedSlots(
+  diagnostic: { teamId: string | null; venueId: string | null; coachId: string | null },
+  slots: Slot[],
+  lookups: Lookups,
+): ConcernedSlot[] {
+  const matches = slots.filter(
+    (s) =>
+      (null !== diagnostic.teamId && diagnostic.teamId === s.teamId) ||
+      (null !== diagnostic.venueId && diagnostic.venueId === s.venueId) ||
+      (null !== diagnostic.coachId && diagnostic.coachId === s.coachId),
+  );
+
+  return matches
+    .map((s) => ({
+      slotId: s.id,
+      day: s.dayOfWeek,
+      startMin: parseTimeToMinutes(s.startTime),
+      dayLabel: dayLabelOf(s.dayOfWeek),
+      timeLabel: toHourMinute(s.startTime),
+      teamLabel: lookups.teams.get(s.teamId)?.name ?? "Équipe ?",
+      venueLabel: lookups.venues.get(s.venueId)?.name ?? "Gymnase ?",
+    }))
+    .sort((a, b) => a.day - b.day || a.startMin - b.startMin)
+    .map(({ slotId, dayLabel, timeLabel, teamLabel, venueLabel }) => ({ slotId, dayLabel, timeLabel, teamLabel, venueLabel }));
 }

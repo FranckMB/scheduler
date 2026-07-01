@@ -6,11 +6,11 @@ import { useMe } from "@/features/auth/queries";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import type { Diagnostic } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
-import { buildGrid, type Lookups } from "./lib/grid";
+import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
@@ -42,8 +42,9 @@ function EmptyState({ title, description }: { title: string; description: string
 
 export function PlanningPage() {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
-  const { viewMode, selectedScheduleId, selectedSlotId, setViewMode, setSelectedScheduleId, setSelectedSlotId } = usePlanningStore();
-  const [selectedDiagnosticId, setSelectedDiagnosticId] = useState<string | null>(null);
+  const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
+    usePlanningStore();
+  const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
 
   // Keep a valid selection: default to the latest completed schedule.
   const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
@@ -95,7 +96,8 @@ export function PlanningPage() {
     [teams, venues, coaches],
   );
 
-  const model = useMemo(() => buildGrid(slots, viewMode, lookups), [slots, viewMode, lookups]);
+  const resources = useMemo(() => availableResources(slots, viewMode, lookups), [slots, viewMode, lookups]);
+  const model = useMemo(() => buildGrid(slots, viewMode, lookups, new Set(resourceFilter)), [slots, viewMode, lookups, resourceFilter]);
 
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
   const categoryLabel = useMemo(() => {
@@ -107,21 +109,6 @@ export function PlanningPage() {
     const category = team ? categories.find((c) => c.id === team.sportCategoryId) : undefined;
     return category?.name ?? "—";
   }, [selectedCell, slots, lookups, categories]);
-
-  const highlightSlotIds = useMemo(() => {
-    const diagnostic = diagnostics.find((d) => d.id === selectedDiagnosticId);
-    if (undefined === diagnostic) {
-      return undefined;
-    }
-    const matches = (slotTeam: string, slotVenue: string, slotCoach: string | null): boolean =>
-      (null !== diagnostic.teamId && diagnostic.teamId === slotTeam) ||
-      (null !== diagnostic.venueId && diagnostic.venueId === slotVenue) ||
-      (null !== diagnostic.coachId && diagnostic.coachId === slotCoach);
-    return new Set(slots.filter((s) => matches(s.teamId, s.venueId, s.coachId)).map((s) => s.id));
-  }, [diagnostics, selectedDiagnosticId, slots]);
-
-  const onSelectDiagnostic = (diagnostic: Diagnostic) =>
-    setSelectedDiagnosticId((current) => (current === diagnostic.id ? null : diagnostic.id));
 
   if (schedulesLoading) {
     return <FullPageSpinner />;
@@ -151,11 +138,13 @@ export function PlanningPage() {
             onValidate={() => validScheduleId && validateMutation.mutate(validScheduleId)}
           />
 
+          <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+
           {0 === slots.length ? (
             <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-              <div className="relative min-w-0">
+            <div className="lg:grid lg:h-[calc(100vh-16rem)] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4">
+              <div className="relative min-w-0 lg:h-full lg:overflow-auto">
                 {isGenerating ? (
                   <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
                     Génération en cours…
@@ -163,7 +152,7 @@ export function PlanningPage() {
                 ) : null}
                 <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
               </div>
-              <div className="flex flex-col gap-4">
+              <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
                 {null !== selectedCell && null !== selectedSlot ? (
                   <SlotDetail
                     key={selectedSlot.id}
@@ -177,7 +166,9 @@ export function PlanningPage() {
                     onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
                   />
                 ) : null}
-                <DiagnosticsPanel diagnostics={diagnostics} selectedId={selectedDiagnosticId} onSelect={onSelectDiagnostic} />
+                <div className="min-h-0 flex-1">
+                  <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
+                </div>
               </div>
             </div>
           )}

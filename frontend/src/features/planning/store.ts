@@ -8,9 +8,13 @@ interface PlanningState {
   viewMode: ViewMode;
   selectedScheduleId: string | null;
   selectedSlotId: string | null;
+  /** Resource ids to show for the current view; empty = show all used resources. */
+  resourceFilter: string[];
   setViewMode: (viewMode: ViewMode) => void;
   setSelectedScheduleId: (id: string | null) => void;
   setSelectedSlotId: (id: string | null) => void;
+  toggleResource: (id: string) => void;
+  clearResourceFilter: () => void;
 }
 
 export const usePlanningStore = create<PlanningState>()(
@@ -19,9 +23,16 @@ export const usePlanningStore = create<PlanningState>()(
       viewMode: "gymnase",
       selectedScheduleId: null,
       selectedSlotId: null,
-      setViewMode: (viewMode) => set({ viewMode }),
+      resourceFilter: [],
+      // Switching view invalidates the resource selection (different resource set).
+      setViewMode: (viewMode) => set({ viewMode, resourceFilter: [], selectedSlotId: null }),
       setSelectedScheduleId: (selectedScheduleId) => set({ selectedScheduleId, selectedSlotId: null }),
       setSelectedSlotId: (selectedSlotId) => set({ selectedSlotId }),
+      toggleResource: (id) =>
+        set((state) => ({
+          resourceFilter: state.resourceFilter.includes(id) ? state.resourceFilter.filter((r) => r !== id) : [...state.resourceFilter, id],
+        })),
+      clearResourceFilter: () => set({ resourceFilter: [] }),
     }),
     {
       name: "cs-planning",
