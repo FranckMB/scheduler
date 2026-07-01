@@ -9,7 +9,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
@@ -42,17 +42,20 @@ function EmptyState({ title, description }: { title: string; description: string
 
 export function PlanningPage() {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
+  const { data: me } = useMe();
+  const baselineScheduleId = me?.baselineScheduleId ?? null;
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
 
-  // Keep a valid selection: default to the latest completed schedule.
+  // Keep a valid selection: default to the season base plan, else the latest completed.
   const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
-      setSelectedScheduleId(pickDefaultSchedule(schedules));
+      const base = schedules.find((s) => s.id === baselineScheduleId);
+      setSelectedScheduleId(base ? base.id : pickDefaultSchedule(schedules));
     }
-  }, [validScheduleId, schedules, setSelectedScheduleId]);
+  }, [validScheduleId, schedules, baselineScheduleId, setSelectedScheduleId]);
 
   const { data: slots = [] } = useSlots(validScheduleId);
   const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
@@ -61,14 +64,10 @@ export function PlanningPage() {
   const { data: coaches = [] } = useCoaches();
   const { data: categories = [] } = useCategories();
 
-  const { data: me } = useMe();
-  const baselineScheduleId = me?.baselineScheduleId ?? null;
-
   const queryClient = useQueryClient();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const generateMutation = useGenerate();
-  const validateMutation = useValidateSchedule();
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
@@ -134,8 +133,6 @@ export function PlanningPage() {
             isGenerating={isGenerating}
             onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
             baselineScheduleId={baselineScheduleId}
-            isValidating={validateMutation.isPending}
-            onValidate={() => validScheduleId && validateMutation.mutate(validScheduleId)}
           />
 
           <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />

@@ -21,8 +21,6 @@ interface PlanningToolbarProps {
   onRegenerate: () => void;
   isGenerating: boolean;
   baselineScheduleId: string | null;
-  onValidate: () => void;
-  isValidating: boolean;
 }
 
 export function PlanningToolbar({
@@ -34,8 +32,6 @@ export function PlanningToolbar({
   onRegenerate,
   isGenerating,
   baselineScheduleId,
-  onValidate,
-  isValidating,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
   const isBaseline = null !== selected && selected.id === baselineScheduleId;
@@ -65,7 +61,9 @@ export function PlanningToolbar({
                 <Star className="size-3" />
                 Base
               </span>
-            ) : null}
+            ) : (
+              <span className="rounded-full border border-border px-2 py-0.5">Secondaire</span>
+            )}
           </span>
         ) : null}
       </div>
@@ -84,12 +82,6 @@ export function PlanningToolbar({
             </Button>
           ))}
         </div>
-        {null !== selected && "COMPLETED" === selected.status && !isBaseline ? (
-          <Button size="sm" variant="outline" className="h-8" disabled={isValidating} onClick={onValidate}>
-            <Star className="size-4" />
-            Définir comme base
-          </Button>
-        ) : null}
         <Button size="sm" variant="outline" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
           <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
           {isGenerating ? "Génération…" : "Régénérer"}
