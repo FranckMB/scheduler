@@ -53,6 +53,9 @@ class SeasonResource
     #[Groups(['read'])]
     public ?string $exportPdfUrl = null;
 
+    #[Groups(['read'])]
+    public ?string $baselineScheduleId = null;
+
     /** @var array<string, mixed> */
     #[Groups(['read'])]
     public array $transitionData = [];
@@ -69,6 +72,7 @@ class SeasonResource
         $dto->endDate = $entity->getEndDate();
         $dto->status = $entity->getStatus();
         $dto->exportPdfUrl = $entity->getExportPdfUrl();
+        $dto->baselineScheduleId = $entity->getBaselineScheduleId();
         $dto->transitionData = $entity->getTransitionData();
 
         return $dto;

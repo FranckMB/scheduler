@@ -8,6 +8,7 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\Pagination\Pagination;
 use ApiPlatform\State\ProviderInterface;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
@@ -62,7 +63,11 @@ abstract class AbstractStateProvider implements ProviderInterface
             ->select('e')
             ->from($this->getEntityClass(), 'e');
 
-        if ($this->pagination->isEnabled($operation, $context)) {
+        // Subclasses may bound the collection from request query params (e.g. ?scheduleId=).
+        // A bounded result set (all rows of one parent) bypasses the default 30-item pagination.
+        $bounded = $this->applyRequestFilters($qb);
+
+        if (!$bounded && $this->pagination->isEnabled($operation, $context)) {
             $offset = $this->pagination->getOffset($operation, $context);
             $limit = $this->pagination->getLimit($operation, $context);
             $qb->setFirstResult($offset)
@@ -73,6 +78,17 @@ abstract class AbstractStateProvider implements ProviderInterface
         $results = $query->getResult();
 
         return array_map([$this, 'mapEntityToOutput'], $results);
+    }
+
+    /**
+     * Hook: add WHERE clauses derived from the current request query.
+     * Return true when the filter bounds the result to a single parent
+     * (so pagination is skipped and every matching row is returned).
+     * Tenant isolation is always enforced independently by Postgres RLS.
+     */
+    protected function applyRequestFilters(QueryBuilder $qb): bool
+    {
+        return false;
     }
 
     /**
