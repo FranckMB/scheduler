@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
+
 AssignmentLike = Any
 BoolVarLike = Any
 
@@ -167,7 +169,7 @@ _EXPLICIT_BONUS_FIELDS = (
     "bonuses",
 )
 
-_MISSING = object()
+_MISSING = MISSING
 
 
 @dataclass(frozen=True)
@@ -609,67 +611,19 @@ def _normalise_bonus_weight_name(value: Any) -> str:
 
 
 def _get(source: Any, *names: str, default: Any = None) -> Any:
-    if isinstance(source, Mapping):
-        for name in names:
-            if name in source and source[name] is not None:
-                return source[name]
-
-    for name in names:
-        if hasattr(source, name):
-            value = getattr(source, name)
-            if value is not None:
-                return value
-
-    if isinstance(source, Sequence) and not isinstance(source, (str, bytes)):
-        tuple_indexes = {
-            "var": 0,
-            "variable": 0,
-            "bool_var": 0,
-            "x": 0,
-            "team_id": 1,
-            "team": 1,
-            "slot_id": 2,
-            "time_slot_id": 2,
-            "venue_id": 3,
-            "room_id": 3,
-            "coach_id": 4,
-            "session_id": 5,
-            "priority_tier": 6,
-            "priority_tier_id": 6,
-            "tier": 6,
-        }
-        for name in names:
-            index = tuple_indexes.get(name)
-            if index is not None and len(source) > index:
-                value = source[index]
-                if value is not None:
-                    return value
-
-    return default
+    return get_field(source, *names, default=default, skip_none=True)
 
 
 def _scalar_id(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, (str, int, float, bool, tuple)):
-        return value
-    if isinstance(value, Mapping):
-        return value.get("id") or value.get("uuid") or value.get("name")
-    for attr in ("id", "uuid", "name"):
-        if hasattr(value, attr):
-            return getattr(value, attr)
-    return str(value)
+    return scalar_id(value)
 
 
 def _var(assignment: AssignmentLike) -> BoolVarLike:
-    variable = _get(assignment, "var", "variable", "bool_var", "literal", "x", default=_MISSING)
-    if variable is _MISSING:
-        raise ValueError("Assignment is missing a CP-SAT BoolVar field named var/variable/bool_var/literal/x")
-    return variable
+    return assignment_var(assignment, skip_none=True)
 
 
 def _team_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "team_id", "teamId", "team", default=None))
+    return assignment_team_id(assignment, skip_none=True)
 
 
 def _assignment_key(assignment: AssignmentLike, variable: BoolVarLike) -> Any:

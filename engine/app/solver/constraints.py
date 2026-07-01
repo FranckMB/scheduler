@@ -19,13 +19,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence, cast
 
+from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _time_to_minutes
 
 AssignmentLike = Any
 BoolVarLike = Any
 RuleCollection = Any
 
-_MISSING = object()
+_MISSING = MISSING
 
 
 @dataclass(frozen=True)
@@ -1021,55 +1022,15 @@ def _dedupe_variables(variables: Iterable[BoolVarLike]) -> list[BoolVarLike]:
 
 
 def _get(assignment: AssignmentLike, *names: str, default: Any = None) -> Any:
-    if isinstance(assignment, Mapping):
-        for name in names:
-            if name in assignment:
-                return assignment[name]
-
-    for name in names:
-        if hasattr(assignment, name):
-            return getattr(assignment, name)
-
-    if isinstance(assignment, Sequence) and not isinstance(assignment, (str, bytes)):
-        tuple_indexes = {
-            "var": 0,
-            "variable": 0,
-            "bool_var": 0,
-            "team_id": 1,
-            "team": 1,
-            "slot_id": 2,
-            "time_slot_id": 2,
-            "venue_id": 3,
-            "room_id": 3,
-            "coach_id": 4,
-            "session_id": 5,
-        }
-        for name in names:
-            index = tuple_indexes.get(name)
-            if index is not None and len(assignment) > index:
-                return assignment[index]
-
-    return default
+    return get_field(assignment, *names, default=default, skip_none=False)
 
 
 def _scalar_id(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, (str, int, float, bool, tuple)):
-        return value
-    if isinstance(value, Mapping):
-        return value.get("id") or value.get("uuid") or value.get("name")
-    for attr in ("id", "uuid", "name"):
-        if hasattr(value, attr):
-            return getattr(value, attr)
-    return str(value)
+    return scalar_id(value)
 
 
 def _var(assignment: AssignmentLike) -> BoolVarLike:
-    variable = _get(assignment, "var", "variable", "bool_var", "x", default=_MISSING)
-    if variable is _MISSING:
-        raise ValueError("Assignment is missing a CP-SAT BoolVar field named var/variable/bool_var/x")
-    return variable
+    return assignment_var(assignment, skip_none=False)
 
 
 def _assignment_id(assignment: AssignmentLike) -> Any:
@@ -1077,7 +1038,7 @@ def _assignment_id(assignment: AssignmentLike) -> Any:
 
 
 def _team_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "team_id", "team", default=None))
+    return assignment_team_id(assignment, skip_none=False)
 
 
 def _slot_id(assignment: AssignmentLike) -> Any:

@@ -56,11 +56,11 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 - **Proof:** grep shows **no internal caller** within `engine/`; they only widen the public surface.
 - **Action:** delete (and trim `__all__` / `__init__` exports) after confirming no external import relies on them. See `cleanup-candidates.md`.
 
-### 🟧 E2 — Six duplicated solver helpers across `constraints.py` and `objective.py`
-- **Where:** `constraints.py` (~933–1224) and `objective.py` (~467–715): `_var`, `_team_id`, `_get`, `_scalar_id`, `_normalise_assignments`, `_assignment_from_mapping_item`, plus a separately-defined `_MISSING = object()` in each (`constraints.py:28`, `objective.py:170`).
-- **Proof:** near-identical implementations with **subtle divergences** (e.g. `objective._team_id` also accepts `teamId`; `objective._var` accepts `literal`; the two `_MISSING` sentinels are distinct objects, so cross-module identity checks would silently differ).
-- **Risk:** the divergences are the real hazard — a fix applied to one copy won't reach the other.
-- **Action:** extract a single `engine/app/solver/helpers.py`, reconcile the field-alias handling deliberately, and import from both. Covered by existing unit tests.
+### ✅ E2 — Solver helpers de-duplicated into `helpers.py` — RESOLVED 2026-07-01
+- **Was:** `constraints.py` and `objective.py` each carried near-identical `_get`, `_scalar_id`, `_var`, `_team_id` (+ a distinct `_MISSING` sentinel), with **subtle divergences** — the real hazard was a fix landing in only one copy. Key divergence: `objective._get` skipped `None` values (treated as absent) while `constraints._get` returned them; field-name/tuple-index lists also differed (`literal`, `teamId`, `x`, `priority_tier*`).
+- **Fix:** extracted `engine/app/solver/helpers.py` (`MISSING`, `get_field`, `scalar_id`, `assignment_var`, `assignment_team_id`). The `None`-skip divergence is encoded as an explicit `get_field(..., skip_none=...)` param — `constraints.py` delegates with `skip_none=False`, `objective.py` with `skip_none=True` — so **each caller's exact behaviour is preserved**. Field lists and the tuple-index map are the union of both (a strict superset per caller). The shared `MISSING` sentinel also fixes the cross-module identity hazard.
+- **Deliberately NOT merged:** `_normalise_assignments` / `_assignment_from_mapping_item` have **different return contracts** (constraints → `AssignmentVariable` with schedule-slot-key detection; objective → plain `dict`) — kept per-module (documented in `helpers.py`).
+- **Verified:** `make -C engine lint` clean (ruff+mypy+bandit), 138 pytest passed, `smoke-solver.sh` → COMPLETED with the **same score 9051** (behaviour unchanged end-to-end).
 
 ### 🟦 E3 — Two-pass fallback strategy defined but never activated in production
 - **Where:** `skip_rest_day_and_distribution` (`constraints.py:117`), `fallback_used` (`result_builder.py:33`); `main.py:125` passes `fallback_used=False` hardcoded and never sets `skip_rest_day_and_distribution=True` outside tests.
@@ -87,6 +87,6 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 ---
 
 ## Suggested priority
-1. **E2** (divergent duplicate logic, correctness risk) → 2. **E3 / B3** (decisions to confirm + ADRs) → 3. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 4. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7 resolved 2026-07-01.)*
+1. **E3 / B3** (decisions to confirm + ADRs) → 2. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 3. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7, E2 resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.
