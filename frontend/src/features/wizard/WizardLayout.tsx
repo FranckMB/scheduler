@@ -7,7 +7,7 @@ import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
 import { CoachesStep } from "./steps/CoachesStep";
 import { ConstraintsStep } from "./steps/ConstraintsStep";
-import { PlaceholderStep } from "./steps/PlaceholderStep";
+import { RecapStep } from "./steps/RecapStep";
 import { TeamsStep } from "./steps/TeamsStep";
 import { VenuesStep } from "./steps/VenuesStep";
 import { useWizardStore } from "./store";
@@ -23,7 +23,7 @@ function StepContent({ stepId }: { stepId: WizardStepId }) {
     case "constraints":
       return <ConstraintsStep />;
     case "recap":
-      return <PlaceholderStep title="Récapitulatif" />;
+      return <RecapStep />;
   }
 }
 

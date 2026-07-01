@@ -189,3 +189,22 @@ export function useDeleteConstraint() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
   });
 }
+
+// --- Recap + generate (W5) ---
+
+export function useConstraintValidation(enabled: boolean) {
+  return useQuery({ queryKey: ["wizard", "constraint_validation"], queryFn: wizardApi.validateConstraints, enabled, staleTime: 0 });
+}
+
+/** Create a fresh schedule then queue its generation; resolves to the schedule id. */
+export function useLaunchGeneration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const schedule = await wizardApi.createSchedule(name);
+      await wizardApi.generateSchedule(schedule.id);
+      return schedule.id;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
+}

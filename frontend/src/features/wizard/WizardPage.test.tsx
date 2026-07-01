@@ -35,6 +35,9 @@ vi.mock("./api", () => ({
   listConstraints: vi.fn(() => Promise.resolve([])),
   createConstraint: vi.fn(() => Promise.resolve({})),
   deleteConstraint: vi.fn(() => Promise.resolve()),
+  validateConstraints: vi.fn(() => Promise.resolve({ valid: true, errors: {}, conflicts: [] })),
+  createSchedule: vi.fn(() => Promise.resolve({ id: "s1" })),
+  generateSchedule: vi.fn(() => Promise.resolve({})),
 }));
 
 beforeEach(() => {

@@ -1,3 +1,5 @@
+import { HTTPError } from "ky";
+
 import { api } from "@/shared/api/client";
 import { collection, collectionAll } from "@/shared/api/collection";
 
@@ -166,3 +168,26 @@ export interface ConstraintPayload {
 export const listConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");
 export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
 export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
+
+// --- Recap + generate (W5) ---
+
+export interface ValidateResult {
+  valid: boolean;
+  errors: Record<string, string[]>;
+  conflicts: { constraint1Id: string; constraint2Id: string; reason: string }[];
+}
+
+/** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). */
+export async function validateConstraints(): Promise<ValidateResult> {
+  try {
+    return await api.post("constraints/validate").json<ValidateResult>();
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      return (await error.response.json()) as ValidateResult;
+    }
+    throw error;
+  }
+}
+
+export const createSchedule = (name: string): Promise<{ id: string }> => api.post("schedules", { json: { name, status: "DRAFT" } }).json();
+export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
