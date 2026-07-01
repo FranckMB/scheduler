@@ -20,7 +20,10 @@ export const api = ky.create({
     ],
     afterResponse: [
       (state) => {
-        if (state.response.status === 401) {
+        // 401 on the login endpoint is a normal "bad credentials" — let the caller
+        // handle it. Only treat 401 elsewhere as a stale/expired session.
+        const isLogin = state.request.url.includes("/api/login");
+        if (state.response.status === 401 && !isLogin) {
           useAuthStore.getState().clear();
           if (typeof window !== "undefined") {
             window.location.assign("/login");
