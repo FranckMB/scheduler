@@ -48,16 +48,16 @@ jobs:
         run: docker compose exec -T php-fpm composer install --no-interaction
 
       - name: TenantIsolationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/Security/TenantIsolationTest.php --group phase1'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
 
       - name: TenantCacheIsolationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/Security/TenantCacheIsolationTest.php --group phase1'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantCacheIsolationTest.php --group phase1'
 
       - name: ConcurrentGenerationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/Queue/ConcurrentGenerationTest.php --group phase1'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Queue/ConcurrentGenerationTest.php --group phase1'
 
       - name: ContractSchemaTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/CrossStack/ContractSchemaTest.php --group phase1'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ContractSchemaTest.php --group phase1'
 
   unit-tests:
     name: Unit Tests
@@ -73,7 +73,7 @@ jobs:
         run: docker compose exec -T php-fpm composer install --no-interaction
 
       - name: Run unit tests
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/'
 
   functional-tests:
     name: Functional Tests
@@ -89,7 +89,7 @@ jobs:
         run: docker compose exec -T php-fpm composer install --no-interaction
 
       - name: Run functional tests
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/.phpunit/phpunit-9.6-0/phpunit tests/ --filter Functional'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/ --filter Functional'
 
   engine-tests:
     name: Engine Tests

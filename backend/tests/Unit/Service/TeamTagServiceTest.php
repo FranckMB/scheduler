@@ -183,14 +183,15 @@ final class TeamTagServiceTest extends TestCase
 
         $this->service->syncTeamTags($team, 'season-1');
 
-        // All 20 required system tags should be created
-        self::assertCount(20, $persistedTags);
+        // All 21 required system tags should be created
+        self::assertCount(21, $persistedTags);
 
         $tagNames = array_map(static fn (TeamTag $t): string => $t->getName(), $persistedTags);
         self::assertContains('JEUNE', $tagNames);
         self::assertContains('SENIOR', $tagNames);
         self::assertContains('MASCULINE', $tagNames);
-        self::assertContains('LOISIR', $tagNames);
+        self::assertContains('LOISIR_ADULTE', $tagNames);
+        self::assertContains('LOISIR_JEUNE', $tagNames);
     }
 
     protected function setUp(): void

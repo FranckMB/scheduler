@@ -6,6 +6,6 @@ use Rector\Config\RectorConfig;
 
 return RectorConfig::configure()
     ->withPaths([__DIR__ . '/src'])
-    ->withPhpVersion(80300)
+    ->withPhpVersion(80400)
     ->withPreparedSets(codeQuality: true, typeDeclarations: true)
     ->withComposerBased(symfony: true);

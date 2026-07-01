@@ -76,8 +76,8 @@ All services share the Docker network `clubscheduler_network`.
 ### 2.6 Tooling (verified)
 - **PHPStan** level 8 (`phpstan.neon`, Doctrine+Symfony ext).
 - **CS-Fixer** (`.php-cs-fixer.dist.php`): `@Symfony` risky + `@PHP84Migration` + `@PHP80Migration:risky` + Yoda + strict comparisons + trailing commas.
-- **Rector** (`rector.php`): `withPhpVersion(80300)` — **targets 8.3 while composer requires `>=8.4`** (see `technical-debt.md`).
-- **PHPUnit** via `symfony/phpunit-bridge`: `vendor/bin/.phpunit/phpunit-<ver>/phpunit`. composer requires `^11`, `phpunit.xml.dist` references `phpunit-11.5-0`, **CI hardcodes `phpunit-9.6-0`** (inconsistency — see debt). `make phpunit` adds `--group phase1`.
+- **Rector** (`rector.php`): `withPhpVersion(80400)`, aligned with composer `>=8.4`.
+- **PHPUnit**: direct `vendor/bin/phpunit` (11.5.55, `phpunit/phpunit ^11`) in CI, `Makefile`, and `composer test`; schema `vendor/phpunit/phpunit/phpunit.xsd`. `make phpunit` adds `--group phase1`; the suite needs `make db-init-test` first.
 - `config/services.yaml`: autowire all `App\*` except `DevScheduleReportWriter` (dev-only tool).
 
 ---

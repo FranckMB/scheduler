@@ -43,7 +43,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 ## 5. Conventions (essentials)
 
-- **Backend:** PHPStan level 8 (Doctrine+Symfony ext) · CS-Fixer `@Symfony` + `@PHP84Migration` + risky + Yoda + strict comparisons · Rector targets PHP **8.3** while composer requires **>=8.4** (known mismatch — see debt) · PHPUnit via `symfony/phpunit-bridge` at the non-standard path `vendor/bin/.phpunit/phpunit-<ver>/phpunit`.
+- **Backend:** PHPStan level 8 (Doctrine+Symfony ext) · CS-Fixer `@Symfony` + `@PHP84Migration` + risky + Yoda + strict comparisons · Rector targets PHP **8.4** (aligned with composer `>=8.4`) · PHPUnit runs directly via `vendor/bin/phpunit` (PHPUnit 11, the `phpunit/phpunit` dev-dep) — same binary in CI, `Makefile`, and `composer test`.
 - **Engine:** ruff (line 120, py312, double quotes, LF) · mypy `strict` + `pydantic.mypy` plugin (`ortools.*` ignored) · pytest (`-ra`) + golden fixtures + invariants + hypothesis.
 
 ## 6. Critical mechanisms
@@ -79,7 +79,7 @@ Feature cycle: need → *(I read this file, then enter `/plan` injecting the sco
 ## 10. Gotchas (top)
 
 1. Backend & engine commands fail on the host — they must run inside the containers. Frontend dev is host-only.
-2. PHPUnit path is non-standard and **version-inconsistent**: CI hardcodes `phpunit-9.6-0` while `composer.json` requires `^11` and `phpunit.xml.dist` references `11.5-0` (see `docs/technical-debt.md`). `make phpunit` adds `--group phase1`.
+2. PHPUnit = `vendor/bin/phpunit` (PHPUnit 11) everywhere (CI, `Makefile`, `composer test`). `make phpunit` adds `--group phase1`. The suite needs the test DB — run `make db-init-test` first (CI brings it up via `docker compose up -d --wait`).
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
 4. Frontend is being deleted/rebuilt — excluded from the graph index (`.code-review-graphignore`) and the debt audit.
 

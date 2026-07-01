@@ -8,16 +8,14 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 
 ## Backend
 
-### 🟧 B1 — Rector targets PHP 8.3 while the project requires 8.4
-- **Where:** `backend/rector.php:9` → `->withPhpVersion(80300)` vs `backend/composer.json:7` → `"php": ">=8.4"`.
-- **Proof:** the two declared versions disagree; CS-Fixer already uses `@PHP84Migration`.
-- **Note:** `backend/AGENTS.md` flags this as *intentional* ("do not change without verifying the Rector rule set supports 8.4"). So this is a **decision to confirm**, not a clear bug.
-- **Action:** decide explicitly — bump to `80400` or document why 8.3 is pinned. Candidate ADR (see `architecture/adr-index.md`).
+### ✅ B1 — Rector aligned to PHP 8.4 — RESOLVED 2026-07-01
+- **Was:** `backend/rector.php:9` `->withPhpVersion(80300)` vs `composer.json` `"php": ">=8.4"`.
+- **Fix:** bumped to `->withPhpVersion(80400)`. Dry-run clean (161 files, no unexpected rewrite). The `backend/AGENTS.md` "intentional 8.3" note is now stale — to correct in that file.
 
-### 🟦 B2 — PHPUnit version inconsistency (CI vs composer vs phpunit.xml)
-- **Where:** `composer.json:100` → `"phpunit/phpunit": "^11.0"`; `phpunit.xml.dist:3` → schema `vendor/bin/.phpunit/phpunit-11.5-0/phpunit.xsd`; `.github/workflows/ci.yml` (lines 51, 54, 57, 60, 76, 92) → hardcodes `vendor/bin/.phpunit/phpunit-9.6-0/phpunit`.
-- **Proof:** three sources name two different PHPUnit majors (9.6 vs 11.x). `symfony/phpunit-bridge` installs a version under `vendor/bin/.phpunit/`; if it resolves to 11.5, the CI path `phpunit-9.6-0` will not exist and CI breaks.
-- **Action:** verify which version the bridge actually installs (check `SYMFONY_PHPUNIT_VERSION`), then make CI, `composer.json` and `phpunit.xml.dist` agree. Higher priority than B1 (a mismatch here silently breaks CI on a dependency bump).
+### ✅ B2 — PHPUnit unified on `vendor/bin/phpunit` — RESOLVED 2026-07-01
+- **Was:** three divergent, partly-broken PHPUnit paths — CI hardcoded `vendor/bin/.phpunit/phpunit-9.6-0/phpunit` (bridge absent → **path missing → CI failed before running any test**), `composer test` called the missing `vendor/bin/simple-phpunit`, `phpunit.xml.dist` schema pointed at `phpunit-11.5-0`.
+- **Fix:** all aligned on the direct `vendor/bin/phpunit` (PHPUnit **11.5.55**, the `phpunit/phpunit ^11` dev-dep) — `.github/workflows/ci.yml` (6 lines), `composer.json` `test` script, and `phpunit.xml.dist` schema (`vendor/phpunit/phpunit/phpunit.xsd`). `symfony/phpunit-bridge` intentionally not reintroduced.
+- **Side effect:** the now-functional CI exposed a stale `TeamTagServiceTest` (**fixed** in the same pass) and the deprecation / fixture debt below (B6/B7).
 
 ### 🟦 B3 — `TenantCacheIsolationTest` is a blocking job but skipped
 - **Where:** `backend/tests/Security/TenantCacheIsolationTest.php` (~18 lines) — skipped with "Cache isolation test deferred to Phase 2"; still listed in CI `blocking-tests`.
@@ -34,6 +32,19 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 - **Proof:** intentional dev-only tool; exclusion is by design. **Keep.**
 
 > No dead controllers (all 7 are routed), no orphan entities/services, no `TODO/FIXME/HACK` in `backend/src/`.
+
+### 🟦 B6 — 9 PHPUnit 11 deprecations in the test suite
+- **Where:** whole backend suite. `php vendor/bin/phpunit tests/ --group phase1` reports `PHPUnit Deprecations: 9` (and the full suite reports 9 too).
+- **Proof:** counter emitted by PHPUnit 11.5.55. Detail block is suppressed by the current `phpunit.xml.dist` (no `displayDetailsOnTestsThatTriggerDeprecations`); run `php vendor/bin/phpunit tests/ --display-deprecations` in the `php-fpm` container to enumerate. Typical PHPUnit 11 deprecations: doc-comment metadata instead of `#[Attributes]`, deprecated assertions.
+- **Context:** surfaced only after B2 repaired the CI PHPUnit path — the previously-broken `phpunit-9.6-0` binary never ran, so these were invisible.
+- **Action:** enable deprecation detail, migrate the flagged test code to PHPUnit 11 attributes/APIs. Own plan (engine-cleanup-analogue for backend tests). Low priority — non-blocking.
+
+### 🟦 B7 — Fixture references removed system tag `LOISIR`
+- **Where:** `backend/src/DataFixtures/BasketballInit.php:963` → `'targetTag' => 'LOISIR'`. Plain `LOISIR` no longer exists in the system tags (split into `LOISIR_ADULTE` / `LOISIR_JEUNE` by commit `fee099e`).
+- **Proof:** `ScheduleConstraintBuilder::resolveTagToTeamIds` (`src/Service/ScheduleConstraintBuilder.php:524–528`) looks up the tag by name; unknown → logs `Tag 'LOISIR' not found … constraint will be ignored` and **silently drops that CLUB constraint** in the seeded demo data.
+- **Action:** point the fixture at a real tag (`LOISIR_ADULTE` and/or `LOISIR_JEUNE`) or remove the constraint. Demo-data only, no prod impact. Own plan.
+
+> Backend findings B6/B7 were discovered on 2026-07-01 while resolving B2 (CI repair exposing the real test state). The stale `TeamTagServiceTest` (expected 20 tags, wrong `LOISIR` assertion) found at the same time was **fixed** in that pass, not left as debt.
 
 ---
 
@@ -75,6 +86,6 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 ---
 
 ## Suggested priority
-1. **B2** (CI breakage risk) → 2. **E2** (divergent duplicate logic, correctness risk) → 3. **B1 / E3 / B3** (decisions to confirm + ADRs) → 4. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes).
+1. **E2** (divergent duplicate logic, correctness risk) → 2. **E3 / B3** (decisions to confirm + ADRs) → 3. **E1 / E4 / E5 / E6 / B4 / B7** (cleanups & doc/fixture fixes) → 4. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2 resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.
