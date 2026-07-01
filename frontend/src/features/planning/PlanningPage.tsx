@@ -1,5 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { CalendarX2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
@@ -8,10 +9,12 @@ import type { Diagnostic } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoaches, useDiagnostics, useSchedules, useSlots, useTeams, useVenues } from "./queries";
+import { useCategories, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeams, useVenues } from "./queries";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
+
+const IN_FLIGHT = ["PENDING", "GENERATING"];
 
 /** Latest COMPLETED schedule, else the most recent one, else null. */
 function pickDefaultSchedule(schedules: { id: string; status: string; createdAt: string }[]): string | null {
@@ -55,6 +58,28 @@ export function PlanningPage() {
   const { data: venues = [] } = useVenues();
   const { data: coaches = [] } = useCoaches();
   const { data: categories = [] } = useCategories();
+
+  const queryClient = useQueryClient();
+  const lockMutation = useLockSlot();
+  const moveMutation = useMoveSlot();
+  const generateMutation = useGenerate();
+
+  const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
+  const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
+  const busy = lockMutation.isPending || moveMutation.isPending;
+
+  // When a running generation finishes, pull the fresh slots + diagnostics.
+  const prevStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = selectedSchedule?.status ?? null;
+    if (null !== prevStatus.current && IN_FLIGHT.includes(prevStatus.current) && null !== status && !IN_FLIGHT.includes(status)) {
+      void queryClient.invalidateQueries({ queryKey: ["slots", validScheduleId] });
+      void queryClient.invalidateQueries({ queryKey: ["diagnostics", validScheduleId] });
+    }
+    prevStatus.current = status;
+  }, [selectedSchedule?.status, validScheduleId, queryClient]);
+
+  const selectedSlot = slots.find((s) => s.id === selectedSlotId) ?? null;
 
   const lookups: Lookups = useMemo(
     () => ({
@@ -114,16 +139,35 @@ export function PlanningPage() {
             onSelectSchedule={setSelectedScheduleId}
             viewMode={viewMode}
             onViewMode={setViewMode}
+            isGenerating={isGenerating}
+            onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
           />
 
           {0 === slots.length ? (
             <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-              <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
+              <div className="relative">
+                {isGenerating ? (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
+                    Génération en cours…
+                  </div>
+                ) : null}
+                <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
+              </div>
               <div className="flex flex-col gap-4">
-                {null !== selectedCell ? (
-                  <SlotDetail cell={selectedCell} categoryLabel={categoryLabel} onClose={() => setSelectedSlotId(null)} />
+                {null !== selectedCell && null !== selectedSlot ? (
+                  <SlotDetail
+                    key={selectedSlot.id}
+                    cell={selectedCell}
+                    slot={selectedSlot}
+                    venues={venues}
+                    categoryLabel={categoryLabel}
+                    busy={busy}
+                    onClose={() => setSelectedSlotId(null)}
+                    onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
+                    onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
+                  />
                 ) : null}
                 <DiagnosticsPanel diagnostics={diagnostics} selectedId={selectedDiagnosticId} onSelect={onSelectDiagnostic} />
               </div>

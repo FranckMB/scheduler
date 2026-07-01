@@ -1,3 +1,5 @@
+import { RefreshCw } from "lucide-react";
+
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
@@ -16,9 +18,11 @@ interface PlanningToolbarProps {
   onSelectSchedule: (id: string) => void;
   viewMode: ViewMode;
   onViewMode: (mode: ViewMode) => void;
+  onRegenerate: () => void;
+  isGenerating: boolean;
 }
 
-export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedule, viewMode, onViewMode }: PlanningToolbarProps) {
+export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedule, viewMode, onViewMode, onRegenerate, isGenerating }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
 
   return (
@@ -44,18 +48,24 @@ export function PlanningToolbar({ schedules, selectedScheduleId, onSelectSchedul
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
-        {VIEWS.map((view) => (
-          <Button
-            key={view.key}
-            size="sm"
-            variant={view.key === viewMode ? "default" : "ghost"}
-            className={cn("h-7", view.key === viewMode ? "" : "text-muted-foreground")}
-            onClick={() => onViewMode(view.key)}
-          >
-            {view.label}
-          </Button>
-        ))}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+          {VIEWS.map((view) => (
+            <Button
+              key={view.key}
+              size="sm"
+              variant={view.key === viewMode ? "default" : "ghost"}
+              className={cn("h-7", view.key === viewMode ? "" : "text-muted-foreground")}
+              onClick={() => onViewMode(view.key)}
+            >
+              {view.label}
+            </Button>
+          ))}
+        </div>
+        <Button size="sm" variant="outline" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
+          <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
+          {isGenerating ? "Génération…" : "Régénérer"}
+        </Button>
       </div>
     </div>
   );

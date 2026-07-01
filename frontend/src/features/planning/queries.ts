@@ -1,10 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { LockLevel, Schedule, SlotMovePatch } from "./api";
 import * as planningApi from "./api";
 
-/** List of the club's schedules (all seasons; the active season is the only one today). */
+const IN_FLIGHT: Schedule["status"][] = ["PENDING", "GENERATING"];
+
+/**
+ * List of the club's schedules. While any schedule is mid-generation, poll so the
+ * grid reflects PENDING → GENERATING → COMPLETED without a Mercure subscriber.
+ */
 export function useSchedules() {
-  return useQuery({ queryKey: ["schedules"], queryFn: planningApi.listSchedules, staleTime: 30_000 });
+  return useQuery({
+    queryKey: ["schedules"],
+    queryFn: planningApi.listSchedules,
+    staleTime: 30_000,
+    refetchInterval: (query) => ((query.state.data ?? []).some((s) => IN_FLIGHT.includes(s.status)) ? 2500 : false),
+  });
 }
 
 export function useSlots(scheduleId: string | null) {
@@ -40,4 +51,31 @@ export function useCoaches() {
 
 export function useCategories() {
   return useQuery({ queryKey: ["categories"], queryFn: planningApi.getCategories, staleTime: 300_000 });
+}
+
+// --- 2b: adjust + regenerate loop ---------------------------------------------
+
+export function useLockSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, lockLevel }: { id: string; lockLevel: LockLevel }) => planningApi.lockSlot(id, lockLevel),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+  });
+}
+
+export function useMoveSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+  });
+}
+
+export function useGenerate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (scheduleId: string) => planningApi.generateSchedule(scheduleId),
+    // The controller flips the schedule to PENDING synchronously; refetch starts the poll.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
 }

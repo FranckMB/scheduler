@@ -77,6 +77,23 @@ export interface Category {
   name: string;
 }
 
+export interface SlotMovePatch {
+  dayOfWeek?: number;
+  startTime?: string;
+  venueId?: string;
+}
+
+/** Lock (HARD) or unlock (NONE) a placed slot so the next solve keeps/frees it. */
+export const lockSlot = (id: string, lockLevel: LockLevel): Promise<unknown> =>
+  api.post(`schedule-slots/${id}/manual-edit/lock`, { json: { lockLevel } }).json();
+
+/** Move a slot in place (day / time / venue) via the one-time edit endpoint. */
+export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
+  api.post(`schedule-slots/${id}/manual-edit/one-time`, { json: patch }).json();
+
+/** Queue a (re)generation of the schedule (202). Locked slots survive; the rest reshuffles. */
+export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
+
 export const listSchedules = (): Promise<Schedule[]> => collection<Schedule>("schedules");
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });

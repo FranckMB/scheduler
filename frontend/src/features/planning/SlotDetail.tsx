@@ -1,13 +1,21 @@
-import { Lock, X } from "lucide-react";
+import { Lock, LockOpen, X } from "lucide-react";
+import { useState } from "react";
 
+import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
+import type { Slot, SlotMovePatch, Venue } from "./api";
 import { DAYS, type GridCell } from "./lib/grid";
 
 interface SlotDetailProps {
   cell: GridCell;
+  slot: Slot;
+  venues: Venue[];
   categoryLabel: string;
+  busy: boolean;
   onClose: () => void;
+  onToggleLock: () => void;
+  onMove: (patch: SlotMovePatch) => void;
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -19,8 +27,12 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SlotDetail({ cell, categoryLabel, onClose }: SlotDetailProps) {
-  const dayLabel = DAYS.find((d) => d.n === cell.day)?.label ?? "—";
+export function SlotDetail({ cell, slot, venues, categoryLabel, busy, onClose, onToggleLock, onMove }: SlotDetailProps) {
+  const [day, setDay] = useState(slot.dayOfWeek);
+  const [time, setTime] = useState(slot.startTime.slice(0, 5));
+  const [venueId, setVenueId] = useState(slot.venueId);
+
+  const dirty = day !== slot.dayOfWeek || time !== slot.startTime.slice(0, 5) || venueId !== slot.venueId;
 
   return (
     <Card>
@@ -35,11 +47,38 @@ export function SlotDetail({ cell, categoryLabel, onClose }: SlotDetailProps) {
       </CardHeader>
       <CardContent className="pt-0">
         <Row label="Catégorie" value={categoryLabel} />
-        <Row label="Gymnase" value={cell.venueLabel} />
         <Row label="Coach" value={cell.coachLabel} />
-        <Row label="Jour" value={dayLabel} />
-        <Row label="Horaire" value={`${cell.startLabel} – ${cell.endLabel}`} />
-        <Row label="Verrou" value={cell.locked ? "Verrouillé" : "Libre"} />
+        <Row label="Durée" value={`${slot.durationMinutes} min`} />
+
+        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+          <div className="grid grid-cols-3 gap-2">
+            <select aria-label="Jour" value={day} onChange={(e) => setDay(Number(e.target.value))} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+              {DAYS.map((d) => (
+                <option key={d.n} value={d.n}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+            <input aria-label="Heure" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+            <select aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+              {venues.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="flex-1" disabled={!dirty || busy} onClick={() => onMove({ dayOfWeek: day, startTime: time, venueId })}>
+              Déplacer
+            </Button>
+            <Button size="sm" variant={cell.locked ? "default" : "outline"} className="flex-1" disabled={busy} onClick={onToggleLock}>
+              {cell.locked ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+              {cell.locked ? "Déverrouiller" : "Verrouiller"}
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
