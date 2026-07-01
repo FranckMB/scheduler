@@ -17,10 +17,10 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 - **Fix:** all aligned on the direct `vendor/bin/phpunit` (PHPUnit **11.5.55**, the `phpunit/phpunit ^11` dev-dep) — `.github/workflows/ci.yml` (6 lines), `composer.json` `test` script, and `phpunit.xml.dist` schema (`vendor/phpunit/phpunit/phpunit.xsd`). `symfony/phpunit-bridge` intentionally not reintroduced.
 - **Side effect:** the now-functional CI exposed a stale `TeamTagServiceTest` (**fixed** in the same pass) and the deprecation / fixture debt below (B6/B7).
 
-### 🟦 B3 — `TenantCacheIsolationTest` is a blocking job but skipped
-- **Where:** `backend/tests/Security/TenantCacheIsolationTest.php` (~18 lines) — skipped with "Cache isolation test deferred to Phase 2"; still listed in CI `blocking-tests`.
-- **Proof:** the test body skips; CI runs it as a gate.
-- **Action:** implement the cache-isolation assertions (the `cache.tenant` pool exists) or remove it from `blocking-tests` so the gate reflects real coverage. Document the chosen path.
+### ✅ B3 — `TenantCacheIsolationTest` implemented — RESOLVED 2026-07-01
+- **Was:** the blocking `phase1` test body just `markTestSkipped('… deferred to Phase 2')` — a no-op gate giving false coverage on tenant cache isolation.
+- **Fix:** implemented two real unit tests against `CacheInvalidationListener` with `ArrayAdapter` pools: (1) modifying a club A entity purges only club A's `club.{id}.{schedule_input,tenant_data,schedule_snapshot}` keys in both the tenant and schedule pools while club B's keys survive (cross-tenant isolation); (2) an entity with no resolvable club id purges nothing. No `src/` change.
+- **Verified:** 2 tests / 13 assertions green, CS-Fixer + PHPStan (level 8) clean.
 
 ### 🟦 B4 — Duplicate Mercure publish logic across handlers (low)
 - **Where:** `GenerateScheduleHandler::publishProgress` (~lines 362–376) and `ExportPdfHandler::publishProgress` (~lines 59–71).
@@ -62,7 +62,10 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 - **Deliberately NOT merged:** `_normalise_assignments` / `_assignment_from_mapping_item` have **different return contracts** (constraints → `AssignmentVariable` with schedule-slot-key detection; objective → plain `dict`) — kept per-module (documented in `helpers.py`).
 - **Verified:** `make -C engine lint` clean (ruff+mypy+bandit), 138 pytest passed, `smoke-solver.sh` → COMPLETED with the **same score 9051** (behaviour unchanged end-to-end).
 
-### 🟦 E3 — Two-pass fallback strategy defined but never activated in production
+### ✅ E3 — Two-pass fallback: single-pass decision formalized — RESOLVED 2026-07-01 (see ADR-0001)
+_The dormant two-pass fallback is an intentional, documented single-pass design; captured in [`architecture/adr-0001-single-pass-solve.md`](architecture/adr-0001-single-pass-solve.md) + a code pointer in `app/main.py`. The `skip_rest_day_and_distribution` / `fallback_used` parameters are kept as a tested opt-in extension point. Original finding below._
+
+### 🟦 E3 (original) — Two-pass fallback strategy defined but never activated in production
 - **Where:** `skip_rest_day_and_distribution` (`constraints.py:117`), `fallback_used` (`result_builder.py:33`); `main.py:125` passes `fallback_used=False` hardcoded and never sets `skip_rest_day_and_distribution=True` outside tests.
 - **Proof:** only `tests/` exercise the fallback path; production solve always runs pass 1.
 - **Action:** document *why* the fallback is dormant (intentional?) in a code comment, or wire it into the solve path. Decide — don't leave it ambiguous. Candidate ADR.
@@ -87,6 +90,6 @@ Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (list
 ---
 
 ## Suggested priority
-1. **E3 / B3** (decisions to confirm + ADRs) → 2. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 3. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7, E2 resolved 2026-07-01.)*
+1. **E1 / E4 / E5 / E6 / B4** (cleanups & doc fixes) → 2. **B6** (PHPUnit 11 deprecations, non-blocking). *(B1, B2, B7, E2, E3, B3 resolved 2026-07-01.)*
 
 All actions above require an explicit, scoped plan before any change — none are pre-approved.

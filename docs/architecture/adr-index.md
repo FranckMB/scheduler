@@ -20,7 +20,7 @@ This repo has **no formal ADRs yet**. This index is the entry point; add one num
 ## Index
 | ADR | Title | Status |
 |-----|-------|--------|
-| — | (none yet) | — |
+| [ADR-0001](adr-0001-single-pass-solve.md) | Single-pass solve, no silent fallback | accepted |
 
 ## Candidate decisions to formalize
 These are existing, load-bearing decisions found during onboarding that are currently implicit. Promote to ADRs when touched (do not invent rationale retroactively without confirming intent):
@@ -29,7 +29,7 @@ These are existing, load-bearing decisions found during onboarding that are curr
 2. **Backend↔engine contract is hand-synced (no codegen)**, versioned via `engine/CONTRACT_VERSION`, guarded by `ContractSchemaTest`. Why no codegen?
 3. **Async generation via Symfony Messenger + Redis + per-club lock**, progress over Mercure (`club:{id}:schedule:{id}`). Why this topology over synchronous generation.
 4. **Solver timeout default 650 s, payload-driven** (`solver_timeout_seconds`). Rationale + the relationship to `pytest-timeout` test limits.
-5. **Two-pass solver fallback is dormant in production** (`technical-debt.md` E3). Decision pending: intentional or to be wired in.
-6. **Rector pinned to PHP 8.3 while the project targets 8.4** (`technical-debt.md` B1). Confirm or change.
 
-See [`../technical-debt.md`](../technical-debt.md) for the evidence behind items 4–6.
+*Formalized / resolved:* the two-pass fallback decision → [ADR-0001](adr-0001-single-pass-solve.md); the Rector 8.3-vs-8.4 mismatch was fixed in code (Rector now targets 8.4), not via ADR — see `technical-debt.md` B1.
+
+See [`../technical-debt.md`](../technical-debt.md) for the evidence behind item 4.

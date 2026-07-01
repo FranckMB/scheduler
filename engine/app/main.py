@@ -119,6 +119,7 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # Single pass with all HARD constraints (including coach rest day + salarie
     # distribution).  If the solver returns INFEASIBLE, build_result produces
     # status="failed" with conflict diagnostics — no silent constraint dropping.
+    # Decision: docs/architecture/adr-0001-single-pass-solve.md
     solver_status, solver, model, conflicts = _solve(data, input_data)
 
     result_dict = build_result(
