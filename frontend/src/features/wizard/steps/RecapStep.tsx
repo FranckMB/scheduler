@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight, Rocket } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +37,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
 
 export function RecapStep() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: teams = [] } = useWizardTeams();
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
@@ -74,10 +76,11 @@ export function RecapStep() {
   const canGenerate = 0 === blockers.length && !launch.isPending;
 
   const generate = async () => {
-    const id = await launch.mutateAsync(`Planning ${new Date().toLocaleDateString("fr-FR")}`);
-    if (id) {
-      navigate("/");
-    }
+    await launch.mutateAsync(`Planning ${new Date().toLocaleDateString("fr-FR")}`);
+    // Onboarding just completed server-side — refetch /me so the guard lets us
+    // leave the wizard, then land on the work loop where the plan is generating.
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
+    navigate("/");
   };
 
   return (
