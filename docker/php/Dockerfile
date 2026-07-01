@@ -4,6 +4,7 @@ ARG UID=1000
 ARG GID=1000
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_HOME=/tmp/composer \
     PATH="/root/.composer/vendor/bin:${PATH}"
 
 WORKDIR /app
@@ -17,10 +18,15 @@ RUN apt-get update \
         libpq-dev \
         libonig-dev \
         libxml2-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libfreetype6-dev \
         pkg-config \
     && docker-php-ext-configure intl \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         bcmath \
+        gd \
         intl \
         opcache \
         pcntl \

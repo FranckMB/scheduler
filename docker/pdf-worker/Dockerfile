@@ -1,10 +1,15 @@
 FROM ghcr.io/puppeteer/puppeteer:latest
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 ENV NODE_ENV=development \
-    PUPPETEER_SKIP_DOWNLOAD=true
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    NODE_PATH=/app/frontend/node_modules
 
-EXPOSE 3000
+COPY frontend/package*.json ./
 
-CMD ["node", "-e", "console.log('pdf-worker ready'); setInterval(() => {}, 1000);"]
+RUN npm ci
+
+COPY frontend ./
+
+CMD ["node", "worker.js"]

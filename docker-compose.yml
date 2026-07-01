@@ -184,16 +184,14 @@ services:
     working_dir: /app/frontend
     volumes:
       - ./:/app:cached
+      - pdf_worker_node_modules:/app/frontend/node_modules
     environment:
-      NODE_PATH: /home/pptruser/node_modules
-    command: >-
-      sh -lc 'if [ -f worker.js ]; then
-        exec node worker.js;
-      else
-        exec sleep infinity;
-      fi'
+      NODE_ENV: development
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      NODE_PATH: /app/frontend/node_modules
+    command: [ "node", "worker.js" ]
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -fa 'node worker.js|sleep infinity' >/dev/null"]
+      test: [ "CMD-SHELL", "pgrep -fa 'node worker.js' >/dev/null" ]
       interval: 20s
       timeout: 5s
       retries: 5
@@ -244,3 +242,4 @@ networks:
 
 volumes:
   postgres_data:
+  pdf_worker_node_modules:
