@@ -247,6 +247,14 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || resourceKeysForSlot(s, viewMode, lookups).some((k) => filter.has(k))),
   );
 
+  // When a filter is active, a slot shows ONLY under the selected columns — not
+  // under every coach it concerns. Looking at Mara, SF2 stays under Mara and does
+  // not drag in the other coach-players of SF2.
+  const keysFor = (slot: Slot): string[] => {
+    const keys = resourceKeysForSlot(slot, viewMode, lookups);
+    return filter.size > 0 ? keys.filter((k) => filter.has(k)) : keys;
+  };
+
   const bounds = computeTimeBounds(visible);
 
   const columns: GridColumn[] = [];
@@ -258,7 +266,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     if (0 === daySlots.length) {
       continue; // hide days with no slot
     }
-    const idSet = new Set(daySlots.flatMap((s) => resourceKeysForSlot(s, viewMode, lookups)));
+    const idSet = new Set(daySlots.flatMap((s) => keysFor(s)));
     const resourceIds = [...idSet]
       .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
@@ -288,7 +296,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     const mainCoachId = slotCoachId(slot, lookups);
     const coachLabel = coachName(lookups.coaches, mainCoachId);
 
-    for (const key of resourceKeysForSlot(slot, viewMode, lookups)) {
+    for (const key of keysFor(slot)) {
       const idx = columnIndex.get(`${slot.dayOfWeek}:${key}`);
       if (undefined === idx) {
         continue;

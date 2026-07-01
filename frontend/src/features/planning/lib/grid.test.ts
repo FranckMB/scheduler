@@ -134,6 +134,21 @@ describe("buildGrid", () => {
     expect(model.cells).toHaveLength(0);
   });
 
+  it("coach filter shows the slot only under the selected coach (no co-player columns)", () => {
+    // Slot's team is coached by c9 and has player-coaches p1, p2 → 3 possible columns.
+    const withCoaches = {
+      ...lookups,
+      teamCoach: new Map([["t1", "c9"]]),
+      teamPlayerCoaches: new Map([["t1", ["p1", "p2"]]]),
+    };
+    const s = slot({ id: "sf2", coachId: null, teamId: "t1", dayOfWeek: 1 });
+    expect(buildGrid([s], "coach", withCoaches).columns).toHaveLength(3);
+    // Focused on c9: only c9's column, one cell.
+    const focused = buildGrid([s], "coach", withCoaches, new Set(["c9"]));
+    expect(focused.columns.map((c) => c.resourceId)).toEqual(["c9"]);
+    expect(focused.cells).toHaveLength(1);
+  });
+
   it("flags locked slots", () => {
     const model = buildGrid([slot({ id: "l", lockLevel: "HARD" })], "gymnase", lookups);
     expect(model.cells[0].locked).toBe(true);

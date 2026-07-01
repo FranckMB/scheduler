@@ -74,6 +74,29 @@ async function clickByText(page, text) {
   await page.screenshot({ path: `${OUT}/planning-coach.png` });
   console.log("shot coach");
 
+  // Focus the coach view on a single coach (checks no co-player columns leak in).
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find((b) => /Coachs\s*:/.test(b.textContent));
+    if (el) el.click();
+  });
+  await sleep(300);
+  await page.type('input[placeholder="Rechercher…"]', "Mara").catch(() => {});
+  await sleep(300);
+  await page.evaluate(() => {
+    const opt = [...document.querySelectorAll("button")].find((b) => "Mara" === b.textContent.trim());
+    if (opt) opt.click();
+  });
+  await sleep(200);
+  await page.evaluate(() => {
+    const bd = document.querySelector(".fixed.inset-0");
+    if (bd) bd.click();
+  });
+  await sleep(300);
+  await page.screenshot({ path: `${OUT}/planning-coach-focus.png` });
+  console.log("shot coach-focus");
+  await clickByText(page, "Par coach"); // reset filter (view switch clears it)
+  await sleep(300);
+
   await clickByText(page, "Par équipe");
   await sleep(600);
   await page.screenshot({ path: `${OUT}/planning-equipe.png` });
