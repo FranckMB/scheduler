@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
@@ -15,6 +15,7 @@ import { useAuthStore } from "@/shared/stores/authStore";
 export function AuthGuard() {
   const token = useAuthStore((state) => state.token);
   const { data, isLoading, isError } = useMe();
+  const location = useLocation();
 
   if (null === token) {
     return <Navigate to="/login" replace />;
@@ -27,6 +28,10 @@ export function AuthGuard() {
   }
   if (data.membershipStatus !== "active") {
     return <Navigate to="/waiting" replace />;
+  }
+  // First-time club: guide through the wizard until the first generation.
+  if (data.club && !data.club.onboardingCompleted && location.pathname !== "/wizard") {
+    return <Navigate to="/wizard" replace />;
   }
 
   return <Outlet />;

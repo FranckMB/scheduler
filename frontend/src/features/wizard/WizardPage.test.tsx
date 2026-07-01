@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+vi.mock("@/features/auth/queries", () => ({
+  useMe: () => ({ data: { club: { id: "c", name: "C", onboardingCompleted: true } } }),
+}));
+
 import * as api from "./api";
 import { useWizardStore } from "./store";
 import { WizardPage } from "./WizardLayout";
