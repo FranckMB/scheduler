@@ -60,6 +60,8 @@ All custom agents/skills are **manual / user-triggered**. No hidden automation, 
 
 Feature cycle: need → *(I read this file, then enter `/plan` injecting the scope checklist §9)* → optional `contrarian-review` agent on the plan → you validate → I implement **strictly in scope** (no opportunistic refactor) → change summary → optional `validation-runner` → optional `documentation-update` → optional `/code-review` (+ `/security-review` if the change touches auth/data/external integrations).
 
+**Engine/backend changes — mandatory final verification:** the solver smoke-test `backend/scripts/smoke-solver.sh` drives create→generate→poll and asserts a schedule reaches `COMPLETED` (diagnostics/warnings acceptable — the point is the CP-SAT solver responded and produced a plan). It runs inside `validation-runner`. `generate-schedule-test.sh` is a *mock* (fake `curl`) and does **not** count.
+
 **Before every `/plan`** I read this file myself and inject the boundaries (§2), conventions (§5) and the scope checklist (§9) into the plan prompt — the built-in `Plan`/`Explore` subagents do **not** read `CLAUDE.md`.
 
 ## 8. Documentation rules
@@ -74,7 +76,8 @@ Feature cycle: need → *(I read this file, then enter `/plan` injecting the sco
 - fichiers probablement modifiés et fichiers de tests probablement modifiés ;
 - documentation à mettre à jour si le plan est exécuté ;
 - conditions qui exigeraient de revenir demander une validation (changement de zone, dépendance inter-zone non prévue) ;
-- confirmation explicite qu'aucun refactoring hors scope n'est prévu.
+- confirmation explicite qu'aucun refactoring hors scope n'est prévu ;
+- si la zone touche **engine ou backend**, la section vérification inclut le **smoke-test solveur** (`backend/scripts/smoke-solver.sh`, planning attendu en `COMPLETED`).
 
 ## 10. Gotchas (top)
 
