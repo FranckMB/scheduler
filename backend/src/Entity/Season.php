@@ -46,6 +46,10 @@ class Season
     #[ORM\Column(type: 'string', length: 2048, nullable: true)]
     private ?string $exportPdfUrl = null;
 
+    /** The season's chosen/baseline schedule (the "main" plan). First COMPLETED wins, re-designable. */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $baselineScheduleId = null;
+
     /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
     private array $transitionData = [];
@@ -173,6 +177,18 @@ class Season
     public function setExportPdfUrl(?string $exportPdfUrl): self
     {
         $this->exportPdfUrl = $exportPdfUrl;
+
+        return $this;
+    }
+
+    public function getBaselineScheduleId(): ?string
+    {
+        return $this->baselineScheduleId;
+    }
+
+    public function setBaselineScheduleId(?string $baselineScheduleId): self
+    {
+        $this->baselineScheduleId = $baselineScheduleId;
 
         return $this;
     }
