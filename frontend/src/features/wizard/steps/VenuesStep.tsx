@@ -1,14 +1,66 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 
-import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import type { VenueTrainingSlot } from "../api";
+import { DAYS, hhmm } from "../lib/days";
+import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
 const DURATIONS = [60, 75, 90, 105, 120];
+const WEEK = DAYS.filter((d) => d.n <= 6);
+
+function SlotEditor({ slot, onClose }: { slot: VenueTrainingSlot; onClose: () => void }) {
+  const update = useUpdateSlot();
+  const del = useDeleteSlot();
+  const [day, setDay] = useState(slot.dayOfWeek);
+  const [time, setTime] = useState(hhmm(slot.startTime));
+  const [duration, setDuration] = useState(slot.durationMinutes);
+  const [capacity, setCapacity] = useState(slot.capacity);
+
+  const save = () => {
+    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity } });
+    onClose();
+  };
+
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-accent/40 bg-card p-3">
+      <span className="text-xs font-medium">Modifier le créneau</span>
+      <Select aria-label="Jour" className="h-8 w-24" value={day} onChange={(e) => setDay(Number(e.target.value))}>
+        {WEEK.map((d) => (
+          <option key={d.n} value={d.n}>
+            {d.label}
+          </option>
+        ))}
+      </Select>
+      <Input aria-label="Début" type="time" className="h-8 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
+      <Select aria-label="Durée" className="h-8 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+        {DURATIONS.map((d) => (
+          <option key={d} value={d}>
+            {d} min
+          </option>
+        ))}
+      </Select>
+      <Select aria-label="Capacité" className="h-8 w-20" value={capacity} onChange={(e) => setCapacity(Number(e.target.value))}>
+        <option value={1}>cap 1</option>
+        <option value={2}>cap 2</option>
+      </Select>
+      <Button size="sm" onClick={save} disabled={update.isPending}>
+        Enregistrer
+      </Button>
+      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => (del.mutate(slot.id), onClose())}>
+        <Trash2 className="size-4" />
+        Supprimer
+      </Button>
+      <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" onClick={onClose}>
+        <X className="size-4" />
+      </Button>
+    </div>
+  );
+}
 
 export function VenuesStep() {
   const { data: venues = [] } = useWizardVenues();
@@ -17,13 +69,13 @@ export function VenuesStep() {
   const update = useUpdateVenue();
   const delVenue = useDeleteVenue();
   const addSlot = useCreateSlot();
-  const delSlot = useDeleteSlot();
 
   const [name, setName] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [capacity, setCapacity] = useState(1);
   const [venueName, setVenueName] = useState("");
+  const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
 
   const selected = venues.find((v) => v.id === (selectedId || venues[0]?.id)) ?? null;
 
@@ -60,7 +112,15 @@ export function VenuesStep() {
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Select aria-label="Gymnase" className="h-9 w-48" value={selected.id} onChange={(e) => setSelectedId(e.target.value)}>
+            <Select
+              aria-label="Gymnase"
+              className="h-9 w-48"
+              value={selected.id}
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setEditingSlot(null);
+              }}
+            >
               {venues.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
@@ -104,9 +164,12 @@ export function VenuesStep() {
           <VenueAvailabilityGrid
             venue={selected}
             slots={slots.filter((s) => s.venueId === selected.id)}
+            selectedSlotId={editingSlot?.id ?? null}
             onAdd={(dayOfWeek, startTime) => addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity })}
-            onRemove={(id) => delSlot.mutate(id)}
+            onSelect={(slot) => setEditingSlot(slot)}
           />
+
+          {null !== editingSlot ? <SlotEditor key={editingSlot.id} slot={editingSlot} onClose={() => setEditingSlot(null)} /> : null}
         </>
       )}
     </div>

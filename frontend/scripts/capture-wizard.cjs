@@ -38,6 +38,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.screenshot({ path: `${OUT}/wizard-venues.png` });
   console.log("shot wizard-venues");
 
+  // Click an availability slot to open the editor.
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".grid button")].find((b) => /^\d{2}:\d{2}/.test(b.textContent.trim()));
+    if (el) el.click();
+  });
+  await sleep(500);
+  await page.screenshot({ path: `${OUT}/wizard-venue-edit.png` });
+  console.log("shot wizard-venue-edit");
+
   await goStep("Coachs");
   await page.screenshot({ path: `${OUT}/wizard-coaches.png` });
   console.log("shot wizard-coaches");
@@ -45,6 +54,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await goStep("Contraintes");
   await page.screenshot({ path: `${OUT}/wizard-constraints.png` });
   console.log("shot wizard-constraints");
+
+  await goStep("Récapitulatif");
+  await sleep(800);
+  await page.screenshot({ path: `${OUT}/wizard-recap.png` });
+  console.log("shot wizard-recap");
 
   await browser.close();
 })().catch((e) => {

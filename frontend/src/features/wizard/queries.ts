@@ -86,6 +86,14 @@ export function useCreateSlot() {
   });
 }
 
+export function useUpdateSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SlotPayload }) => wizardApi.updateSlot(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venue_slots"] }),
+  });
+}
+
 export function useDeleteSlot() {
   const queryClient = useQueryClient();
   return useMutation({

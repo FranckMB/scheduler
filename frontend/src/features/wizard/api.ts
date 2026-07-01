@@ -87,6 +87,7 @@ export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("ven
 export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
 export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
+export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
 
 // --- Coaches + links (W3) ---
