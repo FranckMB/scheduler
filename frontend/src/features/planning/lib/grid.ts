@@ -129,6 +129,9 @@ export interface GridCell {
   gridColumn: number;
   gridRowStart: number;
   gridRowSpan: number;
+  /** Horizontal lane within the column for time-overlapping slots (side-by-side). */
+  lane: number;
+  laneCount: number;
   teamLabel: string;
   venueLabel: string;
   venueColor: string | null;
@@ -137,6 +140,56 @@ export interface GridCell {
   startLabel: string;
   endLabel: string;
   locked: boolean;
+}
+
+interface Interval {
+  startMin: number;
+  endMin: number;
+  cell: GridCell;
+}
+
+/** Lay time-overlapping cells in the same column into side-by-side lanes. */
+function assignLanes(intervals: Interval[]): void {
+  const byColumn = new Map<number, Interval[]>();
+  for (const interval of intervals) {
+    const list = byColumn.get(interval.cell.gridColumn) ?? [];
+    list.push(interval);
+    byColumn.set(interval.cell.gridColumn, list);
+  }
+
+  for (const list of byColumn.values()) {
+    list.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+    let cluster: Interval[] = [];
+    let clusterEnd = -1;
+    const flush = (): void => {
+      const laneEnds: number[] = [];
+      for (const item of cluster) {
+        let lane = laneEnds.findIndex((end) => end <= item.startMin);
+        if (-1 === lane) {
+          lane = laneEnds.length;
+        }
+        laneEnds[lane] = item.endMin;
+        item.cell.lane = lane;
+      }
+      for (const item of cluster) {
+        item.cell.laneCount = laneEnds.length;
+      }
+    };
+
+    for (const interval of list) {
+      if (cluster.length > 0 && interval.startMin >= clusterEnd) {
+        flush();
+        cluster = [];
+        clusterEnd = -1;
+      }
+      cluster.push(interval);
+      clusterEnd = Math.max(clusterEnd, interval.endMin);
+    }
+    if (cluster.length > 0) {
+      flush();
+    }
+  }
 }
 
 export interface GridRow {
@@ -197,6 +250,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
   const columnIndex = new Map(columns.map((c, i) => [c.key, i]));
 
   const cells: GridCell[] = [];
+  const intervals: Interval[] = [];
   for (const slot of visible) {
     const idx = columnIndex.get(`${slot.dayOfWeek}:${resourceKeyForSlot(slot, viewMode)}`);
     if (undefined === idx) {
@@ -204,11 +258,13 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     }
     const start = parseTimeToMinutes(slot.startTime);
     const venue = lookups.venues.get(slot.venueId);
-    cells.push({
+    const cell: GridCell = {
       slotId: slot.id,
       gridColumn: 2 + idx,
       gridRowStart: 3 + Math.round((start - bounds.startMin) / stepMin),
       gridRowSpan: Math.max(1, Math.round(slot.durationMinutes / stepMin)),
+      lane: 0,
+      laneCount: 1,
       teamLabel: lookups.teams.get(slot.teamId)?.name ?? "Équipe ?",
       venueLabel: venue?.name ?? "Gymnase ?",
       venueColor: venue?.color ?? null,
@@ -217,8 +273,11 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       startLabel: formatMinutes(start),
       endLabel: formatMinutes(start + slot.durationMinutes),
       locked: "NONE" !== slot.lockLevel || slot.temporaryLock,
-    });
+    };
+    cells.push(cell);
+    intervals.push({ startMin: start, endMin: start + slot.durationMinutes, cell });
   }
+  assignLanes(intervals);
 
   const rows: GridRow[] = [];
   for (let t = bounds.startMin; t < bounds.endMin; t += stepMin) {

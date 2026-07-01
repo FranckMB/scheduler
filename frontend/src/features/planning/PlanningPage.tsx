@@ -141,7 +141,7 @@ export function PlanningPage() {
             <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
             <div className="lg:grid lg:h-[calc(100vh-16rem)] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4">
-              <div className="relative min-w-0 lg:h-full lg:overflow-auto">
+              <div className="relative min-w-0 lg:h-full">
                 {isGenerating ? (
                   <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
                     Génération en cours…

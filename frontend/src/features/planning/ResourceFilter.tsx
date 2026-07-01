@@ -1,3 +1,6 @@
+import { Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
+
 import { cn } from "@/shared/lib/utils";
 
 import type { GridResource } from "./lib/grid";
@@ -18,40 +21,70 @@ interface ResourceFilterProps {
 }
 
 export function ResourceFilter({ viewMode, resources, selected, onToggle, onClear }: ResourceFilterProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
   if (0 === resources.length) {
     return null;
   }
-  const allActive = 0 === selected.length;
+
+  const filtered = resources.filter((resource) => resource.label.toLowerCase().includes(query.trim().toLowerCase()));
+  const count = selected.length;
+  const summary = 0 === count ? "tous" : `${count} sélectionné${count > 1 ? "s" : ""}`;
 
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-xs font-medium text-muted-foreground">{LABELS[viewMode]} :</span>
+    <div className="relative mb-3 inline-block">
       <button
         type="button"
-        onClick={onClear}
-        className={cn(
-          "rounded-full border px-2.5 py-0.5 text-xs transition",
-          allActive ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:text-foreground",
-        )}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs text-foreground hover:bg-muted"
       >
-        Tous
+        <span className="font-medium text-muted-foreground">{LABELS[viewMode]} :</span>
+        <span>{summary}</span>
+        <ChevronDown className="size-3.5 text-muted-foreground" />
       </button>
-      {resources.map((resource) => {
-        const active = selected.includes(resource.id);
-        return (
-          <button
-            key={resource.id}
-            type="button"
-            onClick={() => onToggle(resource.id)}
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-xs transition",
-              active ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {resource.label}
-          </button>
-        );
-      })}
+
+      {open ? (
+        <>
+          <button type="button" aria-hidden className="fixed inset-0 z-30 cursor-default" onClick={() => setOpen(false)} />
+          <div className="absolute z-40 mt-1 w-72 rounded-md border border-border bg-card shadow-md">
+            <div className="border-b border-border p-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher…"
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <ul className="max-h-64 overflow-y-auto p-1">
+              {count > 0 ? (
+                <li>
+                  <button type="button" onClick={onClear} className="w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted">
+                    Tout effacer ({count})
+                  </button>
+                </li>
+              ) : null}
+              {filtered.map((resource) => {
+                const active = selected.includes(resource.id);
+                return (
+                  <li key={resource.id}>
+                    <button
+                      type="button"
+                      onClick={() => onToggle(resource.id)}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                    >
+                      <Check className={cn("size-4 shrink-0 text-accent", active ? "" : "invisible")} />
+                      <span className="truncate">{resource.label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+              {0 === filtered.length ? <li className="px-2 py-1 text-xs text-muted-foreground">Aucun résultat</li> : null}
+            </ul>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

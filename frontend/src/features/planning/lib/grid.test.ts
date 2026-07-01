@@ -125,6 +125,35 @@ describe("buildGrid", () => {
     const model = buildGrid([slot({ id: "l", lockLevel: "HARD" })], "gymnase", lookups);
     expect(model.cells[0].locked).toBe(true);
   });
+
+  it("lays time-overlapping slots of a column into side-by-side lanes", () => {
+    const model = buildGrid(
+      [
+        slot({ id: "o1", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 60 }),
+        slot({ id: "o2", venueId: "v1", dayOfWeek: 1, startTime: "18:30:00", durationMinutes: 60 }),
+      ],
+      "gymnase",
+      lookups,
+    );
+    const o1 = model.cells.find((c) => c.slotId === "o1")!;
+    const o2 = model.cells.find((c) => c.slotId === "o2")!;
+    expect(o1.gridColumn).toBe(o2.gridColumn);
+    expect(o1.laneCount).toBe(2);
+    expect(o2.laneCount).toBe(2);
+    expect(new Set([o1.lane, o2.lane])).toEqual(new Set([0, 1]));
+  });
+
+  it("keeps non-overlapping slots in a single lane", () => {
+    const model = buildGrid(
+      [
+        slot({ id: "n1", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 60 }),
+        slot({ id: "n2", venueId: "v1", dayOfWeek: 1, startTime: "19:00:00", durationMinutes: 60 }),
+      ],
+      "gymnase",
+      lookups,
+    );
+    expect(model.cells.every((c) => c.laneCount === 1 && c.lane === 0)).toBe(true);
+  });
 });
 
 describe("availableResources", () => {

@@ -66,7 +66,7 @@ async function clickByText(page, text) {
 
   // Expand the first diagnostics group to reveal when + which teams conflict.
   await page.evaluate(() => {
-    const el = [...document.querySelectorAll("button")].find((b) => /conflict|unused|warning/i.test(b.textContent));
+    const el = [...document.querySelectorAll("button")].find((b) => /Erreurs|Alertes|Infos/i.test(b.textContent));
     if (el) el.click();
   });
   await sleep(500);
