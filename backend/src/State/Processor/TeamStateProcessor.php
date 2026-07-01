@@ -27,6 +27,9 @@ class TeamStateProcessor extends AbstractStateProcessor
         $entity = new Team;
         $entity->setSportCategoryId($input->sportCategoryId ?? '33333333-3333-3333-3333-333333333333');
         $entity->setPriorityTierId($input->priorityTierId ?? 1);
+        if (null !== $input->tierOrder) {
+            $entity->setTierOrder($input->tierOrder);
+        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
@@ -56,6 +59,9 @@ class TeamStateProcessor extends AbstractStateProcessor
     {
         $entity->setSportCategoryId($input->sportCategoryId ?? '33333333-3333-3333-3333-333333333333');
         $entity->setPriorityTierId($input->priorityTierId ?? 1);
+        if (null !== $input->tierOrder) {
+            $entity->setTierOrder($input->tierOrder);
+        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

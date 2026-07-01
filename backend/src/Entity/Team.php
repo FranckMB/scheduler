@@ -46,6 +46,10 @@ class Team
     #[ORM\Column(type: 'integer')]
     private int $priorityTierId;
 
+    /** Position within the priority tier (0-based). Global rank derives from (tier order, tierOrder). */
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private int $tierOrder = 0;
+
     #[ORM\Column(type: 'string', length: 180)]
     private string $name;
 
@@ -178,6 +182,18 @@ class Team
     public function setPriorityTierId(int $priorityTierId): self
     {
         $this->priorityTierId = $priorityTierId;
+
+        return $this;
+    }
+
+    public function getTierOrder(): int
+    {
+        return $this->tierOrder;
+    }
+
+    public function setTierOrder(int $tierOrder): self
+    {
+        $this->tierOrder = $tierOrder;
 
         return $this;
     }

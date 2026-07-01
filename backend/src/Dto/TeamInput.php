@@ -15,6 +15,9 @@ class TeamInput
     #[Groups(['write'])]
     public ?int $priorityTierId = null;
 
+    #[Groups(['write'])]
+    public ?int $tierOrder = null;
+
     #[Assert\NotBlank]
     #[Groups(['write'])]
     public ?string $name = null;
