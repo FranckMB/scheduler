@@ -16,22 +16,17 @@ from .helpers import MISSING, assignment_team_id, assignment_var, get_field, sca
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V3"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
         "S": 10000,
         "A": 1000,
-        "SOFT": 800,
         "B": 100,
         "session_count": 20,
-        "pref_link": 80,
         "preferred": 60,
-        "grouping": 50,
         "preferred_day": 30,
         "C": 10,
-        "max_days": 8,
-        "opt_link": 5,
         "D": 1,
         "rest": 3,
     }
@@ -73,13 +68,8 @@ CHAINING_TIER_WEIGHTS = MappingProxyType(
 
 TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
 BONUS_WEIGHT_NAMES = (
-    "SOFT",
-    "pref_link",
     "preferred",
-    "grouping",
     "preferred_day",
-    "max_days",
-    "opt_link",
     "rest",
     "session_count",
 )
@@ -113,23 +103,6 @@ _ONE_BASED_TIER_IDS = {1: "S", 2: "A", 3: "B", 4: "C", 5: "D"}
 _ZERO_BASED_TIER_RANKS = {0: "S", 1: "A", 2: "B", 3: "C", 4: "D"}
 
 _BONUS_FIELD_ALIASES = {
-    "SOFT": (
-        "soft",
-        "soft_satisfied",
-        "softSatisfied",
-        "soft_constraints_satisfied",
-        "softConstraintsSatisfied",
-        "respects_soft_constraints",
-        "respectsSoftConstraints",
-    ),
-    "pref_link": (
-        "pref_link",
-        "prefLink",
-        "preferred_link",
-        "preferredLink",
-        "preferred_link_satisfied",
-        "preferredLinkSatisfied",
-    ),
     "preferred": (
         "preferred",
         "is_preferred",
@@ -138,23 +111,6 @@ _BONUS_FIELD_ALIASES = {
         "preferredSlot",
         "preferred_venue",
         "preferredVenue",
-    ),
-    "grouping": ("grouping", "grouped", "grouping_satisfied", "groupingSatisfied"),
-    "max_days": (
-        "max_days",
-        "maxDays",
-        "max_days_satisfied",
-        "maxDaysSatisfied",
-        "within_max_days",
-        "withinMaxDays",
-    ),
-    "opt_link": (
-        "opt_link",
-        "optLink",
-        "optional_link",
-        "optionalLink",
-        "optional_link_satisfied",
-        "optionalLinkSatisfied",
     ),
     "rest": ("rest", "rest_satisfied", "restSatisfied", "respects_rest", "respectsRest"),
 }
@@ -577,16 +533,7 @@ def _soft_term_variable_and_weight(term: Any) -> tuple[BoolVarLike, str]:
 
 def _normalise_bonus_weight_name(value: Any) -> str:
     text = str(_scalar_id(value)).strip()
-    aliases = {
-        "soft": "SOFT",
-        "SOFT": "SOFT",
-        "preferred_link": "pref_link",
-        "preferredLink": "pref_link",
-        "optional_link": "opt_link",
-        "optionalLink": "opt_link",
-        "maxDays": "max_days",
-    }
-    normalized = aliases.get(text, text)
+    normalized = text
     if normalized not in BONUS_WEIGHT_NAMES:
         raise ValueError(f"unknown level-2 bonus weight {value!r}")
     return normalized
