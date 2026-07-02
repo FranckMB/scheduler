@@ -278,6 +278,35 @@ class DiagnosticPrecisionTest(unittest.TestCase):
         self.assertEqual(1, len(diags))
         self.assertIn("Gym Fermé", diags[0]["message"])  # names the saturated forced venue
 
+    def test_partial_sessions_warns_even_when_tier_floor_met(self) -> None:
+        """Team requested 2 sessions, only 1 placed → WARNING even if tier floor (1) is met."""
+        from app.solver.result_builder import _diagnose_session_below_effective_min
+
+        model_data = {
+            "teams": [{"id": "t1", "name": "U11 Mixte", "priorityTierId": 4, "sessionsPerWeek": 2}],
+            "constraints": [{"type": "PRIORITY_TIER", "metadata": {"id": 4, "defaultMinSessions": 1}}],
+        }
+        # one placed 15-min unit → placed = 1, requested = 2, floor = 1
+        slots = [{"teamId": "t1", "durationMinutes": 15}]
+        diags = _diagnose_session_below_effective_min(model_data, slots)
+        self.assertEqual(1, len(diags))
+        self.assertEqual("WARNING", diags[0]["severity"])  # floor met → warning, not error
+        msg = diags[0]["message"]
+        self.assertIn("U11 Mixte", msg)
+        self.assertIn("2 séance", msg)  # requested
+        self.assertIn("1 placée", msg)  # placed
+
+    def test_below_tier_floor_is_high_severity(self) -> None:
+        from app.solver.result_builder import _diagnose_session_below_effective_min
+
+        model_data = {
+            "teams": [{"id": "t1", "name": "SM1", "priorityTierId": 1, "sessionsPerWeek": 3}],
+            "constraints": [{"type": "PRIORITY_TIER", "metadata": {"id": 1, "defaultMinSessions": 2}}],
+        }
+        diags = _diagnose_session_below_effective_min(model_data, slots=[])  # 0 placed, floor 2
+        self.assertEqual(1, len(diags))
+        self.assertEqual("high", diags[0]["severity"])
+
 
 if __name__ == "__main__":
     unittest.main()

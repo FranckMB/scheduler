@@ -19,13 +19,20 @@ final class DiagnosticMessageBuilder
         array $venueNames = [],
     ): string {
         $type = (string) ($diagnostic['type'] ?? '');
+        $engineMessage = trim((string) ($diagnostic['message'] ?? ''));
 
+        // The engine already emits precise, manager-ready French messages that
+        // name the teams / venue / coach + day + time + reason (who/when/why).
+        // Prefer them; the localized builders below are only a fallback for
+        // payloads that arrive without a rich message. soft_lock_moved is the
+        // exception: the engine still sends a raw English message for it, so we
+        // always rebuild that one locally.
         return match ($type) {
-            'unplaced' => $this->buildUnplaced($diagnostic, $teamNames),
-            'conflict' => $this->buildConflict($diagnostic, $teamNames, $coachNames, $venueNames),
-            'coach_overload' => $this->buildCoachOverload($diagnostic, $coachNames),
+            'unplaced' => '' !== $engineMessage ? $engineMessage : $this->buildUnplaced($diagnostic, $teamNames),
+            'conflict' => '' !== $engineMessage ? $engineMessage : $this->buildConflict($diagnostic, $teamNames, $coachNames, $venueNames),
+            'coach_overload' => '' !== $engineMessage ? $engineMessage : $this->buildCoachOverload($diagnostic, $coachNames),
             'soft_lock_moved' => $this->buildSoftLockMoved($diagnostic, $teamNames, $venueNames),
-            default => (string) ($diagnostic['message'] ?? 'Diagnostic inconnu.'),
+            default => '' !== $engineMessage ? $engineMessage : 'Diagnostic inconnu.',
         };
     }
 
