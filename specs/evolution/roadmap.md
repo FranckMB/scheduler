@@ -84,6 +84,14 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | CacheInvalidationListener ciblé (Venue/Coach/Team/Schedule) | 🟡 | v3 §6.2 · FF#9 | Stub actuel |
 | `ClubTimeService` (UTC ↔ fuseau club) | ⬜ | v3 §6.2 · FF#10 | |
 
+### Rôles & membres (non couvert par les initiales — issu du hors-scope wizard)
+
+| Évolution | Statut | Note |
+|-----------|--------|------|
+| **Rôles non-admin** (coach / lecteur au-delà d'`admin`) + modèle de permissions | ⬜ | Aujourd'hui `ClubUser.role` est **hardcodé `'admin'`** au register ; pas de différenciation de droits |
+| **Gestion des membres** (inviter / changer rôle / désactiver) — écran admin club | ⬜ | `ClubUser` (membership) existe ; pas d'UI |
+| **Approbation des demandes d'adhésion** (rejoindre un club → membre `pending`) | 🟡 | Le flux register crée un membre pending + `WaitingApprovalPage` ; **manque** l'écran admin pour approuver/refuser |
+
 ---
 
 ## 6. Pricing & bridage (business-critique)
