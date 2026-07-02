@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { GenerationWaiting } from "./GenerationWaiting";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRenameSchedule, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
@@ -102,13 +103,15 @@ export function PlanningPage() {
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
   const setBaselineMutation = useSetBaseline();
+  const renameMutation = useRenameSchedule();
   const [validateOpen, setValidateOpen] = useState(false);
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
-  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending;
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending || renameMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
+  const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
   const prevStatus = useRef<string | null>(null);
@@ -189,25 +192,21 @@ export function PlanningPage() {
               onValidate={() => setValidateOpen(true)}
               onReopen={() => validScheduleId && reopenMutation.mutate(validScheduleId)}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
+              onRename={(name) => validScheduleId && renameMutation.mutate({ id: validScheduleId, name, status: selectedSchedule?.status ?? "COMPLETED" })}
               baselineScheduleId={baselineScheduleId}
             />
-            <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+            <div className="ml-auto flex items-center gap-2">
+              <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+            </div>
           </div>
 
-          {0 === slots.length ? (
-            isGenerating ? (
-              <EmptyState title="Génération en cours…" description="Le planning s'affichera dès qu'il est prêt (1 à 3 min)." />
-            ) : (
-              <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
-            )
+          {isGenerating ? (
+            <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />
+          ) : 0 === slots.length ? (
+            <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
             <div className="lg:grid lg:h-[calc(100vh-16rem)] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4">
               <div className="relative min-w-0 lg:h-full">
-                {isGenerating ? (
-                  <div className="absolute inset-0 z-30 flex items-center justify-center rounded-lg bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
-                    Génération en cours…
-                  </div>
-                ) : null}
                 <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
               </div>
               <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
@@ -225,9 +224,11 @@ export function PlanningPage() {
                     onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
                   />
                 ) : null}
-                <div className="min-h-0 flex-1">
-                  <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
-                </div>
+                {isReadOnly ? null : (
+                  <div className="min-h-0 flex-1">
+                    <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
+                  </div>
+                )}
               </div>
             </div>
           )}

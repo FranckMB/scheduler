@@ -1,10 +1,10 @@
-import { AlertTriangle, ChevronDown, ChevronRight, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
-import { useConstraintValidation, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
@@ -28,10 +28,22 @@ function Section({ title, count, children }: { title: string; count: number; chi
         <span className="flex-1 font-medium">{title}</span>
         <span className="rounded-full bg-muted px-2 text-xs text-muted-foreground">{count}</span>
       </button>
-      {open ? <div className="border-t border-border px-4 py-2 text-sm text-muted-foreground">{children}</div> : null}
+      {open ? <div className="border-t border-border px-3 py-1">{children}</div> : null}
     </div>
   );
 }
+
+/** One item per row — readable list, not a comma-joined blob. */
+function ItemRow({ label, meta }: { label: string; meta?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border/60 py-1.5 text-sm last:border-0">
+      <span className="text-foreground">{label}</span>
+      {meta ? <span className="shrink-0 text-xs text-muted-foreground">{meta}</span> : null}
+    </div>
+  );
+}
+
+const empty = <p className="py-1.5 text-sm text-muted-foreground">—</p>;
 
 export function RecapStep() {
   const { next } = useWizardStore();
@@ -39,11 +51,17 @@ export function RecapStep() {
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
   const { data: coaches = [] } = useWizardCoaches();
+  const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const { data: constraints = [] } = useWizardConstraints();
   const { data: validation } = useConstraintValidation(true);
 
   const salaried = coaches.filter((c) => c.isEmployee).length;
+  const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
   const hardConstraints = constraints.filter((c) => c.ruleType === "HARD").length;
+  const slotsByVenue = new Map<string, number>();
+  for (const s of slots) {
+    slotsByVenue.set(s.venueId, (slotsByVenue.get(s.venueId) ?? 0) + 1);
+  }
   const venuesWithSlot = new Set(slots.map((s) => s.venueId));
   const emptyVenues = venues.filter((v) => !venuesWithSlot.has(v.id));
 
@@ -79,15 +97,33 @@ export function RecapStep() {
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Counter label="Équipes" value={teams.length} />
         <Counter label="Gymnases" value={venues.length} />
-        <Counter label="Coachs" value={coaches.length} sub={`dont ${salaried} salarié(s)`} />
+        <Counter label="Coachs" value={coaches.length} sub={`dont ${salaried} salarié(s) · ${coachPlayerIds.size} coach-joueur(s)`} />
         <Counter label="Contraintes dures" value={hardConstraints} />
       </div>
 
       <div className="mb-4 flex flex-col gap-1.5">
-        <Section title="Équipes" count={teams.length}>{teams.map((t) => t.name).join(", ") || "—"}</Section>
-        <Section title="Gymnases" count={venues.length}>{venues.map((v) => v.name).join(", ") || "—"}</Section>
-        <Section title="Coachs" count={coaches.length}>{coaches.map((c) => `${c.firstName} ${c.lastName}`.trim()).join(", ") || "—"}</Section>
-        <Section title="Contraintes" count={constraints.length}>{constraints.map((c) => c.name).join(" · ") || "—"}</Section>
+        <Section title="Équipes" count={teams.length}>
+          {0 === teams.length
+            ? empty
+            : teams.map((t) => <ItemRow key={t.id} label={t.name} meta={`${t.sessionsPerWeek} séance(s)/sem`} />)}
+        </Section>
+        <Section title="Gymnases" count={venues.length}>
+          {0 === venues.length ? empty : venues.map((v) => <ItemRow key={v.id} label={v.name} meta={`${slotsByVenue.get(v.id) ?? 0} créneau(x)`} />)}
+        </Section>
+        <Section title="Coachs" count={coaches.length}>
+          {0 === coaches.length
+            ? empty
+            : coaches.map((c) => (
+                <ItemRow
+                  key={c.id}
+                  label={`${c.firstName} ${c.lastName}`.trim()}
+                  meta={[c.isEmployee ? "salarié" : null, coachPlayerIds.has(c.id) ? "coach-joueur" : null].filter(Boolean).join(" · ") || undefined}
+                />
+              ))}
+        </Section>
+        <Section title="Contraintes" count={constraints.length}>
+          {0 === constraints.length ? empty : constraints.map((c) => <ItemRow key={c.id} label={c.name} meta={c.ruleType} />)}
+        </Section>
       </div>
 
       {blockers.length > 0 ? (

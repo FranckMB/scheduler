@@ -112,7 +112,7 @@ export function WizardPage() {
       {/* Current step */}
       <div className="min-w-0 flex-1">
         {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
-        <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background/95 py-3 backdrop-blur">
+        <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
           <h2 className="text-lg font-semibold">
             <span className="text-muted-foreground">
               Étape {index + 1}/{WIZARD_STEPS.length} ·{" "}
@@ -145,12 +145,14 @@ export function WizardPage() {
           </p>
         ))}
 
-        {/* Sticky Prev/Next footer (W7) — stays visible on long steps */}
-        <div className="sticky bottom-0 z-20 mt-6 flex justify-between border-t border-border bg-background/95 py-4 backdrop-blur">
+        {/* Sticky Prev/Next footer (W7) — stays visible on long steps. On Récap the
+            forward action is the gated "Continuer vers la génération" CTA inside the
+            step, so the generic "Suivant" is hidden there to avoid a redundant button. */}
+        <div className="sticky bottom-0 z-20 mt-6 flex justify-between border-t border-border bg-background py-4">
           <Button variant="outline" disabled={0 === index} onClick={prev}>
             Précédent
           </Button>
-          {isLast ? null : (
+          {isLast || "recap" === stepId ? null : (
             <Button disabled={blocked} onClick={next}>
               Suivant
             </Button>
