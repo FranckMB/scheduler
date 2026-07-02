@@ -10,6 +10,7 @@ import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
+import { LogoCropper } from "./LogoCropper";
 import { useDeleteLogo, useUpdateAppearance, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -24,13 +25,16 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
   const [palette, setPalette] = useState<string[]>(accentPalette ?? []);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(logoUrl);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const valid = HEX.test(color);
   const busy = uploadLogo.isPending || updateAppearance.isPending || deleteLogo.isPending;
 
-  const onPick = async (picked: File) => {
-    setFile(picked);
-    const objectUrl = URL.createObjectURL(picked);
+  const onCropped = async (blob: Blob) => {
+    const cropped = new File([blob], "logo.png", { type: "image/png" });
+    setFile(cropped);
+    setCropFile(null);
+    const objectUrl = URL.createObjectURL(cropped);
     setPreview(objectUrl);
     const pal = await extractPalette(objectUrl);
     if (pal.length > 0) {
@@ -61,36 +65,41 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
         <CardDescription>Logo et couleur d'accent du club. La couleur personnalise les boutons, liens et éléments actifs de toute l'interface.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Logo */}
-        <div className="flex items-center gap-4">
-          <div className="flex size-16 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-bold text-muted-foreground">
-            {null !== preview ? <img src={preview} alt="Logo" className="size-full object-cover" /> : (clubName.trim().charAt(0).toUpperCase() || "C")}
+        {/* Logo — cropper when a new file is being framed, else preview + actions */}
+        {null !== cropFile ? (
+          <LogoCropper file={cropFile} onCropped={onCropped} onCancel={() => setCropFile(null)} />
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="flex size-16 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-bold text-muted-foreground">
+              {null !== preview ? <img src={preview} alt="Logo" className="size-full object-cover" /> : clubName.trim().charAt(0).toUpperCase() || "C"}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted">
+                <ImagePlus className="size-4" />
+                Choisir un logo
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (undefined !== f) {
+                      setCropFile(f);
+                    }
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {null !== logoUrl ? (
+                <Button size="sm" variant="ghost" className="text-destructive" onClick={removeLogo} disabled={busy}>
+                  <Trash2 className="size-4" />
+                  Retirer
+                </Button>
+              ) : null}
+              <span className="text-xs text-muted-foreground">PNG / JPEG / WebP, ≤ 500 Ko.</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted">
-              <ImagePlus className="size-4" />
-              Choisir un logo
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (undefined !== f) {
-                    void onPick(f);
-                  }
-                }}
-              />
-            </label>
-            {null !== logoUrl ? (
-              <Button size="sm" variant="ghost" className="text-destructive" onClick={removeLogo} disabled={busy}>
-                <Trash2 className="size-4" />
-                Retirer
-              </Button>
-            ) : null}
-            <span className="text-xs text-muted-foreground">PNG / JPEG / WebP, ≤ 500 Ko.</span>
-          </div>
-        </div>
+        )}
 
         {/* Suggested palette from the logo */}
         {palette.length > 0 ? (

@@ -13,7 +13,7 @@ function NavItem({ to, children }: { to: string; children: string }) {
       to={to}
       end
       className={({ isActive }) =>
-        cn("rounded-md px-3 py-1.5 text-sm transition-colors", isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")
+        cn("rounded-md px-3 py-1.5 text-sm transition-colors", isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")
       }
     >
       {children}

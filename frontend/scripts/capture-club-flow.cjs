@@ -26,12 +26,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.goto(BASE + "/club", { waitUntil: "networkidle0", timeout: 20000 });
   await sleep(600);
 
-  // Upload a logo file
+  // Upload a logo file → opens the cropper
   const input = await page.$('input[type=file]');
   await input.uploadFile(LOGO);
-  await sleep(800); // extraction
+  await sleep(600);
+  await page.screenshot({ path: `${OUT}/club-cropper.png` });
 
-  // Click "Enregistrer"
+  // Valider le cadrage
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Valider le cadrage");
+    if (b) b.click();
+  });
+  await sleep(700); // extraction on cropped image
+
+  // Enregistrer
   const saved = await page.evaluate(() => {
     const btn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enregistrer");
     if (btn) { btn.click(); return true; }
