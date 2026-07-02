@@ -9,12 +9,25 @@ import type { Gender, PriorityTier, SportCategory, Team, TeamPayload } from "../
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 
+// Manager-facing meaning of each priority tier (backend tier names are FFBB
+// competition levels; here we explain what the rank means for scheduling).
+const TIER_MEANING: Record<string, string> = {
+  S: "Fanion",
+  A: "Importante",
+  B: "Moyenne",
+  C: "De base",
+  D: "Bonus",
+};
+
 const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "—" },
-  { value: "M", label: "M" },
-  { value: "F", label: "F" },
+  { value: "M", label: "Homme" },
+  { value: "F", label: "Femme" },
   { value: "MIXTE", label: "Mixte" },
 ];
+
+/** Full label for a tier select: "S · Fanion" rather than the bare letter. */
+const tierLabel = (t: PriorityTier): string => `${t.label} · ${TIER_MEANING[t.label] ?? t.name}`;
 
 function payload(team: Team, patch: Partial<TeamPayload>): TeamPayload {
   return {
@@ -84,10 +97,10 @@ function TeamRow({ team, number, categories, tiers, canUp, canDown, onField, onM
         onChange={(e) => setSessions(e.target.value)}
         onBlur={() => Number(sessions) !== team.sessionsPerWeek && onField(team, { sessionsPerWeek: Number(sessions) })}
       />
-      <Select aria-label="Tier" className="h-8 w-16" value={team.priorityTierId} onChange={(e) => onField(team, { priorityTierId: Number(e.target.value) })}>
+      <Select aria-label="Niveau" className="h-8 w-32" value={team.priorityTierId} onChange={(e) => onField(team, { priorityTierId: Number(e.target.value) })}>
         {tiers.map((t) => (
           <option key={t.id} value={t.id}>
-            {t.label}
+            {tierLabel(t)}
           </option>
         ))}
       </Select>
@@ -159,41 +172,43 @@ export function TeamsStep() {
   return (
     <div>
       <h2 className="mb-1 text-xl font-semibold">Équipes</h2>
-      <p className="mb-1 text-sm text-muted-foreground">
-        Une équipe par catégorie suffit souvent (ex. 2 seniors M, 1 senior F, puis U18 → U11).
+      <p className="mb-2 text-sm text-muted-foreground">
+        Listez vos équipes et donnez à chacune un <strong>rang</strong> : il tranche quand les créneaux manquent — les mieux classées passent d'abord.
       </p>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Le <strong>tier</strong> classe l'importance : <strong>S</strong> (élite) &gt; A &gt; B &gt; C &gt; <strong>D</strong> (loisir). Dans un tier, montez/descendez les équipes ; le
-        <strong> numéro</strong> à gauche est leur rang global (1 = plus importante) — c'est l'ordre où on les traitera.
-      </p>
+      <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {(Object.entries(TIER_MEANING) as [string, string][]).map(([label, meaning]) => (
+          <span key={label}>
+            <strong className="text-foreground">{label}</strong> {meaning}
+          </span>
+        ))}
+      </div>
 
-      <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Input aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-9 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
-        <Select aria-label="Catégorie" className="h-9 w-36" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
+      <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 text-sm">
+        <Input aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-40 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+        <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
         </Select>
-        <Select aria-label="Tier" className="h-9 w-20" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
+        <Select aria-label="Niveau" className="h-8 w-36" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
           {tiers.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.label}
+              {tierLabel(t)}
             </option>
           ))}
         </Select>
-        <Select aria-label="Genre" className="h-9 w-24" value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+        <Select aria-label="Genre" className="h-8 w-28" value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
           {GENDERS.map((g) => (
             <option key={g.value} value={g.value}>
               {g.label}
             </option>
           ))}
         </Select>
-        <Input aria-label="Séances/sem" type="number" min={1} className="h-9 w-20" value={sessions} onChange={(e) => setSessions(e.target.value)} />
-        <Button type="submit" disabled={create.isPending}>
+        <Input aria-label="Séances/sem" type="number" min={1} className="h-8 w-16" value={sessions} onChange={(e) => setSessions(e.target.value)} />
+        <Button type="submit" size="icon" className="ml-auto size-8" disabled={create.isPending} title="Ajouter l'équipe" aria-label="Ajouter l'équipe">
           <Plus className="size-4" />
-          Ajouter
         </Button>
       </form>
 
@@ -207,7 +222,7 @@ export function TeamsStep() {
             <span className="w-32">Catégorie</span>
             <span className="w-20">Genre</span>
             <span className="w-16">Séances</span>
-            <span className="w-16">Tier</span>
+            <span className="w-32">Niveau</span>
             <span className="w-[104px] text-right">Ordre · Suppr.</span>
           </div>
           {tierGroups.map((tier) => {
@@ -215,7 +230,7 @@ export function TeamsStep() {
             return (
               <section key={tier.id}>
                 <h3 className="mb-1 text-sm font-semibold">
-                  {tier.label} · {tier.name}
+                  {tier.label} · {TIER_MEANING[tier.label] ?? tier.name}
                 </h3>
                 <div className="rounded-lg border border-border bg-card px-2">
                   {group.map((team, i) => (

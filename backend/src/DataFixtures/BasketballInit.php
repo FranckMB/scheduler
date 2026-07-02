@@ -57,7 +57,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $club->setFfbbClubCode('ARA0069036');
             $club->setTimezone('Europe/Paris');
             $club->setLocale('fr');
-            $club->setOnboardingCompleted(false);
+            // Established demo club: onboarding done → free wizard navigation
+            // (FakeClub stays not-onboarded to exercise the guided flow).
+            $club->setOnboardingCompleted(true);
             $manager->persist($club);
         }
         $manager->flush();
@@ -1303,6 +1305,111 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $c->setConfig(['forbiddenDays' => [3]]);
                 $c->setIsActive(true);
                 $manager->persist($c);
+            }
+        }
+
+        $manager->flush();
+
+        $this->loadFakeClubFromScratch($manager);
+    }
+
+    /**
+     * Fresh "from scratch" account (N'Gnima EBLIN / FakeClub, ffbb ARA00TEST).
+     * Mirrors AuthController::register for a NEW club: active admin membership,
+     * seeded active season + sport + sport categories, onboarding NOT completed
+     * (so the account lands on the wizard). No teams/venues/coaches on purpose.
+     */
+    private function loadFakeClubFromScratch(EntityManagerInterface $manager): void
+    {
+        $ara = 'ARA00TEST';
+
+        $club = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => $ara]);
+        if (!$club instanceof Club) {
+            $club = new Club;
+            $club->setName('FakeClub');
+            $club->setSlug('fakeclub');
+            $club->setFfbbClubCode($ara);
+            $club->setTimezone('Europe/Paris');
+            $club->setLocale('fr');
+            $club->setOnboardingCompleted(false);
+            $manager->persist($club);
+            $manager->flush();
+        }
+
+        $clubId = $club->getId();
+        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '{$clubId}'");
+
+        $user = $manager->getRepository(User::class)->findOneBy(['email' => 'n.eblin@gmail.com']);
+        if (!$user instanceof User) {
+            $user = new User;
+            $user->setEmail('n.eblin@gmail.com');
+            $user->setFirstName('N\'Gnima');
+            $user->setLastName('EBLIN');
+            $user->setEmailVerifiedAt(null);
+            $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'jennifer'));
+            $manager->persist($user);
+            $manager->flush();
+        }
+
+        $existingMembership = $manager->getRepository(ClubUser::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'userId' => $user->getId(),
+        ]);
+        if (null === $existingMembership) {
+            $clubUser = new ClubUser;
+            $clubUser->setClubId($club->getId());
+            $clubUser->setUserId($user->getId());
+            $clubUser->setRole('admin');
+            $clubUser->setIsActive(true);
+            $manager->persist($clubUser);
+        }
+
+        $existingSeason = $manager->getRepository(Season::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'status' => 'active',
+        ]);
+        if (null === $existingSeason) {
+            $currentYear = (int) (new DateTimeImmutable)->format('Y');
+            $season = new Season;
+            $season->setClubId($club->getId());
+            $season->setName((string) $currentYear);
+            $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
+            $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
+            $season->setStatus('active');
+            $season->setTransitionData([]);
+            $manager->persist($season);
+
+            $sport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basketball']);
+            if (!$sport instanceof Sport) {
+                $sport = new Sport;
+                $sport->setName('Basketball');
+                $sport->setSlug('basketball');
+                $sport->setIsActive(true);
+                $manager->persist($sport);
+                $manager->flush();
+            }
+
+            $categories = [
+                ['name' => 'U7', 'ageMin' => 6, 'ageMax' => 7, 'sortOrder' => 0],
+                ['name' => 'U9', 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 1],
+                ['name' => 'U11', 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 2],
+                ['name' => 'U13', 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 3],
+                ['name' => 'U15', 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 4],
+                ['name' => 'U18', 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 5],
+                ['name' => 'U21', 'ageMin' => 19, 'ageMax' => 21, 'sortOrder' => 6],
+                ['name' => 'Seniors M', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 7],
+                ['name' => 'Seniors F', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 8],
+            ];
+            foreach ($categories as $categoryData) {
+                $sportCategory = new SportCategory;
+                $sportCategory->setClubId($club->getId());
+                $sportCategory->setSportId($sport->getId());
+                $sportCategory->setName($categoryData['name']);
+                $sportCategory->setAgeMin($categoryData['ageMin']);
+                $sportCategory->setAgeMax($categoryData['ageMax']);
+                $sportCategory->setIsCustom(false);
+                $sportCategory->setSortOrder($categoryData['sortOrder']);
+                $manager->persist($sportCategory);
             }
         }
 

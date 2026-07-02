@@ -23,3 +23,7 @@
 /phpunit.xml
 /.phpunit.cache/
 ###< phpunit/phpunit ###
+
+# generated / test artifacts (never commit)
+.phpunit.result.cache
+/config/reference.php

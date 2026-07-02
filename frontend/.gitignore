@@ -11,7 +11,6 @@ node_modules
 dist
 dist-ssr
 storybook-static
-.screenshots
 *.local
 
 # Editor directories and files
@@ -24,3 +23,10 @@ storybook-static
 *.njsproj
 *.sln
 *.sw?
+
+# capture/screenshot outputs (never commit)
+.screenshots*
+
+# Playwright outputs
+test-results/
+playwright-report/

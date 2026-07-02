@@ -135,27 +135,29 @@ export function PlanningPage() {
       <h1 className="mb-4 text-2xl font-semibold">Planning</h1>
 
       {0 === schedules.length ? (
-        <EmptyState
-          title="Aucun planning"
-          description="La création des équipes, gymnases et la génération arriveront avec l'assistant (prochaine étape)."
-        />
+        <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />
       ) : (
         <>
-          <PlanningToolbar
-            schedules={schedules}
-            selectedScheduleId={validScheduleId}
-            onSelectSchedule={setSelectedScheduleId}
-            viewMode={viewMode}
-            onViewMode={setViewMode}
-            isGenerating={isGenerating}
-            onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
-            baselineScheduleId={baselineScheduleId}
-          />
-
-          <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <PlanningToolbar
+              schedules={schedules}
+              selectedScheduleId={validScheduleId}
+              onSelectSchedule={setSelectedScheduleId}
+              viewMode={viewMode}
+              onViewMode={setViewMode}
+              isGenerating={isGenerating}
+              onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
+              baselineScheduleId={baselineScheduleId}
+            />
+            <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+          </div>
 
           {0 === slots.length ? (
-            <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
+            isGenerating ? (
+              <EmptyState title="Génération en cours…" description="Le planning s'affichera dès qu'il est prêt (1 à 3 min)." />
+            ) : (
+              <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
+            )
           ) : (
             <div className="lg:grid lg:h-[calc(100vh-16rem)] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4">
               <div className="relative min-w-0 lg:h-full">

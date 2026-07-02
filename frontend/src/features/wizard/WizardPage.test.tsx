@@ -53,7 +53,7 @@ describe("Wizard (integration)", () => {
   it("renders the Teams step with a team grouped under its tier", async () => {
     renderWithProviders(<WizardPage />, { route: "/wizard" });
     expect(await screen.findByDisplayValue("SF1")).toBeInTheDocument();
-    expect(screen.getByText("S · Elite")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "S · Fanion" })).toBeInTheDocument();
   });
 
   it("advances to the next step via Suivant when the step is valid", async () => {

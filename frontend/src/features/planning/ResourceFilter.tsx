@@ -33,7 +33,7 @@ export function ResourceFilter({ viewMode, resources, selected, onToggle, onClea
   const summary = 0 === count ? "tous" : `${count} sélectionné${count > 1 ? "s" : ""}`;
 
   return (
-    <div className="relative mb-3 inline-block">
+    <div className="relative inline-block">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

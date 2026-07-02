@@ -18,7 +18,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.type("#email", EMAIL);
   await page.type("#password", PASSWORD);
   await page.click("button[type=submit]");
-  await page.waitForFunction(() => document.querySelector("h1")?.textContent?.includes("Planning"), { timeout: 20000 });
+  // Logged in once we leave /login (may land on /planning or be redirected to /wizard).
+  await page.waitForFunction(() => !location.pathname.includes("/login"), { timeout: 20000 });
 
   await page.goto(BASE + "/wizard", { waitUntil: "networkidle0", timeout: 20000 });
   await page.waitForFunction(() => document.querySelector("h2")?.textContent?.includes("Équipes"), { timeout: 20000 });
@@ -55,10 +56,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.screenshot({ path: `${OUT}/wizard-constraints.png` });
   console.log("shot wizard-constraints");
 
+  // Reservation tab (schedule slot templates / HARD lock).
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Réserver");
+    if (el) el.click();
+  });
+  await sleep(500);
+  await page.screenshot({ path: `${OUT}/wizard-constraints-reserve.png` });
+  console.log("shot wizard-constraints-reserve");
+
   await goStep("Récapitulatif");
   await sleep(800);
   await page.screenshot({ path: `${OUT}/wizard-recap.png` });
   console.log("shot wizard-recap");
+
+  // Generation step (full-width; launch screen before solving).
+  await goStep("Génération");
+  await sleep(800);
+  await page.screenshot({ path: `${OUT}/wizard-generate.png` });
+  console.log("shot wizard-generate");
 
   await browser.close();
 })().catch((e) => {
