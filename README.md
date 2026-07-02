@@ -92,9 +92,18 @@ docs/      architecture, testing, technical-debt notes
 
 ## Documentation
 
-- **`CLAUDE.md`** — operational index for the whole repo (stack, boundaries, conventions).
-- **`docs/project-map.md`** — detailed map · **`docs/architecture/`** — ADRs.
-- **`backend/docs/TENANT.md`** — multi-tenant isolation · **`specs/courantes/`** — current specs.
+**Par sous-projet** (chaque zone travaille différemment — commencez par son README) :
+
+| Zone | README | Docs structurantes |
+|------|--------|--------------------|
+| `backend/` | [`backend/README.md`](backend/README.md) | [`docs/TENANT.md`](backend/docs/TENANT.md) · [`docs/RLS.md`](backend/docs/RLS.md) · [`scripts/generate-schedule.sh`](backend/scripts/generate-schedule.sh) (guide) · [`AGENTS.md`](backend/AGENTS.md) |
+| `engine/` | [`engine/README.md`](engine/README.md) | [`doc/business.md`](engine/doc/business.md) (cœur métier) · [`doc/nominal-flow.md`](engine/doc/nominal-flow.md) · [`doc/solver-errors.md`](engine/doc/solver-errors.md) · [`AGENTS.md`](engine/AGENTS.md) |
+| `frontend/` | [`frontend/README.md`](frontend/README.md) | [`AGENTS.md`](frontend/AGENTS.md) · [`specs/courantes/frontend-wizard.md`](specs/courantes/frontend-wizard.md) |
+
+**Transverse** :
+- **`CLAUDE.md`** — index opérationnel (stack, frontières, conventions) · racine **`AGENTS.md`** y pointe.
+- **`docs/project-map.md`** — carte détaillée · **`docs/architecture/`** — ADRs · **`docs/testing/`** — stratégie de tests · **`docs/technical-debt.md`**.
+- **`specs/`** — specs vivantes : `initiales/` (origine figée) · `courantes/` (ce que l'appli fait) · `evolution/` (à venir). Voir [`specs/README.md`](specs/README.md).
 
 ## Status
 
