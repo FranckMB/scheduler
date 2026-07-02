@@ -77,6 +77,13 @@ class ClubResource
     #[Groups(['read'])]
     public ?string $ffbbClubCode = null;
 
+    #[Groups(['read'])]
+    public ?string $accentColor = null;
+
+    /** @var list<string>|null */
+    #[Groups(['read'])]
+    public ?array $accentPalette = null;
+
     public static function fromEntity(Club $entity): self
     {
         $dto = new self;
@@ -95,6 +102,8 @@ class ClubResource
         $dto->locale = $entity->getLocale();
         $dto->onboardingCompleted = $entity->getOnboardingCompleted();
         $dto->ffbbClubCode = $entity->getFfbbClubCode();
+        $dto->accentColor = $entity->getAccentColor();
+        $dto->accentPalette = $entity->getAccentPalette();
 
         return $dto;
     }

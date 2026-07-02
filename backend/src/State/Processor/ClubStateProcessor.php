@@ -57,6 +57,12 @@ class ClubStateProcessor extends AbstractStateProcessor
         if (null !== $input->ffbbClubCode) {
             $entity->setFfbbClubCode($input->ffbbClubCode);
         }
+        if (null !== $input->accentColor) {
+            $entity->setAccentColor($input->accentColor);
+        }
+        if (null !== $input->accentPalette) {
+            $entity->setAccentPalette($input->accentPalette);
+        }
 
         return $entity;
     }
@@ -99,6 +105,12 @@ class ClubStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->ffbbClubCode) {
             $entity->setFfbbClubCode($input->ffbbClubCode);
+        }
+        if (null !== $input->accentColor) {
+            $entity->setAccentColor($input->accentColor);
+        }
+        if (null !== $input->accentPalette) {
+            $entity->setAccentPalette($input->accentPalette);
         }
     }
 

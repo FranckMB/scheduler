@@ -47,4 +47,15 @@ class ClubInput
 
     #[Groups(['write'])]
     public ?string $ffbbClubCode = null;
+
+    #[Assert\Regex(pattern: '/^#[0-9a-fA-F]{6}$/', message: 'accentColor must be a #RRGGBB hex colour')]
+    #[Groups(['write'])]
+    public ?string $accentColor = null;
+
+    /**
+     * @var list<string>|null
+     */
+    #[Assert\All([new Assert\Regex(pattern: '/^#[0-9a-fA-F]{6}$/')])]
+    #[Groups(['write'])]
+    public ?array $accentPalette = null;
 }
