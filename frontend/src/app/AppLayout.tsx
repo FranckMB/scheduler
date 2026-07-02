@@ -40,6 +40,7 @@ export function AppLayout() {
           <nav className="flex items-center gap-1">
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>
+            <NavItem to="/club">Club</NavItem>
             {isAdmin ? <NavItem to="/pending-members">Demandes</NavItem> : null}
             <NavItem to="/profile">Profil</NavItem>
             <Button variant="ghost" size="icon" aria-label="Basculer le thème" onClick={toggleMode}>

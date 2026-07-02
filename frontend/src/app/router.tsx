@@ -8,6 +8,7 @@ import { PendingMembersPage } from "@/features/auth/PendingMembersPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
+import { ClubPage } from "@/features/club/ClubPage";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 import { WizardPage } from "@/features/wizard/WizardLayout";
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/", element: <PlanningPage /> },
           { path: "/wizard", element: <WizardPage /> },
+          { path: "/club", element: <ClubPage /> },
           { path: "/profile", element: <ProfilePage /> },
           { path: "/pending-members", element: <PendingMembersPage /> },
         ],
