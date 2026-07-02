@@ -56,13 +56,23 @@ def is_team_satisfied_by_hard_locks(
     return hard_count >= sessions_per_week
 
 
+# Small INTEGER tiebreaker weights for the same-coach same-venue chaining bonus.
+# Two ceilings keep it a *bonus*, never a decider:
+#   1. A placed session is worth tier(≥1) + session_count(20) = 21 at minimum,
+#      so a chaining weight < 21 can never drop a session to chain others.
+#   2. The smallest gap between adjacent tiers' placement values is C−D = 9
+#      (30 vs 21), so a weight ≤ 8 can never steal a slot from a higher tier —
+#      S/A/B priority (gaps 90/900) is always safe; only the C↔D arbitration,
+#      which the club treats as indifferent, can wobble.
+# Hence max weight = 8. Order preserved (S>A>B>C>D); the pair's weight is that
+# of its highest tier (chaining SF1(S)+U15F(B) → 8, taken on the S).
 CHAINING_TIER_WEIGHTS = MappingProxyType(
     {
-        "S": 200,
-        "A": 20,
-        "B": 2,
-        "C": 0.2,
-        "D": 0.02,
+        "S": 8,
+        "A": 6,
+        "B": 4,
+        "C": 2,
+        "D": 1,
     }
 )
 
@@ -138,6 +148,14 @@ class Level2ObjectiveStats:
     total_terms: int
     chaining_bonus: int
     coefficient_by_assignment: Mapping[Any, int]
+    # Two-phase support: the placement-only objective expression and the built
+    # chaining terms (var, weight). When add_level_2_objective is called with
+    # apply_chaining=False, chaining is NOT in the objective yet — the caller can
+    # lock placement (placement_expression >= optimum) then optimise chaining in
+    # a bounded second pass. Proving optimality of the tiny chaining bonuses in a
+    # single objective is what blows up solve time on real datasets.
+    placement_expression: Any = None
+    chaining_terms: tuple[tuple[Any, int], ...] = ()
 
 
 def add_level_2_objective(
@@ -148,6 +166,7 @@ def add_level_2_objective(
     soft_terms: Iterable[Any] = (),
     hard_satisfied_team_ids: set[str] | None = None,
     score_formula_version: str = SCORE_FORMULA_VERSION,
+    apply_chaining: bool = True,
 ) -> Level2ObjectiveStats:
     """Maximize the fixed T24 weighted score for candidate placements.
 
@@ -221,20 +240,34 @@ def add_level_2_objective(
         coefficients.append(LEVEL_2_OBJECTIVE_WEIGHTS[weight_name])
         soft_bonus_terms += 1
 
-    chaining_terms = add_chaining_bonus(model, assignment_list, teams=teams)
+    # Placement objective (tiers + session_count + unplaced penalty + soft terms).
+    placement_expression = (
+        sum(coefficient * variable for variable, coefficient in zip(variables, coefficients))
+        if variables
+        else 0
+    )
 
-    if variables:
-        model.Maximize(sum(coefficient * variable for variable, coefficient in zip(variables, coefficients)))
+    # Chaining terms are BUILT (vars + linking constraints) regardless — a
+    # two-phase caller needs them present in the model. Whether they enter the
+    # objective now depends on apply_chaining: single-phase (default) folds them
+    # into the one Maximize; two-phase (apply_chaining=False) maximises placement
+    # only, then the caller locks placement and optimises chaining separately.
+    chaining_pairs = add_chaining_bonus(model, assignment_list, teams=teams)
+
+    if apply_chaining and chaining_pairs:
+        model.Maximize(placement_expression + sum(weight * variable for variable, weight in chaining_pairs))
     else:
-        model.Maximize(0)
+        model.Maximize(placement_expression)
 
     return Level2ObjectiveStats(
         score_formula_version=SCORE_FORMULA_VERSION,
         placement_terms=placement_terms,
         soft_bonus_terms=soft_bonus_terms,
-        total_terms=len(variables),
-        chaining_bonus=chaining_terms,
+        total_terms=len(variables) + len(chaining_pairs),
+        chaining_bonus=len(chaining_pairs),
         coefficient_by_assignment=coefficient_by_assignment,
+        placement_expression=placement_expression,
+        chaining_terms=tuple(chaining_pairs),
     )
 
 
@@ -308,21 +341,23 @@ def add_chaining_bonus(
     assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike],
     *,
     teams: Iterable[Any] = (),
-) -> int:
-    """Add a SOFT bonus for same-venue back-to-back coaching sessions.
+) -> list[tuple[BoolVarLike, int]]:
+    """Build SOFT bonus terms for same-venue back-to-back coaching sessions.
 
     For each pair of consecutive slots (A, B) in the same venue on the same
     day where A.end == B.start, and for each coach who could be assigned to
     both slots, create a ``chained`` BoolVar that is true when the coach is
-    assigned to both. The bonus weight is ``tier_weight / 50`` where the tier
-    is the highest-tier team the coach coaches across the two sessions.
+    assigned to both. The bonus weight is ``CHAINING_TIER_WEIGHTS[tier]`` where
+    the tier is the highest-tier team the coach coaches across the two sessions.
 
-    Returns the number of chaining bonus terms added to the objective.
+    Returns a list of ``(chained_var, weight)`` terms. The caller MUST fold
+    these into its single ``model.Maximize(...)`` — this function must not call
+    Maximize itself, or CP-SAT's single-objective model would drop them.
     """
 
     assignment_list = _normalise_assignments(assignments)
     if len(assignment_list) < 2:
-        return 0
+        return []
 
     teams_by_id = _teams_by_id(teams)
 
@@ -357,7 +392,7 @@ def add_chaining_bonus(
             "end": end_min,
         })
 
-    chaining_terms = 0
+    chaining_pairs: list[tuple[BoolVarLike, int]] = []
     seen_pairs: set[tuple[str, str]] = set()
 
     for key, entries in slot_lookup.items():
@@ -394,14 +429,18 @@ def add_chaining_bonus(
 
                     var_a = _var(entry["assignment"])
                     var_b = _var(next_entry["assignment"])
+                    # Cheap encoding: `chained` only ever appears in the objective
+                    # with a positive weight, so two linear upper bounds suffice —
+                    # the maximiser pushes it to min(var_a, var_b) = "both placed".
+                    # Avoids the reified AddBoolAnd/AddBoolOr + OnlyEnforceIf, which
+                    # blow up the model on real datasets (BCCL solve > 30 s).
                     chained = model.NewBoolVar(f"chained_{coach_id}_{pair_id_a}_{pair_id_b}")
-                    model.AddBoolAnd([var_a, var_b]).OnlyEnforceIf(chained)
-                    model.AddBoolOr([var_a.Not(), var_b.Not()]).OnlyEnforceIf(chained.Not())
+                    model.Add(chained <= var_a)
+                    model.Add(chained <= var_b)
 
-                    model.Maximize(weight * chained)
-                    chaining_terms += 1
+                    chaining_pairs.append((chained, int(weight)))
 
-    return chaining_terms
+    return chaining_pairs
 
 
 def _normalise_assignments(
