@@ -132,7 +132,10 @@ export function PlanningPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold">Planning</h1>
+      <div className="mb-4 flex items-center gap-3">
+        {me?.club?.logoUrl ? <img src={me.club.logoUrl} alt="" className="size-8 shrink-0 rounded object-contain" /> : null}
+        <h1 className="text-2xl font-semibold">Planning</h1>
+      </div>
 
       {0 === schedules.length ? (
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />

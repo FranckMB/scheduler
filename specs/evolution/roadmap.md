@@ -171,8 +171,8 @@ Polish frontend discuté, non structurant mais confort d'usage.
 | **Assistant = menu avec ses étapes en sous-menu** (les 6 étapes du wizard sous l'entrée « Assistant » du menu gauche) | ⬜ | Remplace la colonne d'étapes interne du wizard |
 | **Clic sur le nom / logo du club → Accueil** | ⬜ | Raccourci d'accueil |
 | **« Demandes » fusionné dans « Gestion du club »** | ⬜ | « Demandes » n'est qu'un wrap du club (approbation des membres) → le mettre comme section du hub /club, pas une entrée de menr distincte |
-| **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ⬜ | Aujourd'hui titre et footer scrollent avec le contenu |
-| **Wizard : colonne d'étapes repliable / plein écran** | ⬜ | Trop large ; « agrandir » masque la nav (à trancher). Recoupe l'idée « étapes en sous-menu » ci-dessus |
+| **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ✅ | Livré : header (titre + n° d'étape) et footer Précédent/Suivant en `sticky` dans `WizardLayout.tsx` |
+| **Wizard : colonne d'étapes repliable / plein écran** | ✅ | Livré : toggle « Plein écran » replie la nav gauche (`navCollapsed`) ; le masquage forcé sur l'étape génération est retiré → l'utilisateur contrôle (résout aussi l'accès menu en régénération) |
 | **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances |
 | **i18n des diagnostics solveur** (fichier de traduction) | ⬜ | Alertes **en français** obligatoire. Aujourd'hui messages FR codés en dur dans l'engine + reste EN à éliminer (`soft_lock_moved`, `unused_slot`). Cible : clés + fichier de traduction (côté backend `DiagnosticMessageBuilder` ou front) plutôt que du texte en dur dans l'engine |
 

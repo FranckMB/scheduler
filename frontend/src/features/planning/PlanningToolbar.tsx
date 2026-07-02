@@ -51,7 +51,7 @@ export function PlanningToolbar({
           </option>
         ))}
       </select>
-      <Button size="sm" variant="outline" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
+      <Button size="sm" variant="default" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
         <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
         {isGenerating ? "Génération…" : "Régénérer"}
       </Button>
