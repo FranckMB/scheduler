@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
       - name: Lint Docker Compose
         run: docker compose config > /dev/null
 
@@ -24,6 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
@@ -41,11 +51,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait php-fpm engine
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
+
+      - name: Generate JWT keys
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
 
       - name: Init test database
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
@@ -69,11 +87,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait php-fpm engine
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
+
+      - name: Generate JWT keys
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
 
       - name: Init test database
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
@@ -86,6 +112,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Build engine
         run: docker compose build engine
@@ -105,6 +136,11 @@ jobs:
     needs: [blocking-tests, engine-tests]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Build all images
         run: docker compose build

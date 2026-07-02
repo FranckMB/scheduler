@@ -12,6 +12,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
+        curl \
+        ca-certificates \
         unzip \
         libicu-dev \
         libzip-dev \
@@ -33,8 +35,9 @@ RUN apt-get update \
         pdo_pgsql \
         sockets \
         zip \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
+    && mkdir -p /usr/src/php/ext/redis \
+    && curl -fsSL https://github.com/phpredis/phpredis/archive/6.3.0.tar.gz | tar xz -C /usr/src/php/ext/redis --strip-components 1 \
+    && docker-php-ext-install redis \
     && echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/zz-memory.ini \
     && echo "max_execution_time = 0" >> /usr/local/etc/php/conf.d/zz-memory.ini \
     && rm -rf /var/lib/apt/lists/*
