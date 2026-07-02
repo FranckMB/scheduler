@@ -13,6 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
  * Club identity accent: PATCH /api/club/appearance updates accentColor + palette
@@ -54,6 +55,27 @@ final class ClubAppearanceTest extends WebTestCase
         ], json_encode(['accentColor' => 'rouge'], \JSON_THROW_ON_ERROR));
 
         self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testLogoUploadAndPublicServe(): void
+    {
+        $this->client->loginUser($this->user);
+
+        $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', true);
+        $tmp = (string) tempnam(sys_get_temp_dir(), 'logo') . '.png';
+        file_put_contents($tmp, $png);
+        $file = new UploadedFile($tmp, 'logo.png', 'image/png', null, true);
+
+        $this->client->request('POST', '/api/club/logo', [], ['file' => $file], ['HTTP_X-Club-Id' => $this->club->getId()]);
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        $expected = '/api/clubs/' . $this->club->getId() . '/logo';
+        self::assertSame($expected, $data['logoUrl']);
+
+        // Served publicly with the right content type.
+        $this->client->request('GET', $expected);
+        self::assertResponseIsSuccessful();
+        self::assertSame('image/png', $this->client->getResponse()->headers->get('Content-Type'));
     }
 
     protected function setUp(): void

@@ -129,6 +129,7 @@ final class AuthController extends AbstractController
                     'id' => $clubEntity->getId(),
                     'name' => $clubEntity->getName(),
                     'onboardingCompleted' => $clubEntity->getOnboardingCompleted(),
+                    'logoUrl' => $clubEntity->getLogoUrl(),
                     'accentColor' => $clubEntity->getAccentColor(),
                     'accentPalette' => $clubEntity->getAccentPalette(),
                 ];

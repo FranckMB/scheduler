@@ -78,6 +78,9 @@ class ClubResource
     public ?string $ffbbClubCode = null;
 
     #[Groups(['read'])]
+    public ?string $logoUrl = null;
+
+    #[Groups(['read'])]
     public ?string $accentColor = null;
 
     /** @var list<string>|null */
@@ -102,6 +105,7 @@ class ClubResource
         $dto->locale = $entity->getLocale();
         $dto->onboardingCompleted = $entity->getOnboardingCompleted();
         $dto->ffbbClubCode = $entity->getFfbbClubCode();
+        $dto->logoUrl = $entity->getLogoUrl();
         $dto->accentColor = $entity->getAccentColor();
         $dto->accentPalette = $entity->getAccentPalette();
 

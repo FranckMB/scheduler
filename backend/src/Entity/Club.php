@@ -63,6 +63,10 @@ class Club
     #[ORM\Column(type: 'string', length: 64, unique: true, nullable: true)]
     private ?string $ffbbClubCode = null;
 
+    /** Public URL of the club logo (served by the logo endpoint / storage). */
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $logoUrl = null;
+
     /** Club accent colour (hex, e.g. #3498DB) driving the UI `--accent`. */
     #[ORM\Column(type: 'string', length: 9, nullable: true)]
     private ?string $accentColor = null;
@@ -263,6 +267,18 @@ class Club
     public function setFfbbClubCode(?string $ffbbClubCode): self
     {
         $this->ffbbClubCode = $ffbbClubCode;
+
+        return $this;
+    }
+
+    public function getLogoUrl(): ?string
+    {
+        return $this->logoUrl;
+    }
+
+    public function setLogoUrl(?string $logoUrl): self
+    {
+        $this->logoUrl = $logoUrl;
 
         return $this;
     }

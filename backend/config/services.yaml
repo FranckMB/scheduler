@@ -7,6 +7,9 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    # Where club logos are stored. Dev/default = local disk (persisted via the
+    # ./:/app mount). Prod: swap the LogoStorage alias below for object storage.
+    app.logo_storage_dir: '%kernel.project_dir%/var/storage/logos'
 
 services:
     # default configuration for services in *this* file
@@ -23,6 +26,13 @@ services:
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+
+    # Logo storage: local disk in dev. Prod swaps this alias for an object-storage
+    # implementation (S3/GCS/…) — callers depend only on the LogoStorage interface.
+    App\Storage\LocalLogoStorage:
+        arguments:
+            $dir: '%app.logo_storage_dir%'
+    App\Storage\LogoStorage: '@App\Storage\LocalLogoStorage'
 
     App\EventListener\TenantFilterListener:
         tags:
