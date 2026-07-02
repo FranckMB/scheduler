@@ -132,6 +132,12 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     return ScheduleOutputSchema.model_validate(result_dict)
 
 
+# Hard cap (seconds) on the phase-2 chaining optimisation. Placement is already
+# optimal and locked by then, so this only bounds how long we polish the small
+# back-to-back bonus — best-effort, never at the expense of placement or budget.
+CHAINING_PHASE_MAX_SECONDS = 10
+
+
 def _adaptive_timeout(n_teams: int, n_venues: int, payload_cap: int) -> int:
     """Scale the solve budget to problem size, capped by the payload budget.
 
@@ -208,7 +214,9 @@ def _solve(
 
     # Build assignments from model.x with start/end for consecutive-session constraints.
     # Each (team, venue, day, slot) appears exactly ONCE — no per-coach duplication.
-    # Coach and player info is passed separately via team_coach_map / team_player_map.
+    # Player info is passed separately via team_player_map. The team's MAIN coach
+    # (first entry of team_coach_map after the role filter) is attached so the
+    # chaining bonus can reward back-to-back sessions of the same coach.
     assignments: list[dict[str, Any]] = []
     for slot_key, var in model.x.items():
         team_id_str = str(slot_key[0])
@@ -222,6 +230,9 @@ def _solve(
         start_minutes = _time_to_minutes(slot_start)
         end_minutes = start_minutes + duration
 
+        team_coaches = team_coach_map.get(team_id_str) or []
+        main_coach_id = team_coaches[0] if team_coaches else None
+
         assignments.append({
             "var": var,
             "team_id": team_id_str,
@@ -229,6 +240,7 @@ def _solve(
             "slot_id": slot_id,
             "start": start_minutes,
             "end": end_minutes,
+            "coach_id": main_coach_id,
         })
 
     add_level_1_hard_constraints(
@@ -275,23 +287,51 @@ def _solve(
 
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
 
-    add_level_2_objective(
+    # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
+    # into the model but kept out of the objective (apply_chaining=False) so their
+    # tiny coefficients never wreck the placement optimality proof.
+    objective_stats = add_level_2_objective(
         model,
         assignments,
         teams=data.get("teams", []),
         soft_terms=soft_terms,
         hard_satisfied_team_ids=hard_satisfied_team_ids,
+        apply_chaining=False,
     )
 
-    # Solve — adaptive timeout capped by the payload budget.
+    # Adaptive timeout capped by the payload budget.
     n_teams = len(data.get("teams") or [])
     n_venues = len(data.get("venues") or [])
     timeout_seconds = _adaptive_timeout(n_teams, n_venues, input_data.solver_timeout_seconds)
+
+    # --- Phase 1: solve for the optimal placement (fast, chaining excluded). ---
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout_seconds
     solver.parameters.random_seed = input_data.solver_seed
     solver.parameters.num_search_workers = 1
     status = solver.Solve(model)
+
+    # --- Phase 2: lock the placement quality, then optimise the chaining bonus
+    # under a hard time cap. Proving chaining-optimality can be slow, so we bound
+    # it and keep the best-effort result — placement stays optimal either way. ---
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and objective_stats.chaining_terms:
+        placement_optimum = int(solver.ObjectiveValue())
+        cast(Any, model).Add(objective_stats.placement_expression >= placement_optimum)
+        # Warm-start phase 2 with the placement-optimal solution so it always has
+        # at least that (chaining ≥ 0) to return, even if the cap fires early.
+        for phase1_var in model.x.values():
+            cast(Any, model).AddHint(phase1_var, solver.Value(phase1_var))
+        cast(Any, model).Maximize(
+            objective_stats.placement_expression
+            + sum(weight * var for var, weight in objective_stats.chaining_terms)
+        )
+        phase2_solver = cp_model.CpSolver()
+        phase2_solver.parameters.max_time_in_seconds = min(timeout_seconds, CHAINING_PHASE_MAX_SECONDS)
+        phase2_solver.parameters.random_seed = input_data.solver_seed
+        phase2_solver.parameters.num_search_workers = 1
+        phase2_status = phase2_solver.Solve(model)
+        if phase2_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            solver, status = phase2_solver, phase2_status
 
     return status, solver, model, conflicts
 

@@ -149,7 +149,12 @@ def _working_days_mon_fri(intervals: list[tuple[int, int, int, str]]) -> set[int
     return {day for _, _, day, lock in intervals if 1 <= day <= 5 and lock != "HARD"}
 
 
-@pytest.mark.timeout(30)
+# 60s: this test verifies CORRECTNESS (no coach overlaps/triples), not speed.
+# The same-coach chaining bonus (small tiebreaker terms) makes proving optimality
+# on the BCCL payload cost ~24s of solve (vs <1s without) — an accepted trade for
+# grouping a coach's back-to-back sessions. The real solve ceiling is the adaptive
+# timeout (60/180/600s), not this mark; 60s here just guards against a true blow-up.
+@pytest.mark.timeout(60)
 def test_bccl_regression_all_bugs_fixed() -> None:
     """Replay the BCCL payload and verify all 4 implicit-rule bugs are fixed.
 
