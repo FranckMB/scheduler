@@ -1,9 +1,9 @@
-import { RefreshCw, Star } from "lucide-react";
+import { CheckCircle2, Lock, LockOpen, RefreshCw, Star } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
-import type { Schedule } from "./api";
+import type { Schedule, ScheduleStatus } from "./api";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -12,6 +12,15 @@ const VIEWS: { key: ViewMode; label: string }[] = [
   { key: "equipe", label: "Par équipe" },
 ];
 
+const STATUS_LABELS: Record<ScheduleStatus, string> = {
+  DRAFT: "Brouillon",
+  PENDING: "En attente",
+  GENERATING: "Génération…",
+  COMPLETED: "Terminé",
+  FAILED: "Échec",
+  VALIDATED: "Validé",
+};
+
 interface PlanningToolbarProps {
   schedules: Schedule[];
   selectedScheduleId: string | null;
@@ -19,7 +28,11 @@ interface PlanningToolbarProps {
   viewMode: ViewMode;
   onViewMode: (mode: ViewMode) => void;
   onRegenerate: () => void;
+  onValidate: () => void;
+  onReopen: () => void;
+  onSetBaseline: () => void;
   isGenerating: boolean;
+  actionBusy: boolean;
   baselineScheduleId: string | null;
 }
 
@@ -30,11 +43,18 @@ export function PlanningToolbar({
   viewMode,
   onViewMode,
   onRegenerate,
+  onValidate,
+  onReopen,
+  onSetBaseline,
   isGenerating,
+  actionBusy,
   baselineScheduleId,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
   const isBaseline = null !== selected && selected.id === baselineScheduleId;
+  const isValidated = null !== selected && "VALIDATED" === selected.status;
+  const isCompleted = null !== selected && "COMPLETED" === selected.status;
+  const isFinished = isValidated || isCompleted;
 
   return (
     <>
@@ -51,10 +71,37 @@ export function PlanningToolbar({
           </option>
         ))}
       </select>
-      <Button size="sm" variant="default" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
+      <Button
+        size="sm"
+        variant="default"
+        className="h-8"
+        disabled={isGenerating || isValidated || null === selectedScheduleId}
+        onClick={onRegenerate}
+        title={isValidated ? "Planning validé (lecture seule) — rouvrez-le pour régénérer" : undefined}
+      >
         <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
         {isGenerating ? "Génération…" : "Régénérer"}
       </Button>
+
+      {isCompleted ? (
+        <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
+          <CheckCircle2 className="size-4" />
+          Valider
+        </Button>
+      ) : null}
+      {isValidated ? (
+        <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onReopen}>
+          <LockOpen className="size-4" />
+          Rouvrir
+        </Button>
+      ) : null}
+      {isFinished && !isBaseline ? (
+        <Button size="sm" variant="ghost" className="h-8" disabled={actionBusy} onClick={onSetBaseline}>
+          <Star className="size-4" />
+          Définir principal
+        </Button>
+      ) : null}
+
       <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
         {VIEWS.map((view) => (
           <Button
@@ -70,12 +117,15 @@ export function PlanningToolbar({
       </div>
       {selected ? (
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="rounded-full bg-muted px-2 py-0.5">{selected.status}</span>
+          <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+            {isValidated ? <Lock className="size-3" /> : null}
+            {STATUS_LABELS[selected.status]}
+          </span>
           {null !== selected.score ? <span>score {selected.score}</span> : null}
           {isBaseline ? (
             <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
               <Star className="size-3" />
-              Base
+              Planning principal
             </span>
           ) : (
             <span className="rounded-full border border-border px-2 py-0.5">Secondaire</span>

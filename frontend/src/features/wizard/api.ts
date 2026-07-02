@@ -202,7 +202,7 @@ export async function validateConstraints(): Promise<ValidateResult> {
 export const createSchedule = (name: string): Promise<{ id: string }> => api.post("schedules", { json: { name, status: "DRAFT" } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
 export const getSchedule = (id: string): Promise<{ id: string; status: ScheduleStatus }> => api.get(`schedules/${id}`).json();
 
 export interface SlotTemplatePayload {
