@@ -1,6 +1,12 @@
 # Identité visuelle par club (logo + couleur d'accent)
 
-> **Base de réflexion** — feature discutée pendant la refonte frontend, **scaffoldée mais jamais branchée**. But : chaque club a sa **couleur d'accent** (et son **logo**), donnant une identité visuelle propre. Statut : ✅ livré · 🟡 partiel/scaffoldé · ⬜ à faire.
+> **LIVRÉ (2026-07-02)** — accent par club + logo + extraction 3 couleurs + écran « Gestion du club ». Détail livré ci-dessous ; ce qui reste ⬜ est du confort (voir « Questions ouvertes »).
+>
+> **Livré** : `Club.accentColor` + `accentPalette` + `logoUrl` (backend) · endpoint `PATCH /api/club/appearance` (accent) · upload/serve logo via abstraction `LogoStorage` (locale en dev, swappable prod) `POST/DELETE /api/club/logo` + `GET /api/clubs/{id}/logo` (public) · application front `--accent`/`--accent-foreground` (AA auto, dark/light) via `useApplyClubTheme` · écran `/club` (hub) section Identité (upload logo + extraction 3 couleurs → suggestion accent + palette) · affichage logo header + écran d'attente génération.
+>
+> **Reste ⬜** : stockage prod réel (impl S3/objet à écrire quand la cible est connue) · usage plus poussé des 3 couleurs (teintes signature au-delà de `--accent-2`) · login marque produit (inchangé).
+
+> **Base de réflexion initiale** (conservée pour contexte). Statut : ✅ livré · 🟡 partiel/scaffoldé · ⬜ à faire.
 
 ## Pourquoi
 
