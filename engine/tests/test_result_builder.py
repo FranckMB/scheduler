@@ -47,6 +47,25 @@ class ResultBuilderTest(unittest.TestCase):
         validated = ScheduleOutputSchema.model_validate(result)
         self.assertEqual(validated.status, "completed")
 
+    def test_metrics_expose_determinism_versions(self):
+        from app.solver.objective import SCORE_FORMULA_VERSION
+
+        data = self._minimal_data()
+        model = build_model(data)
+        for var in model.x.values():
+            model.Add(var == 1)
+
+        solver, status = self._solve(model)
+        result = build_result(data, solver, model, status=status, constraint_version="2.0")
+
+        metrics = result["metrics"]
+        self.assertEqual(metrics["score_formula_version"], SCORE_FORMULA_VERSION)
+        self.assertEqual(metrics["constraint_version"], "2.0")
+        # Must still validate against the (now extended) metrics schema.
+        validated = ScheduleOutputSchema.model_validate(result)
+        self.assertEqual(validated.metrics.score_formula_version, SCORE_FORMULA_VERSION)
+        self.assertEqual(validated.metrics.constraint_version, "2.0")
+
     def test_infeasible_solution_returns_failed_status_and_diagnostics(self):
         data = self._minimal_data()
         model = build_model(data)

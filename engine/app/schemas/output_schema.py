@@ -52,6 +52,12 @@ class SolverMetricsSchema(SerializableModel):
     nb_variables: int
     nb_constraints: int
     wall_time_ms: int
+    # Determinism identifiers (v3 §4.5): with solver_seed they pin down a run.
+    # score_formula_version = which fixed T24 scoring formula produced the score;
+    # constraint_version = the backend↔engine contract version the model was built
+    # against. Optional so older payloads still validate.
+    score_formula_version: str | None = Field(default=None, alias="scoreFormulaVersion")
+    constraint_version: str | None = Field(default=None, alias="constraintVersion")
 
 
 class ScheduleOutputSchema(SerializableModel):

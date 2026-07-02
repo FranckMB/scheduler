@@ -22,6 +22,7 @@ from app.solver.model import (
     _format_time,
     _time_to_minutes,
 )
+from app.solver.objective import SCORE_FORMULA_VERSION
 
 
 def build_result(
@@ -31,6 +32,7 @@ def build_result(
     *,
     status: Any | None = None,
     fallback_used: bool = False,
+    constraint_version: str | None = None,
 ) -> dict[str, Any]:
     """Transform a CP-SAT solution into a dict matching ``ScheduleOutputSchema``.
 
@@ -88,6 +90,9 @@ def build_result(
         "nb_variables": int(model.NumVariables()),
         "nb_constraints": int(len(model.Proto().constraints)),
         "wall_time_ms": int(round(solver.WallTime() * 1000)),
+        # Determinism identifiers — the backend persists these on the Schedule.
+        "score_formula_version": SCORE_FORMULA_VERSION,
+        "constraint_version": constraint_version,
     }
 
     return {
