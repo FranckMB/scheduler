@@ -1502,7 +1502,13 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
                 or config.get("coachId")
                 or config.get("coach_id")
             )
-            if team_id and coach_id:
+            # Only the MAIN coach is a HARD no-overlap resource: a team never
+            # trains without its head coach, so the head coach is implicitly
+            # present at every session. An ASSISTANT is optional and must NOT
+            # block placement (e.g. a team can be scheduled while the assistant
+            # is busy elsewhere). Missing role → treated as MAIN (legacy-safe).
+            role = str(metadata.get("role") or "MAIN").strip().upper()
+            if team_id and coach_id and role != "ASSISTANT":
                 team_id_str = str(team_id)
                 coach_id_str = str(coach_id)
                 result["team_coach_map"].setdefault(team_id_str, []).append(coach_id_str)
