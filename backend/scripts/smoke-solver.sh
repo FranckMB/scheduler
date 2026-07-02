@@ -37,12 +37,19 @@ if ! php 'test -f config/jwt/private.pem && echo yes' | grep -q yes; then
   php 'php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction' >/dev/null
 fi
 
-# 3. Dev fixtures — need a seeded club (id is regenerated on each load)
-CLUB_ID=$(php "php bin/console doctrine:query:sql \"SELECT id FROM club LIMIT 1\"" | grep -oiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
+# 3. Dev fixtures — need a seeded club the smoke USER belongs to. Multiple
+#    clubs exist in fixtures (e.g. FakeClub), so pick the club tied to
+#    USER_EMAIL's membership — a bare "club LIMIT 1" can return a club the
+#    token user isn't a member of, yielding a 403 at generate time.
+club_for_user() {
+  php "php bin/console doctrine:query:sql \"SELECT c.id FROM club c JOIN club_user cu ON cu.club_id = c.id JOIN app_user u ON u.id = cu.user_id WHERE u.email = '$USER_EMAIL' LIMIT 1\"" \
+    | grep -oiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true
+}
+CLUB_ID=$(club_for_user)
 if [[ -z "$CLUB_ID" ]]; then
-  warn "no club found — loading fixtures"
+  warn "no club for $USER_EMAIL — loading fixtures"
   dc exec -T -e APP_ENV=dev -u 1000:1000 php-fpm sh -c 'cd /app/backend && php bin/console doctrine:fixtures:load --no-interaction' >/dev/null
-  CLUB_ID=$(php "php bin/console doctrine:query:sql \"SELECT id FROM club LIMIT 1\"" | grep -oiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)
+  CLUB_ID=$(club_for_user)
 fi
 [[ -n "$CLUB_ID" ]] || die "could not resolve a club id (fixtures failed?)"
 ok "club id: $CLUB_ID"

@@ -61,6 +61,33 @@ class TestParseV2CoachConstraints:
         result = parse_v2_constraints(constraints)
         assert result["team_coach_map"]["team-sm1"] == ["coach-maxime", "coach-thomas"]
 
+    def test_assistant_coach_excluded_from_hard_map(self) -> None:
+        """ASSISTANT coach is optional — never a HARD no-overlap resource.
+
+        Only the MAIN (head) coach blocks placement; an assistant busy
+        elsewhere must not prevent the team from being scheduled.
+        """
+        constraints = [
+            {
+                "id": "tc-main",
+                "type": "TEAM_COACH",
+                "teamId": "team-sm1",
+                "severity": "HARD",
+                "value": "coach-maxime",
+                "metadata": {"coachId": "coach-maxime", "role": "MAIN"},
+            },
+            {
+                "id": "tc-asst",
+                "type": "TEAM_COACH",
+                "teamId": "team-sm1",
+                "severity": "SOFT",
+                "value": "coach-thomas",
+                "metadata": {"coachId": "coach-thomas", "role": "ASSISTANT"},
+            },
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["team_coach_map"]["team-sm1"] == ["coach-maxime"]
+
     def test_coach_player_unavailability_parsed(self) -> None:
         constraints = [
             {

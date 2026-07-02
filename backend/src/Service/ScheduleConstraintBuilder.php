@@ -32,6 +32,13 @@ final class ScheduleConstraintBuilder
     private const CACHE_TTL_SECONDS = 14_400;
     private const SCHEMA_VERSION = '2.0';
     private const DEFAULT_SOLVER_SEED = 42;
+    /**
+     * Upper bound on the solve budget (seconds), aligned with the engine input
+     * schema default (`solver_timeout_seconds` = 650). The engine derives an
+     * adaptive timeout from problem size and caps it at this ceiling — this is
+     * the maximum a manager can be made to wait, not a fixed solve time.
+     */
+    private const DEFAULT_SOLVER_TIMEOUT_SECONDS = 650;
     private const SOFT_LOCK_PENALTY = 10_000;
 
     /** @var array<string, array<VenueTrainingSlot>> */
@@ -194,7 +201,7 @@ final class ScheduleConstraintBuilder
             'clubId' => $clubId,
             'seasonId' => $seasonId,
             'solverSeed' => $solverSeed,
-            'solverTimeoutSeconds' => 300,
+            'solverTimeoutSeconds' => self::DEFAULT_SOLVER_TIMEOUT_SECONDS,
             'venues' => array_map($this->serializeVenue(...), $venues),
             'teams' => array_map(fn (Team $team): array => $this->serializeTeam($team, $seasonId), $teams),
             'coaches' => array_map($this->serializeCoach(...), $coaches),
@@ -240,7 +247,7 @@ final class ScheduleConstraintBuilder
             'externalRef' => $venue->getExternalRef(),
             'isActive' => $venue->getIsActive(),
             'parentVenueId' => $venue->getParentVenueId(),
-            'trainingSlots' => $this->buildTrainingSlots($this->currentAvailabilitiesByVenue[$venue->getId()] ?? []),
+            'trainingSlots' => $this->buildTrainingSlots($this->currentAvailabilitiesByVenue[$venue->getId()] ?? [], $venue->getCanSplit()),
         ];
     }
 
@@ -249,7 +256,7 @@ final class ScheduleConstraintBuilder
      *
      * @return array<int, array{dayOfWeek: int, startTime: string, durationMinutes: int, capacity: int}>
      */
-    private function buildTrainingSlots(array $slots): array
+    private function buildTrainingSlots(array $slots, bool $canSplit): array
     {
         if ([] === $slots) {
             return [];
@@ -257,11 +264,15 @@ final class ScheduleConstraintBuilder
 
         $result = [];
         foreach ($slots as $slot) {
+            // Divisibility is a venue property: an indivisible venue (single
+            // court) can host at most one team per slot, whatever the slot's
+            // stored capacity. Only a splittable venue may expose capacity > 1.
+            $capacity = $canSplit ? $slot->getCapacity() : 1;
             $result[] = [
                 'dayOfWeek' => $slot->getDayOfWeek(),
                 'startTime' => $slot->getStartTime()->format('H:i'),
                 'durationMinutes' => $slot->getDurationMinutes(),
-                'capacity' => $slot->getCapacity(),
+                'capacity' => $capacity,
             ];
         }
 
@@ -411,16 +422,19 @@ final class ScheduleConstraintBuilder
      */
     private function serializePriorityTierConstraints(array $priorityTiers): array
     {
+        // orToolsWeight is intentionally NOT sent: the solver enforces tier
+        // priority with fixed hardcoded weights (S=10000/A=1000/B=100/C=10/D=1),
+        // so a per-tier weight would be accepted then ignored. The engine reads
+        // only metadata.id + metadata.defaultMinSessions from this constraint.
         return array_map(static fn (PriorityTier $priorityTier): array => [
             'id' => \sprintf('priority-tier:%d', $priorityTier->getId()),
             'teamId' => '*',
             'type' => 'PRIORITY_TIER',
             'severity' => 'SOFT',
-            'value' => $priorityTier->getOrToolsWeight(),
+            'value' => null,
             'metadata' => [
                 'id' => $priorityTier->getId(),
                 'label' => $priorityTier->getLabel(),
-                'orToolsWeight' => $priorityTier->getOrToolsWeight(),
                 'defaultMinSessions' => $priorityTier->getDefaultMinSessions(),
             ],
         ], $priorityTiers);

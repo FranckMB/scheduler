@@ -210,5 +210,74 @@ class ResultBuilderTest(unittest.TestCase):
         self.assertEqual(result["diagnostics"], [])
 
 
+class DiagnosticPrecisionTest(unittest.TestCase):
+    """S5: diagnostics must answer who / when / why in manager language."""
+
+    def test_venue_over_capacity_names_teams_venue_day_time(self) -> None:
+        from app.solver.result_builder import _diagnose_conflicts
+
+        model_data = {
+            "teams": [
+                {"id": "team-1", "name": "Séniors M1"},
+                {"id": "team-2", "name": "U15 F"},
+            ],
+            "venues": [{"id": "venue-1", "name": "Gymnase Léo Lagrange"}],
+            "coaches": [],
+        }
+        slots = [
+            {"venueId": "venue-1", "teamId": "team-1", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90},
+            {"venueId": "venue-1", "teamId": "team-2", "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90},
+        ]
+        diags = _diagnose_conflicts(model_data, cp_model.OPTIMAL, slots)
+        self.assertEqual(1, len(diags))
+        msg = diags[0]["message"]
+        self.assertIn("Gymnase Léo Lagrange", msg)  # which venue
+        self.assertIn("Séniors M1", msg)  # which teams (by name)
+        self.assertIn("U15 F", msg)
+        self.assertIn("mardi", msg)  # when (day)
+        self.assertIn("18:00", msg)  # when (time)
+        self.assertEqual("venue-1", diags[0]["venueId"])
+        self.assertEqual(2, diags[0]["dayOfWeek"])
+
+    def test_venue_capacity_two_not_flagged(self) -> None:
+        from app.solver.result_builder import _diagnose_conflicts
+
+        model_data = {"teams": [{"id": "t1", "name": "A"}, {"id": "t2", "name": "B"}], "venues": [{"id": "v1", "name": "Gym"}], "coaches": []}
+        slots = [
+            {"venueId": "v1", "teamId": "t1", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90},
+            {"venueId": "v1", "teamId": "t2", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90},
+        ]
+        caps = {("v1", 1, "18:00"): 2}
+        self.assertEqual([], _diagnose_conflicts(model_data, cp_model.OPTIMAL, slots, slot_capacities=caps))
+
+    def test_unplaced_names_team_and_gives_reason(self) -> None:
+        from app.solver.result_builder import _diagnose_unplaced
+
+        model_data = {
+            "teams": [{"id": "team-9", "name": "U11 Mixte", "sessionsPerWeek": 2}],
+            "venues": [{"id": "v1", "name": "Gym", "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}]}],
+        }
+        diags = _diagnose_unplaced(model_data, slots=[])
+        self.assertEqual(1, len(diags))
+        msg = diags[0]["message"]
+        self.assertIn("U11 Mixte", msg)  # who (by name)
+        self.assertIn("n'a pas pu être placée", msg)  # why (reason present)
+        self.assertEqual("team-9", diags[0]["teamId"])
+
+    def test_unplaced_forced_venue_without_slots_reason(self) -> None:
+        from app.solver.result_builder import _diagnose_unplaced
+
+        model_data = {
+            "teams": [{"id": "t1", "name": "Séniors", "forcedVenueId": "v-closed"}],
+            "venues": [
+                {"id": "v-open", "name": "Gym Ouvert", "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}]},
+                {"id": "v-closed", "name": "Gym Fermé", "trainingSlots": []},
+            ],
+        }
+        diags = _diagnose_unplaced(model_data, slots=[])
+        self.assertEqual(1, len(diags))
+        self.assertIn("Gym Fermé", diags[0]["message"])  # names the saturated forced venue
+
+
 if __name__ == "__main__":
     unittest.main()

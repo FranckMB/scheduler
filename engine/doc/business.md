@@ -41,6 +41,8 @@ Chaque salle a des **fenetres de disponibilite** (`availability`). Une salle ne 
 
 Un adulte qui dirige les seances. Exemple : **Maxime Dupont** est l'entraineur principal du SM1. Un entraineur ne peut diriger qu'une seule equipe a la fois. Un cas particulier existe : l'**entraineur-joueur** (`coach-player`), qui est entraineur d'une equipe et joueur dans une autre. Il ne peut pas etre a deux endroits simultanement.
 
+Un entraineur peut etre **principal (`MAIN`)** ou **assistant (`ASSISTANT`)** d'une equipe. Le principal est **indispensable** : une equipe ne s'entraine jamais sans lui, il est donc considere present a **chacune** de ses seances (contrainte dure de non-chevauchement). L'assistant est **optionnel** : il ne bloque pas le placement — l'equipe peut etre planifiee meme si l'assistant est occupe ailleurs.
+
 ### Contrainte (`Constraint`)
 
 Une regle metier qui faconne l'emploi du temps. Chaque contrainte a :
@@ -73,7 +75,7 @@ Ces regles sont toujours actives, meme si l'utilisateur ne les configure pas :
 | Contrainte | Description |
 |------------|-------------|
 | `VENUE_AT_MOST_ONE` | Une salle = une equipe a la fois. Deux equipes ne peuvent pas partager le meme gymnase au meme moment |
-| `COACH_NO_OVERLAP` | Un entraineur = une equipe a la temps. Maxime Dupont ne peut pas diriger le SM1 et l'U15M1 en meme temps |
+| `COACH_NO_OVERLAP` | Un entraineur **principal** = une equipe a la fois. Maxime Dupont ne peut pas diriger le SM1 et l'U15M1 en meme temps. Seul le coach `MAIN` est concerne (l'assistant est optionnel et ne bloque pas) |
 | `COACH_PLAYER_NO_OVERLAP` | Un entraineur-joueur ne peut pas etre a deux endroits simultanement. S'il entraine le SM1 a 19h00, il ne peut pas jouer avec les Seniors 2 a la meme heure |
 | `TEAM_NO_OVERLAP` | Une equipe ne peut pas avoir deux seances en meme temps. Le SM1 ne peut pas s'entrainer a 19h00 au Gymnase A et a 19h00 au Gymnase B simultanement |
 | `MIN_SESSIONS` | Chaque equipe recoit au moins son minimum de seances. Si le SM1 demande 3 seances, il en aura au moins 3 (ou 0 si l'instance est infaisable) |
@@ -96,8 +98,8 @@ Chaque creneau a un niveau de verrouillage (`lockLevel`) :
 
 Les equipes sont classees par tiers. Quand les ressources sont rares, les equipes de haut niveau sont servies en premier :
 
-| Tier | Poids (`orToolsWeight`) | Exemple d'equipe |
-|------|------------------------|------------------|
+| Tier | Poids (fixe) | Exemple d'equipe |
+|------|--------------|------------------|
 | S | 10 000 | SM1, SF1 (equipes premieres) |
 | A | 1 000 | U20M, U18F (formation elite) |
 | B | 100 | U15M1, U15F1 (competition) |
@@ -106,6 +108,8 @@ Les equipes sont classees par tiers. Quand les ressources sont rares, les equipe
 
 Le poids determine combien de points rapporte chaque seance placee. Placer une seance du SM1 (S) rapporte 10 000 points. Placer une seance d'une equipe D rapporte 1 point. Ainsi, si le Gymnase A n'a qu'un seul creneau libre le lundi a 19h00, le moteur le donnera au SM1 plutot qu'a l'ecole de basket.
 
+Ces poids sont **fixes et codes en dur** dans le solveur (garantie de priorite stricte S ≫ A ≫ B ≫ C ≫ D). Ils ne sont **pas** parametrables par club : le champ `orToolsWeight` autrefois transmis a ete retire du payload (accepte puis ignore).
+
 ---
 
 ## Ce que le moteur produit
@@ -113,7 +117,9 @@ Le poids determine combien de points rapporte chaque seance placee. Placer une s
 Le moteur retourne trois choses :
 
 1. **Un emploi du temps optimise** : la meilleure repartition possible des seances, en maximisant le score total (somme des poids des seances placees)
-2. **Des diagnostics** : alertes sur les conflits non resolus, les creneaux deplaces, les entraineurs surcharges
+2. **Des diagnostics** : alertes en **langage gestionnaire** — chaque alerte dit **qui, quand et pourquoi**. Un conflit de gymnase nomme le gymnase, les equipes concernees, le jour + la plage horaire et la capacite depassee ; une equipe non placee est nommee avec la raison (aucun creneau declare, gymnase impose sans creneau, creneaux deja pris…) ; une infaisabilite pointe la sous-capacite (seances demandees vs creneaux disponibles) quand c'est identifiable
 3. **Des equipes non placees** : liste des equipes pour lesquelles aucune seance n'a pu etre assignee, avec la raison
 
 Le moteur ne garantit pas que toutes les equipes auront toutes leurs seances. Si le club a 40 equipes et seulement 2 gymnases, certaines equipes de faible priorite risquent de rester sans creneau. C'est un choix explicite : il vaut mieux un emploi du temps partiel mais realiste, qu'un emploi du temps complet mais impossible a tenir.
+
+Le **temps de calcul** s'adapte a la taille du probleme (equipes x gymnases) : ~60 s pour un petit club, jusqu'a 600 s pour un gros, sans jamais depasser le plafond demande. Inutile d'attendre 10 min pour un club a 8 equipes.

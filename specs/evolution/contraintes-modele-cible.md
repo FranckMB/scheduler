@@ -60,7 +60,7 @@ La spec impose une **liste fermée** (pas de type inventé hors liste). Mapping 
 
 La spec remplace le modèle « salle = booléen » par une capacité de parallélisme :
 
-- 🟡 **`divisible` + `max_parallel_trainings`** (gymnase = 1, gymnase divisible = 2). Livré : case « Terrain divisible » (`Venue.canSplit`) + capacité 1/2 posée **par créneau**. ⬜ Manque : `max_parallel_trainings` paramétrable ( > 2), et une contrainte `FACILITY_MAX_PARALLEL_TRAININGS` de 1ère classe (plutôt que la capacité au niveau créneau).
+- 🟡 **`divisible` + `max_parallel_trainings`** (gymnase = 1, gymnase divisible = 2). Livré : case « Terrain divisible » (`Venue.canSplit`) + capacité 1/2 posée **par créneau**, avec garde-fou builder (tranche solveur S4) : une salle **non divisible** force la capacité de ses créneaux à **1**, quelle que soit la valeur stockée. ⬜ Manque : `max_parallel_trainings` paramétrable ( > 2), et une contrainte `FACILITY_MAX_PARALLEL_TRAININGS` de 1ère classe (plutôt que la capacité au niveau créneau).
 - ⬜ **`allow_shared_court` par équipe** — chaque équipe accepte/refuse de partager le terrain (jeunes = oui, seniors = non). Non modélisé. Interagit avec la divisibilité : une salle divisible ne peut mutualiser deux équipes que si les deux acceptent le partage.
 
 À réfléchir : où vit la capacité — au **créneau** (actuel), à la **salle** (`max_parallel_trainings`), ou aux deux ? La spec penche « salle », l'implémentation actuelle « créneau ».
@@ -75,7 +75,7 @@ Règles toujours vraies, pas à ressaisir par l'utilisateur :
 - ✅ Capacité de salle respectée.
 - ✅ Séances dans les créneaux municipaux (disponibilités salle).
 - ✅ Locks HARD respectés.
-- ⬜ **Coach principal présent à toutes les séances de son équipe** — à vérifier/garantir dans le solveur.
+- ✅ **Coach principal (MAIN) présent à toutes les séances de son équipe** — garanti implicitement : seul le coach `MAIN` alimente le `team_coach_map` (no-overlap dur), l'assistant (`ASSISTANT`) est optionnel et ne bloque plus le placement (tranche solveur S2, `parse_v2_constraints`).
 
 ---
 

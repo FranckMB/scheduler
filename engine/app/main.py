@@ -132,6 +132,24 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     return ScheduleOutputSchema.model_validate(result_dict)
 
 
+def _adaptive_timeout(n_teams: int, n_venues: int, payload_cap: int) -> int:
+    """Scale the solve budget to problem size, capped by the payload budget.
+
+    complexity = n_teams * n_venues → small problems return fast instead of
+    burning the full 650 s ceiling. Tiers: ≤50 → 60 s · ≤200 → 180 s · else
+    600 s. ``payload_cap`` (``solver_timeout_seconds``) is the hard ceiling:
+    the manager can never be made to wait longer than they asked for.
+    """
+    complexity = n_teams * n_venues
+    if complexity <= 50:
+        adaptive = 60
+    elif complexity <= 200:
+        adaptive = 180
+    else:
+        adaptive = 600
+    return min(adaptive, payload_cap)
+
+
 def _solve(
     data: dict[str, Any],
     input_data: ScheduleInputSchema,
@@ -265,9 +283,12 @@ def _solve(
         hard_satisfied_team_ids=hard_satisfied_team_ids,
     )
 
-    # Solve — uses the full configured timeout.
+    # Solve — adaptive timeout capped by the payload budget.
+    n_teams = len(data.get("teams") or [])
+    n_venues = len(data.get("venues") or [])
+    timeout_seconds = _adaptive_timeout(n_teams, n_venues, input_data.solver_timeout_seconds)
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = input_data.solver_timeout_seconds
+    solver.parameters.max_time_in_seconds = timeout_seconds
     solver.parameters.random_seed = input_data.solver_seed
     solver.parameters.num_search_workers = 1
     status = solver.Solve(model)

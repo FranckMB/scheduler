@@ -13,16 +13,11 @@ from app.solver.objective import (
 EXPECTED_WEIGHTS = {
     "S": 10000,
     "A": 1000,
-    "SOFT": 800,
     "B": 100,
     "session_count": 20,
-    "pref_link": 80,
     "preferred": 60,
-    "grouping": 50,
     "preferred_day": 30,
     "C": 10,
-    "max_days": 8,
-    "opt_link": 5,
     "D": 1,
     "rest": 3,
 }
@@ -36,7 +31,7 @@ class LevelTwoObjectiveTest(unittest.TestCase):
 
     def test_fixed_weights_and_formula_version_are_locked(self):
         self.assertEqual(EXPECTED_WEIGHTS, dict(LEVEL_2_OBJECTIVE_WEIGHTS))
-        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V3", SCORE_FORMULA_VERSION)
+        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V4", SCORE_FORMULA_VERSION)
 
         with self.assertRaises(TypeError):
             LEVEL_2_OBJECTIVE_WEIGHTS["S"] = 1
