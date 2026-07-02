@@ -14,7 +14,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Lint Docker Compose
         run: docker compose config > /dev/null
@@ -29,7 +31,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
@@ -48,7 +52,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
         run: docker compose up -d --wait
@@ -79,7 +85,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
         run: docker compose up -d --wait
@@ -100,7 +108,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Build engine
         run: docker compose build engine
@@ -122,7 +132,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare .env
-        run: cp .env.dist .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Build all images
         run: docker compose build
