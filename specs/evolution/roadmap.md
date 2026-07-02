@@ -145,6 +145,7 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ |
 | Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; couvrir la liste complète de warnings |
 | Push temps réel (Mercure statut/score) | ✅ | v3 §2, §6 | Livré |
+| **Identité visuelle par club** (couleur d'accent + logo) | 🟡 | — | Scaffoldé non branché (`themeStore.accent` mort, `--accent` prévu « per club », pas de champ Club.logo/color) → [`identite-visuelle-club.md`](identite-visuelle-club.md) |
 | `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ |
 | `max_days_per_week` coach (calcul dynamique + override checkbox) | 🟡 | v3 §3.4 | À vérifier |
 | App **mobile** (React Native/Expo, consultation → exceptions V2) | ⬜ | v3 §1.4 · FF#14 | P2 |
