@@ -69,11 +69,12 @@ final class ClubAppearanceTest extends WebTestCase
         $this->client->request('POST', '/api/club/logo', [], ['file' => $file], ['HTTP_X-Club-Id' => $this->club->getId()]);
         self::assertResponseIsSuccessful();
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $expected = '/api/clubs/' . $this->club->getId() . '/logo';
-        self::assertSame($expected, $data['logoUrl']);
+        $base = '/api/clubs/' . $this->club->getId() . '/logo';
+        // URL carries a content-hash cache-buster (?v=...) so the browser refetches on change.
+        self::assertStringStartsWith($base . '?v=', (string) $data['logoUrl']);
 
-        // Served publicly with the right content type.
-        $this->client->request('GET', $expected);
+        // Served publicly with the right content type (query ignored by the route).
+        $this->client->request('GET', (string) $data['logoUrl']);
         self::assertResponseIsSuccessful();
         self::assertSame('image/png', $this->client->getResponse()->headers->get('Content-Type'));
     }

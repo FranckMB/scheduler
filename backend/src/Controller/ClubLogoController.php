@@ -68,7 +68,10 @@ final class ClubLogoController extends AbstractController
         }
         $this->storage->store($clubId, $bytes);
 
-        $url = "/api/clubs/{$clubId}/logo";
+        // Content-hash cache-buster: the serving URL is otherwise stable, so a new
+        // upload would keep the browser-cached image (esp. in the app header). The
+        // hash changes iff the image bytes change.
+        $url = "/api/clubs/{$clubId}/logo?v=" . substr(md5($bytes), 0, 8);
         $club->setLogoUrl($url);
         $this->entityManager->flush();
 
