@@ -57,7 +57,7 @@ jobs:
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait php-fpm engine
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
@@ -90,7 +90,7 @@ jobs:
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait php-fpm engine
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
