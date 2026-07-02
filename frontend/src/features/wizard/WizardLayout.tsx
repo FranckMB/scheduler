@@ -1,5 +1,5 @@
-import { AlertTriangle, Lock } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { AlertTriangle, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -38,8 +38,10 @@ export function WizardPage() {
   const { data: me } = useMe();
   const validation = useStepValidation(stepId);
   const index = WIZARD_STEPS.findIndex((s) => s.id === stepId);
+  const currentStep = WIZARD_STEPS[index];
   const blocked = validation.errors.length > 0;
   const isLast = index === WIZARD_STEPS.length - 1;
+  const [navCollapsed, setNavCollapsed] = useState(false);
   // First-time club (not yet onboarded) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely.
   const guided = me?.club?.onboardingCompleted === false;
@@ -75,42 +77,59 @@ export function WizardPage() {
     }
   }, [guided, ready, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
-  // On the generation step the planning is shown full-width (nav hidden);
-  // "Précédent" (→ Récap) brings the step nav back.
-  const isGenerate = "generate" === stepId;
-
   return (
-    <div className={cn("flex flex-col gap-6", isGenerate ? "" : "md:flex-row")}>
-      {/* Left step navigation (free navigation) */}
-      <nav className={cn("shrink-0 md:w-52", isGenerate ? "hidden" : "")}>
-        <ol className="flex flex-col gap-1">
-          {WIZARD_STEPS.map((step, i) => {
-            const locked = guided && i > maxIndex;
-            return (
-              <li key={step.id}>
-                <button
-                  type="button"
-                  disabled={locked}
-                  onClick={() => setStep(step.id)}
-                  aria-current={step.id === stepId ? "step" : undefined}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition",
-                    step.id === stepId ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60",
-                    locked ? "cursor-not-allowed opacity-40 hover:bg-transparent" : "",
-                  )}
-                >
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-xs">{i + 1}</span>
-                  <span className="flex-1">{step.label}</span>
-                  {locked ? <Lock className="size-3" /> : null}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+    <div className="flex flex-col gap-6 md:flex-row">
+      {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
+      {navCollapsed ? null : (
+        <nav className="shrink-0 md:w-52">
+          <ol className="flex flex-col gap-1">
+            {WIZARD_STEPS.map((step, i) => {
+              const locked = guided && i > maxIndex;
+              return (
+                <li key={step.id}>
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setStep(step.id)}
+                    aria-current={step.id === stepId ? "step" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition",
+                      step.id === stepId ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60",
+                      locked ? "cursor-not-allowed opacity-40 hover:bg-transparent" : "",
+                    )}
+                  >
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-xs">{i + 1}</span>
+                    <span className="flex-1">{step.label}</span>
+                    {locked ? <Lock className="size-3" /> : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      )}
 
       {/* Current step */}
       <div className="min-w-0 flex-1">
+        {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
+        <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background/95 py-3 backdrop-blur">
+          <h2 className="text-lg font-semibold">
+            <span className="text-muted-foreground">
+              Étape {index + 1}/{WIZARD_STEPS.length} ·{" "}
+            </span>
+            {currentStep?.label}
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setNavCollapsed((c) => !c)}
+            aria-label={navCollapsed ? "Afficher les étapes" : "Masquer les étapes"}
+          >
+            {navCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+            {navCollapsed ? "Étapes" : "Plein écran"}
+          </Button>
+        </div>
+
         <StepContent stepId={stepId} />
 
         {validation.errors.map((error) => (
@@ -126,12 +145,13 @@ export function WizardPage() {
           </p>
         ))}
 
-        <div className="mt-6 flex justify-between border-t border-border pt-4">
+        {/* Sticky Prev/Next footer (W7) — stays visible on long steps */}
+        <div className="sticky bottom-0 z-20 mt-6 flex justify-between border-t border-border bg-background/95 py-4 backdrop-blur">
           <Button variant="outline" disabled={0 === index} onClick={prev}>
-            {isGenerate ? "← Retour aux étapes" : "Précédent"}
+            Précédent
           </Button>
-          {isGenerate ? null : (
-            <Button disabled={blocked || isLast} onClick={next}>
+          {isLast ? null : (
+            <Button disabled={blocked} onClick={next}>
               Suivant
             </Button>
           )}
