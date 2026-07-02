@@ -2,18 +2,15 @@ import { useEffect } from "react";
 
 import { useThemeStore } from "@/shared/stores/themeStore";
 
-/** Applies the theme mode (.dark class) and the optional club accent to <html>. */
+/**
+ * Applies the theme mode (.dark class) to <html>. The club accent is applied
+ * separately by useApplyClubTheme (from /me) — this hook must NOT touch
+ * `--accent`, otherwise it wipes the club accent on every mode toggle.
+ */
 export function useApplyTheme(): void {
   const mode = useThemeStore((state) => state.mode);
-  const accent = useThemeStore((state) => state.accent);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("dark", mode === "dark");
-    if (accent) {
-      root.style.setProperty("--accent", accent);
-    } else {
-      root.style.removeProperty("--accent");
-    }
-  }, [mode, accent]);
+    document.documentElement.classList.toggle("dark", mode === "dark");
+  }, [mode]);
 }

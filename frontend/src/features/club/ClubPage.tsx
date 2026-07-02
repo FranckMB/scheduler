@@ -15,13 +15,13 @@ import { useDeleteLogo, useUpdateAppearance, useUploadLogo } from "./queries";
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
 
-function IdentitySection({ accentColor, logoUrl, clubName }: { accentColor: string | null; logoUrl: string | null; clubName: string }) {
+function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { accentColor: string | null; accentPalette: string[] | null; logoUrl: string | null; clubName: string }) {
   const updateAppearance = useUpdateAppearance();
   const uploadLogo = useUploadLogo();
   const deleteLogo = useDeleteLogo();
 
   const [color, setColor] = useState(accentColor ?? DEFAULT_ACCENT);
-  const [palette, setPalette] = useState<string[]>([]);
+  const [palette, setPalette] = useState<string[]>(accentPalette ?? []);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(logoUrl);
 
@@ -155,7 +155,12 @@ function ClubHub({ me }: { me: MeResponse }) {
       <h1 className="mb-1 text-xl font-semibold">Gestion du club</h1>
       <p className="mb-4 text-sm text-muted-foreground">{me.club?.name ?? "—"}</p>
       {/* Hub extensible : membres, réinitialisation… viendront ici. */}
-      <IdentitySection accentColor={me.club?.accentColor ?? null} logoUrl={me.club?.logoUrl ?? null} clubName={me.club?.name ?? ""} />
+      <IdentitySection
+        accentColor={me.club?.accentColor ?? null}
+        accentPalette={me.club?.accentPalette ?? null}
+        logoUrl={me.club?.logoUrl ?? null}
+        clubName={me.club?.name ?? ""}
+      />
     </div>
   );
 }
