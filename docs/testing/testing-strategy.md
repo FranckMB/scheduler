@@ -10,11 +10,13 @@ Order and dependencies:
 
 ```
 lint ──┐
-       ├─► blocking-tests ──┬─► unit-tests
-phpstan┘                    └─► functional-tests
+       ├─► blocking-tests ──► unit-tests
+phpstan┘
 engine-tests ───────────────────────────────────► build-docker
 blocking-tests ─────────────────────────────────┘
 ```
+
+All PHP test jobs first **create + migrate the test DB** (`doctrine:database:create --if-not-exists` + `migrations:migrate`, `--env=test`) and run phpunit with `-e APP_ENV=test` on the `docker compose exec` — the containers default to `APP_ENV=dev` (root `.env` env_file) and `phpunit.xml.dist`'s `<server APP_ENV=test>` is not `force`d, so the real env var must be set explicitly.
 
 | Job | What it runs |
 |-----|--------------|
@@ -22,7 +24,6 @@ blocking-tests ─────────────────────�
 | `phpstan` | `composer phpstan` (level 8) — needs postgres + redis |
 | `blocking-tests` | the 4 `--group phase1` tests below — **gate for the rest of the PHP suite** |
 | `unit-tests` | full PHPUnit `tests/` |
-| `functional-tests` | `tests/ --filter Functional` |
 | `engine-tests` | `pytest` + `ruff check .` + `mypy` (in the engine container) |
 | `build-docker` | `docker compose build` (needs blocking + engine tests) |
 

@@ -166,6 +166,15 @@ export interface ConstraintPayload {
   isActive?: boolean;
 }
 
+export interface TeamTag {
+  id: string;
+  name: string;
+  color: string | null;
+  isSystem: boolean;
+}
+
+export const listTeamTags = (): Promise<TeamTag[]> => collectionAll<TeamTag>("team_tags");
+
 export const listConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");
 export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
 export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
@@ -192,3 +201,18 @@ export async function validateConstraints(): Promise<ValidateResult> {
 
 export const createSchedule = (name: string): Promise<{ id: string }> => api.post("schedules", { json: { name, status: "DRAFT" } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
+
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+export const getSchedule = (id: string): Promise<{ id: string; status: ScheduleStatus }> => api.get(`schedules/${id}`).json();
+
+export interface SlotTemplatePayload {
+  scheduleId: string;
+  teamId: string;
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  lockLevel: "HARD";
+}
+
+export const createSlotTemplate = (body: SlotTemplatePayload): Promise<{ id: string }> => api.post("schedule_slot_templates", { json: body }).json();

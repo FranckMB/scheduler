@@ -1,19 +1,60 @@
-import { Plus, Trash2, X } from "lucide-react";
+import { Check, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 
-import type { VenueTrainingSlot } from "../api";
+import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, hhmm } from "../lib/days";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
 const DURATIONS = [60, 75, 90, 105, 120];
 const WEEK = DAYS.filter((d) => d.n <= 6);
+const CAP_HINT = "Nombre d'équipes pouvant s'entraîner en même temps sur ce créneau (2 = terrain coupé en deux).";
 
-function SlotEditor({ slot, onClose }: { slot: VenueTrainingSlot; onClose: () => void }) {
+/** Capacity select shared by the editor and the "à poser" toolbar. Only a
+ * splittable gym can host 2 teams; otherwise the whole court is used. */
+function CapacitySelect({ value, onChange, canSplit, className }: { value: number; onChange: (n: number) => void; canSplit: boolean; className?: string }) {
+  if (!canSplit) {
+    return <span className={`inline-flex items-center rounded-md border border-input bg-muted/40 px-2 text-xs text-muted-foreground ${className ?? ""}`}>1 équipe (terrain entier)</span>;
+  }
+  return (
+    <Select aria-label="Capacité" title={CAP_HINT} className={className} value={value} onChange={(e) => onChange(Number(e.target.value))}>
+      <option value={1}>1 équipe (terrain entier)</option>
+      <option value={2}>2 équipes (terrain divisé)</option>
+    </Select>
+  );
+}
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Colour swatch + free hex field; both apply immediately, no Enter needed. */
+function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string) => void }) {
+  const current = venue.color ?? "#666666";
+  const [hex, setHex] = useState(current);
+  const commit = (value: string) => {
+    setHex(value);
+    if (HEX_RE.test(value)) {
+      onApply(value);
+    }
+  };
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        aria-label="Couleur"
+        type="color"
+        className="size-9 shrink-0 rounded border border-input bg-background"
+        value={HEX_RE.test(hex) ? hex : current}
+        onChange={(e) => commit(e.target.value)}
+      />
+      <Input aria-label="Couleur (hexadécimal)" className="h-9 w-24 font-mono text-xs" value={hex} placeholder="#3498DB" onChange={(e) => commit(e.target.value)} />
+    </div>
+  );
+}
+
+function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canSplit: boolean; onClose: () => void }) {
   const update = useUpdateSlot();
   const del = useDeleteSlot();
   const [day, setDay] = useState(slot.dayOfWeek);
@@ -22,7 +63,7 @@ function SlotEditor({ slot, onClose }: { slot: VenueTrainingSlot; onClose: () =>
   const [capacity, setCapacity] = useState(slot.capacity);
 
   const save = () => {
-    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity } });
+    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } });
     onClose();
   };
 
@@ -44,18 +85,14 @@ function SlotEditor({ slot, onClose }: { slot: VenueTrainingSlot; onClose: () =>
           </option>
         ))}
       </Select>
-      <Select aria-label="Capacité" className="h-8 w-20" value={capacity} onChange={(e) => setCapacity(Number(e.target.value))}>
-        <option value={1}>cap 1</option>
-        <option value={2}>cap 2</option>
-      </Select>
-      <Button size="sm" onClick={save} disabled={update.isPending}>
-        Enregistrer
+      <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="h-8 w-52" />
+      <Button size="icon" className="size-8" onClick={save} disabled={update.isPending} title="Enregistrer" aria-label="Enregistrer">
+        <Check className="size-4" />
       </Button>
-      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => (del.mutate(slot.id), onClose())}>
+      <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => (del.mutate(slot.id), onClose())} title="Supprimer" aria-label="Supprimer">
         <Trash2 className="size-4" />
-        Supprimer
       </Button>
-      <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" onClick={onClose}>
+      <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" title="Fermer" onClick={onClose}>
         <X className="size-4" />
       </Button>
     </div>
@@ -98,10 +135,9 @@ export function VenuesStep() {
       </p>
 
       <form onSubmit={addVenue} className="mb-4 flex items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Input aria-label="Nom du gymnase" placeholder="Nom du gymnase" className="h-9 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
-        <Button type="submit" disabled={create.isPending}>
+        <Input aria-label="Nom du gymnase" placeholder="Nom du gymnase" className="h-8 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+        <Button type="submit" size="icon" className="size-8" disabled={create.isPending} title="Ajouter un gymnase" aria-label="Ajouter un gymnase">
           <Plus className="size-4" />
-          Ajouter un gymnase
         </Button>
       </form>
 
@@ -127,13 +163,7 @@ export function VenuesStep() {
                 </option>
               ))}
             </Select>
-            <input
-              aria-label="Couleur"
-              type="color"
-              className="size-9 shrink-0 rounded border border-input bg-background"
-              value={selected.color ?? "#666666"}
-              onChange={(e) => update.mutate({ id: selected.id, body: { name: selected.name, color: e.target.value, canSplit: selected.canSplit } })}
-            />
+            <ColorField key={selected.id} venue={selected} onApply={(color) => update.mutate({ id: selected.id, body: { name: selected.name, color, canSplit: selected.canSplit } })} />
             <Input
               aria-label="Renommer le gymnase"
               className="h-9 w-48"
@@ -142,6 +172,14 @@ export function VenuesStep() {
               onChange={(e) => setVenueName(e.target.value)}
               onBlur={() => venueName.trim() && venueName !== selected.name && update.mutate({ id: selected.id, body: { name: venueName.trim(), color: selected.color, canSplit: selected.canSplit } })}
             />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Un gymnase divisible peut accueillir 2 équipes en même temps (terrain coupé en deux).">
+              <input
+                type="checkbox"
+                checked={selected.canSplit}
+                onChange={(e) => update.mutate({ id: selected.id, body: { name: selected.name, color: selected.color, canSplit: e.target.checked } })}
+              />
+              Terrain divisible
+            </label>
             <span className="mx-2 h-6 w-px bg-border" />
             <span className="text-xs text-muted-foreground">À poser :</span>
             <Select aria-label="Durée à poser" className="h-9 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
@@ -151,13 +189,9 @@ export function VenuesStep() {
                 </option>
               ))}
             </Select>
-            <Select aria-label="Capacité à poser" className="h-9 w-24" value={capacity} onChange={(e) => setCapacity(Number(e.target.value))}>
-              <option value={1}>cap 1</option>
-              <option value={2}>cap 2</option>
-            </Select>
-            <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => delVenue.mutate(selected.id)}>
+            <CapacitySelect value={capacity} onChange={setCapacity} canSplit={selected.canSplit} className="h-9 w-52" />
+            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => delVenue.mutate(selected.id)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
               <Trash2 className="size-4" />
-              Supprimer ce gymnase
             </Button>
           </div>
 
@@ -165,11 +199,11 @@ export function VenuesStep() {
             venue={selected}
             slots={slots.filter((s) => s.venueId === selected.id)}
             selectedSlotId={editingSlot?.id ?? null}
-            onAdd={(dayOfWeek, startTime) => addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity })}
+            onAdd={(dayOfWeek, startTime) => addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity: selected.canSplit ? capacity : 1 })}
             onSelect={(slot) => setEditingSlot(slot)}
           />
 
-          {null !== editingSlot ? <SlotEditor key={editingSlot.id} slot={editingSlot} onClose={() => setEditingSlot(null)} /> : null}
+          {null !== editingSlot ? <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} onClose={() => setEditingSlot(null)} /> : null}
         </>
       )}
     </div>

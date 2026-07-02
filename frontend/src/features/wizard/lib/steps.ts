@@ -1,4 +1,4 @@
-export type WizardStepId = "teams" | "venues" | "coaches" | "constraints" | "recap";
+export type WizardStepId = "teams" | "venues" | "coaches" | "constraints" | "recap" | "generate";
 
 export interface StepDef {
   id: WizardStepId;
@@ -12,6 +12,7 @@ export const WIZARD_STEPS: StepDef[] = [
   { id: "coaches", label: "Coachs" },
   { id: "constraints", label: "Contraintes" },
   { id: "recap", label: "Récapitulatif" },
+  { id: "generate", label: "Génération" },
 ];
 
 export interface StepValidation {

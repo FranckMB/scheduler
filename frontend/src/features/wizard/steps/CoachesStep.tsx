@@ -116,7 +116,7 @@ function CoachCard({ coach, teams, teamName, coachLinks, playerLinks }: CardProp
           <option value="ASSISTANT">Adjoint</option>
           <option value="PLAYER">Joueur</option>
         </Select>
-        <Button size="sm" variant="outline" onClick={addLink} disabled={0 === teams.length}>
+        <Button size="sm" variant="outline" className="ml-auto" onClick={addLink} disabled={0 === teams.length}>
           <Plus className="size-4" />
           Lier
         </Button>
@@ -161,9 +161,8 @@ export function CoachesStep() {
           <input type="checkbox" checked={employee} onChange={(e) => setEmployee(e.target.checked)} />
           Salarié
         </label>
-        <Button type="submit" disabled={create.isPending}>
+        <Button type="submit" size="icon" className="ml-auto size-8" disabled={create.isPending} title="Ajouter le coach" aria-label="Ajouter le coach">
           <Plus className="size-4" />
-          Ajouter
         </Button>
       </form>
 

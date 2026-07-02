@@ -47,17 +47,20 @@ jobs:
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
 
+      - name: Init test database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
+
       - name: TenantIsolationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
 
       - name: TenantCacheIsolationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantCacheIsolationTest.php --group phase1'
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantCacheIsolationTest.php --group phase1'
 
       - name: ConcurrentGenerationTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Queue/ConcurrentGenerationTest.php --group phase1'
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Queue/ConcurrentGenerationTest.php --group phase1'
 
       - name: ContractSchemaTest
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ContractSchemaTest.php --group phase1'
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ContractSchemaTest.php --group phase1'
 
   unit-tests:
     name: Unit Tests
@@ -72,24 +75,11 @@ jobs:
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
 
+      - name: Init test database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
+
       - name: Run unit tests
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/'
-
-  functional-tests:
-    name: Functional Tests
-    runs-on: ubuntu-latest
-    needs: blocking-tests
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Start services
-        run: docker compose up -d --wait
-
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
-
-      - name: Run functional tests
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/ --filter Functional'
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/'
 
   engine-tests:
     name: Engine Tests
