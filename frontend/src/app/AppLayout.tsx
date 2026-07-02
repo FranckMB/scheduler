@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
+import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
@@ -23,6 +24,7 @@ function NavItem({ to, children }: { to: string; children: string }) {
 export function AppLayout() {
   const { data } = useMe();
   const logout = useLogout();
+  useApplyClubTheme();
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
   const isAdmin = data?.role === "admin";
