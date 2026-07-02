@@ -17,7 +17,7 @@
 - **Reprise sur le premier trou** (guidé) : à l'entrée du wizard on se positionne sur la première étape incomplète (pas d'équipe → Équipes, gymnase sans créneau → Gymnases, pas de coach → Coachs) via `store.jumpTo` ; tout rempli → on ne bouge pas. Les clubs ayant déjà généré arrivent sur le planning (AuthGuard).
 - **Tenant** : le front n'envoie **aucun** header `X-Club-Id` (club résolu serveur depuis le JWT — voir `backend/docs/TENANT.md`).
 - **URIs API** : snake_case (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`…), **pas** les tirets du draft.
-- **Différé (évolution)** : import Excel/CSV, mode démo, fermetures exceptionnelles.
+- **Différé (évolution)** : import Excel/CSV, mode démo, fermetures exceptionnelles, rôles non-admin & gestion des membres, transition de saison — tous suivis dans [`../evolution/roadmap.md`](../evolution/roadmap.md).
 - Garanti par : `backend/tests/.../OnboardingFlowTest`, `backend/scripts/onboarding-smoke.sh`, `frontend/.../WizardPage.test`.
 
 ---
