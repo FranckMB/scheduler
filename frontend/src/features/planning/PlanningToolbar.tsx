@@ -1,4 +1,5 @@
-import { CheckCircle2, Lock, LockOpen, RefreshCw, Star } from "lucide-react";
+import { CheckCircle2, Lock, LockOpen, Pencil, RefreshCw, Star } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
@@ -31,6 +32,7 @@ interface PlanningToolbarProps {
   onValidate: () => void;
   onReopen: () => void;
   onSetBaseline: () => void;
+  onRename: (name: string) => void;
   isGenerating: boolean;
   actionBusy: boolean;
   baselineScheduleId: string | null;
@@ -46,6 +48,7 @@ export function PlanningToolbar({
   onValidate,
   onReopen,
   onSetBaseline,
+  onRename,
   isGenerating,
   actionBusy,
   baselineScheduleId,
@@ -55,33 +58,64 @@ export function PlanningToolbar({
   const isValidated = null !== selected && "VALIDATED" === selected.status;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isFinished = isValidated || isCompleted;
+  const [editingName, setEditingName] = useState<string | null>(null);
 
   return (
     <>
-      <select
-        aria-label="Planning"
-        value={selectedScheduleId ?? ""}
-        onChange={(event) => onSelectSchedule(event.target.value)}
-        className="h-8 rounded-md border border-input bg-background px-3 text-sm"
-      >
-        {schedules.map((schedule) => (
-          <option key={schedule.id} value={schedule.id}>
-            {schedule.name}
-            {schedule.id === baselineScheduleId ? " ★" : ""}
-          </option>
-        ))}
-      </select>
-      <Button
-        size="sm"
-        variant="default"
-        className="h-8"
-        disabled={isGenerating || isValidated || null === selectedScheduleId}
-        onClick={onRegenerate}
-        title={isValidated ? "Planning validé (lecture seule) — rouvrez-le pour régénérer" : undefined}
-      >
-        <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
-        {isGenerating ? "Génération…" : "Régénérer"}
-      </Button>
+      {null !== editingName ? (
+        <input
+          autoFocus
+          aria-label="Nom du planning"
+          value={editingName}
+          onChange={(event) => setEditingName(event.target.value)}
+          onKeyDown={(event) => {
+            if ("Enter" === event.key) {
+              const value = editingName.trim();
+              if ("" !== value) {
+                onRename(value);
+              }
+              setEditingName(null);
+            } else if ("Escape" === event.key) {
+              setEditingName(null);
+            }
+          }}
+          onBlur={() => setEditingName(null)}
+          className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+        />
+      ) : (
+        <>
+          <select
+            aria-label="Planning"
+            value={selectedScheduleId ?? ""}
+            onChange={(event) => onSelectSchedule(event.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {schedules.map((schedule) => (
+              <option key={schedule.id} value={schedule.id}>
+                {schedule.name}
+                {schedule.id === baselineScheduleId ? " ★" : ""}
+              </option>
+            ))}
+          </select>
+          {null !== selected && !isValidated ? (
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditingName(selected.name)} aria-label="Renommer le planning" title="Renommer">
+              <Pencil className="size-4" />
+            </Button>
+          ) : null}
+        </>
+      )}
+      {isValidated ? null : (
+        <Button
+          size="sm"
+          variant="default"
+          className="h-8"
+          disabled={isGenerating || null === selectedScheduleId}
+          onClick={onRegenerate}
+        >
+          <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
+          {isGenerating ? "Génération…" : "Régénérer"}
+        </Button>
+      )}
 
       {isCompleted ? (
         <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
