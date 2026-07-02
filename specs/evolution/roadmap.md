@@ -44,6 +44,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | Collecte des besoins coach par **lien sans login** (questionnaire email → `period_coach_responses`) | ⬜ | v3 §8.2 · FF#2 | |
 | Mutualisation de créneau (`team_ids[]`, ex. SM1+SM2 même créneau) | ⬜ | v3 §3.6 · FF#2 | |
 | `school_holiday_periods` (API Éducation Nationale, zones A/B/C) | ⬜ | v3 §3.3 | Alimente les périodes |
+| **Vue calendrier annuel** (menu) — voir tous les plannings prévus sur l'année pour repérer les soucis + **vacances scolaires en cours** | ⬜ | — | Dérive la **zone de vacances** depuis la ville/région/département du club → dates de vacances associées. Dépend de la dérivation zone depuis l'adresse (§8) + `school_holiday_periods` |
 
 ---
 
@@ -57,6 +58,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | **Wizard transition de saison** (5 étapes hybride : salles diff / coachs keep-modify-archive / équipes keep-modify-dissolve / passations & priorités / récap) | ⬜ | v3 §9.2 · FF#3 | `SeasonTransitionService` |
 | Capitalisation des contraintes entre saisons (copie éditable, `parent_*_id` self-FK) | ⬜ | v3 §3.1, contraintes-v2 §3 · FF#3 | |
 | Politique de rétention (2 saisons max, saison N-1 read-only, purge RGPD, `solver_metrics` 6 mois) | ⬜ | v3 §3.2, §9.3 | |
+| **Réinitialiser son club** (RAZ des données pour repartir de zéro) | 🟡 | — | `ResetSeasonController` (`DELETE /api/reset-season`) existe côté données saison ; manque une action « reset club » assumée + son UI (avec confirmation) |
 
 ---
 
@@ -91,6 +93,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | **Rôles non-admin** (coach / lecteur au-delà d'`admin`) + modèle de permissions | ⬜ | Aujourd'hui `ClubUser.role` est **hardcodé `'admin'`** au register ; pas de différenciation de droits |
 | **Gestion des membres** (inviter / changer rôle / désactiver) — écran admin club | ⬜ | `ClubUser` (membership) existe ; pas d'UI |
 | **Approbation des demandes d'adhésion** (rejoindre un club → membre `pending`) | 🟡 | Le flux register crée un membre pending + `WaitingApprovalPage` ; **manque** l'écran admin pour approuver/refuser |
+| **Modifier ses informations personnelles** (nom, email, mot de passe) | ⬜ | Nav « Profil » existe + reset mot de passe ; manque l'édition du profil (prénom/nom/email) + changement de mot de passe connecté |
 
 ---
 
@@ -154,6 +157,19 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Dashboard super-admin (multi-clubs) | ⬜ | v3 §14.3 · FF#15 | P2 |
 | **Multi-sport** (handball/gym/volley, modèle générique) | ⬜ | v3 §1.4 · FF#18 | V2 |
 | Doc OpenAPI de `AuthController` (`/api/register`, `/api/me`) | ⬜ | BG G4 | |
+
+---
+
+## 10. UX & navigation
+
+Polish frontend discuté, non structurant mais confort d'usage.
+
+| Évolution | Statut | Note |
+|-----------|--------|------|
+| **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer, contenu scrollable au milieu) | ⬜ | Aujourd'hui titre et footer scrollent avec le contenu |
+| **Wizard : colonne d'étapes à gauche repliable / plein écran** | ⬜ | La colonne est un peu trop large ; bouton « agrandir » qui masque (ou non) la nav gauche — à trancher (masquer par défaut en plein écran ?) |
+| **Header : infos regroupées dans un burger / menu réglages déroulant** | ⬜ | Aujourd'hui nom du club + thème + déconnexion à plat dans le header ; à réfléchir : burger ou dropdown « réglages » |
+| **Menu : entrée « calendrier annuel »** (en plus du wizard) | ⬜ | Voir §2 — vue annuelle des plannings + vacances en cours |
 
 ---
 
