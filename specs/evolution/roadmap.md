@@ -68,6 +68,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 |-----------|--------|-----|------|
 | Niveaux de lock NONE/SOFT/HARD (enum, ≤30 min = SOFT silencieux) | 🟡 | v3 §3.5, §11.4 | Schéma + lock HARD/SOFT posables ; règle « ≤30min = SOFT auto » à vérifier |
 | **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` |
+| **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées |
 | `ScheduleDiffService` (diff lisible entre 2 snapshots) | ⬜ | v3 §6.2 · FF#11 | |
 | Routes manual-edit documentées (OpenAPI) + naming `schedule-slots` vs `schedule_slot_templates` | 🟡 | BG G5/G6 | Endpoints existent, non documentés |
 
@@ -173,6 +174,7 @@ Polish frontend discuté, non structurant mais confort d'usage.
 | **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ⬜ | Aujourd'hui titre et footer scrollent avec le contenu |
 | **Wizard : colonne d'étapes repliable / plein écran** | ⬜ | Trop large ; « agrandir » masque la nav (à trancher). Recoupe l'idée « étapes en sous-menu » ci-dessus |
 | **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances |
+| **i18n des diagnostics solveur** (fichier de traduction) | ⬜ | Alertes **en français** obligatoire. Aujourd'hui messages FR codés en dur dans l'engine + reste EN à éliminer (`soft_lock_moved`, `unused_slot`). Cible : clés + fichier de traduction (côté backend `DiagnosticMessageBuilder` ou front) plutôt que du texte en dur dans l'engine |
 
 ---
 
