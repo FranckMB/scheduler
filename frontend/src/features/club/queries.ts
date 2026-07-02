@@ -11,3 +11,19 @@ export function useUpdateAppearance() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
   });
 }
+
+export function useUploadLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => clubApi.uploadLogo(file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+export function useDeleteLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => clubApi.deleteLogo(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+}

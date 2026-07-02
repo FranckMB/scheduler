@@ -34,7 +34,11 @@ export function AppLayout() {
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-2">
-            <CalendarCheck2 className="size-5 text-accent" />
+            {data?.club?.logoUrl ? (
+              <img src={data.club.logoUrl} alt="" className="size-6 rounded-full object-cover" />
+            ) : (
+              <CalendarCheck2 className="size-5 text-accent" />
+            )}
             <span className="text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
           </div>
           <nav className="flex items-center gap-1">

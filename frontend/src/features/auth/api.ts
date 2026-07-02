@@ -8,7 +8,7 @@ export interface MeResponse {
   lastName: string;
   membershipStatus: MembershipStatus;
   role: string | null;
-  club: { id: string; name: string; onboardingCompleted: boolean; accentColor: string | null; accentPalette: string[] | null } | null;
+  club: { id: string; name: string; onboardingCompleted: boolean; logoUrl: string | null; accentColor: string | null; accentPalette: string[] | null } | null;
   baselineScheduleId: string | null;
   hasGenerated: boolean;
 }
