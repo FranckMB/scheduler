@@ -97,12 +97,16 @@ L'**engine** est un microservice Python qui reçoit un contexte complet (clubs, 
 
 make test             # ruff + mypy + pytest
 make lint             # ruff + mypy
+make format           # ruff --fix (auto-format)
 make exec             # Entrer dans le conteneur engine
 
 # Dans le conteneur :
 pytest tests/                    # Tests complets
-pytest tests/test_golden.py      # Tests datasets (5 scénarios)
+pytest tests/golden/             # Solves complets sur fixtures de club (golden)
+pytest tests/invariants/         # Invariants post-solve (pas d'overlap, capacité, locks)
 ```
+
+> ⚠️ Commandes engine = **dans Docker** (le Makefile enveloppe `docker compose exec`). Elles échouent sur l'hôte.
 
 ## Architecture interne
 
@@ -148,10 +152,12 @@ engine/
                       - Grouping: 50
                       - Max days: 8
                       - Rest: 3
-5. OR-Tools CP-SAT   Solve(max_time=10s)
+5. OR-Tools CP-SAT   Solve(max_time = solver_timeout_seconds, défaut 650s ; seed = solver_seed, défaut 42)
 6. result_builder.py   Transforme solution → ScheduleOutputSchema
                        + génère diagnostics (unplaced, soft_lock_moved, coach_overload, conflict)
 ```
+
+> **Pass unique, pas de fallback silencieux.** INFEASIBLE → `status="failed"` + diagnostics (décision : [`docs/architecture/adr-0001-single-pass-solve.md`](../docs/architecture/adr-0001-single-pass-solve.md)). Le timeout et le seed viennent du payload (`solver_timeout_seconds` / `solver_seed`), pas codés en dur.
 
 ## Contraintes CP-SAT
 
@@ -173,6 +179,19 @@ engine/
 - **Grouping** : Regroupement d'équipes (50)
 - **Max days** : Respect du max de jours par entraîneur (8)
 - **Rest** : Temps de repos (3)
+
+## Pour aller plus loin (docs structurantes)
+
+Le métier du solveur vit dans `engine/doc/` — à lire avant de toucher au solveur :
+
+| Doc | Contenu |
+|-----|---------|
+| [`doc/business.md`](doc/business.md) | **Cœur métier** — concepts (équipe, salle, coach, contrainte : scopes/familles/règles, tiers de priorité, contraintes implicites, niveaux de lock). |
+| [`doc/nominal-flow.md`](doc/nominal-flow.md) | Flux nominal d'une requête de bout en bout — structure du payload v2.0, négociation de version, locks par club, étapes du pipeline, schéma de sortie. |
+| [`doc/solver-errors.md`](doc/solver-errors.md) | Erreurs & diagnostics — erreurs HTTP, statuts solveur, types de diagnostics, scénarios d'infaisabilité, lecture du score, guide de debug. |
+| [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions ruff/mypy/pytest, gotchas, quick-reference). |
+
+Contrat backend↔engine : version dans `engine/CONTRACT_VERSION`, synchronisé **à la main** (pas de codegen), gardé par `backend/tests/.../ContractSchemaTest`.
 
 ## Environnement
 

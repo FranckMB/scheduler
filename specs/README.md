@@ -1,24 +1,24 @@
 # Living Specs System
 
-Last verified @ 2026-06-30
+Last verified @ 2026-07-02
 
 ## 3-Tier Structure
 
-- `specs/initiales/` : archive du besoin originel, jamais modifié.
-- `specs/courantes/` : miroir de l'état réel backend/engine + spec forward frontend, lue par Claude Code.
-- `specs/evolution/` : backlog, gaps, handoff packets, décisions non résolues — utilisé par Prometheus et user.
+- `specs/initiales/` : besoin d'origine (v2/v3), **figé — jamais modifié**. L'évolution se lit dans le delta `initiales` → `courantes` (+ git). Pas de dossier `archive/`.
+- `specs/courantes/` : **ce que l'appli fait aujourd'hui**. Doit refléter le code : si une spec ne colle plus → on la **met à jour** ; si la feature a disparu → on la **supprime**.
+- `specs/evolution/` : **ce que l'appli fera plus tard** (backlog + gaps ouverts). Quand un item est **livré**, il **quitte** evolution (il gradue dans `courantes`). Les notes de process/décisions **résolues** n'y restent pas.
 
 ## Audiences
 
-- initiales = archive.
-- courantes = développeurs / Claude Code.
-- evolution = planification.
+- initiales = origine (référence historique).
+- courantes = développeurs / agents (vérité courante).
+- evolution = planification (futur).
 
 ## Update Triggers
 
-- `courantes` update quand backend change ou plan frontend démarre.
-- `evolution` update quand le plan se termine ou qu'un gap est identifié.
-- `initiales` jamais modifié.
+- `courantes` : mise à jour quand le comportement change (ou suppression si la feature disparaît).
+- `evolution` : on **retire** un item quand il est livré (graduation vers courantes) ; on **ajoute** un item quand un gap/feature futur est identifié.
+- `initiales` : jamais modifié.
 
 ## Files Overview
 

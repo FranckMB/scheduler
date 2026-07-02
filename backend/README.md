@@ -36,6 +36,8 @@ Le **backend** est le point central du système. Il expose l'API REST, gère les
 
 Toutes les routes sont exposées sous `/api` via **API Platform** (auto-génération CRUD + OpenAPI docs).
 
+> ⚠️ **URIs en `snake_case`** (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`, `/api/schedule_slot_templates`…), **pas** en kebab. La **source de vérité** est l'OpenAPI (`/api/docs`) et l'inventaire [`specs/courantes/backend-inventory.md`](../specs/courantes/backend-inventory.md) ; le tableau ci-dessous est indicatif.
+
 ### Ressources métier (CRUD standard)
 
 | Ressource | Endpoint | Description |
@@ -60,16 +62,22 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 | `ScheduleSlotTemplate` | `/api/schedule-slot-templates` | Créneaux générés |
 | `ScheduleDiagnostic` | `/api/schedule-diagnostics` | Erreurs/avertissements |
 
-### Ressources contraintes
+### Ressources contraintes & liens
 
 | Ressource | Endpoint | Description |
 |-----------|----------|-------------|
-| `TeamConstraint` | `/api/team-constraints` | Contraintes par équipe |
-| `VenueAvailability` | `/api/venue-availabilities` | Disponibilités hebdomadaires salles |
-| `VenueClosure` | `/api/venue-closures` | Fermetures salles (plages) |
-| `CoachUnavailability` | `/api/coach-unavailabilities` | Indisponibilités entraîneurs |
-| `TeamCoach` | `/api/team-coaches` | Assignations entraîneur-équipe |
-| `CoachPlayerMembership` | `/api/coach-player-memberships` | Entraîneurs aussi joueurs |
+| `Constraint` | `/api/constraints` | Contraintes **unifiées** (familles TIME/DAY/FACILITY/COACH_AVAILABILITY · scope CLUB/TEAM/COACH/FACILITY · `config.targetTag` pour cibler un groupe) |
+| `VenueTrainingSlot` | `/api/venue_training_slots` | Disponibilités hebdo des salles (jour, heure, durée, capacité 1/2) |
+| `TeamCoach` | `/api/team_coaches` | Assignations entraîneur-équipe (MAIN/ASSISTANT) |
+| `CoachPlayerMembership` | `/api/coach_player_memberships` | Entraîneurs aussi joueurs |
+
+### Opérations custom (au-delà du CRUD)
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/register`, `/api/me` | POST/GET | Inscription (club ARA/pending) + profil JWT (`AuthController`) |
+| `/api/constraints/validate` | POST | Gate pré-solveur : valide les contraintes + détecte les conflits (200/422) |
+| `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}` | POST | Ajustements manuels de créneau (boucle de travail) |
 
 ### Opérations custom
 
@@ -90,16 +98,21 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 # Le Makefile les lance automatiquement dans le conteneur
 
 make install          # composer install
-make test             # Lint + tests (PHPStan, CS-Fixer, Rector, PHPUnit)
-make lint             # PHPStan + CS-Fixer + Rector
+make test             # CS-Fixer + PHPStan(niveau 8) + PHPUnit (--group phase1)
+make lint             # CS-Fixer + PHPStan + Rector
+make phpstan          # PHPStan seul (niveau 8)
+make cs-fix           # CS-Fixer (auto-format)
+make db-init-test     # crée + migre la base de TEST (requis avant `make phpunit`)
+make phpunit          # PHPUnit --group phase1
+make db-reset         # drop + recreate + migre la base de dev
 make exec             # Entrer dans le conteneur php-fpm
 
-# Commandes Symfony directes
-make exec             # puis dans le conteneur :
-php bin/console doctrine:migrations:migrate  # Migrations
-php bin/console messenger:consume async      # Worker (ou utiliser messenger-worker)
-php bin/console cache:clear                  # Clear cache
+# Dans le conteneur (make exec) :
+php bin/console doctrine:migrations:diff      # génère une migration depuis le diff d'entités
+php bin/console doctrine:migrations:migrate   # applique les migrations
 ```
+
+> ⚠️ Commandes backend = **dans Docker** (le Makefile enveloppe `docker compose exec`). Elles échouent sur l'hôte. La suite de tests a besoin de la base de test → `make db-init-test` d'abord.
 
 ## Architecture interne
 
@@ -141,6 +154,19 @@ backend/
 8. Handler         Publie Mercure: club:{clubId}:schedule:{scheduleId}
 9. Frontend        Reçoit SSE → rafraîchit le calendrier
 ```
+
+## Pour aller plus loin (docs structurantes)
+
+| Doc / script | Contenu |
+|--------------|---------|
+| [`scripts/generate-schedule.sh`](scripts/generate-schedule.sh) | **Guide pratique** — pilote create → generate → poll une génération via l'API (vraie aide pour tester/déboguer le flux). |
+| [`scripts/smoke-solver.sh`](scripts/smoke-solver.sh) | Vérif end-to-end : assure qu'un planning atteint `COMPLETED` (garde-fou solveur, utilisé en validation). |
+| [`scripts/onboarding-smoke.sh`](scripts/onboarding-smoke.sh) | Flux club neuf : register → données minimales → generate → `COMPLETED`. |
+| [`docs/TENANT.md`](docs/TENANT.md) | **Isolation multi-tenant** (cœur sécurité) — `TenantFilter` + `TenantFilterListener` (priorité 7, après le firewall) + résolution du club depuis le JWT. |
+| [`docs/RLS.md`](docs/RLS.md) | PostgreSQL Row-Level Security : rôles DB, policies, activation sur une nouvelle table. |
+| [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions CS-Fixer/PHPStan/Rector, flux services, gotchas). |
+
+**Contraintes = cœur métier.** Elles sont *persistées/exposées* ici (`Constraint` + `ScheduleConstraintBuilder` qui construit le payload solveur, dont `resolveTagToTeamIds` pour cibler un groupe) et *résolues* par l'engine — voir [`engine/doc/business.md`](../engine/doc/business.md).
 
 ## Environnement
 

@@ -12,7 +12,6 @@ Last verified @ 2026-06-30
 - **Source** : `.omo/drafts/features-futures.md` (123 lignes, 21 features inventoriées)
 - **Vérification de statut** : inspection du codebase (`backend/src/`, `backend/migrations/`, `frontend/src/`, `frontend/tests/`) + `.omo/boulder.json` pour les travaux complétés
 - **Statuts possibles** : `Non commencé` / `En cours` / `Délégué futur plan` / `Abandonné`
-- **Cross-référence** : `specs/evolution/fait-vs-v2.md` (à créer — pour les features partiellement réalisées lors du MVP)
 - **Règle** : aucune feature inventée au-delà du draft ; le draft n'est pas modifié
 
 ---
