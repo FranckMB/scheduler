@@ -125,7 +125,14 @@ final class AuthController extends AbstractController
             $membershipStatus = $clubUser->getIsActive() ? 'active' : 'pending';
             $clubEntity = $this->clubRepository->find($clubUser->getClubId());
             if (null !== $clubEntity) {
-                $club = ['id' => $clubEntity->getId(), 'name' => $clubEntity->getName(), 'onboardingCompleted' => $clubEntity->getOnboardingCompleted()];
+                $club = [
+                    'id' => $clubEntity->getId(),
+                    'name' => $clubEntity->getName(),
+                    'onboardingCompleted' => $clubEntity->getOnboardingCompleted(),
+                    'logoUrl' => $clubEntity->getLogoUrl(),
+                    'accentColor' => $clubEntity->getAccentColor(),
+                    'accentPalette' => $clubEntity->getAccentPalette(),
+                ];
                 $season = $this->entityManager->getRepository(Season::class)->findOneBy([
                     'clubId' => $clubEntity->getId(),
                     'status' => 'active',

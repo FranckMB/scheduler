@@ -26,7 +26,7 @@ const PHRASES = [
   "Recherche du meilleur planning possible…",
 ];
 
-function WaitingScreen({ initial }: { initial: string }) {
+function WaitingScreen({ initial, logoUrl }: { initial: string; logoUrl: string | null }) {
   const [i, setI] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setI((n) => (n + 1) % PHRASES.length), 3000);
@@ -36,7 +36,9 @@ function WaitingScreen({ initial }: { initial: string }) {
     <div className="flex flex-col items-center gap-6 py-12 text-center">
       <div className="relative flex size-24 items-center justify-center">
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-accent/20" />
-        <span className="relative inline-flex size-20 animate-pulse items-center justify-center rounded-full bg-accent/15 text-2xl font-bold text-accent">{initial}</span>
+        <span className="relative inline-flex size-20 animate-pulse items-center justify-center overflow-hidden rounded-full bg-accent/15 text-2xl font-bold text-accent">
+          {null !== logoUrl ? <img src={logoUrl} alt="" className="size-full object-cover" /> : initial}
+        </span>
       </div>
       <div className="space-y-1">
         <p className="text-lg font-medium">Génération du planning…</p>
@@ -136,7 +138,7 @@ export function GenerateStep() {
           </Button>
         </div>
       ) : waiting ? (
-        <WaitingScreen initial={initial} />
+        <WaitingScreen initial={initial} logoUrl={me?.club?.logoUrl ?? null} />
       ) : (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />

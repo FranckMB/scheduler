@@ -63,6 +63,22 @@ class Club
     #[ORM\Column(type: 'string', length: 64, unique: true, nullable: true)]
     private ?string $ffbbClubCode = null;
 
+    /** Public URL of the club logo (served by the logo endpoint / storage). */
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $logoUrl = null;
+
+    /** Club accent colour (hex, e.g. #3498DB) driving the UI `--accent`. */
+    #[ORM\Column(type: 'string', length: 9, nullable: true)]
+    private ?string $accentColor = null;
+
+    /**
+     * Up to 3 hex colours extracted from the club logo, used to tint the theme.
+     *
+     * @var list<string>|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $accentPalette = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -251,6 +267,48 @@ class Club
     public function setFfbbClubCode(?string $ffbbClubCode): self
     {
         $this->ffbbClubCode = $ffbbClubCode;
+
+        return $this;
+    }
+
+    public function getLogoUrl(): ?string
+    {
+        return $this->logoUrl;
+    }
+
+    public function setLogoUrl(?string $logoUrl): self
+    {
+        $this->logoUrl = $logoUrl;
+
+        return $this;
+    }
+
+    public function getAccentColor(): ?string
+    {
+        return $this->accentColor;
+    }
+
+    public function setAccentColor(?string $accentColor): self
+    {
+        $this->accentColor = $accentColor;
+
+        return $this;
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    public function getAccentPalette(): ?array
+    {
+        return $this->accentPalette;
+    }
+
+    /**
+     * @param list<string>|null $accentPalette
+     */
+    public function setAccentPalette(?array $accentPalette): self
+    {
+        $this->accentPalette = $accentPalette;
 
         return $this;
     }

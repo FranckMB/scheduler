@@ -148,7 +148,7 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ |
 | Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; couvrir la liste complète de warnings |
 | Push temps réel (Mercure statut/score) | ✅ | v3 §2, §6 | Livré |
-| **Identité visuelle par club** (couleur d'accent + logo) | 🟡 | — | Scaffoldé non branché (`themeStore.accent` mort, `--accent` prévu « per club », pas de champ Club.logo/color) → [`identite-visuelle-club.md`](identite-visuelle-club.md) |
+| **Identité visuelle par club** (couleur d'accent + logo) | ✅ | Livré 2026-07-02 : accent + logo + extraction 3 couleurs + écran /club (reste : stockage prod S3) → [`identite-visuelle-club.md`](identite-visuelle-club.md) |
 | `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ |
 | `max_days_per_week` coach (calcul dynamique + override checkbox) | 🟡 | v3 §3.4 | À vérifier |
 | App **mobile** (React Native/Expo, consultation → exceptions V2) | ⬜ | v3 §1.4 · FF#14 | P2 |
@@ -166,10 +166,13 @@ Polish frontend discuté, non structurant mais confort d'usage.
 
 | Évolution | Statut | Note |
 |-----------|--------|------|
-| **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer, contenu scrollable au milieu) | ⬜ | Aujourd'hui titre et footer scrollent avec le contenu |
-| **Wizard : colonne d'étapes à gauche repliable / plein écran** | ⬜ | La colonne est un peu trop large ; bouton « agrandir » qui masque (ou non) la nav gauche — à trancher (masquer par défaut en plein écran ?) |
-| **Header : infos regroupées dans un burger / menu réglages déroulant** | ⬜ | Aujourd'hui nom du club + thème + déconnexion à plat dans le header ; à réfléchir : burger ou dropdown « réglages » |
-| **Menu : entrée « calendrier annuel »** (en plus du wizard) | ⬜ | Voir §2 — vue annuelle des plannings + vacances en cours |
+| **Refonte de la navigation** — menu principal **à gauche** (Accueil, Assistant…) ; header **réduit** pour gagner de l'espace au centre ; **burger en haut à droite** pour Profil + déconnexion + thème dark/light | ⬜ | Aujourd'hui tout est à plat dans le header (trop gros) |
+| **Assistant = menu avec ses étapes en sous-menu** (les 6 étapes du wizard sous l'entrée « Assistant » du menu gauche) | ⬜ | Remplace la colonne d'étapes interne du wizard |
+| **Clic sur le nom / logo du club → Accueil** | ⬜ | Raccourci d'accueil |
+| **« Demandes » fusionné dans « Gestion du club »** | ⬜ | « Demandes » n'est qu'un wrap du club (approbation des membres) → le mettre comme section du hub /club, pas une entrée de menr distincte |
+| **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ⬜ | Aujourd'hui titre et footer scrollent avec le contenu |
+| **Wizard : colonne d'étapes repliable / plein écran** | ⬜ | Trop large ; « agrandir » masque la nav (à trancher). Recoupe l'idée « étapes en sous-menu » ci-dessus |
+| **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances |
 
 ---
 
