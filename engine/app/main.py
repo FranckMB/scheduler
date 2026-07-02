@@ -123,7 +123,8 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     solver_status, solver, model, conflicts = _solve(data, input_data)
 
     result_dict = build_result(
-        data, solver, model, status=solver_status, fallback_used=False
+        data, solver, model, status=solver_status, fallback_used=False,
+        constraint_version=read_contract_version(),
     )
     if conflicts:
         result_dict.setdefault("diagnostics", []).extend(conflicts)
