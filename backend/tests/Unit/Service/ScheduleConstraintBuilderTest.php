@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Service;
 
+use App\Entity\PriorityTier;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
+use App\Entity\VenueTrainingSlot;
 use App\Service\ScheduleConstraintBuilder;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -84,6 +87,45 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $result = $this->invokeResolveTagToTeamIds('JEUNE', $seasonId, $clubId);
 
         self::assertSame([], $result);
+    }
+
+    public function testIndivisibleVenueForcesSlotCapacityToOne(): void
+    {
+        $slot = (new VenueTrainingSlot)
+            ->setDayOfWeek(1)
+            ->setStartTime(new DateTimeImmutable('18:00'))
+            ->setDurationMinutes(90)
+            ->setCapacity(2);
+
+        $method = new ReflectionMethod($this->builder, 'buildTrainingSlots');
+        $method->setAccessible(true);
+
+        /** @var array<int, array{capacity: int}> $indivisible */
+        $indivisible = $method->invoke($this->builder, [$slot], false);
+        self::assertSame(1, $indivisible[0]['capacity'], 'indivisible venue caps at 1');
+
+        /** @var array<int, array{capacity: int}> $splittable */
+        $splittable = $method->invoke($this->builder, [$slot], true);
+        self::assertSame(2, $splittable[0]['capacity'], 'splittable venue keeps slot capacity');
+    }
+
+    public function testPriorityTierConstraintDoesNotSendOrToolsWeight(): void
+    {
+        $tier = (new PriorityTier)
+            ->setId(1)
+            ->setLabel('S')
+            ->setOrToolsWeight(10000)
+            ->setDefaultMinSessions(2);
+
+        $method = new ReflectionMethod($this->builder, 'serializePriorityTierConstraints');
+        $method->setAccessible(true);
+
+        /** @var array<int, array{value: mixed, metadata: array<string, mixed>}> $result */
+        $result = $method->invoke($this->builder, [$tier]);
+
+        self::assertNull($result[0]['value']);
+        self::assertArrayNotHasKey('orToolsWeight', $result[0]['metadata']);
+        self::assertSame(2, $result[0]['metadata']['defaultMinSessions']);
     }
 
     protected function setUp(): void

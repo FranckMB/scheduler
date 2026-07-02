@@ -247,7 +247,7 @@ final class ScheduleConstraintBuilder
             'externalRef' => $venue->getExternalRef(),
             'isActive' => $venue->getIsActive(),
             'parentVenueId' => $venue->getParentVenueId(),
-            'trainingSlots' => $this->buildTrainingSlots($this->currentAvailabilitiesByVenue[$venue->getId()] ?? []),
+            'trainingSlots' => $this->buildTrainingSlots($this->currentAvailabilitiesByVenue[$venue->getId()] ?? [], $venue->getCanSplit()),
         ];
     }
 
@@ -256,7 +256,7 @@ final class ScheduleConstraintBuilder
      *
      * @return array<int, array{dayOfWeek: int, startTime: string, durationMinutes: int, capacity: int}>
      */
-    private function buildTrainingSlots(array $slots): array
+    private function buildTrainingSlots(array $slots, bool $canSplit): array
     {
         if ([] === $slots) {
             return [];
@@ -264,11 +264,15 @@ final class ScheduleConstraintBuilder
 
         $result = [];
         foreach ($slots as $slot) {
+            // Divisibility is a venue property: an indivisible venue (single
+            // court) can host at most one team per slot, whatever the slot's
+            // stored capacity. Only a splittable venue may expose capacity > 1.
+            $capacity = $canSplit ? $slot->getCapacity() : 1;
             $result[] = [
                 'dayOfWeek' => $slot->getDayOfWeek(),
                 'startTime' => $slot->getStartTime()->format('H:i'),
                 'durationMinutes' => $slot->getDurationMinutes(),
-                'capacity' => $slot->getCapacity(),
+                'capacity' => $capacity,
             ];
         }
 
@@ -418,16 +422,19 @@ final class ScheduleConstraintBuilder
      */
     private function serializePriorityTierConstraints(array $priorityTiers): array
     {
+        // orToolsWeight is intentionally NOT sent: the solver enforces tier
+        // priority with fixed hardcoded weights (S=10000/A=1000/B=100/C=10/D=1),
+        // so a per-tier weight would be accepted then ignored. The engine reads
+        // only metadata.id + metadata.defaultMinSessions from this constraint.
         return array_map(static fn (PriorityTier $priorityTier): array => [
             'id' => \sprintf('priority-tier:%d', $priorityTier->getId()),
             'teamId' => '*',
             'type' => 'PRIORITY_TIER',
             'severity' => 'SOFT',
-            'value' => $priorityTier->getOrToolsWeight(),
+            'value' => null,
             'metadata' => [
                 'id' => $priorityTier->getId(),
                 'label' => $priorityTier->getLabel(),
-                'orToolsWeight' => $priorityTier->getOrToolsWeight(),
                 'defaultMinSessions' => $priorityTier->getDefaultMinSessions(),
             ],
         ], $priorityTiers);
