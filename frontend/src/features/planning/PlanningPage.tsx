@@ -1,15 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarX2 } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useSchedules, useSlots, useTeamCoaches, useTeams, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { usePlanningStore } from "./store";
@@ -17,13 +18,41 @@ import { WeekGrid } from "./WeekGrid";
 
 const IN_FLIGHT = ["PENDING", "GENERATING"];
 
-/** Latest COMPLETED schedule, else the most recent one, else null. */
+/** Latest finished schedule (VALIDATED or COMPLETED), else the most recent one, else null. */
 function pickDefaultSchedule(schedules: { id: string; status: string; createdAt: string }[]): string | null {
   if (0 === schedules.length) {
     return null;
   }
   const byRecent = [...schedules].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return (byRecent.find((s) => "COMPLETED" === s.status) ?? byRecent[0]).id;
+  return (byRecent.find((s) => "VALIDATED" === s.status || "COMPLETED" === s.status) ?? byRecent[0]).id;
+}
+
+function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: boolean; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Valider le planning">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            {hasAlerts ? <AlertTriangle className="size-5 text-amber-500" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
+            <CardTitle>Valider ce planning ?</CardTitle>
+          </div>
+          <CardDescription>
+            {hasAlerts
+              ? "Ce planning présente des alertes du solveur (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
+              : "Le planning passera en lecture seule (« Validé »). Vous pourrez le rouvrir pour le modifier."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
+            Annuler
+          </Button>
+          <Button size="sm" onClick={onConfirm} disabled={busy}>
+            Valider
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {
@@ -70,9 +99,15 @@ export function PlanningPage() {
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const generateMutation = useGenerate();
+  const validateMutation = useValidateSchedule();
+  const reopenMutation = useReopenSchedule();
+  const setBaselineMutation = useSetBaseline();
+  const [validateOpen, setValidateOpen] = useState(false);
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
+  const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
@@ -149,7 +184,11 @@ export function PlanningPage() {
               viewMode={viewMode}
               onViewMode={setViewMode}
               isGenerating={isGenerating}
+              actionBusy={actionBusy}
               onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
+              onValidate={() => setValidateOpen(true)}
+              onReopen={() => validScheduleId && reopenMutation.mutate(validScheduleId)}
+              onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
               baselineScheduleId={baselineScheduleId}
             />
             <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
@@ -180,6 +219,7 @@ export function PlanningPage() {
                     venues={venues}
                     categoryLabel={categoryLabel}
                     busy={busy}
+                    readOnly={isReadOnly}
                     onClose={() => setSelectedSlotId(null)}
                     onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
                     onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
@@ -193,6 +233,19 @@ export function PlanningPage() {
           )}
         </>
       )}
+
+      {validateOpen ? (
+        <ValidateDialog
+          hasAlerts={diagnostics.length > 0}
+          busy={validateMutation.isPending}
+          onCancel={() => setValidateOpen(false)}
+          onConfirm={() => {
+            if (null !== validScheduleId) {
+              validateMutation.mutate(validScheduleId, { onSuccess: () => setValidateOpen(false) });
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

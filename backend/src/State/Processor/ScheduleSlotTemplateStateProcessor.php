@@ -6,7 +6,10 @@ namespace App\State\Processor;
 
 use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Dto\ScheduleSlotTemplateInput;
+use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Enum\ScheduleStatus;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
  * @extends AbstractStateProcessor<ScheduleSlotTemplate, ScheduleSlotTemplateInput, ScheduleSlotTemplateResource>
@@ -23,6 +26,7 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): ScheduleSlotTemplate
     {
+        $this->assertScheduleEditable($input->scheduleId);
         $entity = new ScheduleSlotTemplate;
         if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
@@ -68,6 +72,7 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        $this->assertScheduleEditable($entity->getScheduleId());
         if (null !== $input->scheduleId) {
             $entity->setScheduleId($input->scheduleId);
         }
@@ -110,5 +115,27 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ScheduleSlotTemplateResource
     {
         return ScheduleSlotTemplateResource::fromEntity($entity);
+    }
+
+    /** @param array<string, mixed> $uriVariables */
+    protected function processDelete(array $uriVariables, ?string $clubId): void
+    {
+        $slot = $this->entityManager->find(ScheduleSlotTemplate::class, $uriVariables['id'] ?? null);
+        if ($slot instanceof ScheduleSlotTemplate) {
+            $this->assertScheduleEditable($slot->getScheduleId());
+        }
+        parent::processDelete($uriVariables, $clubId);
+    }
+
+    /** A slot template whose parent schedule is VALIDATED is read-only. */
+    private function assertScheduleEditable(?string $scheduleId): void
+    {
+        if (null === $scheduleId) {
+            return;
+        }
+        $schedule = $this->entityManager->getRepository(Schedule::class)->find($scheduleId);
+        if ($schedule instanceof Schedule && ScheduleStatus::VALIDATED === $schedule->getStatus()) {
+            throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
+        }
     }
 }

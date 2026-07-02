@@ -40,7 +40,7 @@ async function collectionAll<T extends { id: string }>(path: string): Promise<T[
   return all;
 }
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
 export type LockLevel = "NONE" | "SOFT" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 
@@ -132,8 +132,18 @@ export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
 /** Queue a (re)generation of the schedule (202). Locked slots survive; the rest reshuffles. */
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
-/** Designate a COMPLETED schedule as the season baseline (the "main" plan). */
+/** Validate a COMPLETED schedule → VALIDATED (finished, read-only). */
 export const validateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/validate`).json();
+
+/** Reopen a VALIDATED schedule → COMPLETED (editable again). */
+export const reopenSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/reopen`).json();
+
+/** Designate a finished schedule as the season's main plan (baseline). */
+export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules/${id}/set-baseline`).json();
+
+/** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
+export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
+  api.put(`schedules/${id}`, { json: { name, status } }).json();
 
 export const listSchedules = (): Promise<Schedule[]> => collectionAll<Schedule>("schedules");
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });

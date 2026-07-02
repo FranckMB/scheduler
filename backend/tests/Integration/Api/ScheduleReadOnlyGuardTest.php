@@ -18,13 +18,13 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * Validating a COMPLETED schedule locks it (→ VALIDATED, read-only); only within
- * the caller's own club, and only when completed. Designating the season main
- * plan is a separate action (SetBaselineTest).
+ * A VALIDATED schedule is read-only: content mutations are rejected server-side
+ * (409). Covers the regenerate path (the primary work-loop entry point); the
+ * guard returns before any status change or message dispatch.
  */
 #[Group('phase1')]
 #[Group('integration')]
-final class ValidateScheduleTest extends WebTestCase
+final class ScheduleReadOnlyGuardTest extends WebTestCase
 {
     private EntityManagerInterface $em;
 
@@ -32,43 +32,18 @@ final class ValidateScheduleTest extends WebTestCase
 
     private UserPasswordHasherInterface $hasher;
 
-    public function testValidateLocksCompletedSchedule(): void
+    public function testRegenerateIsBlockedOnValidatedSchedule(): void
     {
-        [$user, , $season] = $this->seed('VAL1');
-        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        [$user, , $season] = $this->seed('GRD1');
+        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
 
         $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/generate");
 
-        self::assertResponseIsSuccessful();
+        self::assertResponseStatusCodeSame(409);
         $this->em->clear();
         $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
         self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
-    }
-
-    public function testNonCompletedScheduleCannotBeValidated(): void
-    {
-        [$user, , $season] = $this->seed('VAL2');
-        $schedule = $this->createSchedule($season, ScheduleStatus::DRAFT);
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
-
-        self::assertResponseStatusCodeSame(409);
-    }
-
-    public function testForeignScheduleIsNotAccessible(): void
-    {
-        [$user] = $this->seed('VAL3');
-        [, , $otherSeason] = $this->seed('VAL4');
-        $foreign = $this->createSchedule($otherSeason, ScheduleStatus::COMPLETED);
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$foreign->getId()}/validate");
-
-        // The controller guard rejects a schedule from another club (the caller's
-        // club is resolved from the JWT); RLS is a second line in production.
-        self::assertResponseStatusCodeSame(403);
     }
 
     protected function setUp(): void
@@ -97,8 +72,8 @@ final class ValidateScheduleTest extends WebTestCase
 
         $user = new User;
         $user->setEmail('user-' . $tag . '-' . $uid . '@test.com');
-        $user->setFirstName('B');
-        $user->setLastName('L3');
+        $user->setFirstName('G');
+        $user->setLastName('RD');
         $user->setPasswordHash($this->hasher->hashPassword($user, 'pass'));
         $this->em->persist($user);
 

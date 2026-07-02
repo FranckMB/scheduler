@@ -43,13 +43,15 @@ beforeEach(() => {
 });
 
 describe("PlanningPage (integration)", () => {
-  it("renders the base planning grid: team + coach on the slot, Base badge", async () => {
+  it("renders the base planning grid: team + coach on the slot, main-plan badge", async () => {
     renderWithProviders(<PlanningPage />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    expect(screen.getByText("Base")).toBeInTheDocument();
+    expect(screen.getByText("Planning principal")).toBeInTheDocument();
     expect(screen.getByText(/score 9051/i)).toBeInTheDocument();
+    // A COMPLETED schedule offers validation (→ VALIDATED, read-only).
+    expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
   });
 
   it("switches to the coach view (coach resolved from the team)", async () => {

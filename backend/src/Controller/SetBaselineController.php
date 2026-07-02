@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -15,19 +16,19 @@ use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
 /**
- * Validate a COMPLETED schedule → the manager marks it finished; it becomes
- * VALIDATED (read-only). Many schedules may be validated. To edit again, reopen
- * it (see ReopenScheduleController). Designating the season's main plan is a
- * separate action (SetBaselineController). See planning-lifecycle-validated.md.
+ * Designate a finished schedule as the season's main plan (baseline). The first
+ * successful schedule is auto-designated at generation time; this lets an admin
+ * promote a different finished plan afterwards. Distinct from validation
+ * (locking). See planning-lifecycle-validated.md.
  */
-final class ValidateScheduleController extends AbstractController
+final class SetBaselineController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
     ) {}
 
-    #[Route('/api/schedules/{id}/validate', name: 'api_schedule_validate', methods: ['POST'])]
+    #[Route('/api/schedules/{id}/set-baseline', name: 'api_schedule_set_baseline', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse
     {
         try {
@@ -45,14 +46,19 @@ final class ValidateScheduleController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
-            return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
+        if (!\in_array($schedule->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true)) {
+            return $this->json(['error' => 'Only a finished schedule can be the season main plan.'], Response::HTTP_CONFLICT);
         }
 
-        $schedule->setStatus(ScheduleStatus::VALIDATED);
+        $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+        if (!$season instanceof Season) {
+            return $this->json(['error' => 'Season not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $season->setBaselineScheduleId($schedule->getId());
         $this->entityManager->flush();
 
-        return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::VALIDATED->value], Response::HTTP_OK);
+        return $this->json(['baselineScheduleId' => $schedule->getId()], Response::HTTP_OK);
     }
 
     private function resolveCurrentClubId(): ?string

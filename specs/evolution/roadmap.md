@@ -53,7 +53,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
 | Wizard initial de saisie | ✅ | v3 §9.1 | Livré (6 étapes, reconstruit) — dépasse le draft 4 étapes |
-| Auto-save serveur du brouillon (`GET/PUT /api/clubs/{id}/draft` + `clubs.draft_data`) | ⬜ | v3 §9.1 · BG G1/G2 | Choix acté : save **par entité**, pas de draft-blob → probablement **abandonné** (à confirmer) |
+| Auto-save serveur du brouillon (`GET/PUT /api/clubs/{id}/draft` + `clubs.draft_data`) | ✅ | v3 §9.1 · BG G1/G2 | **Tranché : abandonné** — la persistance **par entité** (chaque salle/équipe/coach POST/PUT à la saisie, le store wizard ne tient aucune donnée) couvre déjà le besoin ; un draft-blob serait une 2e source de vérité. Ferme BG G1/G2 |
 | **Mode démo** (club fictif pré-rempli, génération 30s avant saisie) | ⬜ | v3 §9.1, §12.3 | À faire (différé wizard) |
 | **Wizard transition de saison** (5 étapes hybride : salles diff / coachs keep-modify-archive / équipes keep-modify-dissolve / passations & priorités / récap) | ⬜ | v3 §9.2 · FF#3 | `SeasonTransitionService` |
 | Capitalisation des contraintes entre saisons (copie éditable, `parent_*_id` self-FK) | ⬜ | v3 §3.1, contraintes-v2 §3 · FF#3 | |
@@ -66,6 +66,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
+| **Cycle de vie planning** : `VALIDATED` (fini/verrouillé lecture seule), rouvrir, planning principal (baseline) vs secondaires | ✅ | — | Livré (PR #15) : `/validate` · `/reopen` · `/set-baseline`, verrou serveur sur les 4 chemins d'édition, modale de responsabilité. Cascade principal→secondaires reportée (dépend des occurrences). → [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) |
 | Niveaux de lock NONE/SOFT/HARD (enum, ≤30 min = SOFT silencieux) | 🟡 | v3 §3.5, §11.4 | Schéma + lock HARD/SOFT posables ; règle « ≤30min = SOFT auto » à vérifier |
 | **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` |
 | **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées |
@@ -128,9 +129,9 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
-| Import Excel équipes (template basket) | 🟡 | v3 §9.1, §12.3 | Contrôleur import existe ; à recâbler dans le wizard (différé) |
-| Import CSV salles & coachs | ⬜ | v3 §9.1 | |
-| **Fermetures de salle** (`VenueClosure` date+raison → regen partielle) | ⬜ | v3 §3.4 · BG G3 | Différé wizard |
+| Import Excel équipes (template basket) | 🟡 | v3 §9.1, §12.3 | Backend livré (`POST /clubs/{id}/import-teams`, `FfbbExcelImporter`) ; **UI wizard différée** — l'API FFBB à venir remplacera l'import manuel |
+| Import CSV salles & coachs | ✅ | v3 §9.1 | **Tranché : abandonné** — peu de lignes (1-5 salles, ~10 coachs), pas de format standard ; la saisie manuelle suffit |
+| **Fermetures de salle** (`VenueClosure` date+raison → regen partielle) | ⬜ | v3 §3.4 · BG G3 | **Reporté** : dépend du modèle templates→occurrences (§2, absent) — une fermeture **datée** n'a pas d'occurrence à annuler tant que le planning reste une semaine-type |
 | Connecteurs **API municipales** (`venues.source` manual/municipal/external_api + `external_ref`) | ⬜ | v3 §1.4 · FF#20 | V2 |
 | Import équipes **FFBB** (code club, `ffbb_team_id`) | ⬜ | v3 §1.4 · FF#19 | V2 |
 | Import **calendrier de matchs FFBB** (`competitions`, `ffbb_club_code`) | ⬜ | v3 §1.4 · FF#19 | V2 |
@@ -147,7 +148,7 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | **Audit trail** (`audit_logs` append-only, BRIN, purge RGPD, async) | ⬜ | v3 §3.2 · FF#6 | |
 | Table `solver_metrics` (perf par génération, partition mensuelle, purge 6 mois) | ⬜ | v3 §3.5 · FF#7 | |
 | Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ |
-| Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; couvrir la liste complète de warnings |
+| Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; **warnings de réservation livrés** (PR #14 : créneau surchargé vs capacité, quota séances/semaine, 2 séances le même jour — non bloquants, le solveur reste l'autorité). Liste complète de warnings à compléter |
 | Push temps réel (Mercure statut/score) | ✅ | v3 §2, §6 | Livré |
 | **Identité visuelle par club** (couleur d'accent + logo) | ✅ | Livré 2026-07-02 : accent + logo + extraction 3 couleurs + écran /club (reste : stockage prod S3) → [`identite-visuelle-club.md`](identite-visuelle-club.md) |
 | `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ |

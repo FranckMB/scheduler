@@ -286,17 +286,21 @@ dans `frontend-wizard.md` concernant `onboarding_completed` sont obsolètes
 
 | Gap | Type | Severity | Spec source | Backend action needed |
 |-----|------|----------|-------------|----------------------|
-| G1 | Missing endpoint | High | wizard §7 | Create draft controller + migration |
-| G2 | Type mismatch | High | wizard §7 | Add `draft_data` jsonb to Club |
-| G3 | Missing endpoint + Unimplemented | Medium | wizard §2 | Create VenueClosure entity + resource |
+| G1 | Missing endpoint | ~~High~~ **Closed** | wizard §7 | **Abandonné** — persistance par entité suffit (voir note) |
+| G2 | Type mismatch | ~~High~~ **Closed** | wizard §7 | **Abandonné** — pas de draft-blob `clubs.draft_data` |
+| G3 | Missing endpoint + Unimplemented | ~~Medium~~ **Deferred** | wizard §2 | **Reporté** — VenueClosure dépend du modèle occurrences (absent) |
 | G4 | Unstable shape (OpenAPI doc) | Low | spec §9 | Add OpenAPI docs for AuthController |
 | G5 | Unstable shape (OpenAPI doc + naming) | Medium | spec §9 | Add OpenAPI docs + resolve naming |
 | G6 | Unstable shape (systematic) | Medium | spec §9, wizard §1 | Decide convention, update specs or API Platform |
 | G7 | Spec correction (not a gap) | Info | wizard §5, §7, §9 | None — correct frontend-wizard.md |
 
-> **Note :** G1 et G2 sont les blockers principaux pour le wizard auto-save.
-> Le frontend peut implémenter l'auto-save avec `sessionStorage` uniquement
-> (fallback) jusqu'à ce que G1+G2 soient résolus. G3 peut être désactivé
-> côté frontend (UI des fermetures masquée). G4 et G5 sont des gaps de
+> **Décision (2026-07) :** **G1 + G2 abandonnés** — le wizard persiste **par
+> entité** (chaque salle/équipe/coach est POST/PUT à la saisie ; le store
+> wizard ne tient aucune donnée d'étape), ce qui couvre déjà le besoin
+> « ne rien perdre ». Un draft-blob `clubs.draft_data` serait une 2e source
+> de vérité divergente → non retenu. **G3 (VenueClosure) reporté** : une
+> fermeture datée n'a pas d'occurrence à annuler tant que le planning est une
+> semaine-type (dépend du modèle templates→occurrences, absent). Détail :
+> `specs/evolution/roadmap.md` §3/§8. G4 et G5 sont des gaps de
 > documentation OpenAPI — les endpoints fonctionnent déjà. G6 est un
 > mismatch de naming à résoudre avant que le frontend ne code les appels API.

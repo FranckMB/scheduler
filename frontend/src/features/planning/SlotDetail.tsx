@@ -13,6 +13,8 @@ interface SlotDetailProps {
   venues: Venue[];
   categoryLabel: string;
   busy: boolean;
+  /** VALIDATED schedule → the slot is read-only (no move/lock). */
+  readOnly?: boolean;
   onClose: () => void;
   onToggleLock: () => void;
   onMove: (patch: SlotMovePatch) => void;
@@ -27,7 +29,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, busy, onClose, onToggleLock, onMove }: SlotDetailProps) {
+export function SlotDetail({ cell, slot, venues, categoryLabel, busy, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
@@ -50,6 +52,9 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, busy, onClose, o
         <Row label="Coach" value={cell.coachLabel} />
         <Row label="Durée" value={`${slot.durationMinutes} min`} />
 
+        {readOnly ? (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Planning validé (lecture seule). Rouvrez-le pour modifier ce créneau.</p>
+        ) : (
         <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
           <div className="grid grid-cols-3 gap-2">
             <select aria-label="Jour" value={day} onChange={(e) => setDay(Number(e.target.value))} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
@@ -79,6 +84,7 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, busy, onClose, o
             </Button>
           </div>
         </div>
+        )}
       </CardContent>
     </Card>
   );

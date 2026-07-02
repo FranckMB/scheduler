@@ -14,7 +14,7 @@ class ScheduleInput
     public ?string $name = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['DRAFT', 'PENDING', 'GENERATING', 'COMPLETED', 'FAILED'])]
+    #[Assert\Choice(choices: ['DRAFT', 'PENDING', 'GENERATING', 'COMPLETED', 'FAILED', 'VALIDATED'])]
     #[Groups(['write'])]
     public ?string $status = null;
 

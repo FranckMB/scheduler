@@ -88,13 +88,40 @@ export function useGenerate() {
   });
 }
 
+/** Lock a COMPLETED schedule → VALIDATED (read-only). */
 export function useValidateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (scheduleId: string) => planningApi.validateSchedule(scheduleId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
+}
+
+/** Reopen a VALIDATED schedule → COMPLETED (editable again). */
+export function useReopenSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (scheduleId: string) => planningApi.reopenSchedule(scheduleId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
+}
+
+/** Designate a schedule as the season's main plan (baseline lives on /me). */
+export function useSetBaseline() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (scheduleId: string) => planningApi.setBaseline(scheduleId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["me"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     },
+  });
+}
+
+export function useRenameSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name, status }: { id: string; name: string; status: Schedule["status"] }) => planningApi.renameSchedule(id, name, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }
