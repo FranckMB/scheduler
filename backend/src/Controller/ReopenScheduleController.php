@@ -15,19 +15,17 @@ use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
 /**
- * Validate a COMPLETED schedule → the manager marks it finished; it becomes
- * VALIDATED (read-only). Many schedules may be validated. To edit again, reopen
- * it (see ReopenScheduleController). Designating the season's main plan is a
- * separate action (SetBaselineController). See planning-lifecycle-validated.md.
+ * Reopen a VALIDATED schedule → back to COMPLETED (editable again). The inverse
+ * of ValidateScheduleController. See planning-lifecycle-validated.md.
  */
-final class ValidateScheduleController extends AbstractController
+final class ReopenScheduleController extends AbstractController
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
     ) {}
 
-    #[Route('/api/schedules/{id}/validate', name: 'api_schedule_validate', methods: ['POST'])]
+    #[Route('/api/schedules/{id}/reopen', name: 'api_schedule_reopen', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse
     {
         try {
@@ -45,14 +43,14 @@ final class ValidateScheduleController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
-            return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
+        if (ScheduleStatus::VALIDATED !== $schedule->getStatus()) {
+            return $this->json(['error' => 'Only a validated schedule can be reopened.'], Response::HTTP_CONFLICT);
         }
 
-        $schedule->setStatus(ScheduleStatus::VALIDATED);
+        $schedule->setStatus(ScheduleStatus::COMPLETED);
         $this->entityManager->flush();
 
-        return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::VALIDATED->value], Response::HTTP_OK);
+        return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::COMPLETED->value], Response::HTTP_OK);
     }
 
     private function resolveCurrentClubId(): ?string

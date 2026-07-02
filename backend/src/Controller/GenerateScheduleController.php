@@ -43,6 +43,10 @@ final class GenerateScheduleController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
+        if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before regenerating.'], Response::HTTP_CONFLICT);
+        }
+
         $schedule->setStatus(ScheduleStatus::PENDING);
 
         // Launching the first generation completes onboarding (the wizard is done);

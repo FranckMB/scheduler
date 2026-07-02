@@ -11,4 +11,6 @@ enum ScheduleStatus: string
     case GENERATING = 'GENERATING';
     case COMPLETED = 'COMPLETED';
     case FAILED = 'FAILED';
+    /** Manager marked the plan finished → read-only (see planning-lifecycle-validated.md). */
+    case VALIDATED = 'VALIDATED';
 }

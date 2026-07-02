@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use App\Enum\ScheduleStatus;
 use App\Service\ManualEditService;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +33,10 @@ final class ManualEditController extends AbstractController
 
         if (!$slot instanceof ScheduleSlotTemplate) {
             return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($this->scheduleIsLocked($slot)) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
         }
 
         $data = json_decode($request->getContent(), true);
@@ -71,6 +77,10 @@ final class ManualEditController extends AbstractController
             return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
         }
 
+        if ($this->scheduleIsLocked($slot)) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+        }
+
         $data = json_decode($request->getContent(), true);
 
         if (!\is_array($data)) {
@@ -101,6 +111,10 @@ final class ManualEditController extends AbstractController
 
         if (!$slot instanceof ScheduleSlotTemplate) {
             return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($this->scheduleIsLocked($slot)) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
         }
 
         $data = json_decode($request->getContent(), true);
@@ -138,5 +152,13 @@ final class ManualEditController extends AbstractController
         }
 
         return $slot instanceof ScheduleSlotTemplate ? $slot : null;
+    }
+
+    /** A slot whose parent schedule is VALIDATED is read-only. */
+    private function scheduleIsLocked(ScheduleSlotTemplate $slot): bool
+    {
+        $schedule = $this->entityManager->getRepository(Schedule::class)->find($slot->getScheduleId());
+
+        return $schedule instanceof Schedule && ScheduleStatus::VALIDATED === $schedule->getStatus();
     }
 }

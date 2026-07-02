@@ -8,6 +8,7 @@ use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
  * @extends AbstractStateProcessor<Schedule, ScheduleInput, ScheduleResource>
@@ -47,6 +48,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        // A validated schedule is read-only: reopen it (POST /reopen) before editing.
+        if (ScheduleStatus::VALIDATED === $entity->getStatus()) {
+            throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
+        }
+        // Status transitions go through the dedicated endpoints (generate/validate/reopen),
+        // never a free-form PUT.
+        if ('VALIDATED' === $input->status) {
+            throw new ConflictHttpException('Use POST /schedules/{id}/validate to validate a schedule.');
+        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

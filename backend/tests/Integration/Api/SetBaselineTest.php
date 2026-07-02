@@ -18,13 +18,12 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * Validating a COMPLETED schedule locks it (→ VALIDATED, read-only); only within
- * the caller's own club, and only when completed. Designating the season main
- * plan is a separate action (SetBaselineTest).
+ * Designating a finished schedule as the season main plan (baseline); a finished
+ * plan is COMPLETED or VALIDATED; only within the caller's own club.
  */
 #[Group('phase1')]
 #[Group('integration')]
-final class ValidateScheduleTest extends WebTestCase
+final class SetBaselineTest extends WebTestCase
 {
     private EntityManagerInterface $em;
 
@@ -32,42 +31,51 @@ final class ValidateScheduleTest extends WebTestCase
 
     private UserPasswordHasherInterface $hasher;
 
-    public function testValidateLocksCompletedSchedule(): void
+    public function testSetBaselineDesignatesMainPlan(): void
     {
-        [$user, , $season] = $this->seed('VAL1');
+        [$user, , $season] = $this->seed('BASE1');
         $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
 
         $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/set-baseline");
 
         self::assertResponseIsSuccessful();
         $this->em->clear();
-        $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
-        self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertSame($schedule->getId(), $reloaded?->getBaselineScheduleId());
     }
 
-    public function testNonCompletedScheduleCannotBeValidated(): void
+    public function testValidatedScheduleCanBeMainPlan(): void
     {
-        [$user, , $season] = $this->seed('VAL2');
+        [$user, , $season] = $this->seed('BASE2');
+        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/set-baseline");
+
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testDraftScheduleCannotBeMainPlan(): void
+    {
+        [$user, , $season] = $this->seed('BASE3');
         $schedule = $this->createSchedule($season, ScheduleStatus::DRAFT);
 
         $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/set-baseline");
 
         self::assertResponseStatusCodeSame(409);
     }
 
     public function testForeignScheduleIsNotAccessible(): void
     {
-        [$user] = $this->seed('VAL3');
-        [, , $otherSeason] = $this->seed('VAL4');
+        [$user] = $this->seed('BASE4');
+        [, , $otherSeason] = $this->seed('BASE5');
         $foreign = $this->createSchedule($otherSeason, ScheduleStatus::COMPLETED);
 
         $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$foreign->getId()}/validate");
+        $this->client->request('POST', "/api/schedules/{$foreign->getId()}/set-baseline");
 
-        // The controller guard rejects a schedule from another club (the caller's
-        // club is resolved from the JWT); RLS is a second line in production.
         self::assertResponseStatusCodeSame(403);
     }
 
@@ -98,7 +106,7 @@ final class ValidateScheduleTest extends WebTestCase
         $user = new User;
         $user->setEmail('user-' . $tag . '-' . $uid . '@test.com');
         $user->setFirstName('B');
-        $user->setLastName('L3');
+        $user->setLastName('SE');
         $user->setPasswordHash($this->hasher->hashPassword($user, 'pass'));
         $this->em->persist($user);
 
