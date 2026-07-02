@@ -4,7 +4,9 @@
 >
 > **Livré** : `Club.accentColor` + `accentPalette` + `logoUrl` (backend) · endpoint `PATCH /api/club/appearance` (accent) · upload/serve logo via abstraction `LogoStorage` (locale en dev, swappable prod) `POST/DELETE /api/club/logo` + `GET /api/clubs/{id}/logo` (public) · application front `--accent`/`--accent-foreground` (AA auto, dark/light) via `useApplyClubTheme` · écran `/club` (hub) section Identité (upload logo + extraction 3 couleurs → suggestion accent + palette) · affichage logo header + écran d'attente génération.
 >
-> **Reste ⬜** : stockage prod réel (impl S3/objet à écrire quand la cible est connue) · usage plus poussé des 3 couleurs (teintes signature au-delà de `--accent-2`) · login marque produit (inchangé).
+> **Reste ⬜** : stockage prod réel (impl S3/objet à écrire quand la cible est connue) · usage plus poussé des 3 couleurs (teintes signature au-delà de `--accent-2`) · login marque produit (inchangé) · **cadrage/zoom du logo dans la bulle ronde** (le logo est en `object-cover`, il peut être rogné ; un contrôle zoom + position, style crop d'avatar, permettrait d'ajuster) · logo aux formats non-carrés mieux gérés.
+>
+> **Décision — quand uploader le logo** : **après** la création du club, dans l'écran « Gestion du club » (pas à l'inscription). L'inscription reste minimale (nom/email/ffbb, friction basse — l'utilisateur n'a souvent pas son logo sous la main) ; l'identité est un réglage fait ensuite, potentiellement par un autre gestionnaire. C'est l'implémentation actuelle.
 
 > **Base de réflexion initiale** (conservée pour contexte). Statut : ✅ livré · 🟡 partiel/scaffoldé · ⬜ à faire.
 
