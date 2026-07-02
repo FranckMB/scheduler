@@ -429,12 +429,15 @@ def _diagnose_session_below_effective_min(
             except (TypeError, ValueError):
                 pass
 
+    # Count SESSIONS (one placed slot = one session), not 15-min units. The
+    # comparison is against sessionsPerWeek / tier default_min, both expressed
+    # in sessions — counting units (duration // 15) would make a single 90-min
+    # session look like 6 and hide a genuinely missing session.
     placed_counts: dict[str, int] = defaultdict(int)
     for slot in slots:
         team_id = slot.get("teamId")
         if team_id:
-            duration = int(slot.get("durationMinutes", SLOT_MINUTES))
-            placed_counts[str(team_id)] += max(1, duration // SLOT_MINUTES)
+            placed_counts[str(team_id)] += 1
 
     teams: dict[str, Any] = {}
     team_names: dict[str, str] = {}
@@ -460,20 +463,33 @@ def _diagnose_session_below_effective_min(
                 effective_min = min(spw, tier_min[tier_key])
 
         placed = placed_counts.get(team_id, 0)
-        if placed < effective_min:
+        # Warn whenever fewer sessions were placed than the team REQUESTED
+        # (sessionsPerWeek), even if its tier floor (effective_min) is met — the
+        # manager still needs to know a requested session is missing. Below the
+        # tier floor is the more severe case (the guaranteed minimum was missed).
+        if placed < spw:
             team_name = team_names.get(team_id, team_id)
+            below_floor = placed < effective_min
+            severity = "high" if below_floor else "WARNING"
+            if below_floor:
+                reason = (
+                    f"en-dessous de son minimum garanti de {effective_min} "
+                    "(créneaux de gymnase insuffisants)."
+                )
+            else:
+                reason = "faute de créneau de gymnase disponible."
             diagnostics.append({
                 "id": f"diag-session-below-min-{team_id}",
                 "type": "session_below_effective_min",
-                "severity": "WARNING",
+                "severity": severity,
                 "teamId": team_id,
                 "message": (
-                    f"Team {team_name} ({team_id}) has {placed} session unit(s) placed, "
-                    f"below its effective minimum of {effective_min}."
+                    f"L'équipe {team_name} : {spw} séance(s) demandée(s) par semaine, "
+                    f"seulement {placed} placée(s) — {reason}"
                 ),
                 "suggestions": [
-                    "Add more venue availability or adjust slot templates for this team.",
-                    "Review the team's priority tier and sessionsPerWeek settings.",
+                    "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",
+                    "Vérifiez le tier de priorité et le nombre de séances/semaine de l'équipe.",
                 ],
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })

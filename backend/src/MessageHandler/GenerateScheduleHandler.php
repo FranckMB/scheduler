@@ -263,11 +263,19 @@ final class GenerateScheduleHandler
         $diagnostics = $result['diagnostics'] ?? [];
         if (!\is_array($diagnostics) || [] === $diagnostics) {
             $diagnostics = $this->buildFallbackDiagnostics($result);
-            if ([] === $diagnostics) {
-                $this->persistDiagnostic($schedule, 'engine_failed', ScheduleDiagnosticSeverity::ERROR, (string) ($result['message'] ?? 'Schedule generation failed.'));
+        }
 
-                return;
+        if ([] === $diagnostics) {
+            // No diagnostics at all. On a *failed* result, surface a generic
+            // error so the manager sees something. On a *completed* result,
+            // absence of diagnostics simply means "no issue detected" — a clean
+            // plan must NOT carry a spurious engine_failed error.
+            $engineStatus = strtolower((string) ($result['status'] ?? 'failed'));
+            if ('completed' !== $engineStatus) {
+                $this->persistDiagnostic($schedule, 'engine_failed', ScheduleDiagnosticSeverity::ERROR, (string) ($result['message'] ?? 'Schedule generation failed.'));
             }
+
+            return;
         }
 
         [$teamNames, $coachNames, $venueNames] = $this->buildNameMaps($schedule);
