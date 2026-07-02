@@ -395,6 +395,27 @@ final class TeamApiTest extends WebTestCase
         return $tier;
     }
 
+    public function testBulkReorderPersistsTierAndOrderAtomically(): void
+    {
+        $client = $this->client;
+        $a = $this->createTeam('Alpha');
+        $b = $this->createTeam('Bravo');
+        $client->loginUser($this->user);
+
+        $client->request('POST', '/api/teams/reorder', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['items' => [
+            ['id' => $a->getId(), 'priorityTierId' => $this->priorityTier->getId(), 'tierOrder' => 3],
+            ['id' => $b->getId(), 'priorityTierId' => $this->priorityTier->getId(), 'tierOrder' => 1],
+        ]], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        self::assertSame(3, $this->em->getRepository(Team::class)->find($a->getId())?->getTierOrder());
+        self::assertSame(1, $this->em->getRepository(Team::class)->find($b->getId())?->getTierOrder());
+    }
+
     private function createTeam(string $name): Team
     {
         $team = new Team;

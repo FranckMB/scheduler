@@ -45,6 +45,9 @@ export const listPriorityTiers = (): Promise<PriorityTier[]> => collection<Prior
 
 export const createTeam = (body: TeamPayload): Promise<Team> => api.post("teams", { json: body }).json();
 export const updateTeam = (id: string, body: TeamPayload): Promise<Team> => api.put(`teams/${id}`, { json: body }).json();
+/** Bulk reorder in one transaction (atomic) — avoids N concurrent PUTs racing on the optimistic-lock version. */
+export const reorderTeams = (items: { id: string; priorityTierId: number; tierOrder: number }[]): Promise<unknown> =>
+  api.post("teams/reorder", { json: { items } }).json();
 export const deleteTeam = (id: string): Promise<void> => api.delete(`teams/${id}`).then(() => undefined);
 
 // --- Venues + availability slots (W2) ---

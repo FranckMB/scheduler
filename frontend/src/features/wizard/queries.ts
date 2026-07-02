@@ -42,6 +42,15 @@ export function useDeleteTeam() {
   });
 }
 
+/** Atomic bulk reorder for the sort UI (one transaction, no per-team version races). */
+export function useReorderTeams() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (items: { id: string; priorityTierId: number; tierOrder: number }[]) => wizardApi.reorderTeams(items),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+  });
+}
+
 // --- Venues + slots (W2) ---
 
 export function useWizardVenues() {
