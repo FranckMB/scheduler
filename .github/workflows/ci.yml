@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env
+        run: cp .env.dist .env
+
       - name: Lint Docker Compose
         run: docker compose config > /dev/null
 
@@ -24,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: cp .env.dist .env
 
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
@@ -40,6 +46,9 @@ jobs:
     needs: [lint, phpstan]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: cp .env.dist .env
 
       - name: Start services
         run: docker compose up -d --wait
@@ -69,6 +78,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env
+        run: cp .env.dist .env
+
       - name: Start services
         run: docker compose up -d --wait
 
@@ -86,6 +98,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: cp .env.dist .env
 
       - name: Build engine
         run: docker compose build engine
@@ -105,6 +120,9 @@ jobs:
     needs: [blocking-tests, engine-tests]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: cp .env.dist .env
 
       - name: Build all images
         run: docker compose build
