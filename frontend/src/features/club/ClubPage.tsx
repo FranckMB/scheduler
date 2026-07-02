@@ -1,4 +1,4 @@
-import { ImagePlus, Trash2 } from "lucide-react";
+import { Crop, ImagePlus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -58,6 +58,16 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
     setPalette([]);
   };
 
+  // Re-open the cropper on the CURRENT logo (fetch it back into a File).
+  const recrop = async () => {
+    if (null === preview) {
+      return;
+    }
+    const res = await fetch(preview);
+    const blob = await res.blob();
+    setCropFile(new File([blob], "logo.png", { type: blob.type || "image/png" }));
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -70,9 +80,15 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
           <LogoCropper file={cropFile} onCropped={onCropped} onCancel={() => setCropFile(null)} />
         ) : (
           <div className="flex items-center gap-4">
-            <div className="flex size-16 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-bold text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => void recrop()}
+              disabled={null === preview}
+              title={null !== preview ? "Recadrer le logo" : undefined}
+              className="flex size-16 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-lg font-bold text-muted-foreground enabled:cursor-pointer enabled:hover:opacity-90"
+            >
               {null !== preview ? <img src={preview} alt="Logo" className="size-full object-cover" /> : clubName.trim().charAt(0).toUpperCase() || "C"}
-            </div>
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted">
                 <ImagePlus className="size-4" />
@@ -90,6 +106,12 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
                   }}
                 />
               </label>
+              {null !== preview ? (
+                <Button size="sm" variant="outline" onClick={() => void recrop()} disabled={busy}>
+                  <Crop className="size-4" />
+                  Recadrer
+                </Button>
+              ) : null}
               {null !== logoUrl ? (
                 <Button size="sm" variant="ghost" className="text-destructive" onClick={removeLogo} disabled={busy}>
                   <Trash2 className="size-4" />
