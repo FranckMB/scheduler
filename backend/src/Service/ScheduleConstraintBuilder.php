@@ -32,6 +32,13 @@ final class ScheduleConstraintBuilder
     private const CACHE_TTL_SECONDS = 14_400;
     private const SCHEMA_VERSION = '2.0';
     private const DEFAULT_SOLVER_SEED = 42;
+    /**
+     * Upper bound on the solve budget (seconds), aligned with the engine input
+     * schema default (`solver_timeout_seconds` = 650). The engine derives an
+     * adaptive timeout from problem size and caps it at this ceiling — this is
+     * the maximum a manager can be made to wait, not a fixed solve time.
+     */
+    private const DEFAULT_SOLVER_TIMEOUT_SECONDS = 650;
     private const SOFT_LOCK_PENALTY = 10_000;
 
     /** @var array<string, array<VenueTrainingSlot>> */
@@ -194,7 +201,7 @@ final class ScheduleConstraintBuilder
             'clubId' => $clubId,
             'seasonId' => $seasonId,
             'solverSeed' => $solverSeed,
-            'solverTimeoutSeconds' => 300,
+            'solverTimeoutSeconds' => self::DEFAULT_SOLVER_TIMEOUT_SECONDS,
             'venues' => array_map($this->serializeVenue(...), $venues),
             'teams' => array_map(fn (Team $team): array => $this->serializeTeam($team, $seasonId), $teams),
             'coaches' => array_map($this->serializeCoach(...), $coaches),
