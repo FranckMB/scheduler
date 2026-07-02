@@ -10,7 +10,7 @@ import { Select } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamPayload } from "../api";
-import { useCreateTeam, useDeleteTeam, usePriorityTiers, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
+import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 
 // Manager-facing meaning of each priority tier (backend tier names are FFBB
@@ -190,6 +190,7 @@ export function TeamsStep() {
   const create = useCreateTeam();
   const update = useUpdateTeam();
   const del = useDeleteTeam();
+  const reorder = useReorderTeams();
 
   const [name, setName] = useState("");
   const [catId, setCatId] = useState("");
@@ -263,15 +264,18 @@ export function TeamsStep() {
     setLanes(next);
   }, [teams, tiers]);
 
-  // Persist: for every tier, any team whose tier or position changed → PUT.
+  // Persist the whole ordering in ONE atomic call — every team gets its tier +
+  // index. Avoids the N-concurrent-PUT storm that raced on Team's optimistic-lock
+  // version and dropped updates.
   const commit = (next: Record<number, string[]>) => {
+    const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
     for (const tier of tiers) {
       (next[tier.id] ?? []).forEach((id, index) => {
-        const team = teamById.get(id);
-        if (team && (team.priorityTierId !== tier.id || team.tierOrder !== index)) {
-          update.mutate({ id, body: payload(team, { priorityTierId: tier.id, tierOrder: index }) });
-        }
+        items.push({ id, priorityTierId: tier.id, tierOrder: index });
       });
+    }
+    if (items.length > 0) {
+      reorder.mutate(items);
     }
   };
 
