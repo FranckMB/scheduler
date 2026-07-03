@@ -3,8 +3,9 @@ import { useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import type { MeResponse } from "@/features/auth/api";
+import { PendingMembersSection } from "@/features/auth/PendingMembersSection";
+import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
@@ -69,13 +70,9 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Identité</CardTitle>
-        <CardDescription>Logo et couleur d'accent du club. La couleur personnalise les boutons, liens et éléments actifs de toute l'interface.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Logo — cropper when a new file is being framed, else preview + actions */}
+    <div className="space-y-5">
+      <p className="text-sm text-muted-foreground">Logo et couleur d'accent du club. La couleur personnalise les boutons, liens et éléments actifs de toute l'interface.</p>
+      {/* Logo — cropper when a new file is being framed, else preview + actions */}
         {null !== cropFile ? (
           <LogoCropper file={cropFile} onCropped={onCropped} onCancel={() => setCropFile(null)} />
         ) : (
@@ -175,23 +172,32 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
             </Button>
           ) : null}
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 
 function ClubHub({ me }: { me: MeResponse }) {
+  const isAdmin = me.role === "admin";
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-1 text-xl font-semibold">Gestion du club</h1>
       <p className="mb-4 text-sm text-muted-foreground">{me.club?.name ?? "—"}</p>
-      {/* Hub extensible : membres, réinitialisation… viendront ici. */}
-      <IdentitySection
-        accentColor={me.club?.accentColor ?? null}
-        accentPalette={me.club?.accentPalette ?? null}
-        logoUrl={me.club?.logoUrl ?? null}
-        clubName={me.club?.name ?? ""}
-      />
+      <div className="space-y-3">
+        {isAdmin ? (
+          <AccordionSection title="Demandes" defaultOpen>
+            <p className="mb-3 text-sm text-muted-foreground">Approuvez ou refusez les personnes qui souhaitent rejoindre votre club.</p>
+            <PendingMembersSection />
+          </AccordionSection>
+        ) : null}
+        <AccordionSection title="Visuel">
+          <IdentitySection
+            accentColor={me.club?.accentColor ?? null}
+            accentPalette={me.club?.accentPalette ?? null}
+            logoUrl={me.club?.logoUrl ?? null}
+            clubName={me.club?.name ?? ""}
+          />
+        </AccordionSection>
+      </div>
     </div>
   );
 }

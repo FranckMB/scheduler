@@ -1,8 +1,8 @@
-import { CalendarCheck2, LogOut, Moon, Sun } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User } from "lucide-react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useLogout, useMe } from "@/features/auth/queries";
-import { Button } from "@/shared/components/ui/button";
+import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
@@ -24,10 +24,10 @@ function NavItem({ to, children }: { to: string; children: string }) {
 export function AppLayout() {
   const { data } = useMe();
   const logout = useLogout();
+  const navigate = useNavigate();
   useApplyClubTheme();
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
-  const isAdmin = data?.role === "admin";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -44,15 +44,20 @@ export function AppLayout() {
           <nav className="flex items-center gap-1">
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>
-            <NavItem to="/club">Club</NavItem>
-            {isAdmin ? <NavItem to="/pending-members">Demandes</NavItem> : null}
-            <NavItem to="/profile">Profil</NavItem>
-            <Button variant="ghost" size="icon" aria-label="Basculer le thème" onClick={toggleMode}>
-              {mode === "dark" ? <Sun /> : <Moon />}
-            </Button>
-            <Button variant="ghost" size="icon" aria-label="Se déconnecter" onClick={logout}>
-              <LogOut />
-            </Button>
+            <Menu label="Menu du compte" trigger={<MenuIcon />}>
+              <MenuItem icon={<Settings />} onSelect={() => navigate("/club")}>
+                Club
+              </MenuItem>
+              <MenuItem icon={<User />} onSelect={() => navigate("/profile")}>
+                Profil
+              </MenuItem>
+              <MenuItem icon={mode === "dark" ? <Sun /> : <Moon />} onSelect={toggleMode}>
+                {mode === "dark" ? "Thème clair" : "Thème sombre"}
+              </MenuItem>
+              <MenuItem icon={<LogOut />} className="text-destructive [&_svg]:text-destructive" onSelect={logout}>
+                Se déconnecter
+              </MenuItem>
+            </Menu>
           </nav>
         </div>
       </header>
