@@ -34,9 +34,11 @@ function StepContent({ stepId }: { stepId: WizardStepId }) {
   }
 }
 
-/** Floating top/bottom page-jump arrows (bottom-right), shown on every step
- *  whenever the page actually scrolls. Was TeamsStep-only before. */
-function ScrollJumpButtons() {
+/** Floating top/bottom page-jump arrows, shown on every step whenever the page
+ *  actually scrolls (was TeamsStep-only before). Pinned to the right edge at
+ *  vertical center — NOT bottom-right, to avoid overlapping the sticky footer's
+ *  Suivant button. `suppressed` hides them (e.g. during Teams drag-reorder). */
+function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
   const [scrollable, setScrollable] = useState(false);
 
   useEffect(() => {
@@ -51,11 +53,11 @@ function ScrollJumpButtons() {
     };
   }, []);
 
-  if (!scrollable) {
+  if (suppressed || !scrollable) {
     return null;
   }
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-1">
+    <div className="fixed right-4 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1">
       <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
         <ChevronsUp className="size-4" />
       </Button>
@@ -76,7 +78,8 @@ export function WizardPage() {
   const isLast = index === WIZARD_STEPS.length - 1;
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [footerExtra, setFooterExtra] = useState<ReactNode>(null);
-  const footerCtx = useMemo(() => ({ setFooterExtra }), []);
+  const [suppressScrollJump, setSuppressScrollJump] = useState(false);
+  const footerCtx = useMemo(() => ({ setFooterExtra, setSuppressScrollJump }), []);
   // First-time club (not yet onboarded) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely.
   const guided = me?.club?.onboardingCompleted === false;
@@ -211,7 +214,7 @@ export function WizardPage() {
         </div>
       </div>
       </div>
-      <ScrollJumpButtons />
+      <ScrollJumpButtons suppressed={suppressScrollJump} />
     </WizardFooterContext.Provider>
   );
 }
