@@ -14,13 +14,23 @@ Derived rules (parsed from v2 constraints[] payload):
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Sequence, cast
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _time_to_minutes
+
+logger = logging.getLogger("engine.constraints")
+
+# Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
+# Used to warn ONLY on genuine contract drift, not on recognised families whose
+# specific config variant is intentionally a no-op.
+_KNOWN_FAMILIES = frozenset({"TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"})
+_KNOWN_TYPES = frozenset({"TEAM_COACH", "COACH_PLAYER_UNAVAILABILITY", "PRIORITY_TIER"})
 
 AssignmentLike = Any
 BoolVarLike = Any
@@ -898,7 +908,7 @@ def add_time_window_constraints(
                 "suggestions": [
                     "Remove the overlapping days from forcedDays or forbiddenDays.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
             for var in team_all_vars.get(team_id_text, []):
                 model.Add(var == 0)
@@ -1657,6 +1667,16 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         elif family in ("TIME", "DAY"):
             result["time_windows"].append(c)
 
+        elif family not in _KNOWN_FAMILIES and c_type not in _KNOWN_TYPES and rule_type != "LOCK":
+            # Only warn when neither the family NOR the type is recognised — a
+            # genuine contract drift. A recognised family whose specific
+            # config/scope variant isn't handled (e.g. a CLUB-scope FACILITY) is
+            # a deliberate no-op, not drift, and must not spam warnings (review).
+            logger.warning(
+                "unrecognised constraint dropped: id=%s type=%s family=%s ruleType=%s",
+                c.get("id"), c_type, family, rule_type,
+            )
+
     return result
 
 
@@ -1677,8 +1697,8 @@ __all__ = [
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
     "add_salarie_distribution_constraints",
-    "add_time_window_constraints",
     "add_team_no_overlap",
+    "add_time_window_constraints",
     "add_venue_closure_constraints",
     "parse_v2_constraints",
 ]

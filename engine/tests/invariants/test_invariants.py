@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import pathlib
+from collections import defaultdict
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from ortools.sat.python import cp_model
 
 from app.solver.constraints import add_level_1_hard_constraints
@@ -125,7 +126,7 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
     num_coaches = draw(st.integers(min_value=1, max_value=3))
 
     venues = []
-    for i in range(num_venues):
+    for _ in range(num_venues):
         vid = draw(venue_id_st)
         if not any(v["id"] == vid for v in venues):
             venues.append({"id": vid, "name": f"Venue {vid}", "isActive": True})
@@ -137,7 +138,7 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
             coaches.append({"id": cid, "firstName": f"Coach{i}", "lastName": "X", "isActive": True})
 
     teams = []
-    for i in range(num_teams):
+    for _ in range(num_teams):
         tid = draw(team_id_st)
         tier = draw(tier_st)
         if not any(t["id"] == tid for t in teams):

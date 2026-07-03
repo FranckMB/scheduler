@@ -149,10 +149,11 @@ class TestGenerateContract:
 
         data: dict[str, Any] = input_data.model_dump(by_alias=True)
 
-        from app.solver.model import build_model
-        from app.solver.constraints import add_level_1_hard_constraints
-        from app.solver.objective import add_level_2_objective
         from ortools.sat.python import cp_model
+
+        from app.solver.constraints import add_level_1_hard_constraints
+        from app.solver.model import build_model
+        from app.solver.objective import add_level_2_objective
         from app.solver.result_builder import build_result
 
         model = build_model(data)
@@ -186,10 +187,11 @@ class TestGenerateContract:
         with open(fixtures_dir / "medium_club.json", encoding="utf-8") as f:
             data: dict[str, Any] = json.load(f)
 
-        from app.solver.model import build_model
-        from app.solver.constraints import add_level_1_hard_constraints
-        from app.solver.objective import add_level_2_objective
         from ortools.sat.python import cp_model
+
+        from app.solver.constraints import add_level_1_hard_constraints
+        from app.solver.model import build_model
+        from app.solver.objective import add_level_2_objective
         from app.solver.result_builder import build_result
 
         for team in data.get("teams", []):

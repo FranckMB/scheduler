@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,8 +14,13 @@ from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
-from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, build_model, _time_to_minutes
-from app.solver.objective import add_level_2_objective, add_preferred_day_bonus, is_team_satisfied_by_hard_locks, LEVEL_2_OBJECTIVE_WEIGHTS
+from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
+from app.solver.objective import (
+    LEVEL_2_OBJECTIVE_WEIGHTS,
+    add_level_2_objective,
+    add_preferred_day_bonus,
+    is_team_satisfied_by_hard_locks,
+)
 from app.solver.result_builder import build_result
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
@@ -22,10 +28,21 @@ CONTRACT_VERSION_PATH = ENGINE_ROOT / "CONTRACT_VERSION"
 IMPLICIT_RULES_PATH = ENGINE_ROOT / "implicit_rules.json"
 
 settings = get_settings()
+# force=True: uvicorn installs root handlers first, which would make a plain
+# basicConfig a silent no-op — force our level/format to actually take effect.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    force=True,
+)
+logger = logging.getLogger("engine")
+
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 _club_locks: dict[str, asyncio.Lock] = {}
 _club_locks_guard = asyncio.Lock()
+_MAX_CLUB_LOCKS = 256
+_solve_semaphore = asyncio.Semaphore(settings.max_concurrent_solves)
 
 
 class SerializableModel(BaseModel):
@@ -103,8 +120,22 @@ def _day_constraint_conflict_team_ids(time_windows: list[dict[str, Any]]) -> set
     }
 
 
+def _lock_is_idle(lock: asyncio.Lock) -> bool:
+    # Idle = neither held NOR awaited. Checking locked() alone is not enough:
+    # during release, asyncio sets _locked=False before the woken waiter runs,
+    # so a lock with a pending waiter can momentarily report not-locked. Deleting
+    # it then would orphan the waiter and let a fresh request create a second
+    # lock for the same club, breaking per-club serialisation (audit review).
+    waiters = getattr(lock, "_waiters", None)
+    return not lock.locked() and not waiters
+
+
 async def get_club_lock(club_id: str) -> asyncio.Lock:
     async with _club_locks_guard:
+        # Bound the dict: drop only genuinely idle locks (not held, no waiter).
+        if len(_club_locks) > _MAX_CLUB_LOCKS:
+            for cid in [c for c, lk in _club_locks.items() if c != club_id and _lock_is_idle(lk)]:
+                del _club_locks[cid]
         lock = _club_locks.get(club_id)
         if lock is None:
             lock = asyncio.Lock()
@@ -120,7 +151,14 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # distribution).  If the solver returns INFEASIBLE, build_result produces
     # status="failed" with conflict diagnostics — no silent constraint dropping.
     # Decision: docs/architecture/adr-0001-single-pass-solve.md
-    solver_status, solver, model, conflicts = _solve(data, input_data)
+    #
+    # _solve is CPU-bound (up to 650 s of CP-SAT). Run it in a worker thread so
+    # the event loop stays responsive (/health answers during a solve). Solve()
+    # releases the GIL and each request builds its own model/solver, so this is
+    # thread-safe. A global semaphore bounds how many solves run at once.
+    async with _solve_semaphore:
+        logger.info("solve start club=%s teams=%d", input_data.club_id, len(input_data.teams))
+        solver_status, solver, model, conflicts = await asyncio.to_thread(_solve, data, input_data)
 
     result_dict = build_result(
         data, solver, model, status=solver_status, fallback_used=False,
@@ -129,6 +167,10 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     if conflicts:
         result_dict.setdefault("diagnostics", []).extend(conflicts)
 
+    logger.info(
+        "solve done club=%s status=%s slots=%d",
+        input_data.club_id, result_dict.get("status"), len(result_dict.get("slots", [])),
+    )
     # Validate and return.
     return ScheduleOutputSchema.model_validate(result_dict)
 
@@ -198,9 +240,12 @@ def _solve(
     for team in data.get("teams", []):
         team_id = team.get("id")
         sessions_per_week = team.get("sessions_per_week") or team.get("sessionsPerWeek")
-        if team_id and sessions_per_week:
-            if is_team_satisfied_by_hard_locks(str(team_id), model.locked_slots, int(sessions_per_week)):
-                hard_satisfied_team_ids.add(str(team_id))
+        if (
+            team_id
+            and sessions_per_week
+            and is_team_satisfied_by_hard_locks(str(team_id), model.locked_slots, int(sessions_per_week))
+        ):
+            hard_satisfied_team_ids.add(str(team_id))
 
     # Hard min_sessions forces UNKNOWN when venue capacity < total sessions needed.
     # Soft-only via objective bonus (session_count:20) + WARNING diagnostics.

@@ -7,11 +7,13 @@ diagnostics for any post-solve issues it detects.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from datetime import datetime, timezone
-from importlib.metadata import version
+import contextlib
 import uuid
-from typing import Any, Mapping
+from collections import defaultdict
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from importlib.metadata import version
+from typing import Any
 
 from ortools.sat.python import cp_model
 
@@ -54,10 +56,7 @@ def build_result(
     else:
         solver_status = cp_model.UNKNOWN
 
-    if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        schema_status = "completed"
-    else:
-        schema_status = "failed"
+    schema_status = "completed" if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else "failed"
 
     slots: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
@@ -88,8 +87,8 @@ def build_result(
     metrics = {
         "solver_version": version("ortools"),
         "nb_variables": int(model.NumVariables()),
-        "nb_constraints": int(len(model.Proto().constraints)),
-        "wall_time_ms": int(round(solver.WallTime() * 1000)),
+        "nb_constraints": len(model.Proto().constraints),
+        "wall_time_ms": round(solver.WallTime() * 1000),
         # Determinism identifiers — the backend persists these on the Schedule.
         "score_formula_version": SCORE_FORMULA_VERSION,
         "constraint_version": constraint_version,
@@ -313,7 +312,7 @@ def _diagnose_unplaced(
             "teamId": team_id,
             "message": f"L'équipe {team_label} n'a pas pu être placée : {reason}",
             "suggestions": suggestions,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "createdAt": datetime.now(UTC).isoformat(),
         })
     return diagnostics
 
@@ -362,7 +361,7 @@ def _diagnose_soft_lock_moved(
                     "Review the new time and confirm it still works for the team.",
                     "If the original time is essential, consider raising the lock to HARD.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
     return diagnostics
 
@@ -398,7 +397,7 @@ def _diagnose_coach_overload(
                     "Répartissez certaines séances sur un autre coach.",
                     "Vérifiez le nombre de jours maximum dans le profil du coach.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
     return diagnostics
 
@@ -415,10 +414,8 @@ def _diagnose_session_below_effective_min(
         tid = _get(tier, "id")
         default_min = _get(tier, "defaultMinSessions", "default_min_sessions")
         if tid is not None and default_min is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 tier_min[int(tid)] = int(default_min)
-            except (TypeError, ValueError):
-                pass
 
     for constraint in _collection(model_data, "constraints"):
         if not isinstance(constraint, Mapping):
@@ -429,10 +426,8 @@ def _diagnose_session_below_effective_min(
         tier_id = metadata.get("id")
         default_min = metadata.get("defaultMinSessions")
         if tier_id is not None and default_min is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 tier_min[int(tier_id)] = int(default_min)
-            except (TypeError, ValueError):
-                pass
 
     # Count SESSIONS (one placed slot = one session), not 15-min units. The
     # comparison is against sessionsPerWeek / tier default_min, both expressed
@@ -496,7 +491,7 @@ def _diagnose_session_below_effective_min(
                     "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",
                     "Vérifiez le tier de priorité et le nombre de séances/semaine de l'équipe.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
 
     return diagnostics
@@ -531,7 +526,7 @@ def _diagnose_conflicts(
                 "Ajoutez de la disponibilité de gymnase ou un coach supplémentaire.",
                 "Vérifiez les créneaux verrouillés (LOCK) qui se chevauchent entre équipes.",
             ],
-            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "createdAt": datetime.now(UTC).isoformat(),
         })
         return diagnostics
 
@@ -567,7 +562,7 @@ def _diagnose_conflicts(
                 "suggestions": [
                     "Déplacez l'une des séances sur un autre horaire ou un autre gymnase.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
 
     # Post-solve safety check: coach double-booking.
@@ -604,7 +599,7 @@ def _diagnose_conflicts(
                 "suggestions": [
                     "Séparez les séances ou affectez un autre coach à l'une des équipes.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
 
     return diagnostics
@@ -696,7 +691,7 @@ def _diagnose_unused_slots(
                 "suggestions": [],
                 "teamId": None,
                 "coachId": None,
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
 
     return diagnostics
@@ -741,7 +736,7 @@ def _diagnose_coach_rest_days(
                     "Reduce the number of sessions assigned to this coach.",
                     "Add coach unavailability constraints for at least one weekday.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
 
     return diagnostics

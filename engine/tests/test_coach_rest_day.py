@@ -123,7 +123,7 @@ class TestCoachRestDay:
             player_ids=("coach-1",),
         )
 
-        all_assignments = coaching + [playing]
+        all_assignments = [*coaching, playing]
         add_level_1_hard_constraints(
             model, all_assignments, coaches=[{"id": "coach-1"}, {"id": "coach-other"}]
         )
