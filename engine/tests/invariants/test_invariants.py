@@ -27,6 +27,12 @@ def _normalize_team_fields(data: dict[str, Any]) -> None:
             team["forced_venue_id"] = team["forcedVenueId"]
 
 
+# NOTE (PR0): this local harness is NOT yet the production pipeline. It enforces
+# coaches from slotTemplates; production enforces them from TEAM_COACH
+# constraints (parse_v2_constraints). Reconciling these invariants onto
+# ``tests.support.solve_payload`` is deferred to E1, where coach semantics are
+# corrected — migrating naively now would break the coach-uniqueness invariant
+# on generated fixtures that carry no TEAM_COACH constraints.
 def _run_pipeline(
     data: dict[str, Any],
     *,
