@@ -204,12 +204,13 @@ services:
     container_name: clubscheduler-mercure
     environment:
       SERVER_NAME: ":80"
-      MERCURE_PUBLISHER_JWT_KEY: ${JWT_PASSPHRASE}
-      MERCURE_SUBSCRIBER_JWT_KEY: ${JWT_PASSPHRASE}
+      # SEC-05/06: dedicated Mercure secret (no longer the lexik JWT passphrase);
+      # no anonymous subscribers, CORS limited to the dev frontends, publish
+      # restricted to same-origin (the backend publishes server-side).
+      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET}
+      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_JWT_SECRET}
       MERCURE_EXTRA_DIRECTIVES: |
-        cors_origins *
-        anonymous
-        publish_origins *
+        cors_origins http://localhost:5173 http://localhost:8081
     ports:
       - "127.0.0.1:${MERCURE_PORT}:80"
     healthcheck:
