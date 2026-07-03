@@ -16,8 +16,6 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class UserSelfOnlyTest extends WebTestCase
 {
-    private static int $ip = 0;
-
     private KernelBrowser $client;
 
     public function testUsersCollectionIsGone(): void
@@ -37,6 +35,14 @@ final class UserSelfOnlyTest extends WebTestCase
         [$token, $userId] = $this->register('USRB');
 
         $this->request('GET', '/api/users/' . $userId, $token);
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testPutSelfSucceeds(): void
+    {
+        [$token, $userId] = $this->register('USRI');
+
+        $this->request('PUT', '/api/users/' . $userId, $token, ['firstName' => 'Renamed', 'lastName' => 'Self']);
         self::assertResponseIsSuccessful();
     }
 
@@ -77,8 +83,9 @@ final class UserSelfOnlyTest extends WebTestCase
      */
     private function register(string $ara): array
     {
-        $ip = '10.30.' . intdiv(self::$ip, 254) . '.' . (self::$ip % 254 + 1);
-        ++self::$ip;
+        // High-entropy IP: the register rate-limiter lives in Redis and is NOT
+        // rolled back between test runs, so deterministic IPs eventually throttle.
+        $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = strtolower($ara) . substr(md5(uniqid('', true)), 0, 6);
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,

@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Entity\ClubUser;
+use App\Entity\User;
+use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * SEC-04 non-regression: POST /api/clubs/{id}/import-teams requires an active
@@ -17,8 +22,6 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ImportAuthorizationTest extends WebTestCase
 {
-    private static int $ip = 0;
-
     private KernelBrowser $client;
 
     public function testImportOnForeignClubReturns403(): void
@@ -44,9 +47,46 @@ final class ImportAuthorizationTest extends WebTestCase
         self::assertResponseStatusCodeSame(400);
     }
 
+    public function testImportAsNonAdminMemberReturns403(): void
+    {
+        [, , $clubA] = $this->register('IMPD');
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+
+        // Active member of the club, but not admin → 403 (not the 400 "no file").
+        $this->client->request('POST', '/api/clubs/' . $clubA . '/import-teams', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
+        ]);
+        self::assertResponseStatusCodeSame(403, 'a non-admin member must not import');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
+    }
+
+    private function addActiveMember(string $clubId, string $role): string
+    {
+        $container = self::getContainer();
+        $em = $container->get(EntityManagerInterface::class);
+        $hasher = $container->get(UserPasswordHasherInterface::class);
+
+        $uid = substr(md5(uniqid('', true)), 0, 8);
+        $user = new User;
+        $user->setEmail($role . $uid . '@test.fr');
+        $user->setFirstName('N');
+        $user->setLastName('Admin');
+        $user->setPasswordHash($hasher->hashPassword($user, 'password123'));
+        $em->persist($user);
+
+        $membership = new ClubUser;
+        $membership->setClubId($clubId);
+        $membership->setUserId($user->getId());
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $em->persist($membership);
+        $em->flush();
+
+        return $container->get(JWTTokenManagerInterface::class)->create($user);
     }
 
     /**
@@ -54,8 +94,9 @@ final class ImportAuthorizationTest extends WebTestCase
      */
     private function register(string $ara): array
     {
-        $ip = '10.40.' . intdiv(self::$ip, 254) . '.' . (self::$ip % 254 + 1);
-        ++self::$ip;
+        // High-entropy IP: the register rate-limiter lives in Redis and is NOT
+        // rolled back between test runs, so deterministic IPs eventually throttle.
+        $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = strtolower($ara) . substr(md5(uniqid('', true)), 0, 6);
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,

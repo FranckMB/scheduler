@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Entity\ClubUser;
+use App\Entity\User;
+use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * SEC-01 non-regression: the Club resource is scoped to the caller's active
@@ -17,8 +22,6 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ClubAccessTest extends WebTestCase
 {
-    private static int $ip = 0;
-
     private KernelBrowser $client;
 
     public function testCollectionReturnsOnlyOwnClubs(): void
@@ -65,6 +68,21 @@ final class ClubAccessTest extends WebTestCase
         self::assertResponseIsSuccessful();
     }
 
+    public function testPutOwnClubAsNonAdminMemberReturns403(): void
+    {
+        [, , $clubA] = $this->register('CLBJ');
+        // A second, active but NON-admin member of the same club.
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+
+        $this->request('PUT', '/api/clubs/' . $clubA, $editorToken, [
+            'name' => 'Editor Rename',
+            'slug' => 'editor-' . uniqid(),
+            'timezone' => 'Europe/Paris',
+            'locale' => 'fr',
+        ]);
+        self::assertResponseStatusCodeSame(403, 'an active non-admin member must not edit the club');
+    }
+
     public function testPostClubIsGone(): void
     {
         [$tokenA] = $this->register('CLBH');
@@ -95,12 +113,42 @@ final class ClubAccessTest extends WebTestCase
     }
 
     /**
+     * Seed an active member of $clubId with the given (non-admin) role and
+     * return a real JWT for it. Mirrors the register wiring minus the club.
+     */
+    private function addActiveMember(string $clubId, string $role): string
+    {
+        $container = self::getContainer();
+        $em = $container->get(EntityManagerInterface::class);
+        $hasher = $container->get(UserPasswordHasherInterface::class);
+
+        $uid = substr(md5(uniqid('', true)), 0, 8);
+        $user = new User;
+        $user->setEmail($role . $uid . '@test.fr');
+        $user->setFirstName('N');
+        $user->setLastName('Admin');
+        $user->setPasswordHash($hasher->hashPassword($user, 'password123'));
+        $em->persist($user);
+
+        $membership = new ClubUser;
+        $membership->setClubId($clubId);
+        $membership->setUserId($user->getId());
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $em->persist($membership);
+        $em->flush();
+
+        return $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /**
      * @return array{0: string, 1: string, 2: string} [token, userId, clubId]
      */
     private function register(string $ara): array
     {
-        $ip = '10.20.' . intdiv(self::$ip, 254) . '.' . (self::$ip % 254 + 1);
-        ++self::$ip;
+        // High-entropy IP: the register rate-limiter lives in Redis and is NOT
+        // rolled back between test runs, so deterministic IPs eventually throttle.
+        $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = strtolower($ara) . substr(md5(uniqid('', true)), 0, 6);
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
