@@ -200,10 +200,11 @@ Le draft original `.omo/drafts/features-futures.md` est préservé intact comme 
 
 ---
 
-## Backlog — PREFERRED TIME (contrainte solveur, engine)
+## ~~Backlog — PREFERRED TIME (contrainte solveur, engine)~~ — LIVRÉ (série ENGINE E-feat, 2026-07-03)
 
-- **Statut** : non implémenté. Le solveur gère `PREFERRED DAY` mais pas `PREFERRED TIME` (préférence d'un créneau horaire, pas seulement d'un jour).
-- **Sites code** (les deux pointent ici) :
-  - `engine/app/solver/objective.py` — bonus soft, branche `family != "DAY"`.
-  - `engine/app/solver/constraints.py` — `rule_type == "PREFERRED" and family == "TIME"`.
-- **Besoin** : prendre en compte une fenêtre/horaire préféré comme terme soft de l'objectif (analogue au `add_preferred_day_bonus` existant).
+- **Statut** : ✅ livré. `add_preferred_time_bonus` (`engine/app/solver/objective.py`) — une contrainte `PREFERRED+TIME` récompense (terme soft, poids `preferred_time`=30) les séances dans `[minStartTime, maxStartTime]`. Factorisé avec `add_preferred_day_bonus` via `_add_preferred_bonus`. Bump `SCORE_FORMULA_VERSION` → V5.
+
+## Dette restante — typage cœur engine (ENG-05, partiel)
+
+- **Fait** : `parse_v2_constraints` renvoie un `ParsedConstraints` (TypedDict) — le boundary backend→engine où vivaient les bugs de format (ENG-01/02) est désormais typé, mypy vérifie producteurs et consommateurs.
+- **Reste** : la couche *assignment* de `constraints.py` utilise encore `AssignmentLike = Any` + ~50 alias de champs (`_get(assignment, "venue_id", "room_id", …)`). Migration vers une dataclass `Assignment` construite une fois depuis les schemas — différée (gros diff, couverture goldens partielle sur cette couche ; les tests `tests/semantic/` la protègent maintenant). À reprendre avec une extension de couverture.

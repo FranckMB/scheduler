@@ -30,7 +30,7 @@ ScheduleInputSchema → build_model() → add_constraints() → add_objective() 
 1. **Variable indexing** — `SlotKey = tuple[str, str, int, str]` (team, venue, day, slot). Must match exactly.
 2. **Hard locks** — `HARD_LOCK_LEVEL` variables are forced to 1. Cannot be violated.
 3. **MVP stubs** — `travel_feasibility` and `required_bridge` return 0 constraints (always satisfied).
-4. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"`. Changing weights requires version bump.
+4. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"`. Changing weights requires version bump.
 5. **Constraint aliases** — `constraints.py` has 5 aliases for `add_hard_constraints` (backward compatibility).
 
 ## Anti-Patterns
