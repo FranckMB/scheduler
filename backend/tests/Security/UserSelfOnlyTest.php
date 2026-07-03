@@ -64,13 +64,17 @@ final class UserSelfOnlyTest extends WebTestCase
         self::assertResponseStatusCodeSame(404);
     }
 
-    public function testDeleteOtherUserReturns404(): void
+    public function testDeleteIsGone(): void
     {
-        [$tokenA] = $this->register('USRG');
-        [, $userB] = $this->register('USRH');
+        [$tokenA, $userA] = $this->register('USRG');
 
-        $this->request('DELETE', '/api/users/' . $userB, $tokenA);
-        self::assertResponseStatusCodeSame(404);
+        // No Delete operation is exposed (would orphan ClubUser memberships).
+        $this->request('DELETE', '/api/users/' . $userA, $tokenA);
+        self::assertContains(
+            $this->client->getResponse()->getStatusCode(),
+            [404, 405],
+            'DELETE /api/users/{id} must not exist',
+        );
     }
 
     protected function setUp(): void

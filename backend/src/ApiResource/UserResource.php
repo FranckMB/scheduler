@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\Put;
 use App\Dto\UserInput;
@@ -16,13 +15,15 @@ use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 // SEC-02: self-only. No GetCollection (email enumeration) and no bare Post
-// (registration is /api/register). Get/Put/Delete are restricted to the
-// authenticated user's own record in the provider/processor.
+// (registration is /api/register). Get/Put are restricted to the authenticated
+// user's own record in the provider/processor. No Delete: club_user has no FK
+// cascade, so deleting a User would orphan its memberships and a sole admin
+// could lock its club out of management — account erasure (GDPR) needs a
+// dedicated cascade flow, not open CRUD.
 #[ApiResource(shortName: 'User', operations: [
     new Get,
     new Put,
-    new Delete,
-], input: UserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: UserStateProvider::class, processor: UserStateProcessor::class)]
+], input: UserInput::class, provider: UserStateProvider::class, processor: UserStateProcessor::class)]
 class UserResource
 {
     #[Groups(['read'])]

@@ -24,15 +24,17 @@ final class ImportAuthorizationTest extends WebTestCase
 {
     private KernelBrowser $client;
 
-    public function testImportOnForeignClubReturns403(): void
+    public function testImportOnForeignClubReturns404(): void
     {
         [$tokenA] = $this->register('IMPA');
         [, , $clubB] = $this->register('IMPB');
 
+        // A non-member gets 404 (not 403): the endpoint must not reveal that the
+        // club id exists (no existence oracle, aligned with the Club PUT path).
         $this->client->request('POST', '/api/clubs/' . $clubB . '/import-teams', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $tokenA,
         ]);
-        self::assertResponseStatusCodeSame(403, 'a non-member must not import into another club');
+        self::assertResponseStatusCodeSame(404, 'a non-member must not learn the club exists');
     }
 
     public function testImportAsActiveAdminReaches400WithoutFile(): void
@@ -47,16 +49,28 @@ final class ImportAuthorizationTest extends WebTestCase
         self::assertResponseStatusCodeSame(400);
     }
 
+    public function testImportAsOwnerReaches400WithoutFile(): void
+    {
+        [, , $clubA] = $this->register('IMPE');
+        $ownerToken = $this->addActiveMember($clubA, 'owner');
+
+        // 'owner' is a management role → guard passed → 400 (no file), not 403.
+        $this->client->request('POST', '/api/clubs/' . $clubA . '/import-teams', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $ownerToken,
+        ]);
+        self::assertResponseStatusCodeSame(400, 'owner must be allowed to import');
+    }
+
     public function testImportAsNonAdminMemberReturns403(): void
     {
         [, , $clubA] = $this->register('IMPD');
         $editorToken = $this->addActiveMember($clubA, 'editor');
 
-        // Active member of the club, but not admin → 403 (not the 400 "no file").
+        // Active member of the club, but not a management role → 403 (not 400).
         $this->client->request('POST', '/api/clubs/' . $clubA . '/import-teams', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
         ]);
-        self::assertResponseStatusCodeSame(403, 'a non-admin member must not import');
+        self::assertResponseStatusCodeSame(403, 'a viewer/editor member must not import');
     }
 
     protected function setUp(): void

@@ -45,14 +45,6 @@ class UserStateProcessor extends AbstractStateProcessor
         return parent::processPut($input, $uriVariables, $clubId, $seasonId);
     }
 
-    /** @param array<string, mixed> $uriVariables */
-    protected function processDelete(array $uriVariables, ?string $clubId): void
-    {
-        $this->assertSelf($uriVariables['id'] ?? null);
-
-        parent::processDelete($uriVariables, $clubId);
-    }
-
     /**
      * @param UserInput $input
      */

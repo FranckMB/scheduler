@@ -17,9 +17,11 @@ use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 // SEC-01: no bare Post/Delete. A club is created only through /api/register
-// (AuthController); deleting a whole tenant is a dedicated cascade+confirm
-// flow, not open CRUD. GetCollection/Get/Put are tenant-scoped in the
-// provider/processor to the caller's active ClubUser memberships.
+// (AuthController). Club deletion is intentionally NOT exposed over the API
+// yet: dropping a tenant must cascade its child rows (no DB cascade exists
+// today) and be confirmed — that dedicated flow is future work, not open CRUD.
+// GetCollection/Get/Put are tenant-scoped in the provider/processor to the
+// caller's active ClubUser memberships.
 #[ApiResource(shortName: 'Club', operations: [
     new GetCollection,
     new Get,

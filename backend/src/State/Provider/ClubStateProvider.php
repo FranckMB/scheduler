@@ -7,8 +7,8 @@ namespace App\State\Provider;
 use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\ClubResource;
 use App\Entity\Club;
-use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -24,6 +24,7 @@ class ClubStateProvider extends AbstractStateProvider
         RequestStack $requestStack,
         Pagination $pagination,
         private readonly Security $security,
+        private readonly ClubUserRepository $clubUserRepository,
     ) {
         parent::__construct($entityManager, $requestStack, $pagination);
     }
@@ -40,17 +41,17 @@ class ClubStateProvider extends AbstractStateProvider
     protected function applyRequestFilters(QueryBuilder $qb): bool
     {
         $user = $this->security->getUser();
-        if (!$user instanceof User) {
-            // Fail-closed: no authenticated user → no clubs.
+        $clubIds = $user instanceof User ? $this->clubUserRepository->findActiveClubIds($user->getId()) : [];
+
+        if ([] === $clubIds) {
+            // Fail-closed: no authenticated user / no active membership → no clubs.
             $qb->andWhere('1 = 0');
 
             return false;
         }
 
-        $qb->andWhere($qb->expr()->in(
-            'e.id',
-            'SELECT cu.clubId FROM ' . ClubUser::class . ' cu WHERE cu.userId = :cs_uid AND cu.isActive = true',
-        ))->setParameter('cs_uid', $user->getId());
+        $qb->andWhere($qb->expr()->in('e.id', ':cs_club_ids'))
+            ->setParameter('cs_club_ids', $clubIds);
 
         return false;
     }
@@ -61,7 +62,7 @@ class ClubStateProvider extends AbstractStateProvider
     protected function provideItem(array $uriVariables, ?string $clubId): ?object
     {
         $id = $uriVariables['id'] ?? null;
-        if (!$id) {
+        if (!\is_string($id)) {
             return null;
         }
 
@@ -70,12 +71,7 @@ class ClubStateProvider extends AbstractStateProvider
             return null;
         }
 
-        $membership = $this->entityManager->getRepository(ClubUser::class)->findOneBy([
-            'userId' => $user->getId(),
-            'clubId' => $id,
-            'isActive' => true,
-        ]);
-        if (null === $membership) {
+        if (null === $this->clubUserRepository->findActiveMembership($user->getId(), $id)) {
             return null;
         }
 

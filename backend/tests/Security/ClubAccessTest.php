@@ -37,6 +37,22 @@ final class ClubAccessTest extends WebTestCase
         self::assertNotContains($clubB, $ids, 'caller must not see another club');
     }
 
+    public function testCollectionListsAllActiveMemberships(): void
+    {
+        [$tokenA, $userA, $clubA] = $this->register('CLBL');
+        [, , $clubB] = $this->register('CLBM');
+        // Make userA an active member of a SECOND club. The collection must list
+        // both — a tenant-filtered membership lookup would hide clubB.
+        $this->linkUserToClub($userA, $clubB, 'admin');
+
+        $ids = array_map(
+            static fn (array $c): string => $c['id'],
+            $this->get('/api/clubs', $tokenA)['member'],
+        );
+        self::assertContains($clubA, $ids);
+        self::assertContains($clubB, $ids, 'both active memberships must be listed');
+    }
+
     public function testGetForeignClubReturns404(): void
     {
         [$tokenA] = $this->register('CLBC');
@@ -62,6 +78,20 @@ final class ClubAccessTest extends WebTestCase
         $this->request('PUT', '/api/clubs/' . $clubA, $tokenA, [
             'name' => 'Renamed Club',
             'slug' => 'renamed-' . uniqid(),
+            'timezone' => 'Europe/Paris',
+            'locale' => 'fr',
+        ]);
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testPutOwnClubAsOwnerSucceeds(): void
+    {
+        [, , $clubA] = $this->register('CLBK');
+        $ownerToken = $this->addActiveMember($clubA, 'owner');
+
+        $this->request('PUT', '/api/clubs/' . $clubA, $ownerToken, [
+            'name' => 'Owner Rename',
+            'slug' => 'owner-' . uniqid(),
             'timezone' => 'Europe/Paris',
             'locale' => 'fr',
         ]);
@@ -139,6 +169,18 @@ final class ClubAccessTest extends WebTestCase
         $em->flush();
 
         return $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    private function linkUserToClub(string $userId, string $clubId, string $role): void
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $membership = new ClubUser;
+        $membership->setClubId($clubId);
+        $membership->setUserId($userId);
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $em->persist($membership);
+        $em->flush();
     }
 
     /**

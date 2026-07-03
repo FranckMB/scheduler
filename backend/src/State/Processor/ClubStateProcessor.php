@@ -49,20 +49,16 @@ class ClubStateProcessor extends AbstractStateProcessor
         $id = $uriVariables['id'] ?? null;
         $user = $this->security->getUser();
 
-        if (\is_string($id) && $user instanceof User) {
-            $membership = $this->clubUserRepository->findOneBy([
-                'userId' => $user->getId(),
-                'clubId' => $id,
-                'isActive' => true,
-            ]);
-            if (null === $membership) {
-                throw new NotFoundHttpException('Resource not found');
-            }
-            if ('admin' !== $membership->getRole()) {
-                throw new AccessDeniedHttpException('Access denied');
-            }
-        } else {
+        if (!\is_string($id) || !$user instanceof User) {
             throw new NotFoundHttpException('Resource not found');
+        }
+
+        $membership = $this->clubUserRepository->findActiveMembership($user->getId(), $id);
+        if (null === $membership) {
+            throw new NotFoundHttpException('Resource not found');
+        }
+        if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {
+            throw new AccessDeniedHttpException('Access denied');
         }
 
         return parent::processPut($input, $uriVariables, $clubId, $seasonId);
