@@ -63,7 +63,9 @@ describe("Wizard (integration)", () => {
     await screen.findByDisplayValue("SF1");
 
     await user.click(screen.getByRole("button", { name: "Suivant" }));
-    expect(await screen.findByRole("heading", { name: "Gymnases" })).toBeInTheDocument();
+    // Assert on the Venues step BODY (its own control), not the store-derived
+    // sticky header, so the test still proves the step component actually rendered.
+    expect(await screen.findByLabelText("Nom du gymnase")).toBeInTheDocument();
   });
 
   it("blocks Suivant + shows an alert when there is no team", async () => {

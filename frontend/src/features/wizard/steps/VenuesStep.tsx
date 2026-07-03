@@ -129,7 +129,6 @@ export function VenuesStep() {
 
   return (
     <div>
-      <h2 className="mb-1 text-xl font-semibold">Gymnases</h2>
       <p className="mb-4 text-sm text-muted-foreground">
         Ajoutez vos gymnases, puis cliquez dans la grille pour poser les créneaux de disponibilité (jour + heure). Un gymnase sans créneau ne peut pas être utilisé.
       </p>

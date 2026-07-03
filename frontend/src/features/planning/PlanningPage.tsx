@@ -70,7 +70,9 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
-export function PlanningPage() {
+/** `embedded` = rendered inside the wizard's Génération step, where the sticky
+ *  wizard header + footer eat extra vertical space, so the grid must be shorter. */
+export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   const baselineScheduleId = me?.baselineScheduleId ?? null;
@@ -207,7 +209,13 @@ export function PlanningPage() {
           ) : 0 === slots.length ? (
             <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
           ) : (
-            <div className="lg:grid lg:h-[calc(100vh-16rem)] lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4">
+            // grid-rows-[minmax(0,1fr)] gives the single row a DEFINITE size (the
+            // container height) — with the default `auto` row the children's h-full
+            // cannot resolve, the WeekGrid lays out at full content height and
+            // overflows the page instead of scrolling internally.
+            <div
+              className={`lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4 ${embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]"}`}
+            >
               <div className="relative min-w-0 lg:h-full">
                 <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
               </div>

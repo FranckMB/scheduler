@@ -65,7 +65,6 @@ export function RecapStep() {
 
   return (
     <div>
-      <h2 className="mb-1 text-xl font-semibold">Récapitulatif</h2>
       <p className="mb-4 text-sm text-muted-foreground">Cartographie de votre club avant génération.</p>
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">

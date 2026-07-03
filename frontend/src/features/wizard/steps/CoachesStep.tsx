@@ -151,7 +151,6 @@ export function CoachesStep() {
 
   return (
     <div>
-      <h2 className="mb-1 text-xl font-semibold">Coachs</h2>
       <p className="mb-4 text-sm text-muted-foreground">Ajoutez vos coachs, marquez les salariés, et liez-les à des équipes (coach, adjoint) ou aux équipes où ils jouent.</p>
 
       <form onSubmit={add} className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">

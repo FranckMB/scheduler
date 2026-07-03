@@ -1,7 +1,7 @@
 import { closestCorners, DndContext, type DragEndEvent, DragOverlay, KeyboardSensor, PointerSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowUpDown, ChevronDown, ChevronsDown, ChevronsUp, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -520,16 +520,6 @@ export function TeamsStep() {
         </>
       )}
 
-      {!sortMode && teams.length > 8 ? (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-1">
-          <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <ChevronsUp className="size-4" />
-          </Button>
-          <Button size="icon" variant="outline" aria-label="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
-            <ChevronsDown className="size-4" />
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -80,12 +80,11 @@ export function GenerateStep() {
 
   // Plan ready (or regenerating) → show the planning inline (same screen).
   if (showPlanning) {
-    return <PlanningPage />;
+    return <PlanningPage embedded />;
   }
 
   return (
     <div>
-      <h2 className="mb-1 text-xl font-semibold">Génération</h2>
       <p className="mb-4 text-sm text-muted-foreground">Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner.</p>
 
       {failed ? (

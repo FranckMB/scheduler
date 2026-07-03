@@ -1,4 +1,4 @@
-import { AlertTriangle, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { AlertTriangle, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -32,6 +32,38 @@ function StepContent({ stepId }: { stepId: WizardStepId }) {
     case "generate":
       return <GenerateStep />;
   }
+}
+
+/** Floating top/bottom page-jump arrows (bottom-right), shown on every step
+ *  whenever the page actually scrolls. Was TeamsStep-only before. */
+function ScrollJumpButtons() {
+  const [scrollable, setScrollable] = useState(false);
+
+  useEffect(() => {
+    const check = () => setScrollable(document.documentElement.scrollHeight > window.innerHeight + 48);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(document.body);
+    window.addEventListener("resize", check);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, []);
+
+  if (!scrollable) {
+    return null;
+  }
+  return (
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-1">
+      <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <ChevronsUp className="size-4" />
+      </Button>
+      <Button size="icon" variant="outline" aria-label="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+        <ChevronsDown className="size-4" />
+      </Button>
+    </div>
+  );
 }
 
 export function WizardPage() {
@@ -85,7 +117,7 @@ export function WizardPage() {
       <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (
-        <nav className="shrink-0 md:w-52">
+        <nav className="shrink-0 md:w-44">
           <ol className="flex flex-col gap-1">
             {WIZARD_STEPS.map((step, i) => {
               const locked = guided && i > maxIndex;
@@ -113,8 +145,9 @@ export function WizardPage() {
         </nav>
       )}
 
-      {/* Current step */}
-      <div className="min-w-0 flex-1">
+      {/* Current step — fills the viewport height so the sticky footer sits at
+          the real bottom (no floating gap on short steps) yet stays pinned on scroll. */}
+      <div className="flex min-h-[calc(100vh-5.5rem)] min-w-0 flex-1 flex-col">
         {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
         <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
           <h2 className="text-lg font-semibold">
@@ -152,10 +185,18 @@ export function WizardPage() {
           </p>
         ))}
 
-        {/* Sticky Prev/Next footer (W7). On Récap "Suivant" becomes the gated
-            "Continuer vers la génération". A step can inject an action (footerExtra),
-            e.g. "Trier" on the Teams step, rendered left of Suivant. */}
-        <div className="sticky bottom-0 z-20 mt-6 flex items-center justify-between gap-2 border-t border-border bg-background py-4">
+        {/* Prev/Next footer (W7). Sticky on the data-entry steps; NOT sticky on
+            Génération — there the embedded planning stack is taller than the
+            viewport on short screens and a pinned bar would overlay the grid,
+            so the footer sits in the flow below it instead. On Récap "Suivant"
+            becomes the gated "Continuer vers la génération". A step can inject
+            an action (footerExtra), e.g. "Trier" on the Teams step. */}
+        <div
+          className={cn(
+            "z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4",
+            "generate" === stepId ? "" : "sticky bottom-0",
+          )}
+        >
           <Button variant="outline" disabled={0 === index} onClick={prev}>
             Précédent
           </Button>
@@ -170,6 +211,7 @@ export function WizardPage() {
         </div>
       </div>
       </div>
+      <ScrollJumpButtons />
     </WizardFooterContext.Provider>
   );
 }
