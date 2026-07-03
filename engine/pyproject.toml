@@ -34,7 +34,7 @@ include-package-data = true
 include = ["app*"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -m 'not perf'"
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
