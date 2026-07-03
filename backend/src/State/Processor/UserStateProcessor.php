@@ -7,15 +7,42 @@ namespace App\State\Processor;
 use App\ApiResource\UserResource;
 use App\Dto\UserInput;
 use App\Entity\User;
+use App\Repository\SeasonRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * @extends AbstractStateProcessor<User, UserInput, UserResource>
  */
 class UserStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonRepository $seasonRepository,
+        private readonly Security $security,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonRepository);
+    }
+
     protected function getEntityClass(): string
     {
         return User::class;
+    }
+
+    /**
+     * SEC-02: a user may only modify its own record; any other id → 404.
+     *
+     * @param UserInput            $input
+     * @param array<string, mixed> $uriVariables
+     */
+    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+    {
+        $this->assertSelf($uriVariables['id'] ?? null);
+
+        return parent::processPut($input, $uriVariables, $clubId, $seasonId);
     }
 
     /**
@@ -60,5 +87,13 @@ class UserStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): UserResource
     {
         return UserResource::fromEntity($entity);
+    }
+
+    private function assertSelf(mixed $id): void
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User || $id !== $user->getId()) {
+            throw new NotFoundHttpException('Resource not found');
+        }
     }
 }

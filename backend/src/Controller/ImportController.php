@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Club;
+use App\Entity\User;
+use App\Repository\ClubUserRepository;
 use App\Service\FfbbExcelImporter;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -22,10 +24,28 @@ final class ImportController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly FfbbExcelImporter $importer,
+        private readonly ClubUserRepository $clubUserRepository,
     ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
     {
+        // SEC-04: the tenant listener validates the header/JWT club, not the {id}
+        // in the path. Gate on the caller's active membership FIRST — checking
+        // club existence before membership would leak which club ids exist
+        // (403 for an existing club vs 404 for a random uuid). Semantics mirror
+        // ClubStateProcessor: no active membership → 404, member but not a
+        // management role → 403.
+        $user = $this->getUser();
+        $membership = $user instanceof User
+            ? $this->clubUserRepository->findActiveMembership($user->getId(), $id)
+            : null;
+        if (null === $membership) {
+            return $this->json(['error' => 'Club not found.'], Response::HTTP_NOT_FOUND);
+        }
+        if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {
+            return $this->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
+        }
+
         $club = $this->entityManager->getRepository(Club::class)->find($id);
         if (!$club instanceof Club) {
             return $this->json(['error' => 'Club not found.'], Response::HTTP_NOT_FOUND);
