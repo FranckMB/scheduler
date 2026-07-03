@@ -1,160 +1,25 @@
 # ClubScheduler — Engine Agent Context
 
-> Python 3.12 + FastAPI + OR-Tools CP-SAT. Optimization solver for sports club scheduling.
+> Python 3.12 + FastAPI + OR-Tools CP-SAT. Reactive solver microservice.
+> **Pointer file** — commands, CI, boundaries, solver principles: see root [`CLAUDE.md`](../CLAUDE.md), [`docs/project-map.md`](../docs/project-map.md) §3 and [`docs/architecture/adr-0001-single-pass-solve.md`](../docs/architecture/adr-0001-single-pass-solve.md). Do not duplicate them here.
 
----
+## Where things live (no counts — they rot)
 
-## Architecture
+- `app/main.py` FastAPI endpoints + solve orchestration · `app/schemas/` Pydantic v2 input/output · `app/solver/` model / constraints / objective / result_builder · `tests/` golden + invariants + hypothesis, fixtures under `tests/fixtures/`.
+- Nested solver detail: [`app/solver/AGENTS.md`](app/solver/AGENTS.md).
+- Contract source of truth: `CONTRACT_VERSION` file at engine root (returned in `/` and metrics).
 
-```
-engine/
-├── app/
-│   ├── main.py              # FastAPI entry point + endpoints
-│   ├── core/
-│   │   └── config.py        # Pydantic settings
-│   ├── schemas/
-│   │   ├── input_schema.py  # ScheduleInputSchema (Pydantic v2)
-│   │   └── output_schema.py # ScheduleOutputSchema (Pydantic v2)
-│   └── solver/
-│       ├── model.py         # CP-SAT model builder (ScheduleCpModel)
-│       ├── constraints.py   # 11 hard constraints (Level 1)
-│       ├── objective.py     # Level-2 weighted objective
-│       └── result_builder.py # Solution → ScheduleOutputSchema
-├── tests/
-│   ├── fixtures/            # Golden fixtures (5 scenarios)
-│   ├── golden/              # Golden path tests
-│   ├── invariants/          # Invariant tests
-│   └── test_result_builder.py
-├── CONTRACT_VERSION         # Contract version string
-├── pyproject.toml           # ruff, mypy, pytest config
-└── Makefile
-```
+## Endpoints (verify in `app/main.py` before relying on this)
 
----
+`GET /` (health + contract) · `GET /health` · `POST /generate` (main) · `POST /implicit-constraints` (validation warnings for the wizard).
 
-## Key Conventions
+## Zone gotchas (facts not in the root docs)
 
-- **Pydantic v2** for all request/response schemas.
-- **FastAPI** with auto-generated OpenAPI docs.
-- **Solver pipeline** is pure functions: `build_model` → `add_level_1_hard_constraints` → `add_level_2_objective` → `cp_model.CpSolver().Solve()` → `build_result`.
-- **Solver timeout** comes from the input payload `solver_timeout_seconds` (default 650s), applied in `main.py` (`solver.parameters.max_time_in_seconds`). See ADR-0001 (single-pass solve).
-- **Per-club asyncio locks** prevent concurrent generation for the same club (`_club_locks` dict in `main.py`).
-- **Contract version** is read from `CONTRACT_VERSION` file (root of engine package).
-
----
-
-## Toolchain
-
-- **ruff** — line length 120, target py312, double quotes, space indent, LF.
-- **mypy** — strict mode + `pydantic.mypy` plugin. `ortools` imports are ignored.
-- **pytest** — with `pytest-timeout` and `hypothesis`. Golden fixtures in `tests/fixtures/`.
-- **setuptools** — package is installed as `clubscheduler-engine` in editable mode.
-
----
-
-## Commands
-
-All commands run **inside the engine container** via `engine/Makefile`:
-
-```bash
-cd engine
-make install              # pip install -e ".[dev]"
-make test                 # pytest
-make lint                 # ruff check . && mypy
-make format               # ruff format .
-make exec                 # shell in engine container
-```
-
-Inside the container:
-```bash
-pytest tests/                    # Run all tests
-pytest tests/golden/             # Golden path tests
-pytest tests/invariants/          # Invariant tests
-pytest tests/test_result_builder.py
-ruff check .                     # Lint
-ruff format .                    # Format
-mypy                             # Type check
-```
-
----
-
-## Solver Pipeline
-
-### Input: `ScheduleInputSchema`
-- `version`, `clubId`, `seasonId`, `scheduleName`, `solverSeed`
-- `venues`, `teams`, `coaches`, `constraints`, `slotTemplates`
-
-### Model (`model.py`)
-- Creates boolean variables `x[team, venue, day, slot]`.
-- Returns `ScheduleCpModel` object with variables and helper methods.
-
-### Hard Constraints (`constraints.py`) — Level 1
-1. **Room at-most-one** — one venue hosts max one team per time slot.
-2. **Coach at-most-one** — one coach coaches max one team per time slot.
-3. **Coach-player non-overlap** — a coach-player cannot be in two roles simultaneously.
-4. **Travel feasibility** — MVP stub (no data yet, always satisfied).
-5. **Fixed slots** — pre-placed slots are forced to 1.
-6. **Forbidden assignments** — forbidden variables are forced to 0.
-7. **Coach unavailability** — unavailable coach slots forced to 0.
-8. **Venue closures** — closed venue slots forced to 0.
-9. **Required bridge** — MVP stub (no data yet, always satisfied).
-10. **Min sessions** — each team gets at least its effective minimum sessions.
-11. **Forced venues** — if a venue is forced, all other venues are excluded.
-
-### Objective (`objective.py`) — Level 2
-Maximize weighted score. Fixed T24 weights (changing them requires new `SCORE_FORMULA_VERSION`):
-
-| Criterion | Weight |
-|-----------|--------|
-| Tier S | 10,000 |
-| Tier A | 1,000 |
-| SOFT | 800 |
-| Tier B | 100 |
-| Preferred link | 80 |
-| Preferred slot | 60 |
-| Grouping | 50 |
-| Tier C | 10 |
-| Max days | 8 |
-| Optional link | 5 |
-| Tier D | 1 |
-| Rest | 3 |
-
-### Output: `ScheduleOutputSchema`
-- `status` (`completed`/`failed`/`infeasible`)
-- `score`, `slots[]`, `diagnostics[]`, `metrics`
-
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Health + contract version |
-| `/health` | GET | Simple health check |
-| `/generate` | POST | **Main** — solve schedule |
-
----
-
-## Gotchas
-
-1. **All commands run in container** — `engine/Makefile` wraps everything with `docker compose exec`. Running `pytest` or `ruff` on host will fail unless Python venv is set up locally.
-2. **Solver timeout is payload-driven** — `solver_timeout_seconds` (default 650s) from the request, applied in `main.py`.
-3. **Per-club locks** — `asyncio.Lock` per `club_id` prevents concurrent requests for the same club. Lock is acquired in `generate_schedule` endpoint.
-4. **Contract version** — read from `CONTRACT_VERSION` file at engine root. If missing, falls back to settings default.
-5. **MVP stubs** — `travel_feasibility` and `required_bridge` constraints are stubs (return 0 constraints). They will be implemented when data exists.
-6. **Score formula is fixed** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V1"`. Changing weights requires bumping the version.
-7. **Constraint aliases** — `constraints.py` has 5 compatibility aliases for the same function (`add_hard_constraints`, `add_mvp_hard_constraints`, etc.) to support different naming conventions from calling code.
-8. **No direct backend calls** — engine is purely reactive. Backend calls it via HTTP POST. Engine never calls backend.
-9. **Hypothesis tests** — `tests/` includes hypothesis-generated tests. `.hypothesis/` directory may grow large.
-
----
-
-## Quick Reference
-
-| Task | Command |
-|------|---------|
-| Install deps | `cd engine && make install` |
-| Run tests | `cd engine && make test` |
-| Run lint | `cd engine && make lint` |
-| Format code | `cd engine && make format` |
-| Enter container | `cd engine && make exec` |
+1. **All commands run in the engine container** — `engine/Makefile` wraps `docker compose exec`. Host `pytest`/`ruff` fail without a local venv.
+2. **Output `status` literals** are `"queued" | "generating" | "completed" | "failed"` (`app/schemas/output_schema.py` — `Literal`, source of truth).
+3. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"` (`app/solver/objective.py`). Changing any level-2 weight requires bumping it. Weights table lives in the root spec / `objective.py`, not here.
+4. **Two-phase solve** — phase 1 optimal placement (locked), phase 2 bounded 10 s chaining bonus with warm-start. Both phases get the payload seed. See `app/main.py`.
+5. **Timeout is payload-driven** — `solver_timeout_seconds` (default 650 s) bounds the adaptive timeout computed in `main.py`.
+6. **Per-club `asyncio.Lock`** (`_club_locks` in `main.py`) serialises requests per club. ⚠ Known limit: the solve itself currently runs on the event loop (audit ENG-03), so one solve blocks all clubs until fixed.
+7. **Uvicorn runs without reload** — after editing engine code, restart the container before any e2e test (stale code otherwise).
+8. **Hypothesis** — `.hypothesis/` directory may grow large; safe to delete.

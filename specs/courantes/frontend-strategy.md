@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 6e35a6ce 2026-06-30
+Last verified @ 09e67f3 2026-07-03
 
 > Document stratégique pour le rebuild du frontend ClubScheduler. Fixe le mandat TDD, les
 > versions exactes de la stack, les anti-patterns bannis et les règles de préservation
@@ -36,13 +36,14 @@ cycle RED → GREEN → REFACTOR avant d'être considéré livrable.
 
 ### Outils de test (versions fixées)
 
-| Outil | Version | Rôle |
+| Outil | Version (`frontend/package.json`) | Rôle |
 |------|---------|------|
-| Vitest | 3.2 | Runner de test |
-| @testing-library/react | 16.1 | Rendu et queries DOM |
-| @testing-library/user-event | 14.6 | Simulation d'interaction |
-| jsdom | 26.0 | Environnement DOM |
-| msw | 2.8 | Mock réseau HTTP |
+| Vitest | ^3.2 | Runner de test |
+| @testing-library/react | ^16.3 | Rendu et queries DOM |
+| @testing-library/user-event | ^14.6 | Simulation d'interaction |
+| jsdom | ^27.0 | Environnement DOM |
+| msw | ^2.8 | Mock réseau HTTP |
+| @playwright/test | ^1.60 | E2E (`frontend/tests/e2e/`) |
 
 > Les versions ci-dessus sont figées au même titre que la stack applicative (§2). Aucune
 > mise à jour sans validation explicite.
@@ -54,30 +55,30 @@ cycle RED → GREEN → REFACTOR avant d'être considéré livrable.
 Les versions suivantes sont **figées** pour toute la durée du rebuild. Aucune mise à jour
 de version majeure ou mineure sans décision explicite et re-vérification de compatibilité.
 
-| Package | Version fixée | Rôle | Notes |
+| Package | Version (`frontend/package.json`) | Rôle | Notes |
 |---------|--------------|------|-------|
-| react | 19.2 | Framework UI | React 19 — pas de ReactDOM.render (voir §3) |
-| react-dom | 19.2 | Rendu DOM | createRoot obligatoire |
-| vite | 8.1 | Bundler / dev server | Plugin `@tailwindcss/vite` |
+| react / react-dom | ^19.2 | Framework UI / rendu DOM | React 19 — pas de ReactDOM.render, createRoot obligatoire (voir §3) |
+| vite | ^8.0 | Bundler / dev server | Plugin `@tailwindcss/vite` |
 | typescript | ~6.0 | Typage | `~6.0` = patch libre, minor figée |
-| tailwindcss | 4.3 | CSS utility-first | Configuration via CSS `@theme`, pas `tailwind.config.js` (voir §3) |
-| @tanstack/react-query | 5.100 | Server state | v5 — pas de `onSuccess` (voir §3) |
-| zustand | 5.0 | Client state | v5 — `migrate()` requiert null check (voir §3) |
-| ky | 2.0 | Client HTTP | v2 — API fetch moderne |
-| @fullcalendar/core | 6.1 | Calendrier | React wrapper `@fullcalendar/react` 6.1 |
-| @dnd-kit/core | 0.5 | Drag & drop | Accessible, moderne |
+| tailwindcss | ^4.3 | CSS utility-first | Configuration via CSS `@theme`, pas `tailwind.config.js` (voir §3) |
+| @tanstack/react-query | ^5.101 | Server state | v5 — pas de `onSuccess` (voir §3) |
+| zustand | ^5.0 | Client state | v5 — `migrate()` requiert null check (voir §3) |
+| ky | ^2.0 | Client HTTP | v2 — API fetch moderne |
+| @dnd-kit/core + sortable + utilities | ^6.3 / ^10.0 / ^3.2 | Drag & drop | Accessible ; utilisé pour le tri des équipes (wizard) |
+| react-router-dom | ^7.1 | Routing | Nested layouts |
+| lucide-react | ^0.470 | Icônes | SVG tree-shakeable |
 
-> **10 packages figés.** Les versions de test (§1) s'ajoutent à cette liste mais sont
-> listées séparément pour clarté.
+> **FullCalendar n'est PAS installé** : la grille planning est un composant custom
+> (`src/features/planning/WeekGrid.tsx`). La liste exhaustive des dépendances vit dans
+> `frontend/package.json` — source de vérité.
 
 ### Règles de verrouillage
 
-1. `package.json` doit utiliser des versions exactes (pas `^` ni `~` pour les packages
-   ci-dessus) via `npm install --save-exact`.
-2. `package-lock.json` est la source de vérité — tout changement de version doit être
+1. `package.json` utilise des plages `^`/`~` ; `package-lock.json` est la source de
+   vérité effective des versions installées — tout changement de version doit être
    reflété dans le lockfile.
-3. Une mise à jour de version = un commit dédié + re-run complet des tests (Vitest) +
-   vérification `tsc --noEmit` + `npm run build`.
+2. Une mise à jour de version majeure = un commit dédié + re-run complet des tests
+   (Vitest) + vérification `tsc --noEmit` + `npm run build`.
 
 ---
 

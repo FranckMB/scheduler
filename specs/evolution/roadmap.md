@@ -66,7 +66,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
-| **Cycle de vie planning** : `VALIDATED` (fini/verrouillé lecture seule), rouvrir, planning principal (baseline) vs secondaires | ✅ | — | Livré (PR #15) : `/validate` · `/reopen` · `/set-baseline`, verrou serveur sur les 4 chemins d'édition, modale de responsabilité. Cascade principal→secondaires reportée (dépend des occurrences). → [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) |
+| **Cycle de vie planning** : `VALIDATED` (fini/verrouillé lecture seule), rouvrir, planning principal (baseline) vs secondaires | ✅ | — | Livré (PR #15) : `/validate` · `/reopen` · `/set-baseline`, verrou serveur sur les 4 chemins d'édition, modale de responsabilité. Cascade principal→secondaires reportée (dépend des occurrences). → [`planning-lifecycle-validated.md`](../courantes/planning-lifecycle-validated.md) |
 | Niveaux de lock NONE/SOFT/HARD (enum, ≤30 min = SOFT silencieux) | 🟡 | v3 §3.5, §11.4 | Schéma + lock HARD/SOFT posables ; règle « ≤30min = SOFT auto » à vérifier |
 | **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` |
 | **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées |
@@ -151,7 +151,7 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ |
 | Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; **warnings de réservation livrés** (PR #14 : créneau surchargé vs capacité, quota séances/semaine, 2 séances le même jour — non bloquants, le solveur reste l'autorité). Liste complète de warnings à compléter |
 | Push temps réel (Mercure statut/score) | ✅ | v3 §2, §6 | Livré |
-| **Identité visuelle par club** (couleur d'accent + logo) | ✅ | Livré 2026-07-02 : accent + logo + extraction 3 couleurs + écran /club (reste : stockage prod S3) → [`identite-visuelle-club.md`](identite-visuelle-club.md) |
+| **Identité visuelle par club** (couleur d'accent + logo) | ✅ | Livré 2026-07-02 : accent + logo + extraction 3 couleurs + écran /club (reste : stockage prod S3) → [`identite-visuelle-club.md`](../courantes/identite-visuelle-club.md) |
 | `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ |
 | `max_days_per_week` coach (calcul dynamique + override checkbox) | 🟡 | v3 §3.4 | À vérifier |
 | App **mobile** (React Native/Expo, consultation → exceptions V2) | ⬜ | v3 §1.4 · FF#14 | P2 |

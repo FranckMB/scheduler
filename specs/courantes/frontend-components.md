@@ -1,12 +1,21 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 6e35a6ce 2026-06-30
+Last verified @ 09e67f3 2026-07-03
 
 > Spécification forward des pages et composants frontend **en dehors du wizard
 > d'onboarding**. Le wizard est spécifié intégralement dans `frontend-wizard.md`
 > (T12) — ce document le référence sans le dupliquer. La stack, le routing, le
 > state management et le contrat API global sont dans `frontend-spec.md` (T11).
 > Le snapshot OpenAPI de référence est `specs/courantes/openapi-snapshot.json`.
+>
+> ⚠️ **Écart avec le code livré** : ce document est antérieur au frontend
+> réellement construit. Le code livré n'a **pas** de routes `/dashboard`,
+> `/teams`, `/priorities`, `/schedules/:id` (planning + diagnostics vivent sur
+> `/`), n'utilise **pas** FullCalendar (grille custom `WeekGrid`), ne consomme
+> **pas** Mercure (polling), et le tri par tier vit dans le wizard (mode
+> « Trier » + `POST /api/teams/reorder`). Les routes/composants réels sont dans
+> `frontend-spec.md` §2/§10 — les sections ci-dessous restent la spec forward
+> d'origine (scénarios Given/When/Then non réconciliés un à un).
 
 ---
 
@@ -19,9 +28,13 @@ Last verified @ 6e35a6ce 2026-06-30
 > les paths exacts de l'OpenAPI, pas une convention kebab-case dérivée. Les
 > query params suivent la même convention (`schedule_id`, `season_id`).
 
-Référence : `specs/courantes/openapi-snapshot.json` — 38 paths, 20 ressources
-API Platform, 2 contrôleurs custom (`/api/schedules/{id}/generate`,
-`/api/schedules/{id}/export-pdf`).
+Référence : `specs/courantes/openapi-snapshot.json` — paths des ressources API
+Platform + opérations custom déclarées sur les ressources (`/api/schedules/{id}/generate`,
+`/api/schedules/{id}/export-pdf`, `/api/clubs/{id}/import-teams`). Les routes
+Symfony custom (`/api/me`, `/api/register`, `/api/password/*`, `/api/memberships/*`,
+`/api/schedules/{id}/validate|reopen|set-baseline`, `/api/teams/reorder`,
+`/api/club/appearance`, `/api/club/logo`, …) n'y figurent **pas** — inventaire
+complet dans `backend-inventory.md` §3.
 
 ---
 
@@ -42,9 +55,9 @@ hydrate le `authStore` Zustand, redirige vers `/` qui dispatche vers
 | `/api/login` | POST | `{ email, password }` | `{ token }` (200) | Stocker token en `authStore`, redirect `/` |
 
 > Référence OpenAPI : `specs/courantes/openapi-snapshot.json` path
-> `/api/login` (POST). Le endpoint `/api/me` (GET) référencé dans
-> `frontend-spec.md` §9 n'apparaît pas dans l'OpenAPI snapshot — c'est un
-> **gap backend** à documenter dans `specs/evolution/backend-gaps.md`.
+> `/api/login` (POST). Le endpoint `/api/me` (GET) **existe** côté backend
+> (route Symfony custom, `AuthController`) mais n'apparaît pas dans le snapshot
+> OpenAPI généré par API Platform — ce n'est pas un gap fonctionnel.
 
 #### Composants
 
@@ -116,10 +129,10 @@ d'onboarding après succès.
 |----------|---------|------|---------|--------|
 | `/api/register` | POST | `{ email, password, firstName, lastName, clubName, ara }` | `{ token }` (201) | Stocker token, redirect `/wizard` |
 
-> **Gap backend :** le endpoint `/api/register` n'apparaît pas dans
-> `specs/courantes/openapi-snapshot.json`. Le frontend l'implémente selon le
-> contrat défini dans `frontend-spec.md` §9. À documenter dans
-> `specs/evolution/backend-gaps.md`.
+> Le endpoint `/api/register` **existe** côté backend (route Symfony custom,
+> `AuthController` — deux modes : nouveau club / adhésion via ARA, voir
+> `backend-inventory.md` §3) mais n'apparaît pas dans le snapshot OpenAPI
+> généré par API Platform — ce n'est pas un gap fonctionnel.
 
 #### Composants
 
@@ -217,7 +230,7 @@ ScheduleSlotTemplate:
   pendingConstraintSuggestion
 
 Schedule:
-  id, name, status (enum: DRAFT | PENDING | GENERATING | COMPLETED | FAILED),
+  id, name, status (enum: DRAFT | PENDING | GENERATING | COMPLETED | FAILED | VALIDATED),
   score, solverSeed, pdfExportStatus, pdfExportUrl, pngExportUrl,
   solverWallTimeMs, solverNbVariables, solverNbConstraints
 ```
@@ -890,8 +903,8 @@ selon `Club.timezone`.
 | Endpoint | Méthode | Page | Statut OpenAPI |
 |----------|---------|------|----------------|
 | `/api/login` | POST | LoginPage | ✅ Présent |
-| `/api/register` | POST | RegisterPage | ❌ **Gap — absent de l'OpenAPI** |
-| `/api/me` | GET | AppLayout (init) | ❌ **Gap — absent de l'OpenAPI** |
+| `/api/register` | POST | RegisterPage | ✅ Existe (route Symfony custom — hors snapshot OpenAPI) |
+| `/api/me` | GET | AppLayout (init) | ✅ Existe (route Symfony custom — hors snapshot OpenAPI) |
 | `/api/schedules/{id}` | GET | ScheduleViewPage | ✅ Présent |
 | `/api/schedules/{id}/generate` | POST | ScheduleViewPage | ✅ Présent (custom controller) |
 | `/api/schedules/{id}/export-pdf` | POST | ScheduleViewPage | ✅ Présent (custom controller) |
@@ -903,18 +916,17 @@ selon `Club.timezone`.
 | `/api/teams/{id}` | PUT | TierListPage | ✅ Présent |
 | `/api/clubs/{id}` | GET, PUT | (profil — non détaillé ici) | ✅ Présent |
 
-> Référence : `specs/courantes/openapi-snapshot.json` (paths vérifiés au
-> 2026-06-30, backend SHA `6e35a6ce`). Les gaps (`/api/register`, `/api/me`)
-> sont à documenter dans `specs/evolution/backend-gaps.md`.
+> Référence : `specs/courantes/openapi-snapshot.json` (paths re-vérifiés au
+> 2026-07-03, backend SHA `09e67f3`). `/api/register` et `/api/me` existent
+> côté backend mais restent hors du snapshot (routes Symfony custom).
 
-### Gaps identifiés
+### Gaps identifiés (résolus)
 
-| Gap | Impact frontend | Action |
-|-----|-----------------|--------|
-| `/api/register` absent | RegisterPage ne peut pas fonctionner | Documenter dans `specs/evolution/backend-gaps.md` |
-| `/api/me` absent | Pas d'hydration de `authStore` (clubId, seasonId) au démarrage | Documenter — le frontend peut fallback sur le JWT claims |
-| `manual-edit/*` sub-routes absentes | L'édition manuelle passe par `PUT /api/schedule_slot_templates/{id}` | Pas un gap — le frontend utilise le PUT standard |
-| `onboarding_completed` sur Club | Présent dans l'OpenAPI (`Club.onboardingCompleted: boolean`) | ✅ Pas un gap — contrairement à `frontend-wizard.md` §5 qui le notait absent |
+| Point | État réel (vérifié @ 09e67f3) |
+|-------|-------------------------------|
+| `/api/register`, `/api/me` | **Existent** côté backend (routes Symfony custom) ; absents du snapshot OpenAPI car hors API Platform. Pas un gap fonctionnel. |
+| `manual-edit/*` sub-routes | **Existent** (`ManualEditController` : `constraint` / `lock` / `one-time`) — le frontend livré utilise `lock` et `one-time`. |
+| `onboarding_completed` sur Club | Présent dans l'OpenAPI (`Club.onboardingCompleted: boolean`). |
 
 ---
 

@@ -2,12 +2,12 @@
 
 ## Overview
 
-ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation is enforced at **two layers**:
+ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation design has **two layers** — but only one is active today:
 
-1. **Application layer** — A Doctrine SQL filter (`TenantFilter`) transparently appends `club_id = ?` to every DQL/SQL query.
-2. **Database layer** — PostgreSQL Row-Level Security (RLS) policies ensure that the `app_user` connection can never see rows belonging to another club, even if the application filter is bypassed.
+1. **Application layer (ACTIVE)** — A Doctrine SQL filter (`TenantFilter`) transparently appends `club_id = ?` to every DQL/SQL query on entities that own a `club_id` column. **This is the effective tenant barrier.**
+2. **Database layer (PREPARED, NOT ACTIVE — audit 2026-07-03, SEC-03)** — PostgreSQL Row-Level Security. The init scripts only ship a helper (`docker/postgres/init/01-rls.sql`, never invoked) and a commented template (`03-rls-template.sql`); **no `CREATE POLICY` exists in any migration**, and the runtime connects as the `clubscheduler` user, not the restricted `app_user`. Additionally the listener's `SET LOCAL app.club_id` runs outside a transaction, which PostgreSQL treats as a no-op. Until policies are created and the connection user is switched, **do not count on RLS as a safety net.**
 
-This defence-in-depth strategy guarantees that a bug or misconfiguration in one layer cannot lead to data leakage across clubs.
+⚠ Entities **without** a `club_id` column (`Club`, `User`) are NOT covered by the filter — their access control must be enforced explicitly at the API layer (audit SEC-01/SEC-02).
 
 ## Components
 
@@ -72,29 +72,18 @@ services:
 
 ## Behaviour Matrix
 
-| Context | Filter Enabled | SET LOCAL | RLS Active | Notes |
+| Context | Filter Enabled | SET LOCAL issued | RLS enforced | Notes |
 |---------|---------------|-----------|------------|-------|
-| HTTP (authenticated) | Yes | Yes | Yes | Normal API request |
-| HTTP (no club_id) | No | No | Yes | Returns 0 rows on RLS tables |
-| CLI | No | No | Yes | Use `--club-id` or `migration_user` |
-| Tests (HTTP kernel) | Yes* | Yes* | Yes* | Same as HTTP if `X-Club-Id` header is set |
-
-\* Phase 1 stub: set the `X-Club-Id` request header to inject a tenant context in integration tests.
-
-## Phase 1 Stub → Phase 2 Migration
-
-In Phase 1 there is no real JWT authentication. The listener resolves `club_id` from:
-
-1. Request attribute `_club_id` (where the JWT authenticator will store it later).
-2. Fallback: `X-Club-Id` HTTP header for manual testing.
-
-**Phase 2 upgrade:** replace `resolveClubId()` with extraction from the Lexik JWT token or Symfony security token.
+| HTTP (authenticated) | Yes | Yes (but no-op outside a transaction) | **No — no policies exist** | Doctrine filter is the barrier |
+| HTTP (no club_id resolvable) | No | No | No | Filter stays off; unsafe reads are prevented by resolution failing, not by RLS |
+| CLI / messenger worker | No | No | No | Handlers must filter by `clubId` explicitly (e.g. `GenerateScheduleHandler`) |
+| Tests (HTTP kernel) | Yes | Yes (inside dama transaction — appears to work) | No | dama wraps tests in a transaction, masking the prod no-op |
 
 ## Security Considerations
 
-- **No bypass by design:** the filter is only enabled when a valid `club_id` is present. If resolution fails, the filter stays disabled and RLS still blocks access (returning zero rows).
-- **Force RLS:** every table that contains `club_id` must have `ALTER TABLE ... FORCE ROW LEVEL SECURITY`. See `backend/docs/RLS.md`.
-- **Connection separation:** runtime API uses `app_user` (RLS-enforced). Migrations and DDL use `migration_user`.
+- **The Doctrine filter is currently the single effective barrier** for `club_id` entities. Treat any change to `TenantFilter`/`TenantFilterListener` as security-critical and keep `TenantIsolationTest`/`TenantJwtIsolationTest` green.
+- **To actually activate RLS** (target state, see `backend/docs/RLS.md`): create policies + `FORCE ROW LEVEL SECURITY` per table (migration), switch the runtime `DATABASE_URL` to `app_user`, and issue the tenant GUC transactionally (`SET LOCAL` inside a transaction, or `set_config(..., true)`).
+- **Connection separation (target, not wired):** `docker/postgres/init/02-users.sql` creates `app_user` / `migration_user`, but the runtime currently connects as `clubscheduler`.
 
 ## See Also
 

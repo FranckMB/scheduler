@@ -27,17 +27,17 @@ All services share the Docker network `clubscheduler_network`.
 **Entry point:** `public/index.php` → `src/Kernel.php` (`MicroKernelTrait`). Active bundles: API Platform, Doctrine ORM, Messenger, Mercure, LexikJWT, Security, Twig, CORS (Nelmio), DoctrineFixtures, DAMADoctrineTest.
 
 ### 2.1 Source layout (`backend/src/`)
-| Dir | Content |
+| Dir | Content (no counts — they rot; `ls` the dir) |
 |-----|---------|
-| `Entity/` | ~21 Doctrine entities (UUID ids) |
-| `ApiResource/` | ~20 API Platform resource DTOs (drive `/api/*`) |
-| `Controller/` | 7 custom controllers (see 2.3) |
-| `Message/` + `MessageHandler/` | 2 messages + 2 async handlers |
-| `Service/` | ~12 business services (snapshot builder, result importer, PDF, FFBB importer, locks…) |
+| `Entity/` | Doctrine entities (UUID ids, scalar FK columns) |
+| `ApiResource/` | API Platform resource DTOs (drive `/api/*`) |
+| `Controller/` | custom controllers (see 2.3 for the structuring ones) |
+| `Message/` + `MessageHandler/` | async messages + handlers (generate, PDF export) |
+| `Service/` | business services (snapshot builder, result importer, PDF, FFBB importer, locks…) |
 | `Repository/` | Doctrine repositories |
 | `EventListener/` | `TenantFilterListener`, `CacheInvalidationListener`, `TeamTagSyncListener` |
 | `Doctrine/Filter/` | `TenantFilter` (SQL-level tenant scoping) |
-| `State/`, `Dto/`, `Enum/` (~10 enums), `DataFixtures/`, `Command/` | supporting code |
+| `State/`, `Dto/`, `Enum/`, `DataFixtures/`, `Command/` | supporting code |
 
 ### 2.2 Domain entities (core)
 - **Club** — root tenant: `slug` (unique), `ffbbClubCode`, `planId`, `billingCycle`, `timezone`, `locale`, `onboardingCompleted`.
@@ -49,15 +49,19 @@ All services share the Docker network `clubscheduler_network`.
 
 ### 2.3 API layer
 - **Auto CRUD (API Platform):** `/api/{schedules,clubs,teams,coaches,venues,constraints,seasons,sport-categories,…}` — ~20 resources, default pagination 30/page. OpenAPI at `/api/docs`.
-- **Custom controllers:**
+- **Custom controllers** (structuring ones; full list = `ls backend/src/Controller/`):
   | Controller | Route | Action |
   |-----------|-------|--------|
   | `GenerateScheduleController` | `POST /api/schedules/{id}/generate` | dispatch `GenerateScheduleMessage` |
+  | `ValidateScheduleController` / `ReopenScheduleController` / `SetBaselineController` | `POST /api/schedules/{id}/{validate,reopen,set-baseline}` | VALIDATED lifecycle + baseline |
   | `ExportPdfController` | `POST /api/schedules/{id}/export-pdf` | dispatch `ExportPdfMessage` |
-  | `ImportController` | `POST /api/clubs/{id}/import` | XLSX import via `FfbbExcelImporter` |
+  | `ImportController` | `POST /api/clubs/{id}/import-teams` | XLSX import via `FfbbExcelImporter` |
   | `ManualEditController` | `POST /api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}` | manual slot edits |
+  | `ReorderTeamsController` | `POST /api/teams/reorder` | atomic tier/rank commit (wizard sort mode) |
+  | `MembershipController` | membership approval endpoints | pending-member workflow |
+  | `ClubLogoController` / `ClubAppearanceController` | club logo upload / accent colors | club visual identity |
   | `ResetSeasonController` | `DELETE /api/reset-season` | batch-delete season data |
-  | `AuthController` | `POST /api/register`, `GET /api/me` | registration / profile (JWT) |
+  | `AuthController` / `PasswordController` | `POST /api/register`, `GET /api/me`, password reset | auth (JWT) |
   | `HealthController` | `GET /api/health` | `{"status":"ok"}` |
 
 ### 2.4 Async / messaging
@@ -69,7 +73,7 @@ All services share the Docker network `clubscheduler_network`.
 
 ### 2.5 Multi-tenant isolation (security-critical)
 1. `TenantFilter` (Doctrine SQL filter) appends `{table}.club_id = :param` on tenant entities; registered in `config/packages/doctrine.yaml`.
-2. `TenantFilterListener` (kernel REQUEST, priority 8): resolves club from `_club_id` attr / `X-Club-Id` header, **requires an active `ClubUser` membership (else 403)**, enables the filter, and sets PostgreSQL `SET LOCAL app.club_id` (RLS).
+2. `TenantFilterListener` (kernel REQUEST, **priority 7 — AFTER the firewall (8)**; source: `backend/src/EventListener/TenantFilterListener.php`): resolves club from `_club_id` attr / `X-Club-Id` header / **else the authenticated JWT user's active `ClubUser` membership** (the frontend sends no header). Spoofed header without matching membership → 403. Enables the Doctrine filter and issues `SET LOCAL app.club_id`. ⚠ Priority 8 (before auth) was the historical cross-club leak bug — never move it back. ⚠ RLS policies are **not active** in PostgreSQL today (prepared template only, see `backend/docs/TENANT.md`) — the Doctrine filter is the effective barrier.
 3. Cache pools `cache.tenant` (1h) and `cache.schedule` (4h) on Redis; `CacheInvalidationListener` keeps them coherent.
 - Reference docs: `backend/docs/TENANT.md`, `backend/docs/RLS.md`.
 

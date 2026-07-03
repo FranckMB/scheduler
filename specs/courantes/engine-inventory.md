@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 51201005 2026-06-30
+Last verified @ 09e67f3 2026-07-03
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -54,10 +54,14 @@ Quatre endpoints exposés par `app/main.py` :
   7. `add_level_1_hard_constraints(...)` — toutes les contraintes hard en un seul pass.
   8. `add_time_window_constraints(...)` — TIME/DAY hard windows + conflits.
   9. `remaining_sessions` : `sum(team_vars) <= max(0, sessionsPerWeek - locked_count)`.
-  10. `add_preferred_day_bonus(...)` + `add_level_2_objective(...)` — objectif Level-2.
-  11. `cp_model.CpSolver().Solve(model)` avec `max_time_in_seconds = input_data.solver_timeout_seconds`, `random_seed = input_data.solver_seed`, `num_search_workers = 1`.
-  12. `build_result(...)` → dict → `ScheduleOutputSchema.model_validate(...)`.
-- **Pas de fallback two-pass** : un seul pass avec toutes les contraintes HARD. Si INFEASIBLE, `build_result` produit `status="failed"` avec diagnostics de conflit — pas de relaxation silencieuse.
+  10. `add_preferred_day_bonus(...)` + `add_level_2_objective(..., apply_chaining=False)` — objectif Level-2 **placement seul** (les termes de chaînage sont construits mais exclus de l'objectif de phase 1).
+  11. **Solve en 2 phases** (voir ci-dessous) → `(status, solver, model, conflicts)`.
+  12. `build_result(..., constraint_version=read_contract_version())` → dict → `ScheduleOutputSchema.model_validate(...)`.
+- **Solve en 2 phases** (`_solve`) :
+  - **Timeout adaptatif** (`_adaptive_timeout`) : `complexity = n_teams * n_venues` → ≤50 : 60 s · ≤200 : 180 s · sinon 600 s ; plafonné par `input_data.solver_timeout_seconds` (le budget payload reste le plafond dur).
+  - **Phase 1 — placement** : `CpSolver` avec `max_time_in_seconds = timeout adaptatif`, `random_seed = input_data.solver_seed`, `num_search_workers = 1`. Objectif = placement uniquement (sans chaînage), pour ne pas polluer la preuve d'optimalité.
+  - **Phase 2 — chaînage** (uniquement si phase 1 OPTIMAL/FEASIBLE et termes de chaînage présents) : verrouille la qualité de placement (`placement_expression >= optimum phase 1`), **warm-start** via `AddHint` sur la solution de phase 1, puis maximise `placement + chaining` sous un cap dur `CHAINING_PHASE_MAX_SECONDS = 10 s` (best-effort : si le cap tombe, le résultat de phase 1 est conservé).
+- **Pas de fallback de relaxation** : toutes les contraintes HARD restent actives dans les deux phases. Si INFEASIBLE, `build_result` produit `status="failed"` avec diagnostics de conflit — pas de relaxation silencieuse.
 
 ---
 
@@ -104,7 +108,7 @@ Sous-schemas clés :
 | `slots` | — | `list[ScheduleSlotSchema]` | `[]` |
 | `diagnostics` | — | `list[DiagnosticSchema]` | `[]` |
 
-- **SolverMetricsSchema** : `solverVersion: str`, `nbVariables: int`, `nbConstraints: int`, `wallTimeMs: int`.
+- **SolverMetricsSchema** : `solverVersion: str`, `nbVariables: int`, `nbConstraints: int`, `wallTimeMs: int`, plus les identifiants de déterminisme (optionnels, `None` accepté pour les anciens payloads) : `scoreFormulaVersion: str | None` (formule T24 qui a produit le score) et `constraintVersion: str | None` (version de contrat backend↔engine).
 - **ScheduleSlotSchema** : `id`, `teamId`, `venueId`, `coachId`, `dayOfWeek`, `startTime` (time), `durationMinutes`, `lockLevel` (default `"NONE"`), `temporaryLock`, `temporaryLockFor`, `temporaryMinSessionsOverride`, `pendingConstraintSuggestion`.
 - **DiagnosticSchema** : `id`, `type`, `severity`, `teamId`, `coachId`, `venueId`, `dayOfWeek`, `startTime`, `durationMinutes`, `message`, `suggestions: list[str]`, `createdAt`.
   - Types valides (commentaire code) : `unplaced`, `soft_lock_moved`, `coach_overload`, `session_below_effective_min`, `conflict`, `unused_slot`, `coach_no_rest_day`, `day_constraint_conflict`.
@@ -146,7 +150,7 @@ Sous-schemas clés :
 
 ### 4.4 Contraintes Hard Level-1 (`add_level_1_hard_constraints`)
 
-17 contraintes comptées dans `HardConstraintStats` :
+Familles de contraintes comptées dans `HardConstraintStats` (liste exhaustive : dataclass dans `app/solver/constraints.py`) :
 
 | # | Nom | Rôle |
 |---|-----|------|
@@ -183,30 +187,25 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 - **Variables** : booléennes `x[team_id, venue_id, day_of_week, slot_start]` (type `SlotKey = tuple[str, str, int, str]`).
 - **Granularité** : `SLOT_MINUTES = 15` (model.py).
 - **Durée session default** : `DEFAULT_SESSION_MINUTES = 90`.
-- **Timeout solver** : `solver.parameters.max_time_in_seconds = input_data.solver_timeout_seconds` (default **650s** dans `ScheduleInputSchema`). **Note** : `engine/AGENTS.md` et `engine/README.md` mentionnent 10s hardcoded, mais le code lu utilise le champ input `solver_timeout_seconds` (default 650) — l'AGENTS.md est stale sur ce point.
-- **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42).
-- **Workers** : `solver.parameters.num_search_workers = 1`.
-- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V3"`. Maximise somme pondérée. Poids fixes :
+- **Timeout solver** : adaptatif (`_adaptive_timeout`, voir §2) — `n_teams × n_venues` ≤50 : 60 s · ≤200 : 180 s · sinon 600 s, plafonné par `solver_timeout_seconds` du payload (default **650 s** dans `ScheduleInputSchema`). Phase 2 (chaînage) plafonnée en plus par `CHAINING_PHASE_MAX_SECONDS = 10`.
+- **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42) — les deux phases.
+- **Workers** : `solver.parameters.num_search_workers = 1` — les deux phases.
+- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py) :
 
 | Critère | Poids |
 |---------|-------|
 | Tier S | 10 000 |
 | Tier A | 1 000 |
-| SOFT | 800 |
 | Tier B | 100 |
 | `session_count` | 20 |
-| `pref_link` | 80 |
 | `preferred` | 60 |
-| `grouping` | 50 |
 | `preferred_day` | 30 |
 | Tier C | 10 |
-| `max_days` | 8 |
-| `opt_link` | 5 |
 | Tier D | 1 |
 | `rest` | 3 |
 
 - `UNPLACED_PENALTY = 100 000` (par team non placée, sauf `hard_satisfied_team_ids`).
-- **Chaining bonus** : `CHAINING_TIER_WEIGHTS = {S:200, A:20, B:2, C:0.2, D:0.02}` — bonus pour sessions back-to-back même venue même coach.
+- **Chaining bonus** (phase 2 uniquement) : `CHAINING_TIER_WEIGHTS = {S:8, A:6, B:4, C:2, D:1}` — bonus entier pour sessions back-to-back même venue même coach, poids du tier le plus haut de la paire. Plafonné à 8 par construction : < 21 (valeur minimale d'une session placée) pour ne jamais sacrifier un placement, et ≤ 8 (écart C−D = 9) pour ne jamais voler un slot à un tier supérieur.
 - **Hard locks** : `HARD_LOCK_LEVEL = "HARD"` (model.py). Slots `lockLevel == "HARD"` → variable forcée à 1, venue bloquée pour autres teams sur ces créneaux.
 
 ### Per-club asyncio locks
@@ -230,6 +229,6 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 
 ## 7. Tests & Fixtures
 
-- **Fixtures golden** (`engine/tests/fixtures/`) : 12 scénarios — `simple_club`, `medium_club`, `dense_club`, `bccl_regression` (155 KB), `impossible`, `age_order_club`, `consecutive_emerick`, `no_rest_enzo`, `overlap_anna`, `overlap_nicolas`, `score_hard_only_teams`, `vacation_week`.
+- **Fixtures golden** (`engine/tests/fixtures/`) : scénarios JSON (liste : `ls engine/tests/fixtures/`) — dont `simple_club`, `medium_club`, `dense_club`, `bccl_regression`, `impossible`, `age_order_club`, `consecutive_emerick`, `no_rest_enzo`, `overlap_anna`, `overlap_nicolas`, `score_hard_only_teams`, `vacation_week`.
 - **Suites** : `tests/golden/`, `tests/invariants/`, `tests/test_result_builder.py`, plus tests spécialisés (`test_age_order`, `test_chaining_bonus`, `test_coach_rest_day`, `test_salarie_distribution`, `test_max_consecutive_sessions`, `test_time_constraints`, `test_constraints`, `test_objective`, `test_generate_contract`, etc.).
 - **Toolchain tests** : `pytest` + `pytest-timeout` + `hypothesis`.
