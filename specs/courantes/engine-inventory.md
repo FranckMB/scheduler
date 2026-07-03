@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 09e67f3 2026-07-03
+Last verified @ c7d93c8 2026-07-03
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.

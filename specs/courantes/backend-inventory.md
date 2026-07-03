@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 09e67f3 2026-07-03
+Last verified @ c7d93c8 2026-07-03
 
 ---
 
@@ -244,13 +244,19 @@ l'isolation multi-tenant au niveau de chaque requête :
    le listener vérifie qu'un `ClubUser` **actif** existe pour `(userId, clubId)`. Sinon → 403
    (bloque un header `X-Club-Id` spoofé ; une membership `pending` n'a accès à rien).
 4. **Filtre Doctrine** : active le filtre `tenant_filter` avec le paramètre `club_id` (UUID).
-   Toutes les requêtes Doctrine sont automatiquement filtrées par club. **C'est la barrière
-   d'isolation effective.**
-5. **PostgreSQL SET LOCAL** : exécute `SET LOCAL app.club_id = '<clubId>'` sur la connexion.
-   ⚠️ **Aucune policy Row Level Security n'existe dans les migrations — le RLS PostgreSQL
-   n'est PAS actif.** Ce `SET LOCAL` est un point d'ancrage pour de futures policies ; seul
-   le filtre Doctrine `TenantFilter` (+ les vérifications d'appartenance des contrôleurs)
-   isole réellement les tenants aujourd'hui.
+   Toutes les requêtes Doctrine sur les entités à `club_id` sont automatiquement filtrées.
+5. **GUC PostgreSQL** : `TenantConnectionContext::setClubId()` pose `app.club_id` via
+   `set_config(..., false)` (session-scoped ; l'ancien `SET LOCAL` hors transaction était un
+   no-op). **RLS PostgreSQL ACTIF** (migration `Version20260703120000`, SEC-03) : policies
+   `tenant_isolation` FORCE sur toutes les tables à `club_id`, runtime = `app_user`. 3 couches :
+   filtre Doctrine + RLS + scoping provider/processor pour Club/User (sans `club_id`). Migrations
+   et ops via la connexion `admin` (`clubscheduler`, superuser, bypass RLS = porte superadmin).
+   Détail : `backend/docs/TENANT.md`, `docs/security/rls.md`.
+
+**Accès API (SEC-01/02/04)** : `Club` GetCollection/Get/Put scopés aux memberships actifs
+(Post/Delete retirés) ; `User` self-only (Get/Put ; pas de collection ni Delete) ;
+`import-teams` requiert un membership admin sur le club du path. Gardé par
+`ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest`/`RlsIsolationTest` (blocking-tests).
 
 ---
 
@@ -258,8 +264,12 @@ l'isolation multi-tenant au niveau de chaque requête :
 
 ### Configuration (`config/packages/mercure.yaml`)
 
-- Hub `default` : URL depuis `MERCURE_URL`, public URL depuis `MERCURE_PUBLIC_URL`.
-- JWT secret depuis `MERCURE_JWT_SECRET`, permission `publish: '*'` (tous les topics).
+- Hub `default` : URL depuis `MERCURE_URL`, public URL depuis `MERCURE_PUBLIC_URL`
+  (dérivée du port publié via compose).
+- JWT secret depuis `MERCURE_JWT_SECRET` (**dédié, distinct de `JWT_PASSPHRASE`** — SEC-06),
+  permission publisher `publish: '*'`. Hub durci (SEC-05) : pas d'abonné `anonymous`,
+  `cors_origins` restreint aux frontends dev, pas de `publish_origins *`. Gardé par
+  `MercureHardeningTest`. Conso frontend future = JWT subscriber (voir `docs/security/mercure.md`).
 
 ### Topic et publication
 
