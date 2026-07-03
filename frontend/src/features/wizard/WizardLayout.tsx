@@ -85,7 +85,7 @@ export function WizardPage() {
       <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (
-        <nav className="shrink-0 md:w-52">
+        <nav className="shrink-0 md:w-44">
           <ol className="flex flex-col gap-1">
             {WIZARD_STEPS.map((step, i) => {
               const locked = guided && i > maxIndex;
@@ -113,8 +113,9 @@ export function WizardPage() {
         </nav>
       )}
 
-      {/* Current step */}
-      <div className="min-w-0 flex-1">
+      {/* Current step — fills the viewport height so the sticky footer sits at
+          the real bottom (no floating gap on short steps) yet stays pinned on scroll. */}
+      <div className="flex min-h-[calc(100vh-7.5rem)] min-w-0 flex-1 flex-col">
         {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
         <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
           <h2 className="text-lg font-semibold">
@@ -155,7 +156,7 @@ export function WizardPage() {
         {/* Sticky Prev/Next footer (W7). On Récap "Suivant" becomes the gated
             "Continuer vers la génération". A step can inject an action (footerExtra),
             e.g. "Trier" on the Teams step, rendered left of Suivant. */}
-        <div className="sticky bottom-0 z-20 mt-6 flex items-center justify-between gap-2 border-t border-border bg-background py-4">
+        <div className="sticky bottom-0 z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4">
           <Button variant="outline" disabled={0 === index} onClick={prev}>
             Précédent
           </Button>

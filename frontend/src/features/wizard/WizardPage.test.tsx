@@ -63,7 +63,8 @@ describe("Wizard (integration)", () => {
     await screen.findByDisplayValue("SF1");
 
     await user.click(screen.getByRole("button", { name: "Suivant" }));
-    expect(await screen.findByRole("heading", { name: "Gymnases" })).toBeInTheDocument();
+    // The step title now lives only in the sticky wizard header ("Étape 2/6 · Gymnases").
+    expect(await screen.findByRole("heading", { name: /Gymnases/ })).toBeInTheDocument();
   });
 
   it("blocks Suivant + shows an alert when there is no team", async () => {
