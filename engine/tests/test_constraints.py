@@ -237,28 +237,34 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         result = parse_v2_constraints(constraints)
         assert result["fixed_slots"] == []
 
-    def test_lock_rule_type_produces_fixed_slot(self):
+    def test_lock_time_day_routes_to_time_windows(self):
+        # LOCK on a TIME/DAY rule is enforced as HARD (routed to time_windows).
+        # The old fixed_slots UUID path was dead (never matched) and is removed.
         constraints = [
-            {"id": "c1", "isActive": True, "ruleType": "LOCK"},
-            {"id": "c2", "isActive": True, "ruleType": "LOCK"},
+            {"id": "c1", "isActive": True, "ruleType": "LOCK", "family": "DAY",
+             "scopeTargetId": "team-1", "config": {"forbiddenDays": [2]}},
         ]
         result = parse_v2_constraints(constraints)
-        assert result["fixed_slots"] == ["c1", "c2"]
+        assert result["fixed_slots"] == []
+        assert len(result["time_windows"]) == 1
 
     def test_coach_availability_family(self):
+        # Days are weekday ints (as the wizard sends them), stored as a set.
         constraints = [
             {
                 "id": "c1",
                 "isActive": True,
                 "family": "COACH_AVAILABILITY",
                 "scopeTargetId": "coach-1",
-                "config": {"unavailableDays": ["monday", "wednesday"]},
+                "config": {"unavailableDays": [1, 3]},
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["coach_unavailability"] == {"coach-1": ["monday", "wednesday"]}
+        assert result["coach_unavailability"] == {"coach-1": {1, 3}}
 
-    def test_facility_with_date_range_produces_venue_closure(self):
+    def test_facility_with_date_range_is_ignored(self):
+        # venue_closures (dateStart) is removed — a dated closure has no meaning
+        # on a week-template schedule without occurrences (ENG-02).
         constraints = [
             {
                 "id": "c1",
@@ -269,7 +275,20 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert "venue-1" in result["venue_closures"]
+        assert result["venue_closures"] == {}
+
+    def test_facility_capacity_produces_cap(self):
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "FACILITY_CAPACITY",
+                "scopeTargetId": "venue-1",
+                "config": {"venueId": "venue-1", "maxTeams": 2},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["venue_capacity_caps"] == {"venue-1": 2}
 
     def test_facility_with_preferred_venue_produces_forced_venue(self):
         constraints = [
@@ -333,10 +352,13 @@ class ParseV2ConstraintsTest(unittest.TestCase):
                 "id": "c1",
                 "isActive": True,
                 "rule_type": "LOCK",
+                "family": "TIME",
+                "scope_target_id": "team-1",
+                "config": {"maxStartTime": "19:00"},
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["fixed_slots"] == ["c1"]
+        assert len(result["time_windows"]) == 1
 
     def test_scope_target_id_snake_case(self):
         constraints = [
@@ -345,11 +367,11 @@ class ParseV2ConstraintsTest(unittest.TestCase):
                 "isActive": True,
                 "family": "COACH_AVAILABILITY",
                 "scope_target_id": "coach-2",
-                "config": {"unavailableDays": ["friday"]},
+                "config": {"unavailableDays": [5]},
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["coach_unavailability"] == {"coach-2": ["friday"]}
+        assert result["coach_unavailability"] == {"coach-2": {5}}
 
 
 if __name__ == "__main__":
