@@ -173,6 +173,17 @@ def _solve(
     team_coach_map: dict[str, list[str]] = parsed.get("team_coach_map", {})
     team_player_map: dict[str, list[str]] = parsed.get("team_player_map", {})
 
+    # FACILITY_CAPACITY: tighten per-slot capacity to maxTeams. min() only — the
+    # backend already sets capacity to 1 for non-divisible venues, so a maxTeams
+    # above the slot capacity must not re-open it. add_room_at_most_one and the
+    # over-capacity diagnostic both read model.slot_capacities → stays coherent.
+    venue_capacity_caps: dict[str, int] = parsed.get("venue_capacity_caps", {})
+    if venue_capacity_caps:
+        for vsk in model.slot_capacities:
+            cap = venue_capacity_caps.get(str(vsk[0]))
+            if cap is not None:
+                model.slot_capacities[vsk] = min(model.slot_capacities[vsk], cap)
+
     locked_slots_by_team: dict[str, int] = {}
     for locked_slot in model.locked_slots:
         locked_team_id: str | None = locked_slot.get("team_id")
@@ -252,7 +263,6 @@ def _solve(
         fixed_assignments=parsed["fixed_slots"],
         forbidden_assignments=parsed["forbidden_assignments"],
         coach_unavailability=parsed["coach_unavailability"],
-        venue_closures=parsed["venue_closures"],
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,

@@ -82,6 +82,44 @@ def team_constraint(
     }
 
 
+def team_coach(constraint_id: str, team_id: str, coach_id: str, *, role: str = "MAIN") -> dict[str, Any]:
+    """A v1 TEAM_COACH constraint (backend serializeTeamCoachConstraints shape)."""
+    return {
+        "id": constraint_id,
+        "teamId": team_id,
+        "type": "TEAM_COACH",
+        "severity": "HARD",
+        "value": coach_id,
+        "metadata": {"coachId": coach_id, "role": role, "isRequired": True},
+    }
+
+
+def coach_availability(
+    constraint_id: str,
+    coach_id: str,
+    *,
+    unavailable_days: list[int] | None = None,
+    available_days: list[int] | None = None,
+) -> dict[str, Any]:
+    """A COACH_AVAILABILITY constraint scoped to a coach."""
+    config: dict[str, Any] = {"coachId": coach_id}
+    if unavailable_days is not None:
+        config["unavailableDays"] = unavailable_days
+    if available_days is not None:
+        config["availableDays"] = available_days
+    return {
+        "id": constraint_id,
+        "scope": "COACH",
+        "scopeTargetId": coach_id,
+        "family": "COACH_AVAILABILITY",
+        "ruleType": "HARD",
+        "name": "coach availability",
+        "config": config,
+        "sortOrder": 0,
+        "isActive": True,
+    }
+
+
 def make_payload(
     *,
     teams: list[dict[str, Any]],

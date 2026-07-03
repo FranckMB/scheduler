@@ -41,8 +41,8 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::DAY:
-                if (!isset($config['allowedDays']) && !isset($config['forbiddenDays'])) {
-                    $errors[] = 'DAY family requires allowedDays or forbiddenDays in config.';
+                if (!isset($config['allowedDays']) && !isset($config['forbiddenDays']) && !isset($config['forcedDays'])) {
+                    $errors[] = 'DAY family requires allowedDays, forbiddenDays or forcedDays in config.';
                 }
                 break;
 

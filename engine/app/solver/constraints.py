@@ -197,7 +197,7 @@ def add_level_1_hard_constraints(
 
     # 7. Coach unavailable variables are forced to 0.
     stats.coach_unavailability = add_coach_unavailability_constraints(
-        model, assignment_list, coach_unavailability
+        model, assignment_list, coach_unavailability, team_coach_map=team_coach_map
     )
 
     # 8. Closed venue variables are forced to 0.
@@ -726,18 +726,51 @@ def add_forbidden_assignments(
     return added
 
 
-def add_coach_unavailability_constraints(
-    model: Any, assignments: Iterable[AssignmentLike], coach_unavailability: RuleCollection = ()
-) -> int:
-    """Constraint 7: coach-unavailable assignment variables are fixed to 0."""
+def _assignment_day(assignment: AssignmentLike) -> int | None:
+    """Weekday number of an assignment, from its slot_id ("3:18:00" → 3)."""
+    slot_id = _time_key(assignment)
+    if isinstance(slot_id, str) and ":" in slot_id:
+        head = slot_id.split(":", 1)[0]
+        try:
+            return int(head)
+        except ValueError:
+            return None
+    return None
 
+
+def add_coach_unavailability_constraints(
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    coach_unavailability: RuleCollection = (),
+    *,
+    team_coach_map: dict[str, list[str]] | None = None,
+) -> int:
+    """Constraint 7: coach-unavailable assignment variables are fixed to 0.
+
+    ``coach_unavailability`` maps a coach id to a set of weekday numbers the
+    coach cannot work. A slot is blocked when its day is in that set. (The old
+    code compared the day names to the slot_id "3:18:00" and never matched —
+    coach availability entered in the UI was silently ignored: audit ENG-01.)
+
+    A team can have several required (non-ASSISTANT) coaches; the assignment only
+    carries the first. If ``team_coach_map`` is given, EVERY coach of the team is
+    checked — a co-head-coach's unavailability must block the day too (audit
+    review), otherwise ENG-01 survives for co-coached teams.
+    """
+    rules: Mapping[Any, Any] = coach_unavailability if isinstance(coach_unavailability, Mapping) else {}
+    coach_map = team_coach_map or {}
     added = 0
     for assignment in assignments:
-        coach_id = _coach_id(assignment)
-        time_key = _time_key(assignment)
-        if _bool_field(assignment, "coach_unavailable", "is_coach_unavailable") or _rule_matches(
-            coach_unavailability, coach_id, time_key
-        ):
+        blocked = _bool_field(assignment, "coach_unavailable", "is_coach_unavailable")
+        if not blocked and rules:
+            coach_ids = coach_map.get(str(_team_id(assignment)))
+            if not coach_ids:
+                single = _coach_id(assignment)
+                coach_ids = [str(single)] if single is not None else []
+            day = _assignment_day(assignment)
+            if day is not None:
+                blocked = any(day in (rules.get(str(cid)) or ()) for cid in coach_ids)
+        if blocked:
             model.Add(_var(assignment) == 0)
             added += 1
     return added
@@ -768,7 +801,9 @@ def add_time_window_constraints(
     added = 0
     conflicts: list[dict[str, Any]] = []
 
-    day_rules_by_team: dict[str, dict[str, set[int]]] = defaultdict(lambda: {"forced": set(), "forbidden": set()})
+    day_rules_by_team: dict[str, dict[str, set[int]]] = defaultdict(
+        lambda: {"forced": set(), "forbidden": set(), "allowed": set()}
+    )
 
     for constraint in time_windows or ():
         if not constraint.get("isActive", True):
@@ -777,9 +812,11 @@ def add_time_window_constraints(
         rule_type = constraint.get("ruleType") or constraint.get("rule_type")
         family = constraint.get("family")
         if rule_type == "PREFERRED" and family == "TIME":
-            # PREFERRED TIME not implemented — backlog: specs/evolution/features-futures.md
+            # PREFERRED TIME is a soft bonus handled in the objective (E-feat),
+            # not a hard window here.
             continue
-        if rule_type != "HARD" or family not in ("TIME", "DAY"):
+        # LOCK on a time/day rule is enforced as HARD (a locked window is fixed).
+        if rule_type not in ("HARD", "LOCK") or family not in ("TIME", "DAY"):
             continue
 
         team_id = constraint.get("scope_target_id") or constraint.get("scopeTargetId")
@@ -789,10 +826,12 @@ def add_time_window_constraints(
         config = constraint.get("config") or {}
 
         if family == "DAY":
-            forced_days = config.get("forcedDays") or []
-            forbidden_days = config.get("forbiddenDays") or []
-            day_rules_by_team[team_id_text]["forced"].update(int(day) for day in forced_days if day is not None)
-            day_rules_by_team[team_id_text]["forbidden"].update(int(day) for day in forbidden_days if day is not None)
+            day_rules_by_team[team_id_text]["forced"].update(_day_int_set(config.get("forcedDays")))
+            day_rules_by_team[team_id_text]["forbidden"].update(_day_int_set(config.get("forbiddenDays")))
+            # An empty allowedDays is treated as "unconfigured" (no restriction),
+            # matching the coach-availability whitelist semantics — never "no day
+            # allowed" (which would force the team to zero sessions).
+            day_rules_by_team[team_id_text]["allowed"].update(_day_int_set(config.get("allowedDays")))
             continue
 
         min_start_time = config.get("minStartTime")
@@ -838,7 +877,14 @@ def add_time_window_constraints(
 
     for team_id_text, day_rules in day_rules_by_team.items():
         forced_day_set = day_rules["forced"]
-        forbidden_day_set = day_rules["forbidden"]
+        forbidden_day_set = set(day_rules["forbidden"])
+        allowed_day_set = day_rules["allowed"]
+        # allowedDays = whitelist: forbid every day the team could train on that
+        # is not allowed (the complement, restricted to days that actually exist).
+        if allowed_day_set:
+            forbidden_day_set |= {
+                day for day in team_day_vars.get(team_id_text, {}) if day not in allowed_day_set
+            }
         if forced_day_set & forbidden_day_set:
             conflicts.append({
                 "id": f"day_constraint_conflict-{team_id_text}",
@@ -1458,11 +1504,24 @@ def add_age_ascending_constraints(
     return added
 
 
+def _to_day_int(value: Any) -> int | None:
+    """Best-effort weekday int. Legacy string day names (e.g. 'monday') and other
+    non-numeric values are skipped, never crash the whole solve (audit review)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _day_int_set(values: Any) -> set[int]:
+    return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
+
+
 def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
     """Parse v2 constraints[] array into solver-ready rule collections.
 
     Returns dict with keys: fixed_slots, forbidden_assignments,
-    coach_unavailability, venue_closures, forced_venues, preferred_venues,
+    coach_unavailability, forced_venues, preferred_venues, venue_capacity_caps,
     time_windows, priority_tiers, team_coach_map, team_player_map
     """
 
@@ -1470,9 +1529,9 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         "fixed_slots": [],
         "forbidden_assignments": [],
         "coach_unavailability": {},
-        "venue_closures": {},
         "forced_venues": {},
         "preferred_venues": {},
+        "venue_capacity_caps": {},
         "time_windows": [],
         "priority_tiers": {},
         "team_coach_map": {},
@@ -1490,8 +1549,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         config = c.get("config") or {}
         metadata = c.get("metadata") or {}
 
-        if rule_type == "LOCK":
-            result["fixed_slots"].append(c.get("id"))
+        if rule_type == "LOCK" and family in ("TIME", "DAY"):
+            # A LOCK on a time/day rule means "keep this window fixed" — same
+            # effect as HARD for the solver. Route it through time_windows;
+            # add_time_window_constraints treats LOCK as HARD.
+            result["time_windows"].append(c)
 
         elif c_type == "TEAM_COACH":
             team_id = c.get("teamId") or c.get("team_id") or scope_target_id
@@ -1532,11 +1594,16 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
                 result["team_player_map"].setdefault(team_id_str, []).append(coach_id_str)
 
         elif family == "COACH_AVAILABILITY" and scope_target_id:
-            unavail = config.get("unavailableDays") or []
-            result["coach_unavailability"][scope_target_id] = unavail
-
-        elif family == "FACILITY" and config.get("dateStart") and scope_target_id:
-            result["venue_closures"][scope_target_id] = config
+            # Days are weekday numbers (ints, as the wizard sends them). Store a
+            # set of unavailable days; a non-empty availableDays whitelist is the
+            # complement. An empty/absent availableDays adds no restriction (an
+            # empty whitelist is treated as "unconfigured", never "blocked every
+            # day" — which would force the team to zero sessions).
+            unavailable = _day_int_set(config.get("unavailableDays"))
+            available_set = _day_int_set(config.get("availableDays"))
+            if available_set:
+                unavailable |= {d for d in range(0, 8) if d not in available_set}
+            result["coach_unavailability"][str(scope_target_id)] = unavailable
 
         elif (
             family == "FACILITY"
@@ -1569,6 +1636,16 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
             result["forbidden_assignments"].append(
                 {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
             )
+
+        elif family == "FACILITY_CAPACITY" and config.get("venueId"):
+            # Max teams allowed simultaneously per slot of this venue. Applied in
+            # _solve as min(trainingSlot.capacity, maxTeams) — can only tighten,
+            # never widen a venue the backend already capped to 1 (canSplit=false).
+            # Keyed strictly by config.venueId: scope_target_id under a TEAM scope
+            # is a team id and would never match a venue slot (audit review).
+            max_teams = config.get("maxTeams")
+            if max_teams is not None:
+                result["venue_capacity_caps"][str(config["venueId"])] = int(max_teams)
 
         elif c.get("type") == "PRIORITY_TIER":
             metadata = c.get("metadata") or {}

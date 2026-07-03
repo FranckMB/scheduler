@@ -111,7 +111,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('DAY family requires allowedDays or forbiddenDays in config.', $errors);
+        self::assertContains('DAY family requires allowedDays, forbiddenDays or forcedDays in config.', $errors);
     }
 
     public function testFacilityFamilyRequiresVenueIdOrTargetTag(): void
