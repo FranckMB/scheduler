@@ -130,6 +130,27 @@ jobs:
       - name: Run mypy
         run: docker compose run --rm engine mypy
 
+  engine-perf:
+    name: Engine Perf Gate
+    runs-on: ubuntu-latest
+    # Perf gate is main-only: it is slow (dense-club solve up to 180s) and would
+    # slow every PR. It guards the MVP "< 3 min" exit criterion on main (PERF-01).
+    if: github.ref == 'refs/heads/main'
+    needs: engine-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      - name: Build engine
+        run: docker compose build engine
+
+      - name: Run perf gate
+        run: docker compose run --rm engine pytest -m perf
+
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
