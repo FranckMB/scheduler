@@ -84,7 +84,11 @@ abstract class AbstractStateProvider implements ProviderInterface
      * Hook: add WHERE clauses derived from the current request query.
      * Return true when the filter bounds the result to a single parent
      * (so pagination is skipped and every matching row is returned).
-     * Tenant isolation is always enforced independently by Postgres RLS.
+     *
+     * For entities that own a club_id, tenant scoping is applied by the
+     * Doctrine tenant_filter (TenantFilterListener). Entities WITHOUT a
+     * club_id (Club, User) are NOT covered by that filter and must bound
+     * their own collection here — see ClubStateProvider (SEC-01).
      */
     protected function applyRequestFilters(QueryBuilder $qb): bool
     {

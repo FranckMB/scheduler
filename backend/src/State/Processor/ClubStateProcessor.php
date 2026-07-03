@@ -7,15 +7,65 @@ namespace App\State\Processor;
 use App\ApiResource\ClubResource;
 use App\Dto\ClubInput;
 use App\Entity\Club;
+use App\Entity\User;
+use App\Repository\ClubUserRepository;
+use App\Repository\SeasonRepository;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * @extends AbstractStateProcessor<Club, ClubInput, ClubResource>
  */
 class ClubStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonRepository $seasonRepository,
+        private readonly Security $security,
+        private readonly ClubUserRepository $clubUserRepository,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonRepository);
+    }
+
     protected function getEntityClass(): string
     {
         return Club::class;
+    }
+
+    /**
+     * SEC-01: Club has no club_id column, so the generic getClubId() guard never
+     * fires. Require an active admin membership in the target club: unknown club
+     * or no membership → 404 (no existence leak); member but not admin → 403.
+     *
+     * @param ClubInput            $input
+     * @param array<string, mixed> $uriVariables
+     */
+    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+    {
+        $id = $uriVariables['id'] ?? null;
+        $user = $this->security->getUser();
+
+        if (\is_string($id) && $user instanceof User) {
+            $membership = $this->clubUserRepository->findOneBy([
+                'userId' => $user->getId(),
+                'clubId' => $id,
+                'isActive' => true,
+            ]);
+            if (null === $membership) {
+                throw new NotFoundHttpException('Resource not found');
+            }
+            if ('admin' !== $membership->getRole()) {
+                throw new AccessDeniedHttpException('Access denied');
+            }
+        } else {
+            throw new NotFoundHttpException('Resource not found');
+        }
+
+        return parent::processPut($input, $uriVariables, $clubId, $seasonId);
     }
 
     /**

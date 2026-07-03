@@ -7,8 +7,6 @@ namespace App\ApiResource;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
-use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
 use App\Dto\UserInput;
 use App\Entity\User;
@@ -17,10 +15,11 @@ use App\State\Provider\UserStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// SEC-02: self-only. No GetCollection (email enumeration) and no bare Post
+// (registration is /api/register). Get/Put/Delete are restricted to the
+// authenticated user's own record in the provider/processor.
 #[ApiResource(shortName: 'User', operations: [
-    new GetCollection,
     new Get,
-    new Post,
     new Put,
     new Delete,
 ], input: UserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: UserStateProvider::class, processor: UserStateProcessor::class)]

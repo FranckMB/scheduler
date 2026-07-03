@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
@@ -17,12 +16,14 @@ use App\State\Provider\ClubStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// SEC-01: no bare Post/Delete. A club is created only through /api/register
+// (AuthController); deleting a whole tenant is a dedicated cascade+confirm
+// flow, not open CRUD. GetCollection/Get/Put are tenant-scoped in the
+// provider/processor to the caller's active ClubUser memberships.
 #[ApiResource(shortName: 'Club', operations: [
     new GetCollection,
     new Get,
-    new Post,
     new Put,
-    new Delete,
     new Post(
         uriTemplate: '/clubs/{id}/import-teams',
         controller: 'App\Controller\ImportController',

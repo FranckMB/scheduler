@@ -7,7 +7,10 @@ ClubScheduler is a **multi-tenant** application where every business entity belo
 1. **Application layer (ACTIVE)** — A Doctrine SQL filter (`TenantFilter`) transparently appends `club_id = ?` to every DQL/SQL query on entities that own a `club_id` column. **This is the effective tenant barrier.**
 2. **Database layer (PREPARED, NOT ACTIVE — audit 2026-07-03, SEC-03)** — PostgreSQL Row-Level Security. The init scripts only ship a helper (`docker/postgres/init/01-rls.sql`, never invoked) and a commented template (`03-rls-template.sql`); **no `CREATE POLICY` exists in any migration**, and the runtime connects as the `clubscheduler` user, not the restricted `app_user`. Additionally the listener's `SET LOCAL app.club_id` runs outside a transaction, which PostgreSQL treats as a no-op. Until policies are created and the connection user is switched, **do not count on RLS as a safety net.**
 
-⚠ Entities **without** a `club_id` column (`Club`, `User`) are NOT covered by the filter — their access control must be enforced explicitly at the API layer (audit SEC-01/SEC-02).
+⚠ Entities **without** a `club_id` column (`Club`, `User`) are NOT covered by the Doctrine filter — the tenant barrier does not apply to them. Their access control is enforced explicitly in their API Platform state provider/processor (SEC-01/SEC-02, fixed):
+- **Club** (`ClubStateProvider` / `ClubStateProcessor`): the collection is bounded to the caller's active `ClubUser` memberships; item read requires an active membership (else 404); `Put` requires an active **admin** membership (404 if none, 403 if member but not admin). No bare `Post`/`Delete` operations are exposed (a club is created via `/api/register`).
+- **User** (`UserStateProvider` / `UserStateProcessor`): self-only — `Get`/`Put`/`Delete` restricted to the caller's own id (else 404); no `GetCollection` (email enumeration) and no bare `Post`.
+- **Import** (`ImportController`, `POST /clubs/{id}/import-teams`): requires an active admin membership in the club named in the path (SEC-04) — the listener validates the header/JWT club, not the path `{id}`.
 
 ## Components
 
