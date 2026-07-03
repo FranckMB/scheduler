@@ -1,10 +1,10 @@
 # Frontend Spec — Forward
 
-> Specification FORWARD pour le rebuild du frontend ClubScheduler. Ce document décrit ce qui
-> doit être construit, pas ce qui existe. L'inventaire backward du backend est dans
+> Specification FORWARD pour le rebuild du frontend ClubScheduler, réconciliée avec le code
+> livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 6e35a6ce 2026-06-30
+Last verified @ 09e67f3 2026-07-03
 
 ---
 
@@ -19,14 +19,14 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 | Langage | TypeScript | ~6.0 | Typage statique, `strict: true` |
 | Styling | Tailwind CSS | 4 | Utility-first, engine Oxide, `@tailwindcss/vite` plugin |
 | Server state | TanStack Query | 5 | Cache, invalidation, optimistic updates, pagination |
-| Client state | Zustand | 5 | Stores globaux légers (auth, UI, tenant context) |
+| Client state | Zustand | 5 | Stores globaux légers (auth, thème, UI wizard/planning) |
 | HTTP client | ky | 2 | Fetch wrapper, interceptors, retry, hooks |
-| Calendrier | FullCalendar | 6 | Grille planning hebdomadaire, drag-and-drop créneaux |
-| Drag & drop | @dnd-kit | v0.5 | Tier list, réordonnancement, accessible DnD |
-| Routing | React Router | 7 | Routes déclaratives, loaders, nested layouts |
-| Date handling | date-fns + date-fns-tz | latest | Manipulation dates, timezone club |
-| Forms | React Hook Form + Zod | latest | Validation schemas, formulaires wizard |
+| Grille planning | Composant custom `WeekGrid` | — | Grille hebdomadaire maison (`src/features/planning/WeekGrid.tsx`) — **pas de FullCalendar** |
+| Drag & drop | @dnd-kit (core 6 + sortable) | 6.x | Tri des équipes (inter-tier), accessible DnD |
+| Primitives UI | Radix UI (label, slot) + cva + tailwind-merge | — | Composants shadcn-style dans `src/shared/components/ui/` |
+| Routing | React Router | 7 | Routes déclaratives, nested layouts |
 | Icons | lucide-react | latest | Icônes SVG tree-shakeable |
+| Types API | openapi-typescript | 7 | `npm run gen:api-types` génère `src/shared/api/types.gen.ts` depuis `openapi-snapshot.json` |
 
 ### Principes de la stack
 
@@ -34,52 +34,41 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 - **Pas d'Axios.** ky remplace — plus léger, hooks natifs, basé sur fetch.
 - **Pas de CSS-in-JS.** Tailwind 4 uniquement. Les styles dynamiques via `clsx` + conditional classes.
 - **Pas de i18n framework.** MVP = français uniquement. Les strings sont en dur dans les composants.
+- **Pas de FullCalendar, pas de date-fns, pas de React Hook Form/Zod** dans le code livré :
+  grille custom `WeekGrid`, formulaires contrôlés simples avec validation manuelle.
 - **TypeScript strict.** `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`.
 
 ---
 
 ## 2. Routes / Objectives
 
-Chaque route a un objectif produit précis. Le routing utilise React Router 7 avec nested layouts.
+Chaque route a un objectif produit précis. Le routing utilise React Router 7 avec nested
+layouts (`src/app/router.tsx`).
 
 | Route | Objectif | Auth | Layout |
 |-------|----------|------|--------|
 | `/login` | Connexion gestionnaire (email + password) | Public | `AuthLayout` |
-| `/register` | Inscription club (crée User + Club + Season + Sport + Categories) | Public | `AuthLayout` |
-| `/` | Redirect post-login : si `onboarding_completed=false` → `/wizard`, sinon → `/dashboard` | Required | `AppLayout` |
-| `/wizard` | Onboarding initial 4 étapes "Draft hybride" (réservé T12 — non détaillé ici) | Required | `WizardLayout` |
-| `/schedules/:id` | Visualisation planning hebdomadaire FullCalendar + actions génération/export | Required | `AppLayout` |
-| `/schedules/:id/diagnostics` | Rapport post-génération : erreurs, avertissements, suggestions | Required | `AppLayout` |
-| `/profile` | Profil utilisateur + club settings (timezone, school_zone, plan) | Required | `AppLayout` |
-| `/teams` | CRUD équipes : catégorie, priorité, coaches, contraintes, sessions/semaine | Required | `AppLayout` |
-| `/priorities` | Tier list drag & drop S/A/B/C/D + min_sessions_override par tier | Required | `AppLayout` |
-| `/dashboard` | Vue d'ensemble : statut saison, dernière génération, alertes diagnostics | Required | `AppLayout` |
+| `/register` | Inscription : nouveau club (admin actif) ou demande d'adhésion à un club existant via ARA (membership `pending`) | Public | `AuthLayout` |
+| `/forgot-password` | Demande de réinitialisation de mot de passe (`POST /api/password/forgot`) | Public | `AuthLayout` |
+| `/reset-password/:token` | Saisie du nouveau mot de passe (`POST /api/password/reset`) | Public | `AuthLayout` |
+| `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
+| `/` | **Boucle de travail planning** (`PlanningPage`) : grille `WeekGrid`, toolbar (sélecteur, régénérer, valider/rouvrir, planning principal ★, renommer), diagnostics, détail créneau | Required | `AppLayout` |
+| `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `onboardingCompleted === false`) | Required | `AppLayout` |
+| `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression) et couleur d'accent (+ palette) appliquée à toute l'UI | Required | `AppLayout` |
+| `/profile` | Profil utilisateur | Required | `AppLayout` |
+| `/pending-members` | Approbation des demandes d'adhésion (`PendingMembersPage`) — visible admin uniquement | Required (admin) | `AppLayout` |
 
-### Guards et redirects
+### Guards et redirects (`src/app/AuthGuard.tsx`)
 
-```typescript
-// Illustration — guard logic, pas un fichier .ts
-function requireAuth(): RouteGuard {
-  // Si pas de JWT en Zustand auth store → redirect /login
-  // Si JWT expiré (401 intercepté par ky) → logout + redirect /login
-}
+- Pas de JWT dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`).
+- `membershipStatus === "pending"` → `/waiting`.
+- `club.onboardingCompleted === false` → redirect `/wizard` (sauf si déjà sur `/wizard`).
 
-function requireOnboarding(): RouteGuard {
-  // Si club.onboarding_completed === false → redirect /wizard
-  // Sauf si déjà sur /wizard ou /login ou /register
-}
-```
+### Routes non livrées
 
-### Routes non-MVP (réservées P1.5+)
-
-Les routes suivantes ne sont PAS dans le scope du rebuild MVP. Elles sont listées pour
-anticiper la structure mais ne doivent pas être implémentées :
-
-- `/schedules/:id/periods` — périodes d'exception (P1.5)
-- `/venues` — CRUD salles + matrice trajets (P1.5)
-- `/coaches` — CRUD coaches + indisponibilités (P1.5)
-- `/audit` — audit trail (P1.5)
-- `/admin` — super-admin dashboard (P2)
+Il n'existe **pas** de routes `/dashboard`, `/teams`, `/priorities`, `/schedules/:id` ni
+`/schedules/:id/diagnostics` : le planning et ses diagnostics vivent sur `/`, le CRUD
+équipes/salles/coachs et le tri par priorité vivent dans le wizard (`/wizard`, rééditable).
 
 ---
 
@@ -90,20 +79,18 @@ Deux couches distinctes, responsabilités non chevauchantes.
 | Couche | Outil | Responsabilité | Règle |
 |--------|-------|----------------|-------|
 | Server state | TanStack Query 5 | Données issues de l'API (resources, collections, mutations) | **Toujours** via Query. Jamais de state local pour des données serveur. |
-| Client state | Zustand 5 | État UI pur, auth, tenant context, préférences | **Jamais** de données serveur en Zustand. Sync via Query callbacks. |
+| Client state | Zustand 5 | État UI pur, token JWT, thème, préférences | **Jamais** de données serveur en Zustand. Sync via Query callbacks. |
 
 ### Frontière stricte
 
 ```typescript
 // Illustration — frontière Zustand / TanStack Query
 
-// ✅ Zustand : état UI pur, pas de données serveur
+// ✅ Zustand : état UI pur, pas de données serveur (authStore réel : token seul)
 type AuthStore = {
   token: string | null;
-  clubId: string | null;
-  seasonId: string | null;
-  login: (token: string, clubId: string) => void;
-  logout: () => void;
+  setToken: (token: string | null) => void;
+  clear: () => void;
 };
 
 // ✅ TanStack Query : données serveur, cache, invalidation
@@ -120,12 +107,13 @@ const schedulesQuery = useQuery({
 
 | Situation | Choix | Raison |
 |-----------|-------|--------|
-| JWT token après login | Zustand | Persistant côté client, pas une resource API |
-| clubId / seasonId actifs | Zustand | Contexte tenant, injecté en header, pas une query |
-| État sidebar/panel ouvert | Zustand | UI pure, pas de persistence serveur |
+| JWT token après login | Zustand (`authStore`, persist `cs-auth`) | Persistant côté client, pas une resource API |
+| Contexte tenant (club/saison) | **Aucun état client** | Résolu côté serveur depuis le JWT (`TenantFilterListener`) — le frontend n'envoie aucun header tenant |
+| Thème clair/sombre | Zustand (`themeStore`) | UI pure ; l'accent club vient de `/api/me` via `useApplyClubTheme` |
+| État UI wizard / planning | Zustand (stores de feature `store.ts`) | UI pure, pas de persistence serveur |
 | Liste des équipes | TanStack Query | Donnée serveur, cacheable, invalidable |
-| Statut d'une génération | TanStack Query + Mercure | Donnée serveur temps réel |
-| Formulaires wizard | React Hook Form | État formulaire local, soumis puis invalidé via Query |
+| Statut d'une génération | TanStack Query + polling (`refetchInterval`) | Donnée serveur quasi temps réel |
+| Formulaires wizard | État local contrôlé | Formulaires simples, soumis puis invalidés via Query |
 
 ---
 
@@ -133,54 +121,52 @@ const schedulesQuery = useQuery({
 
 ky 2 comme unique client HTTP. Configuration centralisée, jamais instancié ad-hoc dans les composants.
 
-### Instance configurée
+### Instance configurée (`src/shared/api/client.ts`)
 
 ```typescript
-// Illustration — configuration ky, pas un fichier .ts
-import ky from 'ky';
-
-const api = ky.create({
-  prefixUrl: '/api',           // proxy Vite dev → backend:8080
+// Extrait fidèle au code livré
+export const api = ky.create({
+  prefix: "/api", // proxy Vite dev, Nginx prod — jamais de host en dur
   hooks: {
     beforeRequest: [
-      (request) => {
-        const { token, clubId, seasonId } = useAuthStore.getState();
-        if (token) request.headers.set('Authorization', `Bearer ${token}`);
-        if (clubId) request.headers.set('X-Club-Id', clubId);
-        if (seasonId) request.headers.set('X-Season-Id', seasonId);
+      (state) => {
+        const token = useAuthStore.getState().token;
+        if (token) state.request.headers.set("Authorization", `Bearer ${token}`);
       },
     ],
     afterResponse: [
-      async (request, options, response) => {
-        if (response.status === 401) {
-          useAuthStore.getState().logout();
-          window.location.href = '/login';
+      (state) => {
+        // 401 sur /api/login = mauvais identifiants (géré par l'appelant).
+        const isLogin = state.request.url.includes("/api/login");
+        if (state.response.status === 401 && !isLogin) {
+          useAuthStore.getState().clear();
+          window.location.assign("/login");
         }
       },
     ],
   },
-  retry: { limit: 2, methods: ['get'], statusCodes: [502, 503] },
 });
 ```
 
 ### Règles
 
 - **Toutes les requêtes passent par l'instance `api` ky.** Pas de `fetch()` direct dans les composants.
-- **Headers tenant automatiques.** `X-Club-Id` et `X-Season-Id` injectés par le hook `beforeRequest` depuis Zustand.
-- **401 → logout automatique.** Le hook `afterResponse` déconnecte et redirige vers `/login`.
-- **Retry limité aux GET.** Les mutations (POST/PUT/DELETE) ne sont jamais retry automatiquement.
-- **Pas de hardcodage d'URL.** `prefixUrl: '/api'` utilise le proxy Vite en dev et Nginx en prod.
-- **Content-Type.** API Platform sert du JSON-LD (`application/ld+json`). ky négocie automatiquement.
+- **Aucun header tenant.** Le club et la saison actifs sont résolus **côté serveur** depuis la
+  membership du JWT (`backend-inventory.md` §4). Le frontend n'envoie ni `X-Club-Id` ni `X-Season-Id`.
+- **401 → logout automatique** (sauf sur `/api/login`). Le hook `afterResponse` vide le store et redirige vers `/login`.
+- **Pas de hardcodage d'URL.** `prefix: '/api'` utilise le proxy Vite en dev et Nginx en prod.
+- **Content-Type.** API Platform sert du JSON-LD (`application/ld+json`). Le déballage hydra vit dans `src/shared/api/collection.ts`.
 
 ### Proxy Vite (dev)
 
 ```typescript
-// vite.config.ts — illustration
+// vite.config.ts — réel (extrait)
 export default defineConfig({
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/.well-known/mercure': 'http://localhost:3000',
+      '/api': { target: 'http://127.0.0.1:8080', changeOrigin: true },
+      '/.well-known/mercure': { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/engine': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
 });
@@ -190,60 +176,22 @@ En production, le Nginx frontend proxy `/api` → backend Nginx et `/.well-known
 
 ---
 
-## 5. Mercure SSE Strategy
+## 5. Suivi temps réel de la génération — Polling (Mercure non consommé)
 
-Le frontend consomme les événements Mercure pour le temps réel (génération de planning, export PDF).
+**État livré : le frontend ne consomme PAS Mercure.** Aucun `EventSource` dans `frontend/src/`.
+Le suivi de génération se fait par **polling TanStack Query** (`src/features/planning/queries.ts`) :
+la query des schedules a un `refetchInterval` de **2 500 ms tant qu'un planning est en vol**
+(statut `PENDING`/`GENERATING`), désactivé sinon. `WaitingApprovalPage` poll `/api/me` toutes les 5 s.
 
-### Topic
+Côté infra, le backend publie bien sur Mercure (topic `club:{clubId}:schedule:{scheduleId}`,
+voir `backend-inventory.md` §5) et les proxies existent (Vite dev et Nginx prod exposent
+`/.well-known/mercure`) — la bascule polling → SSE reste donc possible sans changement d'infra.
 
-Format : `club:{clubId}:schedule:{scheduleId}`
-
-Référence : `backend-inventory.md` §5 — la publication est effectuée par `GenerateScheduleHandler` et `ExportPdfHandler`.
-
-### Connexion EventSource
-
-```typescript
-// Illustration — hook useScheduleSSE, pas un fichier .ts
-function useScheduleSSE(scheduleId: string) {
-  const { clubId } = useAuthStore.getState();
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const url = `/.well-known/mercure?topic=club:${clubId}:schedule:${scheduleId}`;
-    const es = new EventSource(url);
-
-    es.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      // Invalide le cache du schedule pour re-fetch
-      queryClient.invalidateQueries({
-        queryKey: ['schedules', scheduleId],
-      });
-      // Met à jour le statut en temps réel
-      queryClient.setQueryData(['schedule-status', scheduleId], data);
-    });
-
-    return () => es.close();
-  }, [clubId, scheduleId, queryClient]);
-}
-```
-
-### Règles
+### Règles (si la consommation SSE est introduite un jour)
 
 - **EventSource sur `/.well-known/mercure`.** Jamais d'URL hardcodée vers le hub Mercure directement.
-- **Un EventSource par schedule actif.** Fermé au unmount du composant.
-- **Invalidation Query sur événement.** Le SSE déclenche `invalidateQueries`, pas de mutation directe du cache sauf pour le statut.
-- **Reconnexion automatique.** `EventSource` se reconnecte nativement. Pas de librairie supplémentaire.
-- **Pas de polling de fallback.** Si SSE coupe, l'utilisateur attend la reconnexion. Le statut `generating` reste affiché.
-
-### Événements attendus
-
-| Événement | Source backend | Action frontend |
-|-----------|---------------|-----------------|
-| `{ status: 'queued' }` | `GenerateScheduleHandler` | Afficher spinner "En file d'attente" |
-| `{ status: 'generating' }` | `GenerateScheduleHandler` | Afficher spinner "Génération en cours" |
-| `{ status: 'done', score, unplaced, warnings }` | `GenerateScheduleHandler` | Re-fetch schedule + slots, afficher rapport |
-| `{ status: 'failed' }` | `GenerateScheduleHandler` | Afficher erreur + diagnostics |
-| `{ status: 'pdf_ready', url }` | `ExportPdfHandler` | Activer bouton téléchargement PDF |
+- **Invalidation Query sur événement**, pas de mutation directe du cache sauf pour le statut.
+- Tant que ce n'est pas fait, le polling à 2,5 s pendant la génération est la référence.
 
 ---
 
@@ -255,31 +203,35 @@ code existant. Ils guident le rebuild.
 ### 6.1 Onboarding guidé non-négociable
 
 Le gestionnaire arrive avec ses données en vrac (Excel, papier, mémoire). Le frontend doit
-le guider étape par étape sans le perdre. Le wizard "Draft hybride" 4 étapes est figé
-(réservé T12 — ne pas rouvrir le débat ici). Le frontend doit :
+le guider étape par étape sans le perdre. Le wizard livré compte **6 étapes** (Équipes →
+Gymnases → Coachs → Contraintes → Récapitulatif → Génération — détail : `frontend-wizard.md`).
+Le frontend doit :
 
-- Sauvegarder automatiquement à chaque étape (auto-save via `clubs.transition_data`)
+- Sauvegarder à chaque étape (mutations API immédiates)
 - Permettre la navigation arrière sans perte
-- Valider en temps réel chaque champ (Zod schemas)
-- Afficher le mode démo comme option accessible
+- Valider chaque étape (`useStepValidation`, erreurs bloquantes + avertissements non bloquants)
 
-### 6.2 Visualisation planning = FullCalendar
+### 6.2 Visualisation planning = `WeekGrid` (custom)
 
-Le planning est une semaine type (lun-sam). FullCalendar 6 avec vue `timeGridWeek` :
+Le planning est une semaine type (lun-sam), rendu par le composant maison `WeekGrid`
+(`src/features/planning/WeekGrid.tsx` + `lib/grid.ts`) — pas de FullCalendar :
 
-- Créneaux colorés par tier (S=rouge, A=orange, B=bleu, C=vert, D=gris)
-- Drag-and-drop pour édition manuelle (déclenche dialogue post-modification)
-- Click sur créneau → panel latéral avec détails (équipe, coach, salle, lock_level)
+- Créneaux colorés, filtre par ressource (`ResourceFilter` : équipe / coach / salle)
+- Click sur créneau → détail (`SlotDetail` : équipe, coach, salle, verrou)
+- Lecture seule quand le planning est `VALIDATED` (verrou d'édition)
 - Pas de vue mensuelle — le planning est hebdomadaire type
 
-### 6.3 Tier list drag & drop intuitive
+### 6.3 Tri des équipes drag & drop (mode « Trier » du wizard)
 
-La priorisation des équipes (S/A/B/C/D) doit être visuelle et immédiate :
+La priorisation des équipes (S/A/B/C/D) vit dans l'étape Équipes du wizard
+(`TeamsStep`, bouton « Trier » / « Terminer le tri ») :
 
-- @dnd-kit pour le drag-and-drop entre colonnes tier
-- Compteur de sessions min par tier affiché en temps réel
-- Couleurs cohérentes avec le planning (même palette tier)
-- Sauvegarde automatique au drop (mutation `PUT /api/teams/{id}` avec `priority_tier_id`)
+- @dnd-kit (`useSortable` + zones droppables par tier) — **drag & drop inter-tier** :
+  une équipe peut être déposée dans un autre tier, flèches haut/bas en fallback clavier/a11y
+- Couleurs et libellés de tiers cohérents avec le planning
+- Sauvegarde **en bulk atomique** à la fin du tri : `POST /api/teams/reorder` avec
+  `{ items: [{ id, priorityTierId, tierOrder }] }` (une transaction — remplace les N
+  `PUT /api/teams/{id}` concurrents qui perdaient des mises à jour sur le lock optimiste)
 
 ### 6.4 Diagnostics en langage gestionnaire
 
@@ -290,27 +242,35 @@ Le rapport post-génération affiche les `schedule_diagnostics` avec :
 - Liens directs vers l'entité à corriger (équipe, coach, salle)
 - Pas d'auto-correction MVP — l'utilisateur clique → navigue vers l'entité
 
-### 6.5 Export PDF asynchrone avec feedback
+### 6.5 Export PDF asynchrone avec feedback — NON LIVRÉ
 
-L'export PDF est asynchrone (Messenger queue). Le frontend doit :
-
-- Afficher un statut "Génération PDF en cours" après `POST /api/schedules/{id}/export-pdf`
-- Recevoir l'événement Mercure `{ status: 'pdf_ready', url }` 
-- Activer le bouton de téléchargement à réception
-- Timeout UX : si pas de réponse en 60s, afficher "Le PDF est encore en préparation, revenez plus tard"
+Le backend expose `POST /api/schedules/{id}/export-pdf` (asynchrone, Messenger), mais
+**aucune UI d'export PDF n'existe dans le frontend livré** (aucun appel à `export-pdf`
+dans `frontend/src/`). Besoin forward conservé : statut « Génération PDF en cours »,
+activation du bouton de téléchargement à réception, timeout UX 60 s.
 
 ### 6.6 Multi-tenant transparent
 
 Le gestionnaire ne voit jamais le concept de `club_id` ou `season_id`. Le frontend :
 
-- Stocke `clubId` et `seasonId` dans Zustand après login (depuis `/api/me`)
-- Injecte automatiquement les headers `X-Club-Id` et `X-Season-Id` via ky
+- N'envoie **aucun** header tenant : le backend dérive club et saison actifs de la
+  membership du JWT (`TenantFilterListener`)
 - N'affiche jamais de sélecteur de club (un user = un club en MVP)
 - Le sélecteur de saison est implicite (saison active par défaut)
 
+### 6.6 bis Cycle de vie du planning (VALIDATED)
+
+- Un planning `COMPLETED` peut être **validé** (bouton « Valider » de la toolbar) → modale de
+  confirmation (`ValidateDialog`, avertit si des alertes subsistent) → `POST /api/schedules/{id}/validate`
+  → statut `VALIDATED`, planning en **lecture seule** (grille non éditable, renommage et
+  régénération masqués).
+- « Rouvrir » (`POST /api/schedules/{id}/reopen`) ramène en `COMPLETED` (rééditable).
+- « Définir principal » (`POST /api/schedules/{id}/set-baseline`) marque le planning ★ de la
+  saison (affiché dans le sélecteur ; `baselineScheduleId` vient de `/api/me`).
+
 ### 6.7 Optimistic updates pour édition manuelle
 
-Quand le gestionnaire déplace un créneau dans FullCalendar :
+Quand le gestionnaire déplace un créneau dans la grille (`WeekGrid`) :
 
 1. UI se met à jour immédiatement (optimistic)
 2. Mutation `POST /api/schedule-slots/{id}/manual-edit/one-time` envoyée
@@ -332,9 +292,9 @@ Chaque route a :
 ### Conventions de query keys
 
 ```typescript
-// Illustration — hiérarchie de query keys
+// Illustration — hiérarchie de query keys (clé réelle du profil : ["me"])
 type QueryKey =
-  | ['auth', 'me']                              // GET /api/me
+  | ['me']                                       // GET /api/me
   | ['schedules', { seasonId: string }]          // GET /api/schedules?seasonId=X
   | ['schedules', scheduleId]                    // GET /api/schedules/{id}
   | ['schedule-slots', scheduleId]               // GET /api/schedule-slot-templates?scheduleId=X
@@ -391,8 +351,9 @@ type HydraCollection<T> = {
   };
 };
 
-// useInfiniteQuery pour les listes longues (teams, diagnostics)
-// useQuery pour les collections courtes (tiers, categories)
+// Livré : collection()/collectionAll() (src/shared/api/collection.ts) déballent
+// hydra:member et suivent hydra:next pour agréger toutes les pages — pas
+// d'useInfiniteQuery dans le code actuel.
 ```
 
 ### Règles
@@ -406,31 +367,27 @@ type HydraCollection<T> = {
 
 ## 8. Zustand Strategy
 
-### Stores
+### Stores (livrés)
 
-| Store | Contenu | Persistence |
-|-------|---------|-------------|
-| `authStore` | `token`, `clubId`, `seasonId`, `user` (id, email, name) | `localStorage` (token only) |
-| `uiStore` | `sidebarOpen`, `activeScheduleId`, `theme` | Non persisté |
-| `wizardStore` | `currentStep`, `draftData` (auto-save) | Non persisté (auto-save API) |
+| Store | Fichier | Contenu | Persistence |
+|-------|---------|---------|-------------|
+| `authStore` | `src/shared/stores/authStore.ts` | `token` uniquement (`setToken`, `clear`) | `localStorage` (`persist`, clé `cs-auth`, `migrate` avec null-check) |
+| `themeStore` | `src/shared/stores/themeStore.ts` | mode clair/sombre | persisté |
+| wizard `store` | `src/features/wizard/store.ts` | étape courante + état UI du wizard | Non persisté |
+| planning `store` | `src/features/planning/store.ts` | planning sélectionné + état UI (vue, filtres) | Non persisté |
 
 ### authStore
 
 ```typescript
-// Illustration — authStore Zustand
-type AuthStore = {
+// Fidèle au code livré — le token est le SEUL état d'auth client.
+type AuthState = {
   token: string | null;
-  clubId: string | null;
-  seasonId: string | null;
-  user: { id: string; email: string; firstName: string; lastName: string } | null;
-  hasGenerated: boolean;
-  login: (token: string) => void;
-  setContext: (clubId: string, seasonId: string) => void;
-  logout: () => void;
+  setToken: (token: string | null) => void;
+  clear: () => void;
 };
 
-// Persistence partielle : seul le token survive au refresh
-// clubId/seasonId sont re-fetch via /api/me au démarrage
+// Tout le reste (user, club, membershipStatus, baselineScheduleId, accent)
+// vient de GET /api/me via TanStack Query (queryKey ["me"]).
 ```
 
 ### Règles
@@ -454,54 +411,53 @@ type AuthStore = {
 
 | Document | Rôle | Localisation |
 |----------|------|--------------|
-| `backend-inventory.md` | Inventaire backward : 20 resources API Platform, 7 contrôleurs custom, sécurité JWT, Mercure, pagination | `specs/courantes/backend-inventory.md` |
-| `openapi-snapshot.json` | Snapshot OpenAPI 3.1 complet (164KB) — toutes les routes, schemas, réponses | `specs/courantes/openapi-snapshot.json` |
+| `backend-inventory.md` | Inventaire backward : resources API Platform, contrôleurs custom, sécurité JWT, Mercure, pagination | `specs/courantes/backend-inventory.md` |
+| `openapi-snapshot.json` | Snapshot OpenAPI 3.1 des ressources API Platform — sert aussi au codegen `npm run gen:api-types` (les routes Symfony custom comme `/api/me`, `/api/register` n'y figurent pas) | `specs/courantes/openapi-snapshot.json` |
 
 ### Endpoints consommés par le frontend (par route)
 
 | Route frontend | Endpoints backend consommés |
 |----------------|---------------------------|
-| `/login` | `POST /api/login` (AuthController) |
-| `/register` | `POST /api/register` (AuthController) |
-| `/` (redirect) | `GET /api/me` (AuthController) — détermine `onboarding_completed` |
-| `/wizard` | `GET/PUT /api/clubs/{id}`, `POST /api/clubs/{id}/import-teams`, `GET/POST /api/venues`, `GET/POST /api/coaches`, `GET/POST /api/teams`, `GET /api/priority-tiers`, `GET /api/sport-categories` (détail réservé T12) |
-| `/schedules/:id` | `GET /api/schedules/{id}`, `GET /api/schedule-slot-templates?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/export-pdf`, `POST /api/schedule-slots/{id}/manual-edit/*` (ManualEditController) |
-| `/schedules/:id/diagnostics` | `GET /api/schedule-diagnostics?scheduleId={id}` |
-| `/profile` | `GET /api/me`, `GET/PUT /api/clubs/{id}`, `GET /api/users/{id}` |
-| `/teams` | `GET /api/teams`, `POST /api/teams`, `PUT /api/teams/{id}`, `DELETE /api/teams/{id}`, `GET /api/team-coaches`, `GET /api/team-tags`, `GET /api/team-tag-assignments` |
-| `/priorities` | `GET /api/priority-tiers`, `GET /api/teams`, `PUT /api/teams/{id}` (bulk update `priority_tier_id`) |
-| `/dashboard` | `GET /api/me`, `GET /api/schedules?isActive=true&seasonId={id}`, `GET /api/schedule-diagnostics?scheduleId={id}` |
+| `/login` | `POST /api/login` |
+| `/register` | `POST /api/register` |
+| `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
+| `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
+| `/` (planning) | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/set-baseline`, `PUT /api/schedules/{id}` (renommage), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/wizard` | CRUD `teams`/`venues`/`coaches`/`constraints`/`venue_training_slots`…, `GET /api/priority_tiers`, `GET /api/sport_categories`, `POST /api/teams/reorder` (mode tri), `POST /api/constraints/validate`, `POST /api/schedules` + `generate` (étape Génération) |
+| `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload) |
+| `/pending-members` | `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` |
+| `/profile` | `GET /api/me` |
 
 ### Headers obligatoires
 
 | Header | Source | Injection |
 |--------|--------|-----------|
 | `Authorization: Bearer {jwt}` | `authStore.token` | ky `beforeRequest` hook |
-| `X-Club-Id: {uuid}` | `authStore.clubId` | ky `beforeRequest` hook |
-| `X-Season-Id: {uuid}` | `authStore.seasonId` | ky `beforeRequest` hook |
 
-Référence : `backend-inventory.md` §4 — `TenantFilterListener` résout `clubId` et `seasonId` depuis ces headers.
+**Aucun header tenant** : `X-Club-Id`/`X-Season-Id` restent supportés côté backend comme
+override (tests), mais le frontend ne les envoie pas — le tenant est dérivé du JWT
+(`backend-inventory.md` §4).
 
 ### Authentification
 
 | Endpoint | Méthode | Body | Réponse | Action frontend |
 |----------|---------|------|---------|-----------------|
 | `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
-| `/api/register` | POST | `{ email, password, firstName, lastName, clubName, ara }` | `{ token }` (201) | Stocker token, redirect `/wizard` |
-| `/api/me` | GET | — | `{ id, email, firstName, lastName, club: { id, name }, hasGenerated }` | Hydrate Zustand `authStore` + `clubId` |
+| `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name? }` | 201 `{ token, membershipStatus, user }` | Stocker token ; `membershipStatus === "pending"` → `/waiting`, sinon `/wizard` |
+| `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, baselineScheduleId, hasGenerated }` | Query `["me"]` — source des guards, du thème (accent) et du planning principal |
 
-Référence : `backend-inventory.md` §3 (AuthController).
+Référence : `backend-inventory.md` §3 (AuthController, PasswordController, MembershipController).
 
 ### Génération asynchrone
 
 | Étape | Endpoint | Statut HTTP | Frontend |
 |-------|----------|-------------|----------|
-| Lancer | `POST /api/schedules/{id}/generate` | 202 | Mutation TanStack Query, spinner |
-| Suivi | Mercure SSE `club:{clubId}:schedule:{id}` | — | `EventSource`, invalidate Query |
-| Résultat | `GET /api/schedules/{id}` | 200 | Re-fetch schedule + slots |
-| Diagnostics | `GET /api/schedule-diagnostics?scheduleId={id}` | 200 | Afficher rapport |
+| Lancer | `POST /api/schedules/{id}/generate` | 202 | Mutation TanStack Query, écran `GenerationWaiting` |
+| Suivi | `GET /api/schedules` (polling) | 200 | `refetchInterval` 2 500 ms tant que `PENDING`/`GENERATING` (§5) |
+| Résultat | `GET /api/schedule_slot_templates?scheduleId={id}` | 200 | Re-fetch slots à la fin du polling |
+| Diagnostics | `GET /api/schedule_diagnostics?scheduleId={id}` | 200 | Afficher rapport (`DiagnosticsPanel`) |
 
-Référence : `backend-inventory.md` §3 (GenerateScheduleController) + §5 (Mercure).
+Référence : `backend-inventory.md` §3 (GenerateScheduleController) + §5 (Mercure, publié mais non consommé côté frontend).
 
 ### Édition manuelle
 
@@ -539,36 +495,26 @@ Référence : `backend-inventory.md` §1 (config API Platform).
 
 ## 10. Conventions de code frontend
 
-### Structure des dossiers (cible)
+### Structure des dossiers (livrée)
 
 ```
 frontend/src/
 ├── main.tsx                    # Entry point
-├── App.tsx                     # Router + providers
-├── routes/                     # Pages (une par route)
-│   ├── login/
-│   ├── register/
-│   ├── dashboard/
-│   ├── wizard/                 # Réservé T12
-│   ├── schedules/
-│   │   ├── $id/
-│   │   │   ├── index.tsx       # /schedules/:id
-│   │   │   └── diagnostics.tsx # /schedules/:id/diagnostics
-│   ├── teams/
-│   ├── priorities/
-│   └── profile/
+├── index.css                   # Tailwind 4 (@theme) + variables d'accent
+├── app/                        # AppLayout, AuthGuard, providers, router
 ├── features/                   # Logique métier par domaine
-│   ├── auth/
-│   ├── schedules/
-│   ├── teams/
-│   └── wizard/                 # Réservé T12
-├── shared/                     # UI partagée, hooks, utils
-│   ├── api/                    # Instance ky + query helpers
-│   ├── hooks/                  # useScheduleSSE, useAuth, etc.
-│   ├── stores/                 # Zustand stores
-│   ├── ui/                     # Composants UI réutilisables
-│   └── types/                  # Types partagés (HydraCollection, etc.)
-└── assets/
+│   ├── auth/                   # Login/Register/ForgotPassword/ResetPassword/WaitingApproval/PendingMembers + api/queries
+│   ├── club/                   # ClubPage (logo + accent), LogoCropper
+│   ├── planning/               # PlanningPage, PlanningToolbar, WeekGrid, SlotDetail, DiagnosticsPanel, ResourceFilter, GenerationWaiting, store, lib/grid
+│   ├── profile/                # ProfilePage
+│   └── wizard/                 # WizardLayout, steps/ (Teams, Venues, Coaches, Constraints, Recap, Generate), lib/, store
+├── shared/
+│   ├── api/                    # client ky, collection (hydra), errors, types.gen.ts
+│   ├── components/ui/          # Composants UI réutilisables (shadcn-style)
+│   ├── hooks/                  # useApplyTheme, useApplyClubTheme
+│   ├── lib/                    # color, palette, queryClient, utils
+│   └── stores/                 # authStore, themeStore
+└── test/                       # setup vitest
 ```
 
 ### Alias
@@ -578,13 +524,13 @@ frontend/src/
 ### Naming
 
 - Composants : `PascalCase` (`ScheduleCalendar.tsx`)
-- Hooks : `camelCase` préfixé `use` (`useScheduleSSE.ts`)
+- Hooks : `camelCase` préfixé `use` (`useApplyClubTheme.ts`)
 - Stores : `camelCase` + `Store` (`authStore.ts`)
 - Types : `PascalCase` (`ScheduleSlot`, `HydraCollection`)
 - Query keys : `kebab-case` strings (`['schedule-slots', id]`)
 
 ### Tests
 
-- React Testing Library + MSW (Mock Service Worker) pour les tests composants
-- Pas de E2E dans le scope du rebuild (réservé P2 selon `ClubScheduler_v3.md` §13.3)
-- Couverture minimale : composants critiques (auth, planning, tier list, diagnostics)
+- Vitest + React Testing Library + MSW (Mock Service Worker) pour les tests composants (`*.test.tsx` co-localisés)
+- Harnais E2E Playwright présent dans `frontend/tests/e2e/` (`@playwright/test` en devDependency)
+- Couverture : composants critiques (auth, planning, toolbar, grille, wizard)

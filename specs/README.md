@@ -1,6 +1,6 @@
 # Living Specs System
 
-Last verified @ 2026-07-02
+Last verified @ 2026-07-03 (09e67f3)
 
 ## 3-Tier Structure
 
@@ -22,9 +22,10 @@ Last verified @ 2026-07-02
 
 ## Files Overview
 
-- `specs/initiales/ClubScheduler_v3.md`
-- `specs/courantes/`
-- `specs/evolution/`
+- `specs/initiales/` — `ClubScheduler_v3.md` (spec produit consolidée, figée) · `ClubScheduler_Specification_des_contraintes_v2.md` (modèle de contraintes d'origine) · prompt orchestrateur v3.
+- `specs/courantes/` — inventaires par zone (`backend-inventory`, `engine-inventory`, `frontend-spec`, `frontend-components`, `frontend-strategy`, `frontend-wizard`) · specs de features livrées graduées depuis evolution (`planning-lifecycle-validated`, `identite-visuelle-club`) · `openapi-snapshot.json` + son meta (régénéré à chaque changement d'API).
+- `specs/evolution/` — `roadmap.md` (carte vision ↔ livré) · `features-futures.md` · `backend-gaps.md` · `contraintes-modele-cible.md`.
+- `specs/audit/` — éditions d'audit horodatées (`AUDIT-<date>-<model>.md`, skill `/audit`) ; registre de findings à ID stables, comparaison inter-éditions.
 
 ## Notes
 

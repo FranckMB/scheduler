@@ -115,13 +115,13 @@ Last verified @ 2026-06-30
 
 - **Statut** : En cours
 - **Description** : Tests composants critiques, mocking MSW
-- **État actuel** : Infrastructure prête — `frontend/vitest.config.ts` configuré (jsdom, exclut `tests/e2e/**`), `package.json` référence vitest + `@testing-library` (5 occurrences). Aucun fichier de test dans `frontend/src/` (0 `*.test.*` / `*.spec.*`). Tests unitaires à écrire.
+- **État actuel (re-vérifié 2026-07-03)** : suite Vitest + RTL + MSW **vivante et verte** — 13 fichiers, 52 tests (`vitest run`) : libs pures (grid, ranking), stores, pages (PlanningPage, WizardPage, Login/Register). Reste : composants non couverts (SlotDetail, DiagnosticsPanel, drag&drop effectif).
 
 ### 13. E2E Playwright
 
-- **Statut** : En cours
+- **Statut** : En cours (régression)
 - **Description** : Onboarding → génération → export PDF
-- **État actuel** : 4 specs Playwright écrits dans `frontend/tests/e2e/` : `smoke.spec.ts` (9.3K), `wizard-flow.spec.ts` (8.0K), `post-generation-workflow.spec.ts` (15.1K), `season-reset.spec.ts` (8.4K). Playwright présent dans `package.json`. Evidence `.omo/evidence/task-14-e2e.json` indique « blocked » (services non démarrés au moment de la vérification). Tests écrits mais exécution non validée.
+- **État actuel (re-vérifié 2026-07-03, exécution réelle)** : les 4 specs historiques ont **disparu** (frontend reconstruit) — il ne reste que `tests/e2e/auth.spec.ts` (3 tests), et la suite est **rouge : 2/3 échouent** (assertion `getByText(/bonjour/i)` périmée, l'UI n'affiche plus « Bonjour »). À faire : réparer auth.spec + réécrire le parcours complet wizard→génération→work-loop (audit FRT-05/FRT-07).
 
 ### 14. App mobile React Native
 

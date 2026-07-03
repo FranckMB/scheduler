@@ -37,7 +37,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 ## 4. CI order (`.github/workflows/ci.yml`)
 
-`lint → phpstan → blocking-tests → {unit, functional} → engine-tests → build-docker`
+`{lint, phpstan} → blocking-tests → unit-tests · engine-tests (parallel) → build-docker`
 
 **blocking-tests** (must pass first, all `--group phase1`): `Security/TenantIsolationTest`, `Security/TenantCacheIsolationTest`, `Queue/ConcurrentGenerationTest`, `CrossStack/ContractSchemaTest`. Detail: `docs/testing/testing-strategy.md`.
 
@@ -48,7 +48,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 ## 6. Critical mechanisms
 
-- **Multi-tenant isolation** (backend): Doctrine `TenantFilter` + `TenantFilterListener` (**priority 7, AFTER the firewall**) resolves club from `_club_id` / `X-Club-Id` / else the **authenticated JWT user's active `ClubUser` membership** (the frontend sends no header); active season resolved likewise; spoofed header → 403 + PostgreSQL RLS `SET LOCAL app.club_id`. ⚠️ Running before auth left the tenant unresolved on header-less reads → cross-club leak (fixed). Guarded by `TenantIsolationTest`, `TenantJwtIsolationTest`, `OnboardingFlowTest`. See `backend/docs/TENANT.md`.
+- **Multi-tenant isolation** (backend): Doctrine `TenantFilter` + `TenantFilterListener` (**priority 7, AFTER the firewall**) resolves club from `_club_id` / `X-Club-Id` / else the **authenticated JWT user's active `ClubUser` membership** (the frontend sends no header); active season resolved likewise; spoofed header → 403. ⚠️ The Doctrine filter is the **only** active barrier: PostgreSQL RLS is **prepared but NOT active** (no policies; `SET LOCAL` is a no-op outside a transaction — see `backend/docs/TENANT.md`), and entities without `club_id` (Club, User) are not covered by the filter. ⚠️ Running before auth left the tenant unresolved on header-less reads → cross-club leak (fixed). Guarded by `TenantIsolationTest`, `TenantJwtIsolationTest`, `OnboardingFlowTest`.
 - **Concurrency**: backend `ClubGenerationLock` (Redis `SETEX NX` + release token); engine per-club `asyncio.Lock`. Guarded by `ConcurrentGenerationTest`.
 - **Async generation**: `GenerateScheduleController` → `GenerateScheduleMessage` → `GenerateScheduleHandler` (frozen snapshot → POST engine → import results → Mercure publish). Symfony Messenger over Redis, `messenger-worker` container.
 - **Backend↔engine contract**: engine Pydantic schemas ⇄ backend payload; version in `engine/CONTRACT_VERSION`. **No codegen — synced manually.** Guarded by `ContractSchemaTest`.

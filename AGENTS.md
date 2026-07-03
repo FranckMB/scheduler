@@ -13,5 +13,6 @@ Package-level detail stays next to the code:
 
 - [`backend/AGENTS.md`](backend/AGENTS.md) — backend (PHP / Symfony) specifics.
 - [`engine/AGENTS.md`](engine/AGENTS.md) and [`engine/app/solver/AGENTS.md`](engine/app/solver/AGENTS.md) — engine / solver specifics.
+- [`frontend/AGENTS.md`](frontend/AGENTS.md) — frontend (React / Vite) specifics.
 
-Other context files: [`docs/technical-debt.md`](docs/technical-debt.md), [`docs/cleanup-candidates.md`](docs/cleanup-candidates.md), [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md), [`docs/architecture/adr-index.md`](docs/architecture/adr-index.md).
+Other context files: [`docs/technical-debt.md`](docs/technical-debt.md), [`docs/cleanup-candidates.md`](docs/cleanup-candidates.md), [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md), [`docs/architecture/adr-index.md`](docs/architecture/adr-index.md), [`docs/technique/DEVELOPMENT.md`](docs/technique/DEVELOPMENT.md) (human quick-start).

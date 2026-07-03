@@ -1,8 +1,10 @@
 # ClubScheduler — PostgreSQL Row-Level Security (RLS)
 
+> ⚠ **STATUS: DESIGN DOC — RLS IS NOT ACTIVE TODAY** (audit 2026-07-03, SEC-03). No `CREATE POLICY` exists in any migration; `01-rls.sql` ships a helper function that is never invoked; the runtime connects as `clubscheduler`, not `app_user`. This document describes the **target state**. The effective tenant barrier today is the Doctrine `TenantFilter` (see `TENANT.md`).
+
 ## Overview
 
-ClubScheduler uses **PostgreSQL Row-Level Security (RLS)** to enforce **tenant isolation** at the database layer. Every business table that belongs to a club contains a `club_id` column. RLS policies ensure that the application user (`app_user`) can only see and manipulate rows whose `club_id` matches the tenant context set for the current database session.
+ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enforce **tenant isolation** at the database layer. Every business table that belongs to a club contains a `club_id` column. RLS policies ensure that the application user (`app_user`) can only see and manipulate rows whose `club_id` matches the tenant context set for the current database session.
 
 ## Database Users
 

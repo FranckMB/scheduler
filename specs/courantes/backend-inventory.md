@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 6e35a6ce 2026-06-30
+Last verified @ 09e67f3 2026-07-03
 
 ---
 
@@ -28,22 +28,25 @@ Last verified @ 6e35a6ce 2026-06-30
 ```
 backend/
 ├── src/
-│   ├── ApiResource/          # 20 ressources API Platform (DTOs + metadata)
-│   ├── Entity/               # 20 entités Doctrine (UUID string)
-│   ├── Controller/           # 7 contrôleurs custom (Auth, Generate, ExportPdf, Health, Import, ManualEdit, ResetSeason)
+│   ├── ApiResource/          # Ressources API Platform (DTOs + metadata) — liste : ls backend/src/ApiResource/
+│   ├── Entity/               # Entités Doctrine (UUID string) — liste : ls backend/src/Entity/
+│   ├── Controller/           # Contrôleurs custom — liste : ls backend/src/Controller/ (détail §3)
 │   ├── MessageHandler/       # GenerateScheduleHandler, ExportPdfHandler
-│   ├── Service/              # ScheduleConstraintBuilder, ScheduleResultImporter, ClubGenerationLock, ManualEditService, FfbbExcelImporter
+│   ├── Service/              # ScheduleConstraintBuilder, ScheduleResultImporter, ClubGenerationLock, ManualEditService, FfbbExcelImporter, ConstraintValidationService, ... — liste : ls backend/src/Service/
 │   ├── State/Provider/       # State providers API Platform (par ressource)
 │   ├── State/Processor/      # State processors API Platform (par ressource)
-│   ├── EventListener/        # TenantFilterListener (X-Club-Id / X-Season-Id)
+│   ├── EventListener/        # TenantFilterListener (résolution tenant : attribut / header / JWT)
 │   ├── Doctrine/Filter/      # TenantFilter (Doctrine filter SQL)
 │   ├── Enum/                 # ScheduleStatus, LockLevel, ...
 │   ├── Dto/                  # Input DTOs (ClubInput, ScheduleInput, ...)
+│   ├── Repository/           # Repositories Doctrine
+│   ├── Storage/              # LogoStorage (interface) + LocalLogoStorage
 │   └── DataFixtures/         # Jeux de données de test
 ├── config/
 │   ├── packages/security.yaml
 │   ├── packages/api_platform.yaml
 │   ├── packages/mercure.yaml
+│   ├── packages/rate_limiter.yaml
 │   └── routes.yaml
 ├── migrations/
 ├── tests/
@@ -62,7 +65,7 @@ backend/
 
 ## 2. Resources API Platform
 
-Les 20 ressources sont définies dans `backend/src/ApiResource/`. Chaque ressource est un DTO
+Les ressources sont définies dans `backend/src/ApiResource/` (liste exhaustive : `ls backend/src/ApiResource/`). Chaque ressource est un DTO
 avec attributs `#[ApiResource]` déclarant les opérations CRUD standard
 (`GetCollection`, `Get`, `Post`, `Put`, `Delete`), un `provider` et un `processor` personnalisés,
 et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent dans
@@ -81,7 +84,7 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | 9 | SportCategory | `/api/sport-categories` | Catégories d'âge | |
 | 10 | PriorityTier | `/api/priority-tiers` | Niveaux de priorité (S/A/B/C/D) | |
 | 11 | Plan | `/api/plans` | Plans d'abonnement | |
-| 12 | Schedule | `/api/schedules` | Générations de planning | `mercure: true` ; opérations custom `generate` et `export-pdf` ; filtres `isActive` (booléen) et `seasonId` (exact) |
+| 12 | Schedule | `/api/schedules` | Générations de planning | `mercure: true` ; opérations custom `generate` et `export-pdf` ; filtres `isActive` (booléen) et `seasonId` (exact). Les routes de cycle de vie (`validate`/`reopen`/`set-baseline`) sont des routes Symfony hors API Platform (§3). |
 | 13 | ScheduleSlotTemplate | `/api/schedule-slot-templates` | Créneaux générés | |
 | 14 | ScheduleDiagnostic | `/api/schedule-diagnostics` | Erreurs / avertissements | |
 | 15 | Constraint | `/api/constraints` | Contraintes permanentes | |
@@ -108,14 +111,53 @@ classiques avec `#[Route]`.
 | Route | Méthode | Description |
 |-------|---------|-------------|
 | `/api/login` | POST | Connexion — gérée par le firewall `json_login` de Symfony (username `email`, password `password`), succès/échec délégués à LexikJWT. Route déclarée dans `config/routes.yaml`. |
-| `/api/register` | POST | Inscription — crée un `User`, un `Club` (avec slug + code FFBB/ARA), un `ClubUser` (rôle `admin`), une `Season` par défaut, un `Sport` (basketball) et 9 `SportCategory` par défaut. Retourne un JWT (201). Validation : email, password ≥ 8, ARA 3-20 alphanumérique majuscule. |
-| `/api/me` | GET | Profil courant — retourne `id`, `email`, `firstName`, `lastName`, `club` (id + name), `hasGenerated` (booléen : `generationCountSeason > 0`). |
+| `/api/register` | POST | Inscription à deux modes selon le code ARA (rate-limité par IP, `auth_register` : 5/15 min). **Club inexistant** : crée `User` + `Club` (slug + code FFBB/ARA) + `ClubUser` actif (rôle `admin`) + `Season` active + `Sport` basketball + 9 `SportCategory` — `membershipStatus: "active"`. **ARA d'un club existant** : crée `User` + `ClubUser` **inactif** (`isActive=false`, en attente d'approbation admin, aucun accès aux données du club) — `membershipStatus: "pending"`. Retourne 201 `{ token, membershipStatus, user }`. Validation : email, password ≥ 8, ARA 3-20 alphanumérique majuscule, `club_name` requis si nouveau club. |
+| `/api/me` | GET | Profil courant — retourne `id`, `email`, `firstName`, `lastName`, `membershipStatus` (`none`/`pending`/`active`), `role`, `club` (id, name, `onboardingCompleted`, `logoUrl`, `accentColor`, `accentPalette`), `baselineScheduleId` (planning principal de la saison active), `hasGenerated` (booléen : `generationCountSeason > 0`). |
+
+### Mots de passe (`PasswordController.php`)
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/password/forgot` | POST | Demande de réinitialisation (SymfonyCasts ResetPassword). Rate-limité par IP (`auth_password_forgot` : 5/15 min). Envoie un email avec lien `/reset-password/{token}` (expiration 1 h). Répond **toujours** 200 `{status:"sent"}` — pas d'énumération d'emails. |
+| `/api/password/reset` | POST | Body `{ token, password }` (password ≥ 8). Valide le token, consomme la demande, re-hash le mot de passe. 400 si token invalide/expiré. Entité support : `ResetPasswordRequest`. |
 
 ### Génération de planning
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
-| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Vérifie l'appartenance du schedule au club courant (`X-Club-Id`), passe le statut à `PENDING`, dispatche `GenerateScheduleMessage` sur le bus async. Retourne 202. |
+| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Vérifie l'appartenance du schedule au club courant (`_club_id`/`X-Club-Id`), passe le statut à `PENDING`, marque `onboardingCompleted=true` sur le club à la première génération, dispatche `GenerateScheduleMessage` sur le bus async. Retourne 202. |
+
+### Cycle de vie du planning (VALIDATED / reopen / baseline)
+
+`ScheduleStatus` (enum) : `DRAFT`, `PENDING`, `GENERATING`, `COMPLETED`, `FAILED`, **`VALIDATED`** (le gestionnaire marque le planning terminé → lecture seule). `Season.baselineScheduleId` désigne le planning principal de la saison (le premier planning réussi est auto-désigné à la génération).
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/schedules/{id}/validate` | POST | `ValidateScheduleController` | `COMPLETED` → `VALIDATED` (lecture seule). Contrôle club courant (403 sinon). 409 si le statut n'est pas `COMPLETED`. Plusieurs plannings peuvent être validés. |
+| `/api/schedules/{id}/reopen` | POST | `ReopenScheduleController` | Inverse : `VALIDATED` → `COMPLETED` (rééditable). 409 si le statut n'est pas `VALIDATED`. |
+| `/api/schedules/{id}/set-baseline` | POST | `SetBaselineController` | Désigne un planning fini (`COMPLETED` ou `VALIDATED`, sinon 409) comme planning principal de la saison (`Season.baselineScheduleId`). Distinct de la validation (verrouillage). |
+
+### Réordonnancement des équipes
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/teams/reorder` | POST | `ReorderTeamsController` | Bulk atomique : body `{ items: [{ id, priorityTierId, tierOrder }] }` (ou liste nue), applique `(priorityTierId, tierOrder)` sur chaque équipe en une transaction (un seul flush). Remplace les N `PUT /api/teams/{id}` concurrents du mode tri (course sur le lock optimiste). 403 si une équipe n'appartient pas au club courant. Retourne `{ updated }`. |
+
+### Approbation des membres (`MembershipController.php`)
+
+Réservé à un admin **actif** du club (403 sinon) ; cible toujours restreinte au club de l'admin (404 cross-tenant).
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/memberships/pending` | GET | Liste les `ClubUser` inactifs (`isActive=false`) du club de l'admin, avec `id`, `userId`, `email`, `firstName`, `lastName`. |
+| `/api/memberships/{id}/approve` | POST | Active la membership (`isActive=true`). |
+| `/api/memberships/{id}/reject` | POST | Supprime la membership. Retourne 204. |
+
+### Validation des contraintes
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/constraints/validate` | POST | `ValidateConstraintsController` | Valide les contraintes du club/saison courants via `ConstraintValidationService` avant génération (règles contradictoires, incohérences). Retourne erreurs par contrainte + conflits. |
 
 ### Export PDF
 
@@ -177,27 +219,38 @@ Champs `Club` : `accentColor` (hex), `accentPalette` (json ≤3 hex), `logoUrl` 
 |------|------|
 | `^/api/login` | `PUBLIC_ACCESS` |
 | `^/api/register` | `PUBLIC_ACCESS` |
+| `^/api/password` | `PUBLIC_ACCESS` |
 | `^/api/health` | `PUBLIC_ACCESS` |
 | `^/api/docs` | `PUBLIC_ACCESS` |
+| `^/api/clubs/[^/]+/logo$` (GET) | `PUBLIC_ACCESS` |
 | `^/api` | `IS_AUTHENTICATED_FULLY` |
 
 Seule la première règle correspondante s'applique. Tout le reste de `/api/*` requiert un JWT valide.
+Le firewall `login` applique en plus `login_throttling` (`max_attempts: 5`) ; `/api/register` et
+`/api/password/forgot` sont rate-limités par IP (`config/packages/rate_limiter.yaml`, sliding window 5/15 min).
 
-### X-Club-Id et X-Season-Id (`TenantFilterListener`)
+### Résolution du tenant (`TenantFilterListener`)
 
-Le `TenantFilterListener` (event `KernelEvents::REQUEST`, priorité 8) implémente l'isolation
-multi-tenant au niveau de chaque requête :
+Le `TenantFilterListener` (event `KernelEvents::REQUEST`, **priorité 7 — APRÈS le firewall
+de sécurité (priorité 8)**, pour que l'utilisateur JWT soit déjà authentifié) implémente
+l'isolation multi-tenant au niveau de chaque requête :
 
-1. **Résolution du clubId** : depuis l'attribut de requête `_club_id`, sinon depuis le header
-   `X-Club-Id`.
-2. **Résolution du seasonId** : depuis l'attribut `_season_id`, sinon depuis le header
-   `X-Season-Id`.
+1. **Résolution du clubId** : attribut de requête `_club_id`, sinon header `X-Club-Id`,
+   sinon **la membership `ClubUser` active de l'utilisateur JWT** (le frontend n'envoie
+   aucun header tenant — c'est le chemin nominal).
+2. **Résolution du seasonId** : attribut `_season_id`, sinon header `X-Season-Id`, sinon
+   la saison `active` du club résolu.
 3. **Validation d'appartenance** : si un `clubId` est résolu et un utilisateur est authentifié,
-   le listener vérifie qu'un `ClubUser` actif existe pour `(userId, clubId)`. Sinon → 403.
+   le listener vérifie qu'un `ClubUser` **actif** existe pour `(userId, clubId)`. Sinon → 403
+   (bloque un header `X-Club-Id` spoofé ; une membership `pending` n'a accès à rien).
 4. **Filtre Doctrine** : active le filtre `tenant_filter` avec le paramètre `club_id` (UUID).
-   Toutes les requêtes Doctrine sont automatiquement filtrées par club.
-5. **PostgreSQL SET LOCAL** : exécute `SET LOCAL app.club_id = '<clubId>'` sur la connexion,
-   permettant l'isolation au niveau SQL (Row Level Security ou triggers).
+   Toutes les requêtes Doctrine sont automatiquement filtrées par club. **C'est la barrière
+   d'isolation effective.**
+5. **PostgreSQL SET LOCAL** : exécute `SET LOCAL app.club_id = '<clubId>'` sur la connexion.
+   ⚠️ **Aucune policy Row Level Security n'existe dans les migrations — le RLS PostgreSQL
+   n'est PAS actif.** Ce `SET LOCAL` est un point d'ancrage pour de futures policies ; seul
+   le filtre Doctrine `TenantFilter` (+ les vérifications d'appartenance des contrôleurs)
+   isole réellement les tenants aujourd'hui.
 
 ---
 
@@ -232,7 +285,7 @@ Le frontend consomme ces événements via `EventSource` sur
 
 ## 6. Pagination
 
-Toutes les 20 ressources API Platform déclarent explicitement :
+Toutes les ressources API Platform déclarent explicitement :
 
 ```php
 paginationEnabled: true,
