@@ -9,7 +9,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
 
-import type { Gender, PriorityTier, SportCategory, Team, TeamPayload } from "../api";
+import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
@@ -31,8 +31,29 @@ const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "MIXTE", label: "Mixte" },
 ];
 
+// FFBB competition levels (backend App\Enum\TeamLevel). "" = non renseigné.
+const LEVELS: { value: TeamLevel | ""; label: string }[] = [
+  { value: "", label: "—" },
+  { value: "ELITE", label: "Élite" },
+  { value: "NATIONAL", label: "National" },
+  { value: "REGIONAL", label: "Régional" },
+  { value: "PRE_REGION", label: "Pré-région" },
+  { value: "DEPARTEMENTAL", label: "Départemental" },
+  { value: "HONNEUR", label: "Honneur" },
+  { value: "PROMOTION", label: "Promotion" },
+  { value: "LOISIR_ADULTE", label: "Loisir adulte" },
+  { value: "LOISIR_JEUNE", label: "Loisir jeune" },
+];
+
+/** A team is "competitive" unless it plays at a loisir level (or has none set). */
+const isCompetitive = (level: TeamLevel | null): boolean =>
+  null !== level && "LOISIR_ADULTE" !== level && "LOISIR_JEUNE" !== level;
+
 /** Full label for a tier select: "S · Fanion" rather than the bare letter. */
 const tierLabel = (t: PriorityTier): string => `${t.label} · ${TIER_MEANING[t.label] ?? t.name}`;
+
+/** Tier id 5 = "D · Bonus" (lowest priority). */
+const BONUS_TIER_ID = 5;
 
 function payload(team: Team, patch: Partial<TeamPayload>): TeamPayload {
   return {
@@ -41,6 +62,7 @@ function payload(team: Team, patch: Partial<TeamPayload>): TeamPayload {
     priorityTierId: team.priorityTierId,
     tierOrder: team.tierOrder,
     gender: team.gender,
+    level: team.level,
     sessionsPerWeek: team.sessionsPerWeek,
     isActive: team.isActive,
     ...patch,
@@ -66,49 +88,67 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
   const [name, setName] = useState(team.name);
   const [sessions, setSessions] = useState(String(team.sessionsPerWeek));
 
+  // Competitive team ranked "Bonus" (D) is likely a mistake — it will be
+  // scheduled last. Non-blocking warning (the solver stays the authority).
+  const bonusCompetitionWarning = isCompetitive(team.level) && BONUS_TIER_ID === team.priorityTierId;
+
   return (
-    <div className="flex items-center gap-2 border-t border-border py-1.5">
-      <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>
-      <Input
-        aria-label="Nom"
-        className="h-8 flex-1"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={() => name.trim() && name !== team.name && onField(team, { name: name.trim() })}
-      />
-      <Select aria-label="Catégorie" className="h-8 w-32" value={team.sportCategoryId} onChange={(e) => onField(team, { sportCategoryId: e.target.value })}>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </Select>
-      <Select aria-label="Genre" className="h-8 w-20" value={team.gender ?? ""} onChange={(e) => onField(team, { gender: (e.target.value || null) as Gender | null })}>
-        {GENDERS.map((g) => (
-          <option key={g.value} value={g.value}>
-            {g.label}
-          </option>
-        ))}
-      </Select>
-      <Input
-        aria-label="Séances/sem"
-        type="number"
-        min={1}
-        className="h-8 w-16"
-        value={sessions}
-        onChange={(e) => setSessions(e.target.value)}
-        onBlur={() => Number(sessions) !== team.sessionsPerWeek && onField(team, { sessionsPerWeek: Number(sessions) })}
-      />
-      <Select aria-label="Niveau" className="h-8 w-32" value={team.priorityTierId} onChange={(e) => onField(team, { priorityTierId: Number(e.target.value) })}>
-        {tiers.map((t) => (
-          <option key={t.id} value={t.id}>
-            {tierLabel(t)}
-          </option>
-        ))}
-      </Select>
-      <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
-        <Trash2 className="size-4" />
-      </Button>
+    <div className="border-t border-border py-1.5">
+      <div className="flex items-center gap-2">
+        <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>
+        <Input
+          aria-label="Nom"
+          className="h-8 flex-1"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() && name !== team.name && onField(team, { name: name.trim() })}
+        />
+        <Select aria-label="Catégorie" className="h-8 w-28" value={team.sportCategoryId} onChange={(e) => onField(team, { sportCategoryId: e.target.value })}>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+        <Select aria-label="Genre" className="h-8 w-20" value={team.gender ?? ""} onChange={(e) => onField(team, { gender: (e.target.value || null) as Gender | null })}>
+          {GENDERS.map((g) => (
+            <option key={g.value} value={g.value}>
+              {g.label}
+            </option>
+          ))}
+        </Select>
+        <Select aria-label="Niveau de jeu" className="h-8 w-32" value={team.level ?? ""} onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}>
+          {LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </Select>
+        <Input
+          aria-label="Séances/sem"
+          type="number"
+          min={1}
+          className="h-8 w-16"
+          value={sessions}
+          onChange={(e) => setSessions(e.target.value)}
+          onBlur={() => Number(sessions) !== team.sessionsPerWeek && onField(team, { sessionsPerWeek: Number(sessions) })}
+        />
+        <Select aria-label="Rang" className="h-8 w-32" value={team.priorityTierId} onChange={(e) => onField(team, { priorityTierId: Number(e.target.value) })}>
+          {tiers.map((t) => (
+            <option key={t.id} value={t.id}>
+              {tierLabel(t)}
+            </option>
+          ))}
+        </Select>
+        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+      {bonusCompetitionWarning && (
+        <p role="alert" className="ml-8 mt-1 text-xs text-amber-500">
+          Équipe en compétition classée Bonus (D) — elle passera en dernier ; vérifiez le rang.
+        </p>
+      )}
     </div>
   );
 }
@@ -188,6 +228,7 @@ export function TeamsStep() {
   const [catId, setCatId] = useState("");
   const [tierId, setTierId] = useState(1);
   const [gender, setGender] = useState<Gender | "">("");
+  const [level, setLevel] = useState<TeamLevel | "">("");
   const [sessions, setSessions] = useState("2");
   // Default to the first category until the user picks one (no effect needed).
   const effectiveCat = catId || categories[0]?.id || "";
@@ -211,6 +252,7 @@ export function TeamsStep() {
       priorityTierId: tierId,
       tierOrder: nextOrder(teams, tierId),
       gender: gender || null,
+      level: level || null,
       sessionsPerWeek: Number(sessions),
       isActive: true,
     });
@@ -224,14 +266,36 @@ export function TeamsStep() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const lanesRef = useRef(lanes);
   const reorderRef = useRef(reorder);
+  // Dirty = the user reordered but hasn't committed yet. Guards the flush-on-exit.
+  const dirtyRef = useRef(false);
   useEffect(() => {
     reorderRef.current = reorder;
   });
+
+  // Build the atomic reorder payload from the current lanes and persist it.
+  const flushSort = useCallback(() => {
+    if (!dirtyRef.current) {
+      return;
+    }
+    const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
+    for (const tier of tiers) {
+      (lanesRef.current[tier.id] ?? []).forEach((id, index) => items.push({ id, priorityTierId: tier.id, tierOrder: index }));
+    }
+    dirtyRef.current = false;
+    if (items.length > 0) {
+      reorderRef.current.mutate(items);
+    }
+  }, [tiers]);
+
+  // Commit any pending reorder when the step unmounts (e.g. the user clicks
+  // "Suivant" while still in sort mode) — otherwise the order was lost.
+  useEffect(() => () => flushSort(), [flushSort]);
   const sortedTiers = [...tiers].sort((a, b) => a.id - b.id);
   const teamById = new Map(teams.map((t) => [t.id, t] as const));
 
   const setBothLanes = (next: Record<number, string[]>) => {
     lanesRef.current = next;
+    dirtyRef.current = true;
     setLanes(next);
   };
 
@@ -242,13 +306,7 @@ export function TeamsStep() {
   // name-sort.
   const toggleSort = useCallback(() => {
     if (sortMode) {
-      const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
-      for (const tier of tiers) {
-        (lanesRef.current[tier.id] ?? []).forEach((id, index) => items.push({ id, priorityTierId: tier.id, tierOrder: index }));
-      }
-      if (items.length > 0) {
-        reorderRef.current.mutate(items);
-      }
+      flushSort();
       setSortMode(false);
       return;
     }
@@ -257,9 +315,10 @@ export function TeamsStep() {
       next[tier.id] = teamsOfTier(teams, tier.id).map((t) => t.id);
     }
     lanesRef.current = next;
+    dirtyRef.current = false;
     setLanes(next);
     setSortMode(true);
-  }, [sortMode, teams, tiers]);
+  }, [sortMode, teams, tiers, flushSort]);
 
   // Register the "Trier" toggle in the wizard footer, left of "Suivant".
   useEffect(() => {
@@ -341,7 +400,8 @@ export function TeamsStep() {
 
   return (
     <div>
-      <h2 className="mb-1 text-xl font-semibold">Équipes</h2>
+      {/* No inner "Équipes" heading: the sticky wizard header already shows
+          "Étape 1/6 · Équipes" (WizardLayout). Keep the contextual description. */}
       <p className="mb-2 text-sm text-muted-foreground">
         Listez vos équipes et donnez à chacune un <strong>rang</strong> : il tranche quand les créneaux manquent — les mieux classées passent d'abord.
       </p>
@@ -386,21 +446,28 @@ export function TeamsStep() {
                 </option>
               ))}
             </Select>
-            <Select aria-label="Niveau" className="h-8 w-36" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
-              {tiers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {tierLabel(t)}
-                </option>
-              ))}
-            </Select>
-            <Select aria-label="Genre" className="h-8 w-28" value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+            <Select aria-label="Genre" className="h-8 w-24" value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
               {GENDERS.map((g) => (
                 <option key={g.value} value={g.value}>
                   {g.label}
                 </option>
               ))}
             </Select>
+            <Select aria-label="Niveau de jeu" className="h-8 w-32" value={level} onChange={(e) => setLevel(e.target.value as TeamLevel | "")}>
+              {LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </Select>
             <Input aria-label="Séances/sem" type="number" min={1} className="h-8 w-16" value={sessions} onChange={(e) => setSessions(e.target.value)} />
+            <Select aria-label="Rang" className="h-8 w-32" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
+              {tiers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {tierLabel(t)}
+                </option>
+              ))}
+            </Select>
             <Button type="submit" size="icon" className="ml-auto size-8" disabled={create.isPending} title="Ajouter l'équipe" aria-label="Ajouter l'équipe">
               <Plus className="size-4" />
             </Button>
@@ -413,10 +480,11 @@ export function TeamsStep() {
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
                 <span className="w-6 text-center">#</span>
                 <span className="flex-1">Nom de l'équipe</span>
-                <span className="w-32">Catégorie</span>
+                <span className="w-28">Catégorie</span>
                 <span className="w-20">Genre</span>
+                <span className="w-32">Niveau de jeu</span>
                 <span className="w-16">Séances</span>
-                <span className="w-32">Niveau</span>
+                <span className="w-32">Rang</span>
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {tierGroups.map((tier) => {

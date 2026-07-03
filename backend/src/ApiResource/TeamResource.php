@@ -16,6 +16,7 @@ use ApiPlatform\Metadata\Put;
 use App\Dto\TeamInput;
 use App\Entity\Team;
 use App\Enum\Gender;
+use App\Enum\TeamLevel;
 use App\State\Processor\TeamStateProcessor;
 use App\State\Provider\TeamStateProvider;
 use DateTimeImmutable;
@@ -60,6 +61,9 @@ class TeamResource
     public ?Gender $gender = null;
 
     #[Groups(['read'])]
+    public ?TeamLevel $level = null;
+
+    #[Groups(['read'])]
     public int $sessionsPerWeek = 0;
 
     #[Groups(['read'])]
@@ -92,6 +96,7 @@ class TeamResource
         $dto->tierOrder = $entity->getTierOrder();
         $dto->name = $entity->getName();
         $dto->gender = $entity->getGender();
+        $dto->level = $entity->getLevel();
         $dto->sessionsPerWeek = $entity->getSessionsPerWeek();
         $dto->minSessionsOverride = $entity->getMinSessionsOverride();
         $dto->matchDay = $entity->getMatchDay();

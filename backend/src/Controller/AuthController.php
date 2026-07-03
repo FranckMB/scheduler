@@ -14,6 +14,7 @@ use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
 use App\Service\TenantConnectionContext;
+use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -226,17 +227,7 @@ final class AuthController extends AbstractController
             $this->entityManager->persist($sport);
         }
 
-        $categories = [
-            ['name' => 'U7', 'ageMin' => 6, 'ageMax' => 7, 'sortOrder' => 0],
-            ['name' => 'U9', 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 1],
-            ['name' => 'U11', 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 2],
-            ['name' => 'U13', 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 3],
-            ['name' => 'U15', 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 4],
-            ['name' => 'U18', 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 5],
-            ['name' => 'U21', 'ageMin' => 19, 'ageMax' => 21, 'sortOrder' => 6],
-            ['name' => 'Seniors M', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 7],
-            ['name' => 'Seniors F', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 8],
-        ];
+        $categories = BasketballCategoryCatalog::categories();
         foreach ($categories as $categoryData) {
             $sportCategory = new SportCategory;
             $sportCategory->setClubId($club->getId());

@@ -5,6 +5,18 @@ import { collection, collectionAll } from "@/shared/api/collection";
 
 export type Gender = "M" | "F" | "MIXTE";
 
+/** FFBB competition level (backend App\Enum\TeamLevel). LOISIR_* = non-competitive. */
+export type TeamLevel =
+  | "ELITE"
+  | "NATIONAL"
+  | "REGIONAL"
+  | "PRE_REGION"
+  | "DEPARTEMENTAL"
+  | "HONNEUR"
+  | "PROMOTION"
+  | "LOISIR_ADULTE"
+  | "LOISIR_JEUNE";
+
 export interface Team {
   id: string;
   name: string;
@@ -12,6 +24,7 @@ export interface Team {
   priorityTierId: number;
   tierOrder: number;
   gender: Gender | null;
+  level: TeamLevel | null;
   sessionsPerWeek: number;
   isActive: boolean;
 }
@@ -35,6 +48,7 @@ export interface TeamPayload {
   priorityTierId?: number;
   tierOrder?: number;
   gender?: Gender | null;
+  level?: TeamLevel | null;
   sessionsPerWeek?: number;
   isActive?: boolean;
 }

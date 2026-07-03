@@ -11,6 +11,7 @@ const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   priorityTierId: 1,
   tierOrder: 0,
   gender: null,
+  level: null,
   sessionsPerWeek,
   isActive: true,
 });

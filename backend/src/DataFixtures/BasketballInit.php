@@ -26,6 +26,7 @@ use App\Enum\Gender;
 use App\Enum\LockLevel;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
+use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
 use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
 use Doctrine\Common\DataFixtures\FixtureInterface;
@@ -90,27 +91,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($sport);
         }
 
-        // --- Categories ---
-        $categories = [
-            ['name' => 'U5', 'gender' => Gender::MIXTE, 'ageMin' => 3, 'ageMax' => 5, 'sortOrder' => -1],
-            ['name' => 'U7', 'gender' => Gender::MIXTE, 'ageMin' => 6, 'ageMax' => 7, 'sortOrder' => 0],
-            ['name' => 'U9M', 'gender' => Gender::M, 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 1],
-            ['name' => 'U9F', 'gender' => Gender::F, 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 4],
-            ['name' => 'U11M', 'gender' => Gender::M, 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 5],
-            ['name' => 'U11F', 'gender' => Gender::F, 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 6],
-            ['name' => 'U13M', 'gender' => Gender::M, 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 7],
-            ['name' => 'U13F', 'gender' => Gender::F, 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 8],
-            ['name' => 'U15M', 'gender' => Gender::M, 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 9],
-            ['name' => 'U15F', 'gender' => Gender::F, 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 10],
-            ['name' => 'U18M', 'gender' => Gender::M, 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 11],
-            ['name' => 'U18F', 'gender' => Gender::F, 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 12],
-            ['name' => 'U21M', 'gender' => Gender::M, 'ageMin' => 19, 'ageMax' => 21, 'sortOrder' => 13],
-            ['name' => 'Senior M', 'gender' => Gender::M, 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 14],
-            ['name' => 'Senior F', 'gender' => Gender::F, 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 15],
-            ['name' => 'Vétéran', 'gender' => null, 'ageMin' => 35, 'ageMax' => 99, 'sortOrder' => 16],
-            ['name' => 'Loisir', 'gender' => null, 'ageMin' => null, 'ageMax' => null, 'sortOrder' => 17],
-            ['name' => 'Baby basket', 'gender' => null, 'ageMin' => null, 'ageMax' => null, 'sortOrder' => 18],
-        ];
+        // --- Categories (ungendered age brackets — see BasketballCategoryCatalog) ---
+        $categories = BasketballCategoryCatalog::categories();
 
         foreach ($categories as $cat) {
             $existing = $manager->getRepository(SportCategory::class)->findOneBy([
@@ -120,7 +102,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             if (null === $existing) {
                 $entity = new SportCategory;
                 $entity->setName($cat['name']);
-                $entity->setGender($cat['gender']);
                 $entity->setAgeMin($cat['ageMin']);
                 $entity->setAgeMax($cat['ageMax']);
                 $entity->setSortOrder($cat['sortOrder']);
@@ -137,15 +118,15 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         \assert($u5 instanceof SportCategory);
         $u7 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U7']);
         \assert($u7 instanceof SportCategory);
-        $u9M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9M']);
+        $u9M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9']);
         \assert($u9M instanceof SportCategory);
-        $u9F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9F']);
+        $u9F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9']);
         \assert($u9F instanceof SportCategory);
-        $u11F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11F']);
+        $u11F = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11']);
         \assert($u11F instanceof SportCategory);
-        $u11M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11M']);
+        $u11M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11']);
         \assert($u11M instanceof SportCategory);
-        $u13M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13M']);
+        $u13M = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13']);
         \assert($u13M instanceof SportCategory);
 
         // ============================================================
@@ -394,49 +375,49 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // ============================================================
         $seniorM = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'Senior M',
+            'name' => 'Senior',
         ]);
         \assert($seniorM instanceof SportCategory);
 
         $seniorF = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'Senior F',
+            'name' => 'Senior',
         ]);
         \assert($seniorF instanceof SportCategory);
 
         $u13F = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U13F',
+            'name' => 'U13',
         ]);
         \assert($u13F instanceof SportCategory);
 
         $u15M = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U15M',
+            'name' => 'U15',
         ]);
         \assert($u15M instanceof SportCategory);
 
         $u15F = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U15F',
+            'name' => 'U15',
         ]);
         \assert($u15F instanceof SportCategory);
 
         $u18M = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U18M',
+            'name' => 'U18',
         ]);
         \assert($u18M instanceof SportCategory);
 
         $u18F = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U18F',
+            'name' => 'U18',
         ]);
         \assert($u18F instanceof SportCategory);
 
         $u21M = $manager->getRepository(SportCategory::class)->findOneBy([
             'sportId' => $sport->getId(),
-            'name' => 'U21M',
+            'name' => 'U21',
         ]);
         \assert($u21M instanceof SportCategory);
 
@@ -1399,17 +1380,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $manager->flush();
             }
 
-            $categories = [
-                ['name' => 'U7', 'ageMin' => 6, 'ageMax' => 7, 'sortOrder' => 0],
-                ['name' => 'U9', 'ageMin' => 8, 'ageMax' => 9, 'sortOrder' => 1],
-                ['name' => 'U11', 'ageMin' => 10, 'ageMax' => 11, 'sortOrder' => 2],
-                ['name' => 'U13', 'ageMin' => 12, 'ageMax' => 13, 'sortOrder' => 3],
-                ['name' => 'U15', 'ageMin' => 14, 'ageMax' => 15, 'sortOrder' => 4],
-                ['name' => 'U18', 'ageMin' => 16, 'ageMax' => 18, 'sortOrder' => 5],
-                ['name' => 'U21', 'ageMin' => 19, 'ageMax' => 21, 'sortOrder' => 6],
-                ['name' => 'Seniors M', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 7],
-                ['name' => 'Seniors F', 'ageMin' => 22, 'ageMax' => 99, 'sortOrder' => 8],
-            ];
+            $categories = BasketballCategoryCatalog::categories();
             foreach ($categories as $categoryData) {
                 $sportCategory = new SportCategory;
                 $sportCategory->setClubId($club->getId());
