@@ -52,10 +52,10 @@ def test_hard_only_team_no_penalty() -> None:
     )
 
 
-def test_score_formula_version_is_v4() -> None:
-    """Guard: the score formula version must be bumped to V4 after the dead-weight removal."""
-    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V4", (
-        f"expected V4, got {SCORE_FORMULA_VERSION!r}"
+def test_score_formula_version_is_v5() -> None:
+    """Guard: version bumped to V5 when preferred_time was added (E-feat)."""
+    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V5", (
+        f"expected V5, got {SCORE_FORMULA_VERSION!r}"
     )
 
 

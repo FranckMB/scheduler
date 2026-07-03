@@ -12,11 +12,12 @@ from types import MappingProxyType
 from typing import Any
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
+from .model import _time_to_minutes
 
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -26,6 +27,7 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "session_count": 20,
         "preferred": 60,
         "preferred_day": 30,
+        "preferred_time": 30,
         "C": 10,
         "D": 1,
         "rest": 3,
@@ -80,6 +82,7 @@ TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
 BONUS_WEIGHT_NAMES = (
     "preferred",
     "preferred_day",
+    "preferred_time",
     "rest",
     "session_count",
 )
@@ -332,6 +335,127 @@ def add_preferred_day_bonus(
 
             soft_terms.append((variable, "preferred_day"))
             seen_keys.add(slot_key)
+
+    return soft_terms
+
+
+def add_preferred_time_bonus(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    time_windows: Iterable[Any],
+    weights: Mapping[str, int],
+) -> list[tuple[BoolVarLike, str]]:
+    """Return soft objective terms for PREFERRED TIME windows.
+
+    Mirror of add_preferred_day_bonus: a PREFERRED+TIME constraint rewards a
+    team's sessions that start inside [minStartTime, maxStartTime] (either bound
+    absent = unconstrained on that side). Soft only — never a hard window.
+    """
+
+    del model
+    if "preferred_time" not in weights:
+        raise KeyError("preferred_time")
+
+    soft_terms: list[tuple[BoolVarLike, str]] = []
+    seen_keys: set[Any] = set()
+
+    for time_window in time_windows:
+        if _get(time_window, "ruleType", "rule_type", default=None) != "PREFERRED":
+            continue
+        if _get(time_window, "family", default=None) != "TIME":
+            continue
+
+        team_id = _scalar_id(
+            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
+        )
+        if team_id is None:
+            continue
+
+        config = _get(time_window, "config", default={}) or {}
+        min_start = config.get("minStartTime")
+        max_start = config.get("maxStartTime")
+        min_minutes = _time_to_minutes(min_start) if min_start is not None else None
+        max_minutes = _time_to_minutes(max_start) if max_start is not None else None
+        if min_minutes is None and max_minutes is None:
+            continue
+
+        for slot_key, variable in x.items():
+            if slot_key in seen_keys:
+                continue
+            if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+                continue
+            if _scalar_id(slot_key[0]) != team_id:
+                continue
+
+            try:
+                start_minutes = _time_to_minutes(slot_key[3])
+            except (TypeError, ValueError):
+                continue
+
+            if min_minutes is not None and start_minutes < min_minutes:
+                continue
+            if max_minutes is not None and start_minutes > max_minutes:
+                continue
+
+            soft_terms.append((variable, "preferred_time"))
+            seen_keys.add(slot_key)
+
+    return soft_terms
+
+
+def add_match_day_rest_bonus(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    teams: Iterable[Any],
+    weights: Mapping[str, int],
+) -> list[tuple[BoolVarLike, str]]:
+    """Return soft objective terms rewarding a rest day AFTER a team's match day.
+
+    Implicit rule (no UI constraint): for a team playing on match_day m, the day
+    after (m mod 7 + 1) should be left free of training. Nominal case: matches
+    Sat/Sun, training Mon-Fri — a Saturday match's rest day (Sunday) simply has
+    no slots (no-op); a SUNDAY match makes Monday the rest day, gently avoided.
+
+    Reified per team/week: rest_ok is true iff no session lands on the rest day.
+    Weight ``rest`` (3) < tier C (10), so this never displaces a placement — it
+    only breaks ties. No term is emitted when the team has no slot that day
+    (avoids a constant bonus that would inflate the score).
+    """
+
+    if "rest" not in weights:
+        raise KeyError("rest")
+
+    team_day_vars: dict[str, dict[int, list[BoolVarLike]]] = {}
+    for slot_key, variable in x.items():
+        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+            continue
+        team_id = _scalar_id(slot_key[0])
+        try:
+            day = int(_scalar_id(slot_key[2]))
+        except (TypeError, ValueError):
+            continue
+        team_day_vars.setdefault(str(team_id), {}).setdefault(day, []).append(variable)
+
+    soft_terms: list[tuple[BoolVarLike, str]] = []
+    for team in teams:
+        team_id = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        match_day = _get(team, "match_day", "matchDay", default=None)
+        if team_id is None or match_day is None:
+            continue
+        try:
+            match_day_int = int(_scalar_id(match_day))
+        except (TypeError, ValueError):
+            continue
+
+        rest_day = match_day_int % 7 + 1
+        rest_day_vars = team_day_vars.get(str(team_id), {}).get(rest_day, [])
+        if not rest_day_vars:
+            continue
+
+        rest_ok = model.NewBoolVar(f"rest_ok_{team_id}")
+        model.Add(sum(rest_day_vars) == 0).OnlyEnforceIf(rest_ok)
+        model.Add(sum(rest_day_vars) >= 1).OnlyEnforceIf(rest_ok.Not())
+        soft_terms.append((rest_ok, "rest"))
 
     return soft_terms
 
