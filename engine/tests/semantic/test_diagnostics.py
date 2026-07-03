@@ -67,6 +67,45 @@ def test_conflict_message_lists_each_team_once() -> None:
         assert len(listed) == len(set(listed)), f"team listed twice: {listed}"
 
 
+def test_real_coach_double_booking_not_hidden_by_dedup() -> None:
+    # Regression (audit review F1): the coach check must NOT dedupe by team id
+    # alone. The SAME team locked into TWO gyms at the same time with ONE coach
+    # is a real double-booking (the coach cannot be in two places) and must be
+    # reported, even though both slots carry the same team id.
+    tpl = {
+        "teamId": "a", "coachId": "C", "dayOfWeek": 2, "startTime": "18:00",
+        "durationMinutes": 90, "lockLevel": "HARD",
+    }
+    payload = make_payload(
+        teams=[_team("a")],
+        venues=[make_venue("v1", [(2, "18:00")]), make_venue("v2", [(2, "18:00")])],
+        slot_templates=[dict(tpl, id="s1", venueId="v1"), dict(tpl, id="s2", venueId="v2")],
+    )
+    result = solve_payload(payload)
+    coach_conflicts = [
+        d for d in result["diagnostics"] if d["type"] == "conflict" and d.get("coachId") == "C"
+    ]
+    assert coach_conflicts, "coach in two gyms at once must be flagged, even for one team"
+
+
+def test_distinct_duration_hard_locks_not_deduplicated() -> None:
+    # Regression (audit review F2): two HARD templates at the same
+    # team/venue/day/start but DIFFERENT durations are not duplicates — the
+    # longer one must not be silently dropped.
+    base = {"teamId": "a", "venueId": "v", "dayOfWeek": 2, "startTime": "18:00", "lockLevel": "HARD"}
+    payload = make_payload(
+        teams=[_team("a")],
+        venues=[make_venue("v", [(2, "18:00")])],
+        slot_templates=[
+            dict(base, id="short", durationMinutes=60),
+            dict(base, id="long", durationMinutes=120),
+        ],
+    )
+    result = solve_payload(payload)
+    durations = {int(s["durationMinutes"]) for s in result["slots"] if s["teamId"] == "a"}
+    assert 120 in durations, "the longer distinct lock must be preserved"
+
+
 def test_all_fixture_severities_in_allowed_enum() -> None:
     for name in ("simple_club", "medium_club", "vacation_week", "impossible"):
         with open(FIXTURES_DIR / f"{name}.json", encoding="utf-8") as f:

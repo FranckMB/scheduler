@@ -546,9 +546,9 @@ def _diagnose_conflicts(
         venue_durations[key] = max(venue_durations.get(key, 0), int(slot.get("durationMinutes") or 0))
 
     for (venue_id, day_of_week, start_time), booked in venue_bookings.items():
-        # Distinct teams only: the same team appearing twice at a key is not an
-        # over-capacity conflict, and must not be listed twice (audit ENG-09).
-        team_ids = _dedupe_preserve_order(booked)
+        # Distinct teams only: at a fixed (venue, day, start), the same team twice
+        # is the duplicate-slot artifact, not over-capacity (audit ENG-09).
+        team_ids = list(dict.fromkeys(booked))
         capacity = _caps.get((venue_id, day_of_week, start_time), 1)
         if len(team_ids) > capacity:
             when = f"{_day_label(day_of_week)} {_time_range(start_time, venue_durations.get((venue_id, day_of_week, start_time)))}"
@@ -571,19 +571,24 @@ def _diagnose_conflicts(
             })
 
     # Post-solve safety check: coach double-booking.
-    coach_bookings: dict[tuple[str, int, str], list[str]] = defaultdict(list)
+    # Dedupe by (team, venue) — NOT team alone: the coach key excludes venue, so
+    # the SAME team in two different gyms at once with one coach is a REAL
+    # conflict (the coach can't be in two places). Only a same-team+same-venue
+    # repeat (the duplicate-template artifact) must collapse.
+    coach_bookings: dict[tuple[str, int, str], list[tuple[str, str]]] = defaultdict(list)
     coach_durations: dict[tuple[str, int, str], int] = {}
     for slot in slots:
         coach_id = slot.get("coachId")
         if not coach_id:
             continue
         key = (coach_id, slot["dayOfWeek"], slot["startTime"])
-        coach_bookings[key].append(slot["teamId"])
+        coach_bookings[key].append((str(slot["teamId"]), str(slot["venueId"])))
         coach_durations[key] = max(coach_durations.get(key, 0), int(slot.get("durationMinutes") or 0))
 
-    for (coach_id, day_of_week, start_time), booked in coach_bookings.items():
-        team_ids = _dedupe_preserve_order(booked)
-        if len(team_ids) > 1:
+    for (coach_id, day_of_week, start_time), coach_booked in coach_bookings.items():
+        distinct: list[tuple[str, str]] = list(dict.fromkeys(coach_booked))
+        team_ids = [team for team, _venue in distinct]
+        if len(distinct) > 1:
             when = f"{_day_label(day_of_week)} {_time_range(start_time, coach_durations.get((coach_id, day_of_week, start_time)))}"
             diagnostics.append({
                 "id": f"diag-conflict-coach-{coach_id}-{day_of_week}-{start_time}",
@@ -817,16 +822,6 @@ def _label(entity_id: Any, names: Mapping[str, str]) -> str:
 
 def _named_list(ids: list[str], names: Mapping[str, str]) -> str:
     return ", ".join(_label(i, names) for i in ids)
-
-
-def _dedupe_preserve_order(ids: list[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for i in ids:
-        if i not in seen:
-            seen.add(i)
-            out.append(i)
-    return out
 
 
 def _get(source: Mapping[str, Any] | Any, *names: str, default: Any = None) -> Any:
