@@ -74,6 +74,24 @@ def test_preferred_time_window_chosen_over_equal_slot() -> None:
     assert all(s >= "19:00" for s in starts), f"preferred time window not honoured: {starts}"
 
 
+def test_malformed_preferred_time_does_not_crash() -> None:
+    # Regression (audit review F1): a malformed/empty time bound on a PREFERRED
+    # TIME window must be ignored, not raise a 500 for the whole generation.
+    payload = make_payload(
+        teams=[_team("t", sessions=1)],
+        venues=[make_venue("v", [(2, "18:00")])],
+        constraints=[
+            team_constraint(
+                constraint_id="c", team_id="t", family="TIME", rule_type="PREFERRED",
+                config={"minStartTime": ""},
+            )
+        ],
+    )
+    result = solve_payload(payload)
+    assert result["status"] == "completed"
+    assert _days(result, "t"), "team still placed despite malformed preferred bound"
+
+
 def test_preferred_time_never_beats_hard_constraint() -> None:
     # HARD maxStart 18:00 contradicts PREFERRED minStart 19:00 → HARD wins.
     payload = make_payload(

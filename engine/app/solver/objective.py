@@ -296,7 +296,7 @@ def add_preferred_day_bonus(
 
         family = _get(time_window, "family", default=None)
         if family != "DAY":
-            # PREFERRED TIME not implemented — backlog: specs/evolution/features-futures.md
+            # PREFERRED TIME is handled by add_preferred_time_bonus below.
             continue
 
         team_id = _scalar_id(
@@ -356,6 +356,17 @@ def add_preferred_time_bonus(
     if "preferred_time" not in weights:
         raise KeyError("preferred_time")
 
+    # Pre-group vars by team once (O(slots)) instead of rescanning x per window.
+    team_slot_vars: dict[str, list[tuple[Any, int, BoolVarLike]]] = {}
+    for slot_key, variable in x.items():
+        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+            continue
+        try:
+            start_minutes = _time_to_minutes(slot_key[3])
+        except (TypeError, ValueError):
+            continue
+        team_slot_vars.setdefault(str(_scalar_id(slot_key[0])), []).append((slot_key, start_minutes, variable))
+
     soft_terms: list[tuple[BoolVarLike, str]] = []
     seen_keys: set[Any] = set()
 
@@ -372,35 +383,33 @@ def add_preferred_time_bonus(
             continue
 
         config = _get(time_window, "config", default={}) or {}
-        min_start = config.get("minStartTime")
-        max_start = config.get("maxStartTime")
-        min_minutes = _time_to_minutes(min_start) if min_start is not None else None
-        max_minutes = _time_to_minutes(max_start) if max_start is not None else None
+        # Guard the parse: a malformed/empty bound must not turn the whole
+        # generation into a 500 (this window is only a soft bonus).
+        min_minutes = _safe_minutes(config.get("minStartTime"))
+        max_minutes = _safe_minutes(config.get("maxStartTime"))
         if min_minutes is None and max_minutes is None:
             continue
 
-        for slot_key, variable in x.items():
+        for slot_key, start_minutes, variable in team_slot_vars.get(str(team_id), []):
             if slot_key in seen_keys:
                 continue
-            if not isinstance(slot_key, tuple) or len(slot_key) < 4:
-                continue
-            if _scalar_id(slot_key[0]) != team_id:
-                continue
-
-            try:
-                start_minutes = _time_to_minutes(slot_key[3])
-            except (TypeError, ValueError):
-                continue
-
             if min_minutes is not None and start_minutes < min_minutes:
                 continue
             if max_minutes is not None and start_minutes > max_minutes:
                 continue
-
             soft_terms.append((variable, "preferred_time"))
             seen_keys.add(slot_key)
 
     return soft_terms
+
+
+def _safe_minutes(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return _time_to_minutes(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def add_match_day_rest_bonus(
@@ -417,9 +426,11 @@ def add_match_day_rest_bonus(
     no slots (no-op); a SUNDAY match makes Monday the rest day, gently avoided.
 
     Reified per team/week: rest_ok is true iff no session lands on the rest day.
-    Weight ``rest`` (3) < tier C (10), so this never displaces a placement — it
-    only breaks ties. No term is emitted when the team has no slot that day
-    (avoids a constant bonus that would inflate the score).
+    Safety: placing a session is worth its tier weight + session_count (20) — at
+    least 21 — while the rest bonus is only ``rest`` (3), so the solver never
+    drops or moves a real placement to collect it; it only breaks ties. No term
+    is emitted when the team has no slot that day (avoids a constant bonus that
+    would inflate the score).
     """
 
     if "rest" not in weights:
