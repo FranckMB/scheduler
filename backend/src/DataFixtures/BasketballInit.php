@@ -65,7 +65,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         $clubId = $club->getId();
-        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '{$clubId}'");
+        $manager->getConnection()->executeStatement('SELECT set_config(\'app.club_id\', ?, false)', [$clubId]);
 
         // --- Sport ---
         $existingSport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basket']);
@@ -1337,7 +1337,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
 
         $clubId = $club->getId();
-        $manager->getConnection()->executeStatement("SET LOCAL app.club_id = '{$clubId}'");
+        $manager->getConnection()->executeStatement('SELECT set_config(\'app.club_id\', ?, false)', [$clubId]);
 
         $user = $manager->getRepository(User::class)->findOneBy(['email' => 'n.eblin@gmail.com']);
         if (!$user instanceof User) {

@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -19,6 +20,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('phase1')]
 final class VenueTrainingSlotApiTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
 
     private EntityManagerInterface $em;
@@ -72,7 +75,6 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $this->user = $this->createUser();
         $this->createClubUser($this->club, $this->user);
         $this->season = $this->createSeason($this->club);
-        $this->ensureVenueTrainingSlotTableExists();
 
         $this->client->loginUser($this->user);
     }
@@ -88,6 +90,8 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 
         $this->em->persist($club);
         $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
 
         return $club;
     }
@@ -148,27 +152,5 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $this->em->flush();
 
         return $venue;
-    }
-
-    private function ensureVenueTrainingSlotTableExists(): void
-    {
-        $connection = $this->em->getConnection();
-        $connection->executeStatement(<<<'SQL'
-            CREATE TABLE IF NOT EXISTS venue_training_slot (
-                id UUID NOT NULL,
-                version INT DEFAULT 1 NOT NULL,
-                created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL,
-                updated_at TIMESTAMP(0) WITH TIME ZONE NOT NULL,
-                club_id UUID NOT NULL,
-                season_id UUID NOT NULL,
-                venue_id UUID NOT NULL,
-                day_of_week SMALLINT NOT NULL,
-                start_time TIME(0) WITHOUT TIME ZONE NOT NULL,
-                duration_minutes INT NOT NULL,
-                capacity INT DEFAULT 1 NOT NULL,
-                PRIMARY KEY (id)
-            )
-            SQL);
-        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_venue_training_slot_club_venue ON venue_training_slot (club_id, venue_id)');
     }
 }

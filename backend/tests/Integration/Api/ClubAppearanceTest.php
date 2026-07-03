@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -22,6 +23,8 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 #[Group('integration')]
 final class ClubAppearanceTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private EntityManagerInterface $em;
 
     private KernelBrowser $client;
@@ -105,6 +108,8 @@ final class ClubAppearanceTest extends WebTestCase
         $this->em->persist($this->user);
 
         $this->em->flush();
+
+        $this->scopeGucToClub($this->club->getId());
 
         $cu = new ClubUser;
         $cu->setClubId($this->club->getId());

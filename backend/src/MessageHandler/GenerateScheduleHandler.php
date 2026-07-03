@@ -19,6 +19,7 @@ use App\Service\DevScheduleReportWriter;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleResultImporter;
+use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use Symfony\Component\Mercure\HubInterface;
@@ -42,10 +43,24 @@ final class GenerateScheduleHandler
         private HubInterface $hub,
         private ClubGenerationLock $clubGenerationLock,
         private DiagnosticMessageBuilder $diagnosticMessageBuilder,
+        private TenantConnectionContext $tenantConnectionContext,
         private ?DevScheduleReportWriter $devReportWriter = null,
     ) {}
 
     public function __invoke(GenerateScheduleMessage $message): void
+    {
+        // RLS: no HTTP request in the worker → no GUC set by the listener. Scope
+        // the connection to the message's club before any query, clear after.
+        $this->tenantConnectionContext->setClubId($message->getClubId());
+
+        try {
+            $this->handle($message);
+        } finally {
+            $this->tenantConnectionContext->clear();
+        }
+    }
+
+    private function handle(GenerateScheduleMessage $message): void
     {
         $schedule = $this->findSchedule($message->getScheduleId());
         if (!$schedule instanceof Schedule) {

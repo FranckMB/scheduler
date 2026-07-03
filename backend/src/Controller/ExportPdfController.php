@@ -35,6 +35,7 @@ final class ExportPdfController extends AbstractController
         $this->messageBus->dispatch(
             new ExportPdfMessage(
                 scheduleId: $schedule->getId(),
+                clubId: $schedule->getClubId(),
             ),
         );
 

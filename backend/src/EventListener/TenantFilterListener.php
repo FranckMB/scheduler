@@ -8,6 +8,7 @@ use App\Doctrine\Filter\TenantFilter;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Repository\SeasonRepository;
+use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,6 +24,7 @@ class TenantFilterListener implements EventSubscriberInterface
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonRepository $seasonRepository,
         private readonly TokenStorageInterface $tokenStorage,
+        private readonly TenantConnectionContext $tenantConnectionContext,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -41,6 +43,10 @@ class TenantFilterListener implements EventSubscriberInterface
         if (!$event->isMainRequest()) {
             return;
         }
+
+        // Anti-staleness guard: never inherit a GUC from a previous request on
+        // the same connection (shared kernel in tests, worker loops).
+        $this->tenantConnectionContext->clear();
 
         $request = $event->getRequest();
         $user = $this->authenticatedUser();
@@ -87,10 +93,9 @@ class TenantFilterListener implements EventSubscriberInterface
         $filter = $filterCollection->enable('tenant_filter');
         $filter->setParameter('club_id', $clubId, 'uuid');
 
-        $connection = $this->entityManager->getConnection();
-        $connection->executeStatement(
-            'SET LOCAL app.club_id = ' . $connection->quote($clubId),
-        );
+        // Session-scoped GUC read by the RLS policies (the old SET LOCAL was a
+        // no-op outside a transaction — see TenantConnectionContext).
+        $this->tenantConnectionContext->setClubId($clubId);
     }
 
     private function authenticatedUser(): ?User

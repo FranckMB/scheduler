@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
+use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -34,6 +35,7 @@ final class AuthController extends AbstractController
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SportRepository $sportRepository,
         private readonly RateLimiterFactory $authRegisterLimiter,
+        private readonly TenantConnectionContext $tenantConnectionContext,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -75,25 +77,36 @@ final class AuthController extends AbstractController
 
         $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
 
-        if (null !== $existingClub) {
-            // Join an existing club: pending membership, awaits admin approval (no club data access yet).
-            $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $existingClub): void {
-                $user = $this->createUser($email, $password, $firstName, $lastName);
-                $this->createMembership($existingClub->getId(), $user->getId(), false);
-            });
-            $status = 'pending';
-        } else {
-            // New club: creator becomes active admin, seed season + sport + categories.
-            if ('' === $clubName) {
-                return $this->json(['error' => 'Club name is required to create a new club'], 400);
+        // RLS: the register endpoint is anonymous, so no tenant GUC is set by the
+        // listener. The WITH CHECK policies would reject the ClubUser/Season/…
+        // inserts below without it — set it as soon as the club id is known, and
+        // always clear it afterwards (finally: this connection serves other
+        // requests in tests / long-running contexts).
+        try {
+            if (null !== $existingClub) {
+                // Join an existing club: pending membership, awaits admin approval (no club data access yet).
+                $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $existingClub): void {
+                    $this->tenantConnectionContext->setClubId($existingClub->getId());
+                    $user = $this->createUser($email, $password, $firstName, $lastName);
+                    $this->createMembership($existingClub->getId(), $user->getId(), false);
+                });
+                $status = 'pending';
+            } else {
+                // New club: creator becomes active admin, seed season + sport + categories.
+                if ('' === $clubName) {
+                    return $this->json(['error' => 'Club name is required to create a new club'], 400);
+                }
+                $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $clubName): void {
+                    $user = $this->createUser($email, $password, $firstName, $lastName);
+                    $club = $this->createClub($clubName, $ara);
+                    $this->tenantConnectionContext->setClubId($club->getId());
+                    $this->createMembership($club->getId(), $user->getId(), true);
+                    $this->seedNewClub($club);
+                });
+                $status = 'active';
             }
-            $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $clubName): void {
-                $user = $this->createUser($email, $password, $firstName, $lastName);
-                $club = $this->createClub($clubName, $ara);
-                $this->createMembership($club->getId(), $user->getId(), true);
-                $this->seedNewClub($club);
-            });
-            $status = 'active';
+        } finally {
+            $this->tenantConnectionContext->clear();
         }
 
         $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);

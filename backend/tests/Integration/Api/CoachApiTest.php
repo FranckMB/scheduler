@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -21,6 +22,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class CoachApiTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private EntityManagerInterface $em;
 
     private KernelBrowser $client;
@@ -69,6 +72,8 @@ final class CoachApiTest extends WebTestCase
         $this->em->persist($this->user);
 
         $this->em->flush();
+
+        $this->scopeGucToClub($this->club->getId());
 
         $cu = new ClubUser;
         $cu->setClubId($this->club->getId());

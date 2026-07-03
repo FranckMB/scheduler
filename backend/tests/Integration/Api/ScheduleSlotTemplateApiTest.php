@@ -14,6 +14,7 @@ use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -28,6 +29,8 @@ use Symfony\Component\Uid\Uuid;
 #[Group('integration')]
 final class ScheduleSlotTemplateApiTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private EntityManagerInterface $em;
 
     private KernelBrowser $client;
@@ -115,6 +118,8 @@ final class ScheduleSlotTemplateApiTest extends WebTestCase
         $this->em->persist($this->user);
 
         $this->em->flush();
+
+        $this->scopeGucToClub($this->club->getId());
 
         $cu = new ClubUser;
         $cu->setClubId($this->club->getId());

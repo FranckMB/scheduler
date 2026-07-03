@@ -7,6 +7,7 @@ namespace App\MessageHandler;
 use App\Entity\Schedule;
 use App\Message\ExportPdfMessage;
 use App\Service\PdfGenerator;
+use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use Symfony\Component\Mercure\HubInterface;
@@ -21,9 +22,23 @@ final readonly class ExportPdfHandler
         private EntityManagerInterface $entityManager,
         private PdfGenerator $pdfGenerator,
         private HubInterface $hub,
+        private TenantConnectionContext $tenantConnectionContext,
     ) {}
 
     public function __invoke(ExportPdfMessage $message): void
+    {
+        // RLS: no HTTP request in the worker → no GUC set by the listener. Scope
+        // the connection to the message's club before any query, clear after.
+        $this->tenantConnectionContext->setClubId($message->getClubId());
+
+        try {
+            $this->export($message);
+        } finally {
+            $this->tenantConnectionContext->clear();
+        }
+    }
+
+    private function export(ExportPdfMessage $message): void
     {
         $schedule = $this->findSchedule($message->getScheduleId());
         if (!$schedule instanceof Schedule) {
