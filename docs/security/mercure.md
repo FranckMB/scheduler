@@ -36,6 +36,13 @@ Both hold dev placeholders. **Prod: replace `MERCURE_JWT_SECRET` with a random
 32+ byte secret** and keep it in sync between the hub (compose) and the backend
 publisher (`backend/config/packages/mercure.yaml` reads `%env(MERCURE_JWT_SECRET)%`).
 
+## Public URL
+
+`MERCURE_PUBLIC_URL` (the browser-facing hub URL) is set by compose on the
+`php-fpm` service to `http://localhost:${MERCURE_PORT}/.well-known/mercure`, so
+it always matches the port the hub is actually published on. The static value in
+`backend/.env` is only a fallback for non-Docker runs.
+
 ## Frontend consumption (future)
 
 The frontend currently **polls** the API for generation status and does not

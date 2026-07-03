@@ -38,6 +38,11 @@ services:
       - ./:/app:cached
     env_file:
       - ./.env
+    environment:
+      # Browser-facing hub URL must match the actually published port
+      # (${MERCURE_PORT}); overrides the static value in backend/.env so the two
+      # can never drift.
+      MERCURE_PUBLIC_URL: "http://localhost:${MERCURE_PORT}/.well-known/mercure"
     expose:
       - "9000"
     depends_on:
