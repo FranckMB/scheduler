@@ -18,7 +18,9 @@ from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_
 from app.solver.objective import (
     LEVEL_2_OBJECTIVE_WEIGHTS,
     add_level_2_objective,
+    add_match_day_rest_bonus,
     add_preferred_day_bonus,
+    add_preferred_time_bonus,
     is_team_satisfied_by_hard_locks,
 )
 from app.solver.result_builder import build_result
@@ -342,6 +344,8 @@ def _solve(
             soft_terms.append((var, "preferred"))
 
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
+    soft_terms.extend(add_preferred_time_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
+    soft_terms.extend(add_match_day_rest_bonus(model, model.x, data.get("teams", []), LEVEL_2_OBJECTIVE_WEIGHTS))
 
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their
