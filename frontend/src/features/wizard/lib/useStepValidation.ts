@@ -1,5 +1,5 @@
 import type { Team, Venue, VenueTrainingSlot } from "../api";
-import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { type Reservation, useWizardStore } from "../store";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
@@ -73,6 +73,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const reservations = useWizardStore((s) => s.reservations);
+  const { data: constraintValidation } = useConstraintValidation("recap" === stepId);
 
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
@@ -99,6 +100,32 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   }
   if ("constraints" === stepId) {
     return { errors: [], warnings: computeReservationWarnings(reservations, teams, venues, slots) };
+  }
+  if ("recap" === stepId) {
+    const withSlot = new Set(slots.map((s) => s.venueId));
+    const empty = venues.filter((v) => !withSlot.has(v.id));
+    const errors: string[] = [];
+    if (0 === teams.length) {
+      errors.push("Ajoutez au moins une équipe.");
+    }
+    if (0 === coaches.length) {
+      errors.push("Ajoutez au moins un coach.");
+    }
+    if (0 === venues.length) {
+      errors.push("Ajoutez au moins un gymnase.");
+    }
+    if (empty.length > 0) {
+      errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
+    }
+    if (constraintValidation && !constraintValidation.valid) {
+      for (const messages of Object.values(constraintValidation.errors)) {
+        errors.push(...messages);
+      }
+      for (const conflict of constraintValidation.conflicts) {
+        errors.push(conflict.reason);
+      }
+    }
+    return { errors, warnings: [] };
   }
   return okValidation();
 }

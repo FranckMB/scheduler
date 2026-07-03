@@ -225,7 +225,7 @@ export function PlanningPage() {
                   />
                 ) : null}
                 {isReadOnly ? null : (
-                  <div className="min-h-0 flex-1">
+                  <div className="min-h-[12rem] flex-1">
                     <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
                   </div>
                 )}
