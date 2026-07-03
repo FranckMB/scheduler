@@ -64,9 +64,20 @@ final class GenerateScheduleHandler
     {
         $schedule = $this->findSchedule($message->getScheduleId());
         if (!$schedule instanceof Schedule) {
+            // Under RLS a schedule belonging to another club is invisible here
+            // (the old club_mismatch guard below can no longer fire for that
+            // case). Deleted or mismatched: never leave the frontend spinning
+            // on GENERATING — publish a terminal failure on the message's topic.
+            $this->hub->publish(new Update(
+                \sprintf('club:%s:schedule:%s', $message->getClubId(), $message->getScheduleId()),
+                json_encode(['status' => 'failed', 'error' => 'schedule_not_found'], \JSON_THROW_ON_ERROR),
+            ));
+
             return;
         }
 
+        // Defence in depth — unreachable for cross-club schedules under RLS
+        // (handled above), kept for a same-club id mixup or RLS regression.
         if ($schedule->getClubId() !== $message->getClubId()) {
             $this->failSchedule($schedule, 'club_mismatch', 'Message club_id does not match schedule club_id.');
             $this->publishProgress($schedule, []);

@@ -71,8 +71,9 @@ db-reset-test:
 	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
 # Real env var beats dotenv, so injecting DATABASE_URL=<admin url> makes the
-# whole fixtures run (purge + inserts) bypass RLS.
-DB_ADMIN_URL = $(shell awk -F= '$$1=="DATABASE_ADMIN_URL" {sub(/^[^=]*=/,""); gsub(/"/,""); print}' .env | tail -n 1)
+# whole fixtures run (purge + inserts) bypass RLS. Symfony dotenv precedence:
+# .env.local overrides .env — read both, last definition wins.
+DB_ADMIN_URL = $(shell cat .env .env.local 2>/dev/null | awk -F= '$$1=="DATABASE_ADMIN_URL" {sub(/^[^=]*=/,""); gsub(/"/,""); print}' | tail -n 1)
 
 .PHONY: fixtures ## Load backend fixtures (also clears var/generate)
 fixtures: APP_ENV = dev

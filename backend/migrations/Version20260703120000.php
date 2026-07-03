@@ -54,16 +54,16 @@ final class Version20260703120000 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        // 1. Role + grants (idempotent — safe on volumes with or without initdb).
-        $this->addSql(<<<'SQL'
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-                    CREATE ROLE app_user WITH LOGIN PASSWORD 'app_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-                END IF;
-            END
-            $$
-            SQL);
+        // 1. Grants (idempotent). The app_user ROLE itself is NOT created here:
+        // a migration is committed to git, so any password it contained would be
+        // public forever (audit review F3). Role provisioning is an environment
+        // concern — docker initdb (02-users.sql) in dev/test/CI, manual secure
+        // provisioning in prod. Fail loudly if it is missing.
+        $hasRole = (bool) $this->connection->fetchOne('SELECT 1 FROM pg_roles WHERE rolname = \'app_user\'');
+        $this->abortIf(
+            !$hasRole,
+            'Role app_user does not exist. Create it first with a per-environment password (see docker/postgres/init/02-users.sql): CREATE ROLE app_user WITH LOGIN PASSWORD \'<secret>\' NOSUPERUSER NOCREATEDB NOCREATEROLE;',
+        );
         $this->addSql('GRANT USAGE ON SCHEMA public TO app_user');
         $this->addSql('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user');
         $this->addSql('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user');

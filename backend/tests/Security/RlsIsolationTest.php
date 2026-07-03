@@ -39,6 +39,37 @@ final class RlsIsolationTest extends KernelTestCase
         self::assertFalse((bool) $superuser, 'runtime connection must NOT be a superuser');
     }
 
+    public function testEveryClubIdTableIsUnderForcedRls(): void
+    {
+        // Coverage guard: the migration hardcodes the table list — a future
+        // migration adding a club_id table without RLS would silently open a
+        // tenant hole. Enumerate club_id tables dynamically and require
+        // ENABLE + FORCE + at least one policy on each.
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $this->connection->fetchAllAssociative(<<<'SQL'
+            SELECT c.relname AS table_name,
+                   c.relrowsecurity AS rls_enabled,
+                   c.relforcerowsecurity AS rls_forced,
+                   (SELECT count(*) FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND EXISTS (
+                  SELECT 1 FROM pg_attribute a
+                  WHERE a.attrelid = c.oid AND a.attname = 'club_id' AND NOT a.attisdropped
+              )
+            SQL);
+
+        self::assertNotEmpty($rows, 'expected club_id tables to exist');
+        foreach ($rows as $row) {
+            $table = (string) $row['table_name'];
+            self::assertTrue((bool) $row['rls_enabled'], \sprintf('table %s owns club_id but RLS is not ENABLED — add it to the RLS migration', $table));
+            self::assertTrue((bool) $row['rls_forced'], \sprintf('table %s owns club_id but RLS is not FORCED', $table));
+            self::assertGreaterThan(0, (int) $row['policies'], \sprintf('table %s owns club_id but has no policy', $table));
+        }
+    }
+
     public function testGucScopedSelectCannotSeeOtherClub(): void
     {
         $this->seedTwoClubsWithOneTeamEach();

@@ -46,6 +46,16 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             throw new RuntimeException('Expected EntityManagerInterface');
         }
 
+        // RLS guard: as app_user the purge phase silently DELETEs zero rows on
+        // tenant tables (fail-closed policies) and the reload then collides
+        // with the surviving data — a half-purged database. Fail fast instead.
+        $superuser = (bool) $manager->getConnection()->fetchOne(
+            'SELECT usesuper FROM pg_user WHERE usename = current_user',
+        );
+        if (!$superuser) {
+            throw new RuntimeException('Fixtures must run on the admin connection (RLS silently breaks the purge as app_user). Use `make fixtures`, which injects DATABASE_URL=<DATABASE_ADMIN_URL>.');
+        }
+
         // --- Club ---
         $existingClub = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'ARA0069036']);
         if ($existingClub instanceof Club) {

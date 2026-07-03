@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use Doctrine\DBAL\Connection;
+use Throwable;
 
 /**
  * Sets the PostgreSQL tenant GUC (app.club_id) the RLS policies read.
@@ -33,8 +34,21 @@ final readonly class TenantConnectionContext
 
     public function clear(): void
     {
-        $this->connection->executeStatement(
-            'SELECT set_config(\'app.club_id\', \'\', false)',
-        );
+        // A connection that was never opened (or died) has no session GUC to
+        // leak: skip the round-trip on fresh connections (every plain HTTP
+        // request pays this otherwise), and never let a dead connection turn
+        // the cleanup into a new exception that would mask the real failure
+        // (worker finally blocks after a 650 s solve).
+        if (!$this->connection->isConnected()) {
+            return;
+        }
+
+        try {
+            $this->connection->executeStatement(
+                'SELECT set_config(\'app.club_id\', \'\', false)',
+            );
+        } catch (Throwable) {
+            // Connection is unusable → its session (and GUC) is gone anyway.
+        }
     }
 }
