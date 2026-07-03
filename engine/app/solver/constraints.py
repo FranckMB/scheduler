@@ -14,13 +14,17 @@ Derived rules (parsed from v2 constraints[] payload):
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Sequence, cast
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _time_to_minutes
+
+logger = logging.getLogger("engine.constraints")
 
 AssignmentLike = Any
 BoolVarLike = Any
@@ -898,7 +902,7 @@ def add_time_window_constraints(
                 "suggestions": [
                     "Remove the overlapping days from forcedDays or forbiddenDays.",
                 ],
-                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(UTC).isoformat(),
             })
             for var in team_all_vars.get(team_id_text, []):
                 model.Add(var == 0)
@@ -1657,6 +1661,15 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         elif family in ("TIME", "DAY"):
             result["time_windows"].append(c)
 
+        else:
+            # Visible instead of silent: a constraint the engine does not
+            # recognise is dropped (it would be a no-op anyway), but log it so a
+            # contract drift surfaces instead of a silently-ignored rule.
+            logger.warning(
+                "unrecognised constraint dropped: id=%s type=%s family=%s ruleType=%s",
+                c.get("id"), c_type, family, rule_type,
+            )
+
     return result
 
 
@@ -1677,8 +1690,8 @@ __all__ = [
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
     "add_salarie_distribution_constraints",
-    "add_time_window_constraints",
     "add_team_no_overlap",
+    "add_time_window_constraints",
     "add_venue_closure_constraints",
     "parse_v2_constraints",
 ]

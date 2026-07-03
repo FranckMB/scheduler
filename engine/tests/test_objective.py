@@ -9,7 +9,6 @@ from app.solver.objective import (
     add_level_2_objective,
 )
 
-
 EXPECTED_WEIGHTS = {
     "S": 10000,
     "A": 1000,

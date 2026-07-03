@@ -260,7 +260,7 @@ class TestSalarieDistribution:
             for d in range(4, 6)
         ]
 
-        all_assignments = coaching + [playing] + coach2_assignments
+        all_assignments = [*coaching, playing, *coach2_assignments]
         coaches = [
             {"id": "coach-1", "isEmployee": True},
             {"id": "coach-2", "isEmployee": True},

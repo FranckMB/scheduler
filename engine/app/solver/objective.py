@@ -242,7 +242,7 @@ def add_level_2_objective(
 
     # Placement objective (tiers + session_count + unplaced penalty + soft terms).
     placement_expression = (
-        sum(coefficient * variable for variable, coefficient in zip(variables, coefficients))
+        sum(coefficient * variable for variable, coefficient in zip(variables, coefficients, strict=False))
         if variables
         else 0
     )
@@ -640,10 +640,10 @@ __all__ = [
     "BONUS_WEIGHT_NAMES",
     "CHAINING_TIER_WEIGHTS",
     "LEVEL_2_OBJECTIVE_WEIGHTS",
-    "Level2ObjectiveStats",
     "SCORE_FORMULA_VERSION",
     "TIER_WEIGHT_NAMES",
     "UNPLACED_PENALTY",
+    "Level2ObjectiveStats",
     "add_chaining_bonus",
     "add_level_2_objective",
     "add_preferred_day_bonus",

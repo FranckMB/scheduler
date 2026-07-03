@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     contract_version: str = Field(default="2.0")
     environment: str = Field(default="dev")
     log_level: str = Field(default="info")
+    # Max solves running concurrently across all clubs. 1 preserves the current
+    # de-facto serialisation (the event loop no longer blocks — see build_schedule
+    # running _solve in a worker thread) while keeping CPU contention bounded.
+    max_concurrent_solves: int = Field(default=1, ge=1)
 
 
 @lru_cache(maxsize=1)

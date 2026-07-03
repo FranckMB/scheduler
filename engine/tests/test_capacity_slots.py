@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 
+from pydantic import ValidationError
+
 from app.main import build_schedule
 from app.schemas.input_schema import ScheduleInputSchema
-from pydantic import ValidationError
 
 
 def test_capacity_2_slot_allows_two_teams() -> None:
