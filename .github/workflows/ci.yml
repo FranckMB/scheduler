@@ -80,6 +80,15 @@ jobs:
       - name: ContractSchemaTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ContractSchemaTest.php --group phase1'
 
+      - name: RlsIsolationTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/RlsIsolationTest.php --group phase1'
+
+      - name: ClubUserAccessTests
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ClubAccessTest.php tests/Security/UserSelfOnlyTest.php tests/Security/ImportAuthorizationTest.php --group phase1'
+
+      - name: MercureHardeningTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/MercureHardeningTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
