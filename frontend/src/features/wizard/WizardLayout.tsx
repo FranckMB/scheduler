@@ -1,4 +1,4 @@
-import { AlertTriangle, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { AlertTriangle, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -32,6 +32,38 @@ function StepContent({ stepId }: { stepId: WizardStepId }) {
     case "generate":
       return <GenerateStep />;
   }
+}
+
+/** Floating top/bottom page-jump arrows (bottom-right), shown on every step
+ *  whenever the page actually scrolls. Was TeamsStep-only before. */
+function ScrollJumpButtons() {
+  const [scrollable, setScrollable] = useState(false);
+
+  useEffect(() => {
+    const check = () => setScrollable(document.documentElement.scrollHeight > window.innerHeight + 48);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(document.body);
+    window.addEventListener("resize", check);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, []);
+
+  if (!scrollable) {
+    return null;
+  }
+  return (
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-1">
+      <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <ChevronsUp className="size-4" />
+      </Button>
+      <Button size="icon" variant="outline" aria-label="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+        <ChevronsDown className="size-4" />
+      </Button>
+    </div>
+  );
 }
 
 export function WizardPage() {
@@ -179,6 +211,7 @@ export function WizardPage() {
         </div>
       </div>
       </div>
+      <ScrollJumpButtons />
     </WizardFooterContext.Provider>
   );
 }
