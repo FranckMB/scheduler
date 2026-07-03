@@ -26,6 +26,12 @@ from .model import _time_to_minutes
 
 logger = logging.getLogger("engine.constraints")
 
+# Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
+# Used to warn ONLY on genuine contract drift, not on recognised families whose
+# specific config variant is intentionally a no-op.
+_KNOWN_FAMILIES = frozenset({"TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"})
+_KNOWN_TYPES = frozenset({"TEAM_COACH", "COACH_PLAYER_UNAVAILABILITY", "PRIORITY_TIER"})
+
 AssignmentLike = Any
 BoolVarLike = Any
 RuleCollection = Any
@@ -1661,10 +1667,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         elif family in ("TIME", "DAY"):
             result["time_windows"].append(c)
 
-        else:
-            # Visible instead of silent: a constraint the engine does not
-            # recognise is dropped (it would be a no-op anyway), but log it so a
-            # contract drift surfaces instead of a silently-ignored rule.
+        elif family not in _KNOWN_FAMILIES and c_type not in _KNOWN_TYPES and rule_type != "LOCK":
+            # Only warn when neither the family NOR the type is recognised — a
+            # genuine contract drift. A recognised family whose specific
+            # config/scope variant isn't handled (e.g. a CLUB-scope FACILITY) is
+            # a deliberate no-op, not drift, and must not spam warnings (review).
             logger.warning(
                 "unrecognised constraint dropped: id=%s type=%s family=%s ruleType=%s",
                 c.get("id"), c_type, family, rule_type,

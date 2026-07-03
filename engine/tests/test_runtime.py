@@ -75,3 +75,39 @@ def test_unrecognised_constraint_is_logged(caplog: Any) -> None:
     with caplog.at_level(logging.WARNING, logger="engine.constraints"):
         parse_v2_constraints([{"id": "x", "isActive": True, "family": "TOTALLY_UNKNOWN"}])
     assert any("unrecognised constraint" in r.message for r in caplog.records)
+
+
+def test_recognised_family_variant_does_not_warn(caplog: Any) -> None:
+    # A recognised family (FACILITY) whose specific config variant isn't handled
+    # (CLUB scope, no venue action) is an intentional no-op, NOT contract drift.
+    with caplog.at_level(logging.WARNING, logger="engine.constraints"):
+        parse_v2_constraints([{
+            "id": "x", "isActive": True, "family": "FACILITY", "scope": "CLUB",
+            "ruleType": "PREFERRED", "config": {},
+        }])
+    assert not any("unrecognised constraint" in r.message for r in caplog.records)
+
+
+def test_purge_keeps_lock_with_pending_waiter() -> None:
+    # Regression (audit review F1): a lock that is momentarily unlocked but has a
+    # pending waiter must NOT be purged, or per-club serialisation breaks.
+    async def scenario() -> bool:
+        lock = await main.get_club_lock("keepme")
+        await lock.acquire()  # held → a waiter will queue behind it
+
+        async def waiter() -> None:
+            async with lock:
+                pass
+
+        w = asyncio.create_task(waiter())
+        await asyncio.sleep(0)  # let the waiter queue on the lock
+
+        # Fill past the cap with idle clubs to trigger the purge, then release.
+        for i in range(main._MAX_CLUB_LOCKS + 10):
+            await main.get_club_lock(f"filler-{i}")
+        same = main._club_locks.get("keepme") is lock  # not orphaned
+        lock.release()
+        await w
+        return same
+
+    assert asyncio.run(scenario()), "a lock with a pending waiter must survive the purge"

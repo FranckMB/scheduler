@@ -28,7 +28,13 @@ CONTRACT_VERSION_PATH = ENGINE_ROOT / "CONTRACT_VERSION"
 IMPLICIT_RULES_PATH = ENGINE_ROOT / "implicit_rules.json"
 
 settings = get_settings()
-logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# force=True: uvicorn installs root handlers first, which would make a plain
+# basicConfig a silent no-op — force our level/format to actually take effect.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    force=True,
+)
 logger = logging.getLogger("engine")
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
@@ -114,13 +120,21 @@ def _day_constraint_conflict_team_ids(time_windows: list[dict[str, Any]]) -> set
     }
 
 
+def _lock_is_idle(lock: asyncio.Lock) -> bool:
+    # Idle = neither held NOR awaited. Checking locked() alone is not enough:
+    # during release, asyncio sets _locked=False before the woken waiter runs,
+    # so a lock with a pending waiter can momentarily report not-locked. Deleting
+    # it then would orphan the waiter and let a fresh request create a second
+    # lock for the same club, breaking per-club serialisation (audit review).
+    waiters = getattr(lock, "_waiters", None)
+    return not lock.locked() and not waiters
+
+
 async def get_club_lock(club_id: str) -> asyncio.Lock:
     async with _club_locks_guard:
-        # Bound the dict: drop locks that no one currently holds/awaits. A held
-        # lock keeps its identity (removing it would let a second request slip
-        # past the per-club serialisation).
+        # Bound the dict: drop only genuinely idle locks (not held, no waiter).
         if len(_club_locks) > _MAX_CLUB_LOCKS:
-            for cid in [c for c, lk in _club_locks.items() if not lk.locked() and c != club_id]:
+            for cid in [c for c, lk in _club_locks.items() if c != club_id and _lock_is_idle(lk)]:
                 del _club_locks[cid]
         lock = _club_locks.get(club_id)
         if lock is None:
