@@ -309,7 +309,7 @@ def _diagnose_unplaced(
         diagnostics.append({
             "id": f"diag-unplaced-{team_id}",
             "type": "unplaced",
-            "severity": "high",
+            "severity": "ERROR",
             "teamId": team_id,
             "message": f"L'équipe {team_label} n'a pas pu être placée : {reason}",
             "suggestions": suggestions,
@@ -350,7 +350,7 @@ def _diagnose_soft_lock_moved(
             diagnostics.append({
                 "id": f"diag-soft-moved-{team_id}-{day_of_week}-{start_time}",
                 "type": "soft_lock_moved",
-                "severity": "medium",
+                "severity": "WARNING",
                 "teamId": team_id,
                 "venueId": venue_id,
                 "message": (
@@ -387,7 +387,7 @@ def _diagnose_coach_overload(
             diagnostics.append({
                 "id": f"diag-overload-{coach_id}",
                 "type": "coach_overload",
-                "severity": "medium",
+                "severity": "WARNING",
                 "coachId": coach_id,
                 "message": (
                     f"Le coach {_label(coach_id, coach_names)} est affecté à {count} séances, "
@@ -475,7 +475,7 @@ def _diagnose_session_below_effective_min(
         if placed < spw:
             team_name = team_names.get(team_id, team_id)
             below_floor = placed < effective_min
-            severity = "high" if below_floor else "WARNING"
+            severity = "ERROR" if below_floor else "WARNING"
             if below_floor:
                 reason = (
                     f"en-dessous de son minimum garanti de {effective_min} "
@@ -524,7 +524,7 @@ def _diagnose_conflicts(
         diagnostics.append({
             "id": "diag-infeasible",
             "type": "conflict",
-            "severity": "high",
+            "severity": "ERROR",
             "message": _infeasible_message(model_data),
             "suggestions": [
                 "Assouplissez ou retirez une contrainte dure (jour/heure imposé, gymnase forcé).",
@@ -545,14 +545,17 @@ def _diagnose_conflicts(
         venue_bookings[key].append(slot["teamId"])
         venue_durations[key] = max(venue_durations.get(key, 0), int(slot.get("durationMinutes") or 0))
 
-    for (venue_id, day_of_week, start_time), team_ids in venue_bookings.items():
+    for (venue_id, day_of_week, start_time), booked in venue_bookings.items():
+        # Distinct teams only: at a fixed (venue, day, start), the same team twice
+        # is the duplicate-slot artifact, not over-capacity (audit ENG-09).
+        team_ids = list(dict.fromkeys(booked))
         capacity = _caps.get((venue_id, day_of_week, start_time), 1)
         if len(team_ids) > capacity:
             when = f"{_day_label(day_of_week)} {_time_range(start_time, venue_durations.get((venue_id, day_of_week, start_time)))}"
             diagnostics.append({
                 "id": f"diag-conflict-venue-{venue_id}-{day_of_week}-{start_time}",
                 "type": "conflict",
-                "severity": "high",
+                "severity": "ERROR",
                 "venueId": venue_id,
                 "dayOfWeek": day_of_week,
                 "startTime": str(start_time)[:5],
@@ -568,23 +571,29 @@ def _diagnose_conflicts(
             })
 
     # Post-solve safety check: coach double-booking.
-    coach_bookings: dict[tuple[str, int, str], list[str]] = defaultdict(list)
+    # Dedupe by (team, venue) — NOT team alone: the coach key excludes venue, so
+    # the SAME team in two different gyms at once with one coach is a REAL
+    # conflict (the coach can't be in two places). Only a same-team+same-venue
+    # repeat (the duplicate-template artifact) must collapse.
+    coach_bookings: dict[tuple[str, int, str], list[tuple[str, str]]] = defaultdict(list)
     coach_durations: dict[tuple[str, int, str], int] = {}
     for slot in slots:
         coach_id = slot.get("coachId")
         if not coach_id:
             continue
         key = (coach_id, slot["dayOfWeek"], slot["startTime"])
-        coach_bookings[key].append(slot["teamId"])
+        coach_bookings[key].append((str(slot["teamId"]), str(slot["venueId"])))
         coach_durations[key] = max(coach_durations.get(key, 0), int(slot.get("durationMinutes") or 0))
 
-    for (coach_id, day_of_week, start_time), team_ids in coach_bookings.items():
-        if len(team_ids) > 1:
+    for (coach_id, day_of_week, start_time), coach_booked in coach_bookings.items():
+        distinct: list[tuple[str, str]] = list(dict.fromkeys(coach_booked))
+        team_ids = [team for team, _venue in distinct]
+        if len(distinct) > 1:
             when = f"{_day_label(day_of_week)} {_time_range(start_time, coach_durations.get((coach_id, day_of_week, start_time)))}"
             diagnostics.append({
                 "id": f"diag-conflict-coach-{coach_id}-{day_of_week}-{start_time}",
                 "type": "conflict",
-                "severity": "high",
+                "severity": "ERROR",
                 "coachId": coach_id,
                 "dayOfWeek": day_of_week,
                 "startTime": str(start_time)[:5],

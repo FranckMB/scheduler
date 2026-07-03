@@ -315,7 +315,7 @@ class DiagnosticPrecisionTest(unittest.TestCase):
         self.assertIn("2 séance", msg)  # requested
         self.assertIn("1 placée", msg)  # placed
 
-    def test_below_tier_floor_is_high_severity(self) -> None:
+    def test_below_tier_floor_is_error_severity(self) -> None:
         from app.solver.result_builder import _diagnose_session_below_effective_min
 
         model_data = {
@@ -324,7 +324,8 @@ class DiagnosticPrecisionTest(unittest.TestCase):
         }
         diags = _diagnose_session_below_effective_min(model_data, slots=[])  # 0 placed, floor 2
         self.assertEqual(1, len(diags))
-        self.assertEqual("high", diags[0]["severity"])
+        # Severity scale normalised to the backend/frontend enum (ENG-09).
+        self.assertEqual("ERROR", diags[0]["severity"])
 
 
 if __name__ == "__main__":
