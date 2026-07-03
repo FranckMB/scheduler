@@ -58,11 +58,25 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 All custom agents/skills are **manual / user-triggered**. No hidden automation, with one pre-existing exception documented in `docs/project-map.md` (the `code-review-graph` PostToolUse hook).
 
-Feature cycle: need → *(I read this file, then enter `/plan` injecting the scope checklist §9)* → optional `contrarian-review` agent on the plan → you validate → I implement **strictly in scope** (no opportunistic refactor) → change summary → optional `validation-runner` → optional `documentation-update` → optional `/code-review` (+ `/security-review` if the change touches auth/data/external integrations).
+**Two lanes.** Pick the lane BEFORE starting and say which one applies:
+- **Full lane** (default for any feature, behaviour change, API/schema change, or anything touching a structuring axis §7.1).
+- **Light lane** — only if ALL true: ≤2 files, no behaviour/API/schema change, no structuring axis touched (typo, label, doc, tiny fix). Cycle: implement → relevant tests green locally → doc check declaration → `/code-review` → PR → user go.
+
+**Full lane cycle:**
+1. **Need validation (mandatory, before any plan):** reformulate the need in 3–6 lines + open ambiguities + what I will NOT do. **User validates or corrects — no `/plan` before that.**
+2. `/plan` injecting boundaries §2, conventions §5, scope checklist §9 (the built-in `Plan`/`Explore` subagents do **not** read `CLAUDE.md`). Optional `contrarian-review` on the plan. User validates the plan.
+3. Implement **strictly in scope** (no opportunistic refactor).
+4. **Non-regression (mandatory if a structuring axis §7.1 is touched):** add/extend a test guarding the axis in the same PR (`--group phase1`, engine invariant/golden, or e2e).
+5. **Tests green locally before proposing merge** (blocking tests + the new NR tests + zone suite). CI is a double-check and does NOT block the merge.
+6. Change summary + **doc check (mandatory):** either run `documentation-update`, or state explicitly "no doc impacted because …". Never skip silently.
+7. **`/code-review` on every PR** (+ `/security-review` if the change touches auth/data/external integrations).
+8. PR → **user's explicit go** → merge.
+
+### 7.1 Structuring axes (closed list — NR test required when touched)
+
+tenant isolation (filter/listener/voters) · generation pipeline (controller→messenger→engine→import→Mercure) · **constraint semantics** (a constraint entered in the UI must be honored by the solver — semantic smoke, not just COMPLETED) · planning lifecycle (VALIDATED/reopen/baseline + edit locks) · backend↔engine contract (schemas/CONTRACT_VERSION) · auth & memberships (register/login/approval/roles). Extending this list = user decision.
 
 **Engine/backend changes — mandatory final verification:** the solver smoke-test `backend/scripts/smoke-solver.sh` drives create→generate→poll and asserts a schedule reaches `COMPLETED` (diagnostics/warnings acceptable — the point is the CP-SAT solver responded and produced a plan). It runs inside `validation-runner`. `generate-schedule-test.sh` is a *mock* (fake `curl`) and does **not** count.
-
-**Before every `/plan`** I read this file myself and inject the boundaries (§2), conventions (§5) and the scope checklist (§9) into the plan prompt — the built-in `Plan`/`Explore` subagents do **not** read `CLAUDE.md`.
 
 ## 8. Documentation rules
 
@@ -77,6 +91,7 @@ Feature cycle: need → *(I read this file, then enter `/plan` injecting the sco
 - documentation à mettre à jour si le plan est exécuté ;
 - conditions qui exigeraient de revenir demander une validation (changement de zone, dépendance inter-zone non prévue) ;
 - confirmation explicite qu'aucun refactoring hors scope n'est prévu ;
+- **axes structurants (§7.1) touchés → test de non-régression prévu dans la même PR** (lequel, dans quel groupe) ;
 - si la zone touche **engine ou backend**, la section vérification inclut le **smoke-test solveur** (`backend/scripts/smoke-solver.sh`, planning attendu en `COMPLETED`).
 
 ## 10. Gotchas (top)
