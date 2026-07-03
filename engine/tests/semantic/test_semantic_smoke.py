@@ -168,6 +168,57 @@ def test_coach_unavailable_day_no_session() -> None:
     assert _days_of(result, "t"), "team should still be placed on an available day"
 
 
+def test_coach_unavailable_day_enforced_for_second_coach() -> None:
+    # Regression (audit review): a team can have two required coaches; the
+    # assignment carries only the first. The SECOND coach's unavailability must
+    # still block the day, else ENG-01 survives for co-coached teams.
+    venue = make_venue("v", [(2, "18:00"), (4, "18:00")])
+    payload = make_payload(
+        teams=[_team("t", sessions=1)],
+        venues=[venue],
+        constraints=[
+            team_coach("tc1", team_id="t", coach_id="coach-A"),
+            team_coach("tc2", team_id="t", coach_id="coach-B"),
+            coach_availability("ca", "coach-B", unavailable_days=[2]),
+        ],
+    )
+    result = solve_payload(payload)
+    assert 2 not in _days_of(result, "t"), "co-head-coach B unavailable day 2 → no session"
+
+
+def test_empty_available_days_is_no_restriction() -> None:
+    # Regression (audit review): an empty availableDays whitelist must NOT block
+    # every day (which would zero the team) — it is treated as unconfigured.
+    venue = make_venue("v", [(2, "18:00"), (4, "18:00")])
+    payload = make_payload(
+        teams=[_team("t", sessions=1)],
+        venues=[venue],
+        constraints=[
+            team_coach("tc", team_id="t", coach_id="coach-1"),
+            coach_availability("ca", "coach-1", available_days=[]),
+        ],
+    )
+    result = solve_payload(payload)
+    assert _days_of(result, "t"), "empty availableDays must not zero the team"
+
+
+def test_string_day_names_do_not_crash() -> None:
+    # Regression (audit review): a legacy string day value must be skipped, not
+    # crash the whole solve.
+    venue = make_venue("v", [(2, "18:00"), (4, "18:00")])
+    payload = make_payload(
+        teams=[_team("t", sessions=1)],
+        venues=[venue],
+        constraints=[
+            team_coach("tc", team_id="t", coach_id="coach-1"),
+            coach_availability("ca", "coach-1", unavailable_days=["monday"]),
+        ],
+    )
+    result = solve_payload(payload)
+    assert result["status"] == "completed"
+    assert _days_of(result, "t"), "unparseable day is ignored, team still placed"
+
+
 def test_coach_available_days_complement() -> None:
     venue = make_venue("v", [(1, "18:00"), (2, "18:00"), (3, "18:00")])
     payload = make_payload(

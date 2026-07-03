@@ -263,7 +263,6 @@ def _solve(
         fixed_assignments=parsed["fixed_slots"],
         forbidden_assignments=parsed["forbidden_assignments"],
         coach_unavailability=parsed["coach_unavailability"],
-        venue_closures=parsed["venue_closures"],
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,

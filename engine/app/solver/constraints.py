@@ -197,7 +197,7 @@ def add_level_1_hard_constraints(
 
     # 7. Coach unavailable variables are forced to 0.
     stats.coach_unavailability = add_coach_unavailability_constraints(
-        model, assignment_list, coach_unavailability
+        model, assignment_list, coach_unavailability, team_coach_map=team_coach_map
     )
 
     # 8. Closed venue variables are forced to 0.
@@ -739,7 +739,11 @@ def _assignment_day(assignment: AssignmentLike) -> int | None:
 
 
 def add_coach_unavailability_constraints(
-    model: Any, assignments: Iterable[AssignmentLike], coach_unavailability: RuleCollection = ()
+    model: Any,
+    assignments: Iterable[AssignmentLike],
+    coach_unavailability: RuleCollection = (),
+    *,
+    team_coach_map: dict[str, list[str]] | None = None,
 ) -> int:
     """Constraint 7: coach-unavailable assignment variables are fixed to 0.
 
@@ -747,17 +751,25 @@ def add_coach_unavailability_constraints(
     coach cannot work. A slot is blocked when its day is in that set. (The old
     code compared the day names to the slot_id "3:18:00" and never matched —
     coach availability entered in the UI was silently ignored: audit ENG-01.)
+
+    A team can have several required (non-ASSISTANT) coaches; the assignment only
+    carries the first. If ``team_coach_map`` is given, EVERY coach of the team is
+    checked — a co-head-coach's unavailability must block the day too (audit
+    review), otherwise ENG-01 survives for co-coached teams.
     """
     rules: Mapping[Any, Any] = coach_unavailability if isinstance(coach_unavailability, Mapping) else {}
+    coach_map = team_coach_map or {}
     added = 0
     for assignment in assignments:
         blocked = _bool_field(assignment, "coach_unavailable", "is_coach_unavailable")
-        if not blocked:
-            coach_id = _coach_id(assignment)
-            unavailable_days = rules.get(str(coach_id)) if coach_id is not None else None
-            if unavailable_days:
-                day = _assignment_day(assignment)
-                blocked = day is not None and day in unavailable_days
+        if not blocked and rules:
+            coach_ids = coach_map.get(str(_team_id(assignment)))
+            if not coach_ids:
+                single = _coach_id(assignment)
+                coach_ids = [str(single)] if single is not None else []
+            day = _assignment_day(assignment)
+            if day is not None:
+                blocked = any(day in (rules.get(str(cid)) or ()) for cid in coach_ids)
         if blocked:
             model.Add(_var(assignment) == 0)
             added += 1
@@ -814,13 +826,12 @@ def add_time_window_constraints(
         config = constraint.get("config") or {}
 
         if family == "DAY":
-            forced_days = config.get("forcedDays") or []
-            forbidden_days = config.get("forbiddenDays") or []
-            allowed_days = config.get("allowedDays")
-            day_rules_by_team[team_id_text]["forced"].update(int(day) for day in forced_days if day is not None)
-            day_rules_by_team[team_id_text]["forbidden"].update(int(day) for day in forbidden_days if day is not None)
-            if allowed_days is not None:
-                day_rules_by_team[team_id_text]["allowed"].update(int(day) for day in allowed_days if day is not None)
+            day_rules_by_team[team_id_text]["forced"].update(_day_int_set(config.get("forcedDays")))
+            day_rules_by_team[team_id_text]["forbidden"].update(_day_int_set(config.get("forbiddenDays")))
+            # An empty allowedDays is treated as "unconfigured" (no restriction),
+            # matching the coach-availability whitelist semantics — never "no day
+            # allowed" (which would force the team to zero sessions).
+            day_rules_by_team[team_id_text]["allowed"].update(_day_int_set(config.get("allowedDays")))
             continue
 
         min_start_time = config.get("minStartTime")
@@ -1493,11 +1504,24 @@ def add_age_ascending_constraints(
     return added
 
 
+def _to_day_int(value: Any) -> int | None:
+    """Best-effort weekday int. Legacy string day names (e.g. 'monday') and other
+    non-numeric values are skipped, never crash the whole solve (audit review)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _day_int_set(values: Any) -> set[int]:
+    return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
+
+
 def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
     """Parse v2 constraints[] array into solver-ready rule collections.
 
     Returns dict with keys: fixed_slots, forbidden_assignments,
-    coach_unavailability, venue_closures, forced_venues, preferred_venues,
+    coach_unavailability, forced_venues, preferred_venues, venue_capacity_caps,
     time_windows, priority_tiers, team_coach_map, team_player_map
     """
 
@@ -1505,7 +1529,6 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
         "fixed_slots": [],
         "forbidden_assignments": [],
         "coach_unavailability": {},
-        "venue_closures": {},
         "forced_venues": {},
         "preferred_venues": {},
         "venue_capacity_caps": {},
@@ -1572,11 +1595,13 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
 
         elif family == "COACH_AVAILABILITY" and scope_target_id:
             # Days are weekday numbers (ints, as the wizard sends them). Store a
-            # set of unavailable days; availableDays is the complement.
-            unavailable = {int(d) for d in (config.get("unavailableDays") or []) if d is not None}
-            available = config.get("availableDays")
-            if available is not None:
-                available_set = {int(d) for d in available if d is not None}
+            # set of unavailable days; a non-empty availableDays whitelist is the
+            # complement. An empty/absent availableDays adds no restriction (an
+            # empty whitelist is treated as "unconfigured", never "blocked every
+            # day" — which would force the team to zero sessions).
+            unavailable = _day_int_set(config.get("unavailableDays"))
+            available_set = _day_int_set(config.get("availableDays"))
+            if available_set:
                 unavailable |= {d for d in range(0, 8) if d not in available_set}
             result["coach_unavailability"][str(scope_target_id)] = unavailable
 
@@ -1612,14 +1637,15 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
                 {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
             )
 
-        elif family == "FACILITY_CAPACITY" and (config.get("venueId") or scope_target_id):
+        elif family == "FACILITY_CAPACITY" and config.get("venueId"):
             # Max teams allowed simultaneously per slot of this venue. Applied in
             # _solve as min(trainingSlot.capacity, maxTeams) — can only tighten,
             # never widen a venue the backend already capped to 1 (canSplit=false).
+            # Keyed strictly by config.venueId: scope_target_id under a TEAM scope
+            # is a team id and would never match a venue slot (audit review).
             max_teams = config.get("maxTeams")
-            venue_id = config.get("venueId") or scope_target_id
-            if max_teams is not None and venue_id is not None:
-                result["venue_capacity_caps"][str(venue_id)] = int(max_teams)
+            if max_teams is not None:
+                result["venue_capacity_caps"][str(config["venueId"])] = int(max_teams)
 
         elif c.get("type") == "PRIORITY_TIER":
             metadata = c.get("metadata") or {}

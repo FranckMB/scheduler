@@ -226,7 +226,6 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         assert result["fixed_slots"] == []
         assert result["forbidden_assignments"] == []
         assert result["coach_unavailability"] == {}
-        assert result["venue_closures"] == {}
         assert result["forced_venues"] == {}
         assert result["time_windows"] == []
 
@@ -275,7 +274,7 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["venue_closures"] == {}
+        assert "venue_closures" not in result
 
     def test_facility_capacity_produces_cap(self):
         constraints = [
