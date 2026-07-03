@@ -22,7 +22,7 @@ All PHP test jobs first **create + migrate the test DB** (`doctrine:database:cre
 |-----|--------------|
 | `lint` | `docker compose config` + `make -n help` |
 | `phpstan` | `composer phpstan` (level 8) — needs postgres + redis |
-| `blocking-tests` | the 4 `--group phase1` tests below — **gate for the rest of the PHP suite** |
+| `blocking-tests` | the `--group phase1` security/queue/contract tests below — **gate for the rest of the PHP suite**. Beyond the original 4: `RlsIsolationTest` (DB-level RLS), `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06) |
 | `unit-tests` | full PHPUnit `tests/` |
 | `engine-tests` | `pytest` + `ruff check .` + `mypy` (in the engine container) |
 | `build-docker` | `docker compose build` (needs blocking + engine tests) |
