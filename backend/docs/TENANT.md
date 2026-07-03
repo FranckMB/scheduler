@@ -5,7 +5,7 @@
 ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation design has **two layers** — but only one is active today:
 
 1. **Application layer (ACTIVE)** — A Doctrine SQL filter (`TenantFilter`) transparently appends `club_id = ?` to every DQL/SQL query on entities that own a `club_id` column. **This is the effective tenant barrier.**
-2. **Database layer (PREPARED, NOT ACTIVE — audit 2026-07-03, SEC-03)** — PostgreSQL Row-Level Security. The init scripts only ship a helper (`docker/postgres/init/01-rls.sql`, never invoked) and a commented template (`03-rls-template.sql`); **no `CREATE POLICY` exists in any migration**, and the runtime connects as the `clubscheduler` user, not the restricted `app_user`. Additionally the listener's `SET LOCAL app.club_id` runs outside a transaction, which PostgreSQL treats as a no-op. Until policies are created and the connection user is switched, **do not count on RLS as a safety net.**
+2. **Database layer (ACTIVE since `Version20260703120000` — SEC-03 fixed)** — PostgreSQL Row-Level Security. Every `club_id` table carries `FORCE ROW LEVEL SECURITY` + a `tenant_isolation` policy keyed on the `app.club_id` GUC, the runtime connects as the restricted `app_user`, and the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped — the old out-of-transaction `SET LOCAL` was a no-op). Workers set their own GUC from the message's `clubId`. See `docs/security/rls.md` for the full architecture, the `club_user` bootstrap exception and the `clubscheduler` superadmin door.
 
 ⚠ Entities **without** a `club_id` column (`Club`, `User`) are NOT covered by the Doctrine filter — the tenant barrier does not apply to them. Their access control is enforced explicitly in their API Platform state provider/processor (SEC-01/SEC-02, fixed):
 - **Club** (`ClubStateProvider` / `ClubStateProcessor`): the collection is bounded to the caller's active `ClubUser` memberships (resolved via `ClubUserRepository::findActiveClubIds`, a raw query so the tenant filter does not narrow a multi-club member to one club); item read requires an active membership (else 404); `Put` requires an active **management role** — `owner` or `admin` (404 if no membership, 403 if member but `editor`/`viewer`). No bare `Post`/`Delete` (a club is created via `/api/register`; deletion needs a dedicated cascade flow, not yet exposed).
@@ -77,18 +77,20 @@ services:
 
 ## Behaviour Matrix
 
-| Context | Filter Enabled | SET LOCAL issued | RLS enforced | Notes |
+| Context | Filter Enabled | GUC set | RLS enforced | Notes |
 |---------|---------------|-----------|------------|-------|
-| HTTP (authenticated) | Yes | Yes (but no-op outside a transaction) | **No — no policies exist** | Doctrine filter is the barrier |
-| HTTP (no club_id resolvable) | No | No | No | Filter stays off; unsafe reads are prevented by resolution failing, not by RLS |
-| CLI / messenger worker | No | No | No | Handlers must filter by `clubId` explicitly (e.g. `GenerateScheduleHandler`) |
-| Tests (HTTP kernel) | Yes | Yes (inside dama transaction — appears to work) | No | dama wraps tests in a transaction, masking the prod no-op |
+| HTTP (authenticated) | Yes | Yes (`TenantConnectionContext`, session-scoped) | **Yes** | Doctrine filter + RLS, defence in depth |
+| HTTP (no club_id resolvable) | No | Cleared at request start | Yes | Fail-closed: tenant tables return 0 rows |
+| Register (anonymous) | No | Yes, inside the transaction (AuthController) | Yes | WITH CHECK would reject the seeding otherwise |
+| Messenger worker | No | Yes — handler sets it from the message `clubId` | Yes | `GenerateScheduleHandler` / `ExportPdfHandler`, cleared in `finally` |
+| CLI (`doctrine:query:sql` default) | No | No | Yes | 0 rows on tenant tables — use `--connection admin` for ops |
+| Tests | Yes | Yes | Yes | dama rollback also reverts the GUC (`set_config(..., false)` is transactional) |
 
 ## Security Considerations
 
-- **The Doctrine filter is currently the single effective barrier** for `club_id` entities. Treat any change to `TenantFilter`/`TenantFilterListener` as security-critical and keep `TenantIsolationTest`/`TenantJwtIsolationTest` green.
-- **To actually activate RLS** (target state, see `backend/docs/RLS.md`): create policies + `FORCE ROW LEVEL SECURITY` per table (migration), switch the runtime `DATABASE_URL` to `app_user`, and issue the tenant GUC transactionally (`SET LOCAL` inside a transaction, or `set_config(..., true)`).
-- **Connection separation (target, not wired):** `docker/postgres/init/02-users.sql` creates `app_user` / `migration_user`, but the runtime currently connects as `clubscheduler`.
+- Defence in depth is real now: Doctrine filter (layer 2) **and** RLS (layer 3). Keep `TenantIsolationTest`, `TenantJwtIsolationTest` and `RlsIsolationTest` green — they are the blocking guards.
+- **Connection separation (wired):** runtime = `app_user` (`DATABASE_URL`), migrations/ops/fixtures = `clubscheduler` via the Doctrine `admin` connection (`DATABASE_ADMIN_URL`). `clubscheduler` bypasses RLS — that is the deliberate superadmin supervision door (see `docs/security/rls.md`).
+- ⚠ pgbouncer transaction-pooling is incompatible with the session-scoped GUC — redesign before introducing a pooler.
 
 ## See Also
 

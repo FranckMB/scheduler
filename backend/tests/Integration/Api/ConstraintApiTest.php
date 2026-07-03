@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -21,6 +22,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ConstraintApiTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
 
     private EntityManagerInterface $em;
@@ -181,6 +184,8 @@ final class ConstraintApiTest extends WebTestCase
 
         $this->em->persist($club);
         $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
 
         return $club;
     }

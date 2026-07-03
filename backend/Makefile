@@ -47,30 +47,38 @@ phpunit: APP_ENV = test
 phpunit:
 	$(EXEC) php vendor/bin/phpunit --group phase1
 
+# RLS note: database create/drop and fixtures need the admin connection —
+# the runtime app_user has no CREATEDB and its DELETEs would be silently
+# scoped by the RLS policies (partial purge).
 .PHONY: db-init-test ## Create and migrate the test database
 db-init-test: APP_ENV = test
 db-init-test:
-	$(EXEC) php bin/console doctrine:database:create --if-not-exists -e test
+	$(EXEC) php bin/console doctrine:database:create --if-not-exists --connection admin -e test
 	$(EXEC) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
-.PHONY: db-reset ## Drop, recreate, and migrate the test database
+.PHONY: db-reset ## Drop, recreate, and migrate the dev database
 db-reset: APP_ENV = dev
 db-reset:
-	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists
-	$(EXECROOT) php bin/console doctrine:database:create
+	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists --connection admin
+	$(EXECROOT) php bin/console doctrine:database:create --connection admin
 	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction
 
 .PHONY: db-reset-test ## Drop, recreate, and migrate the test database
 db-reset-test: APP_ENV = test
 db-reset-test:
-	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists -e test
-	$(EXECROOT) php bin/console doctrine:database:create -e test
+	$(EXECROOT) php bin/console doctrine:database:drop --force --if-exists --connection admin -e test
+	$(EXECROOT) php bin/console doctrine:database:create --connection admin -e test
 	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction -e test
+
+# Real env var beats dotenv, so injecting DATABASE_URL=<admin url> makes the
+# whole fixtures run (purge + inserts) bypass RLS. Symfony dotenv precedence:
+# .env.local overrides .env — read both, last definition wins.
+DB_ADMIN_URL = $(shell cat .env .env.local 2>/dev/null | awk -F= '$$1=="DATABASE_ADMIN_URL" {sub(/^[^=]*=/,""); gsub(/"/,""); print}' | tail -n 1)
 
 .PHONY: fixtures ## Load backend fixtures (also clears var/generate)
 fixtures: APP_ENV = dev
 fixtures:
-	$(EXEC) php bin/console doctrine:fixtures:load --no-interaction
+	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction
 	$(EXECROOT) rm -rf ./var/generate/*
 
 .PHONY: phpstan ## Run PHPStan

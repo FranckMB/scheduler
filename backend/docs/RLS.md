@@ -1,6 +1,6 @@
 # ClubScheduler — PostgreSQL Row-Level Security (RLS)
 
-> ⚠ **STATUS: DESIGN DOC — RLS IS NOT ACTIVE TODAY** (audit 2026-07-03, SEC-03). No `CREATE POLICY` exists in any migration; `01-rls.sql` ships a helper function that is never invoked; the runtime connects as `clubscheduler`, not `app_user`. This document describes the **target state**. The effective tenant barrier today is the Doctrine `TenantFilter` (see `TENANT.md`).
+> ✅ **STATUS: ACTIVE** since migration `Version20260703120000` (SEC-03 fixed). The migration — not the initdb scripts — is the source of truth for policies and grants: 14 `club_id` tables under `FORCE ROW LEVEL SECURITY` with `tenant_isolation` policies `TO app_user`, `club_user` with an open-SELECT bootstrap policy. Runtime connects as `app_user`; the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped). Effective architecture: `docs/security/rls.md` (repo root). The `01/02/03-*.sql` initdb scripts remain for fresh volumes only.
 
 ## Overview
 

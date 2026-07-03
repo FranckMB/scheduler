@@ -8,6 +8,7 @@ use App\Doctrine\Filter\TenantFilter;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Repository\SeasonRepository;
+use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,6 +24,7 @@ class TenantFilterListener implements EventSubscriberInterface
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonRepository $seasonRepository,
         private readonly TokenStorageInterface $tokenStorage,
+        private readonly TenantConnectionContext $tenantConnectionContext,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -42,26 +44,31 @@ class TenantFilterListener implements EventSubscriberInterface
             return;
         }
 
+        // Anti-staleness guard: never inherit a GUC from a previous request on
+        // the same connection (shared kernel in tests, worker loops).
+        $this->tenantConnectionContext->clear();
+
         $request = $event->getRequest();
         $user = $this->authenticatedUser();
 
         // Single active club per user: when no explicit tenant is supplied, derive
         // it from the JWT user's active membership. Header/attribute stay as an
-        // override (e.g. tests). The active season is derived the same way.
+        // override (e.g. tests). club_user is readable without a GUC by design
+        // (RLS bootstrap exception).
         $clubId = $this->resolveClubId($request, $user);
-        $seasonId = $this->resolveSeasonId($request, $clubId);
-
-        if (null !== $seasonId) {
-            $request->attributes->set('_season_id', $seasonId);
-        }
-
-        if (null !== $clubId) {
-            $request->attributes->set('_club_id', $clubId);
-        }
 
         if (null === $clubId) {
+            // No tenant: only an explicit season header/attribute can apply (the
+            // active-season fallback needs a club anyway).
+            $explicitSeason = $this->resolveExplicitSeasonId($request);
+            if (null !== $explicitSeason) {
+                $request->attributes->set('_season_id', $explicitSeason);
+            }
+
             return;
         }
+
+        $request->attributes->set('_club_id', $clubId);
 
         // Validate that the authenticated user belongs to the requested club
         // (blocks a spoofed X-Club-Id header pointing at another tenant).
@@ -87,10 +94,17 @@ class TenantFilterListener implements EventSubscriberInterface
         $filter = $filterCollection->enable('tenant_filter');
         $filter->setParameter('club_id', $clubId, 'uuid');
 
-        $connection = $this->entityManager->getConnection();
-        $connection->executeStatement(
-            'SET LOCAL app.club_id = ' . $connection->quote($clubId),
-        );
+        // Session-scoped GUC read by the RLS policies (the old SET LOCAL was a
+        // no-op outside a transaction — see TenantConnectionContext).
+        $this->tenantConnectionContext->setClubId($clubId);
+
+        // Season AFTER the GUC: the active-season fallback queries the
+        // RLS-protected season table — before the GUC it always found 0 rows
+        // and the header-less frontend flow lost its _season_id.
+        $seasonId = $this->resolveSeasonId($request, $clubId);
+        if (null !== $seasonId) {
+            $request->attributes->set('_season_id', $seasonId);
+        }
     }
 
     private function authenticatedUser(): ?User
@@ -131,7 +145,7 @@ class TenantFilterListener implements EventSubscriberInterface
         return null;
     }
 
-    private function resolveSeasonId(Request $request, ?string $clubId): ?string
+    private function resolveExplicitSeasonId(Request $request): ?string
     {
         $seasonId = $request->attributes->get('_season_id');
         if (\is_string($seasonId) && '' !== $seasonId) {
@@ -143,7 +157,18 @@ class TenantFilterListener implements EventSubscriberInterface
             return $seasonId;
         }
 
-        // Fallback: the club's single active season.
+        return null;
+    }
+
+    private function resolveSeasonId(Request $request, ?string $clubId): ?string
+    {
+        $seasonId = $this->resolveExplicitSeasonId($request);
+        if (null !== $seasonId) {
+            return $seasonId;
+        }
+
+        // Fallback: the club's single active season (RLS: requires the GUC —
+        // only call this after TenantConnectionContext::setClubId()).
         if (null !== $clubId) {
             $season = $this->seasonRepository->findOneBy([
                 'clubId' => $clubId,

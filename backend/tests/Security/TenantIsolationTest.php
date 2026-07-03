@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Tests\TenantGucTrait;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -16,6 +17,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class TenantIsolationTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private KernelBrowser $client;
 
     private EntityManagerInterface $em;
@@ -107,6 +110,8 @@ final class TenantIsolationTest extends WebTestCase
         $this->em->persist($userA);
 
         $this->em->flush();
+
+        $this->scopeGucToClub($clubA->getId());
 
         $cu = new ClubUser;
         $cu->setClubId($clubA->getId());

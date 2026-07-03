@@ -7,6 +7,7 @@ namespace App\MessageHandler;
 use App\Entity\Schedule;
 use App\Message\ExportPdfMessage;
 use App\Service\PdfGenerator;
+use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use Symfony\Component\Mercure\HubInterface;
@@ -21,12 +22,42 @@ final readonly class ExportPdfHandler
         private EntityManagerInterface $entityManager,
         private PdfGenerator $pdfGenerator,
         private HubInterface $hub,
+        private TenantConnectionContext $tenantConnectionContext,
     ) {}
 
     public function __invoke(ExportPdfMessage $message): void
     {
+        $clubId = $message->getClubId();
+        if (null === $clubId) {
+            // Legacy payload queued before clubId existed: without it the
+            // schedule is invisible under RLS. Notify failure on a best-effort
+            // basis is impossible (no topic without clubId) — drop explicitly.
+            return;
+        }
+
+        // RLS: no HTTP request in the worker → no GUC set by the listener. Scope
+        // the connection to the message's club before any query, clear after.
+        $this->tenantConnectionContext->setClubId($clubId);
+
+        try {
+            $this->export($message, $clubId);
+        } finally {
+            $this->tenantConnectionContext->clear();
+        }
+    }
+
+    private function export(ExportPdfMessage $message, string $clubId): void
+    {
         $schedule = $this->findSchedule($message->getScheduleId());
         if (!$schedule instanceof Schedule) {
+            // Under RLS an invisible schedule (deleted, or claimed by another
+            // club) must not leave the frontend spinning on pdfExportStatus —
+            // publish a failure on the requesting club's topic.
+            $this->hub->publish(new Update(
+                \sprintf('club:%s:schedule:%s', $clubId, $message->getScheduleId()),
+                json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null, 'pngExportUrl' => null], \JSON_THROW_ON_ERROR),
+            ));
+
             return;
         }
 

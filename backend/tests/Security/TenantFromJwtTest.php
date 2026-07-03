@@ -12,6 +12,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -27,6 +28,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class TenantFromJwtTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private EntityManagerInterface $em;
 
     private KernelBrowser $client;
@@ -95,6 +98,8 @@ final class TenantFromJwtTest extends WebTestCase
         $this->em->persist($user);
 
         $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
 
         $cu = new ClubUser;
         $cu->setClubId($club->getId());

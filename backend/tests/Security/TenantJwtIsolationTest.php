@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -27,6 +28,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class TenantJwtIsolationTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private static int $ip = 0;
 
     private EntityManagerInterface $em;
@@ -84,6 +87,8 @@ final class TenantJwtIsolationTest extends WebTestCase
         $club->setOnboardingCompleted(true);
         $club->setFfbbClubCode('AAA' . strtoupper(substr(md5($uid), 0, 10)));
         $this->em->persist($club);
+
+        $this->scopeGucToClub($club->getId());
 
         $sport = new Sport;
         $sport->setName('Basketball');

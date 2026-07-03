@@ -12,6 +12,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -21,6 +22,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class TeamApiTest extends WebTestCase
 {
+    use TenantGucTrait;
+
     private EntityManagerInterface $em;
 
     private UserPasswordHasherInterface $passwordHasher;
@@ -270,6 +273,8 @@ final class TeamApiTest extends WebTestCase
 
         $this->em->flush();
 
+        $this->scopeGucToClub($this->club->getId());
+
         $cu = new ClubUser;
         $cu->setClubId($this->club->getId());
         $cu->setUserId($this->user->getId());
@@ -341,6 +346,7 @@ final class TeamApiTest extends WebTestCase
 
     private function createClubUser(Club $club, User $user): void
     {
+        $this->scopeGucToClub($club->getId());
         $clubUser = new ClubUser;
         $clubUser->setClubId($club->getId());
         $clubUser->setUserId($user->getId());
@@ -353,6 +359,7 @@ final class TeamApiTest extends WebTestCase
 
     private function createSeason(Club $club): Season
     {
+        $this->scopeGucToClub($club->getId());
         $season = new Season;
         $season->setClubId($club->getId());
         $season->setName('2025-2026');
@@ -382,6 +389,7 @@ final class TeamApiTest extends WebTestCase
 
     private function createSportCategory(Club $club, Sport $sport): SportCategory
     {
+        $this->scopeGucToClub($club->getId());
         $category = new SportCategory;
         $category->setClubId($club->getId());
         $category->setSportId($sport->getId());
@@ -418,6 +426,7 @@ final class TeamApiTest extends WebTestCase
 
     private function createTeam(string $name): Team
     {
+        $this->scopeGucToClub($this->club->getId());
         $team = new Team;
         $team->setClubId($this->club->getId());
         $team->setSeasonId($this->season->getId());
