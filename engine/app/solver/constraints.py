@@ -7,9 +7,9 @@ Implicit rules (always applied):
   VENUE_AT_MOST_ONE, COACH_NO_OVERLAP, COACH_PLAYER_NO_OVERLAP,
   TEAM_NO_OVERLAP, MIN_SESSIONS
 
-Derived rules (parsed from v2 constraints[] payload):
-  fixed_slots, forbidden_assignments, coach_unavailability,
-  venue_closures, forced_venues
+Derived rules (parsed from v2 constraints[] payload → ParsedConstraints):
+  forbidden_assignments, coach_unavailability, forced_venues,
+  preferred_venues, venue_capacity_caps, time_windows (TIME/DAY/LOCK).
 """
 
 from __future__ import annotations
@@ -19,12 +19,30 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _time_to_minutes
 
 logger = logging.getLogger("engine.constraints")
+
+
+class ParsedConstraints(TypedDict):
+    """Typed result of parse_v2_constraints — the backend→engine boundary where
+    the ENG-01/02 format bugs lived (an untyped dict let a set-of-days be
+    compared to a slot string with no type error). Now mypy checks every
+    producer and consumer of these collections."""
+
+    fixed_slots: list[str]
+    forbidden_assignments: list[dict[str, str | None]]
+    coach_unavailability: dict[str, set[int]]
+    forced_venues: dict[str, str]
+    preferred_venues: dict[str, str]
+    venue_capacity_caps: dict[str, int]
+    time_windows: list[dict[str, Any]]
+    priority_tiers: dict[int, int]
+    team_coach_map: dict[str, list[str]]
+    team_player_map: dict[str, list[str]]
 
 # Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
 # Used to warn ONLY on genuine contract drift, not on recognised families whose
@@ -1527,15 +1545,10 @@ def _day_int_set(values: Any) -> set[int]:
     return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
 
 
-def parse_v2_constraints(constraints: list[dict[str, Any]]) -> dict[str, Any]:
-    """Parse v2 constraints[] array into solver-ready rule collections.
+def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints:
+    """Parse v2 constraints[] array into typed, solver-ready rule collections."""
 
-    Returns dict with keys: fixed_slots, forbidden_assignments,
-    coach_unavailability, forced_venues, preferred_venues, venue_capacity_caps,
-    time_windows, priority_tiers, team_coach_map, team_player_map
-    """
-
-    result: dict[str, Any] = {
+    result: ParsedConstraints = {
         "fixed_slots": [],
         "forbidden_assignments": [],
         "coach_unavailability": {},

@@ -190,7 +190,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 - **Timeout solver** : adaptatif (`_adaptive_timeout`, voir §2) — `n_teams × n_venues` ≤50 : 60 s · ≤200 : 180 s · sinon 600 s, plafonné par `solver_timeout_seconds` du payload (default **650 s** dans `ScheduleInputSchema`). Phase 2 (chaînage) plafonnée en plus par `CHAINING_PHASE_MAX_SECONDS = 10`.
 - **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42) — les deux phases.
 - **Workers** : `solver.parameters.num_search_workers = 1` — les deux phases.
-- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V4"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py) :
+- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py) :
 
 | Critère | Poids |
 |---------|-------|
@@ -200,9 +200,12 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 | `session_count` | 20 |
 | `preferred` | 60 |
 | `preferred_day` | 30 |
+| `preferred_time` | 30 |
 | Tier C | 10 |
 | Tier D | 1 |
 | `rest` | 3 |
+
+- **Contraintes v2 effectives** (série ENGINE, 2026-07-03) : `parse_v2_constraints` → `ParsedConstraints` (TypedDict). Indispo coach par jour (COACH_AVAILABILITY `unavailableDays`/`availableDays`, jours int) appliquée ; FACILITY_CAPACITY (`maxTeams`) = `min(capacité slot, maxTeams)` ; LOCK TIME/DAY = HARD ; `allowedDays` = whitelist ; `forcedDays`/`forbiddenDays`/min-maxStartTime HARD. `preferred_time` (soft) + repos lendemain de match (règle implicite, `matchDay` → jour+1 libre, poids `rest`).
 
 - `UNPLACED_PENALTY = 100 000` (par team non placée, sauf `hard_satisfied_team_ids`).
 - **Chaining bonus** (phase 2 uniquement) : `CHAINING_TIER_WEIGHTS = {S:8, A:6, B:4, C:2, D:1}` — bonus entier pour sessions back-to-back même venue même coach, poids du tier le plus haut de la paire. Plafonné à 8 par construction : < 21 (valeur minimale d'une session placée) pour ne jamais sacrifier un placement, et ≤ 8 (écart C−D = 9) pour ne jamais voler un slot à un tier supérieur.

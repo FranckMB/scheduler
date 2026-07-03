@@ -274,69 +274,97 @@ def add_level_2_objective(
     )
 
 
-def add_preferred_day_bonus(
-    model: Any,
+def _group_team_slots(
+    x: Mapping[Any, BoolVarLike],
+) -> dict[str, list[tuple[Any, int | None, int | None, BoolVarLike]]]:
+    """Group vars by team once (O(slots)): {team: [(slot_key, day, start_min, var)]}."""
+    grouped: dict[str, list[tuple[Any, int | None, int | None, BoolVarLike]]] = {}
+    for slot_key, variable in x.items():
+        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+            continue
+        try:
+            day: int | None = int(_scalar_id(slot_key[2]))
+        except (TypeError, ValueError):
+            day = None
+        grouped.setdefault(str(_scalar_id(slot_key[0])), []).append(
+            (slot_key, day, _safe_minutes(slot_key[3]), variable)
+        )
+    return grouped
+
+
+def _add_preferred_bonus(
     x: Mapping[Any, BoolVarLike],
     time_windows: Iterable[Any],
     weights: Mapping[str, int],
+    *,
+    family: str,
+    weight_name: str,
+    criterion: Any,
+    matches: Any,
 ) -> list[tuple[BoolVarLike, str]]:
-    """Return soft objective terms for preferred-day time windows."""
+    """Shared soft-bonus builder for PREFERRED+<family> windows.
 
-    del model
-    if "preferred_day" not in weights:
-        raise KeyError("preferred_day")
+    ``criterion(config)`` extracts a per-window value (or None to skip the
+    window); ``matches(day, start_min, crit)`` decides whether a slot earns the
+    bonus. This factors add_preferred_day_bonus / add_preferred_time_bonus into
+    one place (audit review F3) — a fix to the slot-matching/dedup logic now
+    lives once.
+    """
+    if weight_name not in weights:
+        raise KeyError(weight_name)
 
+    grouped = _group_team_slots(x)
     soft_terms: list[tuple[BoolVarLike, str]] = []
     seen_keys: set[Any] = set()
 
     for time_window in time_windows:
-        rule_type = _get(time_window, "ruleType", "rule_type", default=None)
-        if rule_type != "PREFERRED":
+        if _get(time_window, "ruleType", "rule_type", default=None) != "PREFERRED":
             continue
-
-        family = _get(time_window, "family", default=None)
-        if family != "DAY":
-            # PREFERRED TIME is handled by add_preferred_time_bonus below.
+        if _get(time_window, "family", default=None) != family:
             continue
-
         team_id = _scalar_id(
             _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
         )
         if team_id is None:
             continue
 
-        config = _get(time_window, "config", default={}) or {}
-        preferred_days = config.get("preferredDays") or config.get("preferred_days") or ()
-        preferred_day_numbers: set[int] = set()
-        for preferred_day in preferred_days:
-            try:
-                preferred_day_numbers.add(int(_scalar_id(preferred_day)))
-            except (TypeError, ValueError):
-                continue
-
-        if not preferred_day_numbers:
+        crit = criterion(_get(time_window, "config", default={}) or {})
+        if crit is None:
             continue
 
-        for slot_key, variable in x.items():
+        for slot_key, day, start_min, variable in grouped.get(str(team_id), []):
             if slot_key in seen_keys:
                 continue
-            if not isinstance(slot_key, tuple) or len(slot_key) < 4:
-                continue
-            if _scalar_id(slot_key[0]) != team_id:
-                continue
-
-            try:
-                day_of_week = int(_scalar_id(slot_key[2]))
-            except (TypeError, ValueError):
-                continue
-
-            if day_of_week not in preferred_day_numbers:
-                continue
-
-            soft_terms.append((variable, "preferred_day"))
-            seen_keys.add(slot_key)
+            if matches(day, start_min, crit):
+                soft_terms.append((variable, weight_name))
+                seen_keys.add(slot_key)
 
     return soft_terms
+
+
+def add_preferred_day_bonus(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    time_windows: Iterable[Any],
+    weights: Mapping[str, int],
+) -> list[tuple[BoolVarLike, str]]:
+    """Return soft objective terms for preferred-day windows."""
+    del model
+
+    def criterion(config: Mapping[str, Any]) -> set[int] | None:
+        days: set[int] = set()
+        for value in config.get("preferredDays") or config.get("preferred_days") or ():
+            try:
+                days.add(int(_scalar_id(value)))
+            except (TypeError, ValueError):
+                continue
+        return days or None
+
+    return _add_preferred_bonus(
+        x, time_windows, weights, family="DAY", weight_name="preferred_day",
+        criterion=criterion,
+        matches=lambda day, _start, days: day is not None and day in days,
+    )
 
 
 def add_preferred_time_bonus(
@@ -347,60 +375,30 @@ def add_preferred_time_bonus(
 ) -> list[tuple[BoolVarLike, str]]:
     """Return soft objective terms for PREFERRED TIME windows.
 
-    Mirror of add_preferred_day_bonus: a PREFERRED+TIME constraint rewards a
-    team's sessions that start inside [minStartTime, maxStartTime] (either bound
-    absent = unconstrained on that side). Soft only — never a hard window.
+    A PREFERRED+TIME constraint rewards a team's sessions starting inside
+    [minStartTime, maxStartTime] (either bound absent = unconstrained on that
+    side). Soft only — never a hard window. A malformed bound is ignored, not a
+    500 (audit review).
     """
-
     del model
-    if "preferred_time" not in weights:
-        raise KeyError("preferred_time")
 
-    # Pre-group vars by team once (O(slots)) instead of rescanning x per window.
-    team_slot_vars: dict[str, list[tuple[Any, int, BoolVarLike]]] = {}
-    for slot_key, variable in x.items():
-        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
-            continue
-        try:
-            start_minutes = _time_to_minutes(slot_key[3])
-        except (TypeError, ValueError):
-            continue
-        team_slot_vars.setdefault(str(_scalar_id(slot_key[0])), []).append((slot_key, start_minutes, variable))
+    def criterion(config: Mapping[str, Any]) -> tuple[int | None, int | None] | None:
+        lo = _safe_minutes(config.get("minStartTime"))
+        hi = _safe_minutes(config.get("maxStartTime"))
+        return None if lo is None and hi is None else (lo, hi)
 
-    soft_terms: list[tuple[BoolVarLike, str]] = []
-    seen_keys: set[Any] = set()
+    def matches(_day: int | None, start_min: int | None, bounds: tuple[int | None, int | None]) -> bool:
+        lo, hi = bounds
+        if start_min is None:
+            return False
+        if lo is not None and start_min < lo:
+            return False
+        return not (hi is not None and start_min > hi)
 
-    for time_window in time_windows:
-        if _get(time_window, "ruleType", "rule_type", default=None) != "PREFERRED":
-            continue
-        if _get(time_window, "family", default=None) != "TIME":
-            continue
-
-        team_id = _scalar_id(
-            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
-        )
-        if team_id is None:
-            continue
-
-        config = _get(time_window, "config", default={}) or {}
-        # Guard the parse: a malformed/empty bound must not turn the whole
-        # generation into a 500 (this window is only a soft bonus).
-        min_minutes = _safe_minutes(config.get("minStartTime"))
-        max_minutes = _safe_minutes(config.get("maxStartTime"))
-        if min_minutes is None and max_minutes is None:
-            continue
-
-        for slot_key, start_minutes, variable in team_slot_vars.get(str(team_id), []):
-            if slot_key in seen_keys:
-                continue
-            if min_minutes is not None and start_minutes < min_minutes:
-                continue
-            if max_minutes is not None and start_minutes > max_minutes:
-                continue
-            soft_terms.append((variable, "preferred_time"))
-            seen_keys.add(slot_key)
-
-    return soft_terms
+    return _add_preferred_bonus(
+        x, time_windows, weights, family="TIME", weight_name="preferred_time",
+        criterion=criterion, matches=matches,
+    )
 
 
 def _safe_minutes(value: Any) -> int | None:
