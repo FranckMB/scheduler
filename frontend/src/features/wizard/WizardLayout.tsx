@@ -1,10 +1,11 @@
 import { AlertTriangle, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
+import { WizardFooterContext } from "./lib/footerSlot";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
 import { useVenueSlots, useWizardCoaches, useWizardTeams, useWizardVenues } from "./queries";
@@ -42,6 +43,8 @@ export function WizardPage() {
   const blocked = validation.errors.length > 0;
   const isLast = index === WIZARD_STEPS.length - 1;
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [footerExtra, setFooterExtra] = useState<ReactNode>(null);
+  const footerCtx = useMemo(() => ({ setFooterExtra }), []);
   // First-time club (not yet onboarded) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely.
   const guided = me?.club?.onboardingCompleted === false;
@@ -78,7 +81,8 @@ export function WizardPage() {
   }, [guided, ready, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
   return (
-    <div className="flex flex-col gap-6 md:flex-row">
+    <WizardFooterContext.Provider value={footerCtx}>
+      <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (
         <nav className="shrink-0 md:w-52">
@@ -132,12 +136,15 @@ export function WizardPage() {
 
         <StepContent stepId={stepId} />
 
-        {validation.errors.map((error) => (
-          <p key={error} role="alert" className="mt-3 flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle className="size-4 shrink-0" />
-            {error}
-          </p>
-        ))}
+        {/* Récap renders its own grouped blocker panel, so skip the generic alerts there. */}
+        {"recap" === stepId
+          ? null
+          : validation.errors.map((error) => (
+              <p key={error} role="alert" className="mt-3 flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="size-4 shrink-0" />
+                {error}
+              </p>
+            ))}
         {validation.warnings.map((warning) => (
           <p key={warning} className="mt-3 flex items-center gap-2 text-sm text-amber-500">
             <AlertTriangle className="size-4 shrink-0" />
@@ -145,20 +152,24 @@ export function WizardPage() {
           </p>
         ))}
 
-        {/* Sticky Prev/Next footer (W7) — stays visible on long steps. On Récap the
-            forward action is the gated "Continuer vers la génération" CTA inside the
-            step, so the generic "Suivant" is hidden there to avoid a redundant button. */}
-        <div className="sticky bottom-0 z-20 mt-6 flex justify-between border-t border-border bg-background py-4">
+        {/* Sticky Prev/Next footer (W7). On Récap "Suivant" becomes the gated
+            "Continuer vers la génération". A step can inject an action (footerExtra),
+            e.g. "Trier" on the Teams step, rendered left of Suivant. */}
+        <div className="sticky bottom-0 z-20 mt-6 flex items-center justify-between gap-2 border-t border-border bg-background py-4">
           <Button variant="outline" disabled={0 === index} onClick={prev}>
             Précédent
           </Button>
-          {isLast || "recap" === stepId ? null : (
-            <Button disabled={blocked} onClick={next}>
-              Suivant
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {footerExtra}
+            {isLast ? null : (
+              <Button disabled={blocked} onClick={next}>
+                {"recap" === stepId ? "Continuer vers la génération" : "Suivant"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      </div>
+    </WizardFooterContext.Provider>
   );
 }

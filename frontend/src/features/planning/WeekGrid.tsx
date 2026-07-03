@@ -41,7 +41,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
     );
   }
 
-  const gridTemplateColumns = `4rem repeat(${columns.length}, minmax(6rem, 1fr))`;
+  const gridTemplateColumns = `3.25rem repeat(${columns.length}, minmax(4.25rem, 1fr))`;
   const gridTemplateRows = `${HEADER_ROW} ${HEADER_ROW} repeat(${rows.length}, ${ROW_HEIGHT}px)`;
 
   function onScroll(event: UIEvent<HTMLDivElement>) {

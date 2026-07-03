@@ -18,6 +18,7 @@ vi.mock("./api", () => ({
   listPriorityTiers: vi.fn(() => Promise.resolve([{ id: 1, label: "S", name: "Elite", color: null }, { id: 2, label: "A", name: "Régional", color: null }])),
   createTeam: vi.fn(() => Promise.resolve({})),
   updateTeam: vi.fn(() => Promise.resolve({})),
+  reorderTeams: vi.fn(() => Promise.resolve({})),
   deleteTeam: vi.fn(() => Promise.resolve()),
   listVenues: vi.fn(() => Promise.resolve([])),
   listVenueSlots: vi.fn(() => Promise.resolve([])),
@@ -71,5 +72,15 @@ describe("Wizard (integration)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Ajoutez au moins une équipe");
     expect(screen.getByRole("button", { name: "Suivant" })).toBeDisabled();
+  });
+
+  it("enters sort mode from the footer « Trier » button and shows the tier drop zones", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+    await screen.findByDisplayValue("SF1");
+
+    await user.click(await screen.findByRole("button", { name: /trier/i }));
+    expect(await screen.findByRole("button", { name: /terminer le tri/i })).toBeInTheDocument();
+    expect(screen.getByText(/par sa poignée/i)).toBeInTheDocument();
   });
 });

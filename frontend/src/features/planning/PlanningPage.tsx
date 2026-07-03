@@ -83,7 +83,9 @@ export function PlanningPage() {
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
       const base = schedules.find((s) => s.id === baselineScheduleId);
-      setSelectedScheduleId(base ? base.id : pickDefaultSchedule(schedules));
+      // Prefer a READY (finished) plan on arrival, so landing on « Accueil » never
+      // shows the "Génération en cours" screen when the baseline is mid-regeneration.
+      setSelectedScheduleId(base && !IN_FLIGHT.includes(base.status) ? base.id : pickDefaultSchedule(schedules));
     }
   }, [validScheduleId, schedules, baselineScheduleId, setSelectedScheduleId]);
 
@@ -225,7 +227,7 @@ export function PlanningPage() {
                   />
                 ) : null}
                 {isReadOnly ? null : (
-                  <div className="min-h-0 flex-1">
+                  <div className="min-h-[12rem] flex-1">
                     <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
                   </div>
                 )}

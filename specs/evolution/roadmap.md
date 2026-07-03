@@ -71,6 +71,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` |
 | **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées |
 | `ScheduleDiffService` (diff lisible entre 2 snapshots) | ⬜ | v3 §6.2 · FF#11 | |
+| **Grille de réservation** (étape Contraintes, pré-génération) : grille type disponibilités, **clic = affecter une équipe** à un créneau ; affiche les **créneaux déjà placés** en base (`schedule_slot_templates`) | ⬜ | — | Remplace la liste déroulante actuelle (`ReservationPanel`). Réutiliser le style `VenueAvailabilityGrid`. Idée gestionnaire (recette) — les réservations posées ⇒ HARD locks à la génération |
 | Routes manual-edit documentées (OpenAPI) + naming `schedule-slots` vs `schedule_slot_templates` | 🟡 | BG G5/G6 | Endpoints existent, non documentés |
 
 ---

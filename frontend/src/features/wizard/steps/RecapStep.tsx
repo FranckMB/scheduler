@@ -1,11 +1,10 @@
-import { AlertTriangle, ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
-import { useConstraintValidation, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
-import { useWizardStore } from "../store";
+import { useStepValidation } from "../lib/useStepValidation";
+import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
 
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
@@ -28,7 +27,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
         <span className="flex-1 font-medium">{title}</span>
         <span className="rounded-full bg-muted px-2 text-xs text-muted-foreground">{count}</span>
       </button>
-      {open ? <div className="border-t border-border px-3 py-1">{children}</div> : null}
+      {open ? <div className="max-h-64 overflow-y-auto border-t border-border px-3 py-1">{children}</div> : null}
     </div>
   );
 }
@@ -46,14 +45,15 @@ function ItemRow({ label, meta }: { label: string; meta?: ReactNode }) {
 const empty = <p className="py-1.5 text-sm text-muted-foreground">—</p>;
 
 export function RecapStep() {
-  const { next } = useWizardStore();
   const { data: teams = [] } = useWizardTeams();
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const { data: constraints = [] } = useWizardConstraints();
-  const { data: validation } = useConstraintValidation(true);
+  // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
+  // génération" button is gated by the same rules (single source of truth).
+  const { errors: blockers } = useStepValidation("recap");
 
   const salaried = coaches.filter((c) => c.isEmployee).length;
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
@@ -62,32 +62,6 @@ export function RecapStep() {
   for (const s of slots) {
     slotsByVenue.set(s.venueId, (slotsByVenue.get(s.venueId) ?? 0) + 1);
   }
-  const venuesWithSlot = new Set(slots.map((s) => s.venueId));
-  const emptyVenues = venues.filter((v) => !venuesWithSlot.has(v.id));
-
-  const blockers: string[] = [];
-  if (0 === teams.length) {
-    blockers.push("Aucune équipe.");
-  }
-  if (0 === coaches.length) {
-    blockers.push("Aucun coach.");
-  }
-  if (0 === venues.length) {
-    blockers.push("Aucun gymnase.");
-  }
-  if (emptyVenues.length > 0) {
-    blockers.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
-  }
-  if (validation && !validation.valid) {
-    for (const messages of Object.values(validation.errors)) {
-      blockers.push(...messages);
-    }
-    for (const conflict of validation.conflicts) {
-      blockers.push(conflict.reason);
-    }
-  }
-
-  const canGenerate = 0 === blockers.length;
 
   return (
     <div>
@@ -138,15 +112,8 @@ export function RecapStep() {
           </ul>
         </div>
       ) : (
-        <p className="mb-4 text-sm text-emerald-500">Tout est prêt. Vous pouvez générer le planning.</p>
+        <p className="text-sm text-emerald-500">Tout est prêt. Utilisez « Continuer vers la génération » en bas pour lancer.</p>
       )}
-
-      <div className="flex justify-end">
-        <Button size="lg" disabled={!canGenerate} onClick={next}>
-          Continuer vers la génération
-          <ArrowRight className="size-4" />
-        </Button>
-      </div>
     </div>
   );
 }

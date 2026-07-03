@@ -2,7 +2,7 @@ import { closestCorners, DndContext, type DragEndEvent, DragOverlay, KeyboardSen
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowUpDown, ChevronDown, ChevronsDown, ChevronsUp, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -10,8 +10,9 @@ import { Select } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamPayload } from "../api";
-import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
+import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
+import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 
 // Manager-facing meaning of each priority tier (backend tier names are FFBB
 // competition levels; here we explain what the rank means for scheduling).
@@ -56,14 +57,11 @@ interface RowProps {
   number: number;
   categories: SportCategory[];
   tiers: PriorityTier[];
-  canUp: boolean;
-  canDown: boolean;
   onField: (team: Team, patch: Partial<TeamPayload>) => void;
-  onMove: (team: Team, dir: -1 | 1) => void;
   onDelete: (team: Team) => void;
 }
 
-function TeamRow({ team, number, categories, tiers, canUp, canDown, onField, onMove, onDelete }: RowProps) {
+function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProps) {
   // Local edit buffers (saved on blur). name/sessions only change through this row.
   const [name, setName] = useState(team.name);
   const [sessions, setSessions] = useState(String(team.sessionsPerWeek));
@@ -108,12 +106,6 @@ function TeamRow({ team, number, categories, tiers, canUp, canDown, onField, onM
           </option>
         ))}
       </Select>
-      <Button size="icon" variant="ghost" className="size-8" aria-label="Monter" disabled={!canUp} onClick={() => onMove(team, -1)}>
-        <ChevronUp className="size-4" />
-      </Button>
-      <Button size="icon" variant="ghost" className="size-8" aria-label="Descendre" disabled={!canDown} onClick={() => onMove(team, 1)}>
-        <ChevronDown className="size-4" />
-      </Button>
       <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
         <Trash2 className="size-4" />
       </Button>
@@ -208,17 +200,6 @@ export function TeamsStep() {
     update.mutate({ id: team.id, body: payload(team, { ...patch, ...extra }) });
   };
 
-  const onMove = (team: Team, dir: -1 | 1) => {
-    const group = teamsOfTier(teams, team.priorityTierId);
-    const idx = group.findIndex((t) => t.id === team.id);
-    const other = group[idx + dir];
-    if (undefined === other) {
-      return;
-    }
-    update.mutate({ id: team.id, body: payload(team, { tierOrder: other.tierOrder }) });
-    update.mutate({ id: other.id, body: payload(other, { tierOrder: team.tierOrder }) });
-  };
-
   const addTeam = (event: FormEvent) => {
     event.preventDefault();
     if ("" === name.trim()) {
@@ -236,12 +217,16 @@ export function TeamsStep() {
     setName("");
   };
 
-  // --- Sort mode state ---
+  // --- Sort mode: local reordering, committed atomically on exit ---
+  const { setFooterExtra } = useWizardFooter();
   const [sortMode, setSortMode] = useState(false);
   const [lanes, setLanes] = useState<Record<number, string[]>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const lanesRef = useRef(lanes);
-  const draggingRef = useRef(false);
+  const reorderRef = useRef(reorder);
+  useEffect(() => {
+    reorderRef.current = reorder;
+  });
   const sortedTiers = [...tiers].sort((a, b) => a.id - b.id);
   const teamById = new Map(teams.map((t) => [t.id, t] as const));
 
@@ -250,10 +235,21 @@ export function TeamsStep() {
     setLanes(next);
   };
 
-  // Rebuild lanes from server data whenever teams change and no drag is in flight
-  // (so a just-committed drop isn't reverted before the refetch lands).
-  useEffect(() => {
-    if (draggingRef.current) {
+  // Enter → snapshot the current order into lanes; exit → persist the whole
+  // ordering in ONE atomic call (every team gets an explicit tierOrder = index,
+  // so anyone without a number gets one). Lanes are edited locally during sort;
+  // the server is not re-read until exit, so manual order isn't reverted by the
+  // name-sort.
+  const toggleSort = useCallback(() => {
+    if (sortMode) {
+      const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
+      for (const tier of tiers) {
+        (lanesRef.current[tier.id] ?? []).forEach((id, index) => items.push({ id, priorityTierId: tier.id, tierOrder: index }));
+      }
+      if (items.length > 0) {
+        reorderRef.current.mutate(items);
+      }
+      setSortMode(false);
       return;
     }
     const next: Record<number, string[]> = {};
@@ -262,22 +258,21 @@ export function TeamsStep() {
     }
     lanesRef.current = next;
     setLanes(next);
-  }, [teams, tiers]);
+    setSortMode(true);
+  }, [sortMode, teams, tiers]);
 
-  // Persist the whole ordering in ONE atomic call — every team gets its tier +
-  // index. Avoids the N-concurrent-PUT storm that raced on Team's optimistic-lock
-  // version and dropped updates.
-  const commit = (next: Record<number, string[]>) => {
-    const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
-    for (const tier of tiers) {
-      (next[tier.id] ?? []).forEach((id, index) => {
-        items.push({ id, priorityTierId: tier.id, tierOrder: index });
-      });
-    }
-    if (items.length > 0) {
-      reorder.mutate(items);
-    }
-  };
+  // Register the "Trier" toggle in the wizard footer, left of "Suivant".
+  useEffect(() => {
+    setFooterExtra(
+      teams.length > 0 ? (
+        <Button size="sm" variant={sortMode ? "default" : "outline"} onClick={toggleSort}>
+          <ArrowUpDown className="size-4" />
+          {sortMode ? "Terminer le tri" : "Trier"}
+        </Button>
+      ) : null,
+    );
+    return () => setFooterExtra(null);
+  }, [sortMode, teams.length, toggleSort, setFooterExtra]);
 
   const laneOf = (id: string): number | null => {
     const zone = zoneTierId(id);
@@ -293,7 +288,6 @@ export function TeamsStep() {
   };
 
   const onDragEnd = (event: DragEndEvent) => {
-    draggingRef.current = false;
     setActiveId(null);
     const { active, over } = event;
     if (null === over) {
@@ -328,7 +322,6 @@ export function TeamsStep() {
       next[to] = dst;
     }
     setBothLanes(next);
-    commit(next);
   };
 
   const moveInLane = (laneId: number, teamId: string, dir: -1 | 1) => {
@@ -338,9 +331,7 @@ export function TeamsStep() {
     if (idx < 0 || j < 0 || j >= items.length) {
       return;
     }
-    const next = { ...lanesRef.current, [laneId]: arrayMove(items, idx, j) };
-    setBothLanes(next);
-    commit(next);
+    setBothLanes({ ...lanesRef.current, [laneId]: arrayMove(items, idx, j) });
   };
 
   const sensors = useSensors(
@@ -360,12 +351,6 @@ export function TeamsStep() {
             <strong className="text-foreground">{label}</strong> {meaning}
           </span>
         ))}
-        {teams.length > 0 ? (
-          <Button size="sm" variant={sortMode ? "default" : "outline"} className="ml-auto h-8" onClick={() => setSortMode((s) => !s)}>
-            <ArrowUpDown className="size-4" />
-            {sortMode ? "Terminer le tri" : "Trier"}
-          </Button>
-        ) : null}
       </div>
 
       {sortMode ? (
@@ -376,14 +361,8 @@ export function TeamsStep() {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
-            onDragStart={(event) => {
-              draggingRef.current = true;
-              setActiveId(String(event.active.id));
-            }}
-            onDragCancel={() => {
-              draggingRef.current = false;
-              setActiveId(null);
-            }}
+            onDragStart={(event) => setActiveId(String(event.active.id))}
+            onDragCancel={() => setActiveId(null)}
             onDragEnd={onDragEnd}
           >
             <div className="flex flex-col gap-4">
@@ -438,7 +417,7 @@ export function TeamsStep() {
                 <span className="w-20">Genre</span>
                 <span className="w-16">Séances</span>
                 <span className="w-32">Niveau</span>
-                <span className="w-[104px] text-right">Ordre · Suppr.</span>
+                <span className="w-8 text-right">Suppr.</span>
               </div>
               {tierGroups.map((tier) => {
                 const group = teamsOfTier(teams, tier.id);
@@ -448,17 +427,14 @@ export function TeamsStep() {
                       {tier.label} · {TIER_MEANING[tier.label] ?? tier.name}
                     </h3>
                     <div className="rounded-lg border border-border bg-card px-2">
-                      {group.map((team, i) => (
+                      {group.map((team) => (
                         <TeamRow
                           key={team.id}
                           team={team}
                           number={numberOf.get(team.id) ?? 0}
                           categories={categories}
                           tiers={tiers}
-                          canUp={i > 0}
-                          canDown={i < group.length - 1}
                           onField={onField}
-                          onMove={onMove}
                           onDelete={(t) => del.mutate(t.id)}
                         />
                       ))}
