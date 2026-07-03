@@ -240,6 +240,67 @@ final class TeamApiTest extends WebTestCase
         self::assertSame(1, $this->em->getRepository(Team::class)->find($b->getId())?->getTierOrder());
     }
 
+    public function testLevelIsWritableAndReadable(): void
+    {
+        $client = $this->client;
+        $client->loginUser($this->user);
+
+        $client->request('POST', '/api/teams', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Regional Team',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'level' => 'REGIONAL',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame('REGIONAL', json_decode((string) $client->getResponse()->getContent(), true)['level']);
+    }
+
+    public function testLevelIsClearedWhenNullOnUpdate(): void
+    {
+        $client = $this->client;
+        $team = $this->createTeam('Leveled');
+        $team->setLevel(\App\Enum\TeamLevel::REGIONAL);
+        $this->em->flush();
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Leveled',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'level' => null,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        self::assertNull(json_decode((string) $client->getResponse()->getContent(), true)['level']);
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
+    }
+
+    public function testInvalidLevelIsRejected(): void
+    {
+        $client = $this->client;
+        $client->loginUser($this->user);
+
+        $client->request('POST', '/api/teams', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Bad Level',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'level' => 'REGIONALE',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

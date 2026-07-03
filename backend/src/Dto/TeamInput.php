@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\TeamLevel;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -47,6 +48,7 @@ class TeamInput
     #[Groups(['write'])]
     public ?string $ffbbTeamId = null;
 
+    #[Assert\Choice(callback: [TeamLevel::class, 'values'])]
     #[Groups(['write'])]
     public ?string $level = null;
 }

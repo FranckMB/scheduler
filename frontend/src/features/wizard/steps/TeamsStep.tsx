@@ -52,8 +52,9 @@ const isCompetitive = (level: TeamLevel | null): boolean =>
 /** Full label for a tier select: "S · Fanion" rather than the bare letter. */
 const tierLabel = (t: PriorityTier): string => `${t.label} · ${TIER_MEANING[t.label] ?? t.name}`;
 
-/** Tier id 5 = "D · Bonus" (lowest priority). */
-const BONUS_TIER_ID = 5;
+/** The "Bonus" tier is identified by its label ("D"), not a fixture row id. */
+const isBonusTier = (tiers: PriorityTier[], tierId: number): boolean =>
+  tiers.find((t) => t.id === tierId)?.label === "D";
 
 function payload(team: Team, patch: Partial<TeamPayload>): TeamPayload {
   return {
@@ -90,7 +91,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
 
   // Competitive team ranked "Bonus" (D) is likely a mistake — it will be
   // scheduled last. Non-blocking warning (the solver stays the authority).
-  const bonusCompetitionWarning = isCompetitive(team.level) && BONUS_TIER_ID === team.priorityTierId;
+  const bonusCompetitionWarning = isCompetitive(team.level) && isBonusTier(tiers, team.priorityTierId);
 
   return (
     <div className="border-t border-border py-1.5">
@@ -266,26 +267,30 @@ export function TeamsStep() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const lanesRef = useRef(lanes);
   const reorderRef = useRef(reorder);
+  const tiersRef = useRef(tiers);
   // Dirty = the user reordered but hasn't committed yet. Guards the flush-on-exit.
   const dirtyRef = useRef(false);
   useEffect(() => {
     reorderRef.current = reorder;
+    tiersRef.current = tiers;
   });
 
   // Build the atomic reorder payload from the current lanes and persist it.
+  // Reads everything through refs so the callback is stable — the flush-on-exit
+  // effect below must fire ONLY on unmount, never on a tiers refetch.
   const flushSort = useCallback(() => {
     if (!dirtyRef.current) {
       return;
     }
     const items: { id: string; priorityTierId: number; tierOrder: number }[] = [];
-    for (const tier of tiers) {
+    for (const tier of tiersRef.current) {
       (lanesRef.current[tier.id] ?? []).forEach((id, index) => items.push({ id, priorityTierId: tier.id, tierOrder: index }));
     }
     dirtyRef.current = false;
     if (items.length > 0) {
       reorderRef.current.mutate(items);
     }
-  }, [tiers]);
+  }, []);
 
   // Commit any pending reorder when the step unmounts (e.g. the user clicks
   // "Suivant" while still in sort mode) — otherwise the order was lost.

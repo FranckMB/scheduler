@@ -40,9 +40,7 @@ class TeamStateProcessor extends AbstractStateProcessor
                 $entity->setGender($gender);
             }
         }
-        if (null !== $input->level) {
-            $entity->setLevel(TeamLevel::tryFrom($input->level));
-        }
+        $entity->setLevel(null !== $input->level ? TeamLevel::tryFrom($input->level) : null);
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }
@@ -75,9 +73,7 @@ class TeamStateProcessor extends AbstractStateProcessor
                 $entity->setGender($gender);
             }
         }
-        if (null !== $input->level) {
-            $entity->setLevel(TeamLevel::tryFrom($input->level));
-        }
+        $entity->setLevel(null !== $input->level ? TeamLevel::tryFrom($input->level) : null);
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }
