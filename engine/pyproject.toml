@@ -37,6 +37,9 @@ include = ["app*"]
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+  "perf: slow performance-gate tests (dense-club budget); excluded by default, run on CI main only",
+]
 
 [tool.ruff]
 line-length = 120
