@@ -95,6 +95,7 @@ def _extract_hard_locks(
     locked_slots: list[dict[str, Any]] = []
     hard_slot_keys: set[SlotKey] = set()
     blocked_venue_slots: set[VenueSlotKey] = set()
+    seen_locks: set[SlotKey] = set()
 
     for slot in _slot_templates(data):
         lock_level = str(_value(slot, "lock_level", "lockLevel", default="")).upper()
@@ -109,6 +110,15 @@ def _extract_hard_locks(
 
         if duration_minutes <= 0:
             raise ValueError(f"HARD slot for team {team_id} has a non-positive duration")
+
+        # Deduplicate identical HARD templates: two rows for the same
+        # (team, venue, day, start) must yield ONE locked slot, else build_result
+        # emits it twice and _diagnose_conflicts reports a fake over-capacity
+        # conflict ("SM3, SM3" — audit ENG-09).
+        lock_key = (team_id, venue_id, day_of_week, _format_time(start_minutes))
+        if lock_key in seen_locks:
+            continue
+        seen_locks.add(lock_key)
 
         normalized_slot = dict(slot) if isinstance(slot, Mapping) else {}
         normalized_slot.update(
