@@ -95,7 +95,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 |-----------|--------|------|
 | **Rôles non-admin** (coach / lecteur au-delà d'`admin`) + modèle de permissions | ⬜ | Aujourd'hui `ClubUser.role` est **hardcodé `'admin'`** au register ; pas de différenciation de droits |
 | **Gestion des membres** (inviter / changer rôle / désactiver) — écran admin club | ⬜ | `ClubUser` (membership) existe ; pas d'UI |
-| **Approbation des demandes d'adhésion** (rejoindre un club → membre `pending`) | 🟡 | Le flux register crée un membre pending + `WaitingApprovalPage` ; **manque** l'écran admin pour approuver/refuser |
+| **Approbation des demandes d'adhésion** (rejoindre un club → membre `pending`) | ✅ | Flux register → membre pending + `WaitingApprovalPage` côté demandeur ; approbation admin livrée (`PendingMembersSection`, approuver/refuser), désormais section **Demandes** du hub `/club` (PR #36) |
 | **Modifier ses informations personnelles** (nom, email, mot de passe) | ⬜ | Nav « Profil » existe + reset mot de passe ; manque l'édition du profil (prénom/nom/email) + changement de mot de passe connecté |
 
 ---
@@ -169,10 +169,10 @@ Polish frontend discuté, non structurant mais confort d'usage.
 
 | Évolution | Statut | Note |
 |-----------|--------|------|
-| **Refonte de la navigation** — menu principal **à gauche** (Accueil, Assistant…) ; header **réduit** pour gagner de l'espace au centre ; **burger en haut à droite** pour Profil + déconnexion + thème dark/light | ⬜ | Aujourd'hui tout est à plat dans le header (trop gros) |
+| **Refonte de la navigation** — menu principal **à gauche** (Accueil, Assistant…) ; header **réduit** pour gagner de l'espace au centre ; **burger en haut à droite** pour Profil + déconnexion + thème dark/light | 🟡 | **Burger haut-droite livré** (PR #36) : menu unifié Club · Profil · Thème · Logout (`shared/components/ui/menu.tsx`), header allégé (nav gauche = Accueil · Assistant). **Reste** : menu latéral gauche + sous-menu Assistant (l. suivantes) |
 | **Assistant = menu avec ses étapes en sous-menu** (les 6 étapes du wizard sous l'entrée « Assistant » du menu gauche) | ⬜ | Remplace la colonne d'étapes interne du wizard |
 | **Clic sur le nom / logo du club → Accueil** | ⬜ | Raccourci d'accueil |
-| **« Demandes » fusionné dans « Gestion du club »** | ⬜ | « Demandes » n'est qu'un wrap du club (approbation des membres) → le mettre comme section du hub /club, pas une entrée de menr distincte |
+| **« Demandes » fusionné dans « Gestion du club »** | ✅ | Livré (PR #36) : `/club` devient un hub à sections dépliables (`AccordionSection`) — **Demandes** (admin-only, ouverte par défaut, `PendingMembersSection`) + **Visuel** (identité). Route `/pending-members` supprimée, entrée de nav retirée |
 | **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ✅ | Livré : header (titre + n° d'étape) et footer Précédent/Suivant en `sticky` dans `WizardLayout.tsx` |
 | **Wizard : colonne d'étapes repliable / plein écran** | ✅ | Livré : toggle « Plein écran » replie la nav gauche (`navCollapsed`) ; le masquage forcé sur l'étape génération est retiré → l'utilisateur contrôle (résout aussi l'accès menu en régénération) |
 | **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances |

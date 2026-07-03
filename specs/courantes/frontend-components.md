@@ -514,6 +514,8 @@ de la présentation + accessibilité.
 | `Skeleton` | Skeleton loader pour chargement initial | `lines`, `width`, `height` | ScheduleViewPage, DiagnosticsPage, TierListPage |
 | `ErrorBoundary` | Error boundary React avec message + "Réessayer" | `children`, `onRetry` | Toutes les pages (wrap de contenu) |
 | `EmptyState` | État vide avec icône + message + action optionnelle | `icon`, `title`, `description`, `action` | DiagnosticsPage, TierListPage |
+| `Menu` / `MenuItem` | Dropdown accessible (burger, motif APG menu-button) — focus au 1er item à l'ouverture, flèches ↑/↓ (roving), Esc/Tab ferment + rendent le focus au déclencheur, clic-dehors, `z-50` au-dessus du plein écran wizard, sans dépendance | `label`, `trigger`, `children` / `onSelect` \| `to` (NavLink, état actif), `icon` | AppLayout (menu compte : Club · Profil · Thème · Logout) |
+| `AccordionSection` | Section dépliable (`aria-expanded`/`aria-controls`, chevron) | `title`, `defaultOpen`, `children` | ClubPage (sections Demandes / Visuel) |
 | `Modal` | Modal accessible (focus trap, Escape, backdrop) | `open`, `onClose`, `title`, `children` | PostEditDialog, confirmations |
 | `Toast` | Notification temporaire (succès, erreur, info) | `variant`, `message`, `duration` | Toutes les pages (mutations) |
 | `ConfirmDialog` | Dialogue de confirmation (action destructive) | `title`, `message`, `confirmLabel`, `onConfirm` | Suppression d'équipe, reset planning |
