@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
@@ -28,6 +28,8 @@ export const router = createBrowserRouter([
           { path: "/wizard", element: <WizardPage /> },
           { path: "/club", element: <ClubPage /> },
           { path: "/profile", element: <ProfilePage /> },
+          // Unknown authed URL (e.g. the removed /pending-members) → home, not the raw error boundary.
+          { path: "*", element: <Navigate to="/" replace /> },
         ],
       },
     ],

@@ -11,7 +11,7 @@ import { useApproveMember, usePendingMembers, useRejectMember } from "./queries"
  * Renders no page chrome (title/description live in the host).
  */
 export function PendingMembersSection() {
-  const { data, isLoading } = usePendingMembers(true);
+  const { data, isLoading, isError } = usePendingMembers(true);
   const approve = useApproveMember();
   const reject = useRejectMember();
 
@@ -21,6 +21,10 @@ export function PendingMembersSection() {
         <Spinner className="size-5" />
       </div>
     );
+  }
+
+  if (isError) {
+    return <p role="alert" className="py-4 text-center text-sm text-destructive">Impossible de charger les demandes. Réessayez plus tard.</p>;
   }
 
   const members = data?.members ?? [];

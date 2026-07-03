@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const approveMut = vi.fn();
 const rejectMut = vi.fn();
-const pending = { data: { members: [{ id: "m1", firstName: "Ada", lastName: "Lovelace", email: "ada@club.fr" }] }, isLoading: false };
+const pending = { data: { members: [{ id: "m1", firstName: "Ada", lastName: "Lovelace", email: "ada@club.fr" }] }, isLoading: false, isError: false };
 
 vi.mock("./queries", () => ({
   usePendingMembers: () => pending,
@@ -19,6 +19,7 @@ describe("PendingMembersSection", () => {
     approveMut.mockClear();
     rejectMut.mockClear();
     pending.data = { members: [{ id: "m1", firstName: "Ada", lastName: "Lovelace", email: "ada@club.fr" }] };
+    pending.isError = false;
   });
 
   it("approve/reject call the mutations with the member id", async () => {
@@ -34,5 +35,13 @@ describe("PendingMembersSection", () => {
     pending.data = { members: [] };
     render(<PendingMembersSection />);
     expect(screen.getByText(/Aucune demande en attente/)).toBeInTheDocument();
+  });
+
+  it("shows an error (not the empty state) when the fetch fails", () => {
+    pending.isError = true;
+    pending.data = { members: [] };
+    render(<PendingMembersSection />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger/);
+    expect(screen.queryByText(/Aucune demande en attente/)).toBeNull();
   });
 });

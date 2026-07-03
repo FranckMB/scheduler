@@ -49,11 +49,38 @@ describe("Menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("invokes the item's onSelect when clicked", async () => {
+  it("invokes the item's onSelect then closes when clicked", async () => {
     const user = userEvent.setup();
     const onSelect = setup();
     await user.click(screen.getByLabelText("Menu du compte"));
     await user.click(screen.getByRole("menuitem", { name: "Se déconnecter" }));
     expect(onSelect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("focuses the first item on open and roams with arrow keys", async () => {
+    const user = userEvent.setup();
+    render(
+      <Menu label="Menu du compte" trigger={<span>burger</span>}>
+        <MenuItem>Un</MenuItem>
+        <MenuItem>Deux</MenuItem>
+      </Menu>,
+    );
+    await user.click(screen.getByLabelText("Menu du compte"));
+    expect(screen.getByRole("menuitem", { name: "Un" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Deux" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}"); // wraps
+    expect(screen.getByRole("menuitem", { name: "Un" })).toHaveFocus();
+  });
+
+  it("restores focus to the trigger on Escape", async () => {
+    const user = userEvent.setup();
+    setup();
+    const trigger = screen.getByLabelText("Menu du compte");
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(trigger).toHaveFocus();
   });
 });

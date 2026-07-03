@@ -1,5 +1,5 @@
 import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
@@ -24,7 +24,6 @@ function NavItem({ to, children }: { to: string; children: string }) {
 export function AppLayout() {
   const { data } = useMe();
   const logout = useLogout();
-  const navigate = useNavigate();
   useApplyClubTheme();
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
@@ -45,10 +44,10 @@ export function AppLayout() {
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
-              <MenuItem icon={<Settings />} onSelect={() => navigate("/club")}>
+              <MenuItem to="/club" icon={<Settings />}>
                 Club
               </MenuItem>
-              <MenuItem icon={<User />} onSelect={() => navigate("/profile")}>
+              <MenuItem to="/profile" icon={<User />}>
                 Profil
               </MenuItem>
               <MenuItem icon={mode === "dark" ? <Sun /> : <Moon />} onSelect={toggleMode}>
