@@ -441,9 +441,10 @@ PriorityTier:
   id, label, name, color, orToolsWeight, defaultMinSessions
 
 Team:
-  id, sportCategoryId, priorityTierId, name, gender,
+  id, sportCategoryId, priorityTierId, name, gender, level,
   sessionsPerWeek, minSessionsOverride, matchDay,
   allowMultipleSessionsPerDay, forcedVenueId, isActive
+  # level = TeamLevel (Élite..Loisir) — lu+écrit depuis le wizard (PR #35)
 ```
 
 #### Composants

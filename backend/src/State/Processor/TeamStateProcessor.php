@@ -8,6 +8,7 @@ use App\ApiResource\TeamResource;
 use App\Dto\TeamInput;
 use App\Entity\Team;
 use App\Enum\Gender;
+use App\Enum\TeamLevel;
 
 /**
  * @extends AbstractStateProcessor<Team, TeamInput, TeamResource>
@@ -39,6 +40,7 @@ class TeamStateProcessor extends AbstractStateProcessor
                 $entity->setGender($gender);
             }
         }
+        $entity->setLevel(null !== $input->level ? TeamLevel::tryFrom($input->level) : null);
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }
@@ -71,6 +73,7 @@ class TeamStateProcessor extends AbstractStateProcessor
                 $entity->setGender($gender);
             }
         }
+        $entity->setLevel(null !== $input->level ? TeamLevel::tryFrom($input->level) : null);
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }

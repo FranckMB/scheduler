@@ -13,7 +13,7 @@ import { useWizardStore } from "./store";
 import { WizardPage } from "./WizardLayout";
 
 vi.mock("./api", () => ({
-  listTeams: vi.fn(() => Promise.resolve([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, sessionsPerWeek: 2, isActive: true }])),
+  listTeams: vi.fn(() => Promise.resolve([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }])),
   listSportCategories: vi.fn(() => Promise.resolve([{ id: "cat1", name: "U11", sortOrder: 0 }])),
   listPriorityTiers: vi.fn(() => Promise.resolve([{ id: 1, label: "S", name: "Elite", color: null }, { id: 2, label: "A", name: "Régional", color: null }])),
   createTeam: vi.fn(() => Promise.resolve({})),
@@ -47,7 +47,7 @@ vi.mock("./api", () => ({
 
 beforeEach(() => {
   useWizardStore.setState({ stepId: "teams" });
-  vi.mocked(api.listTeams).mockResolvedValue([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, sessionsPerWeek: 2, isActive: true }]);
+  vi.mocked(api.listTeams).mockResolvedValue([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }]);
 });
 
 describe("Wizard (integration)", () => {
