@@ -153,10 +153,18 @@ export function WizardPage() {
           </p>
         ))}
 
-        {/* Sticky Prev/Next footer (W7). On Récap "Suivant" becomes the gated
-            "Continuer vers la génération". A step can inject an action (footerExtra),
-            e.g. "Trier" on the Teams step, rendered left of Suivant. */}
-        <div className="sticky bottom-0 z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4">
+        {/* Prev/Next footer (W7). Sticky on the data-entry steps; NOT sticky on
+            Génération — there the embedded planning stack is taller than the
+            viewport on short screens and a pinned bar would overlay the grid,
+            so the footer sits in the flow below it instead. On Récap "Suivant"
+            becomes the gated "Continuer vers la génération". A step can inject
+            an action (footerExtra), e.g. "Trier" on the Teams step. */}
+        <div
+          className={cn(
+            "z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4",
+            "generate" === stepId ? "" : "sticky bottom-0",
+          )}
+        >
           <Button variant="outline" disabled={0 === index} onClick={prev}>
             Précédent
           </Button>
