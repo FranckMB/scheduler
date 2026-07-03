@@ -115,7 +115,7 @@ export function WizardPage() {
 
       {/* Current step — fills the viewport height so the sticky footer sits at
           the real bottom (no floating gap on short steps) yet stays pinned on scroll. */}
-      <div className="flex min-h-[calc(100vh-7.5rem)] min-w-0 flex-1 flex-col">
+      <div className="flex min-h-[calc(100vh-5.5rem)] min-w-0 flex-1 flex-col">
         {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
         <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
           <h2 className="text-lg font-semibold">
