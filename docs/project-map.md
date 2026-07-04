@@ -48,7 +48,7 @@ All services share the Docker network `clubscheduler_network`.
 - **Coach**, **Venue**, **Constraint**, **ScheduleSlotTemplate**, **ScheduleDiagnostic**, …
 
 ### 2.3 API layer
-- **Auto CRUD (API Platform):** `/api/{schedules,clubs,teams,coaches,venues,constraints,seasons,sport-categories,…}` — ~20 resources, default pagination 30/page. OpenAPI at `/api/docs`.
+- **Auto CRUD (API Platform):** `/api/{schedules,clubs,teams,coaches,venues,constraints,seasons,sport-categories,…}` — ~20 resources, default pagination 30/page (custom providers return a paginator so `hydra:totalItems` is the real count — BCK-05). OpenAPI at `/api/docs`. `Team` collection honors `?seasonId=` / `?isActive=` (wired in `TeamStateProvider::applyRequestFilters`).
 - **Custom controllers** (structuring ones; full list = `ls backend/src/Controller/`):
   | Controller | Route | Action |
   |-----------|-------|--------|

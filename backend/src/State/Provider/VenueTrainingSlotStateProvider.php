@@ -26,6 +26,11 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
         return VenueTrainingSlotResource::fromEntity($entity);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     *
+     * @return array<int, VenueTrainingSlotResource>
+     */
     protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
     {
         $qb = $this->entityManager->createQueryBuilder()

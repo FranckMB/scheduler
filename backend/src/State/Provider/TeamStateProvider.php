@@ -6,6 +6,7 @@ namespace App\State\Provider;
 
 use App\ApiResource\TeamResource;
 use App\Entity\Team;
+use Doctrine\ORM\QueryBuilder;
 
 /**
  * @extends AbstractStateProvider<Team, TeamResource>
@@ -15,6 +16,37 @@ class TeamStateProvider extends AbstractStateProvider
     protected function getEntityClass(): string
     {
         return Team::class;
+    }
+
+    /**
+     * Honors the ?seasonId= and ?isActive= query params documented by the
+     * #[ApiFilter] attributes on TeamResource (the custom provider bypasses API
+     * Platform's built-in Doctrine filters, so they are applied here — BCK-05).
+     * These narrow the set but do not bound it to a single parent → return false
+     * so the default pagination still applies.
+     */
+    protected function applyRequestFilters(QueryBuilder $qb): bool
+    {
+        $request = $this->requestStack->getCurrentRequest();
+
+        $seasonId = $request?->query->get('seasonId');
+        if (\is_string($seasonId) && '' !== $seasonId) {
+            $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
+        }
+
+        // Only a present, recognized boolean ('true'/'false'/'1'/'0'/…) filters.
+        // Guard the raw string first: an absent param must skip the filter — NOT
+        // fall through to filter_var(null, …), which returns false and would
+        // silently apply "isActive = false" to every unfiltered listing.
+        $isActiveRaw = $request?->query->get('isActive');
+        if (\is_string($isActiveRaw) && '' !== $isActiveRaw) {
+            $isActive = filter_var($isActiveRaw, \FILTER_VALIDATE_BOOL, \FILTER_NULL_ON_FAILURE);
+            if (null !== $isActive) {
+                $qb->andWhere('e.isActive = :isActive')->setParameter('isActive', $isActive);
+            }
+        }
+
+        return false;
     }
 
     /**
