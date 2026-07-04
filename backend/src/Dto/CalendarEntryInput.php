@@ -75,7 +75,9 @@ class CalendarEntryInput
             }
         }
 
-        if ('period' === $this->kind && null !== $this->isDisruptive) {
+        // Only reject a *truthy* isDisruptive on a period; false is the benign
+        // checkbox default a form may always serialise.
+        if ('period' === $this->kind && true === $this->isDisruptive) {
             $context->buildViolation('isDisruptive is only allowed on an event entry.')
                 ->atPath('isDisruptive')
                 ->addViolation();

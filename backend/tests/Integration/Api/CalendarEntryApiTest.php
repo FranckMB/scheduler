@@ -148,6 +148,116 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertContains('period', $kinds);
     }
 
+    public function testPeriodAcceptsFalseIsDisruptive(): void
+    {
+        [$user, $club] = $this->seed('CE10');
+
+        $this->post($user, $club, [
+            'kind' => 'period',
+            'title' => 'Fermeture',
+            'startDate' => '2026-05-04',
+            'endDate' => '2026-05-10',
+            'periodType' => 'closure',
+            'isDisruptive' => false,
+        ]);
+
+        self::assertResponseStatusCodeSame(201);
+    }
+
+    public function testMalformedDateWindowReturns400(): void
+    {
+        [$user, $club] = $this->seed('CE11');
+
+        $this->client->request('GET', '/api/calendar_entries?from=notadate', [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(400);
+    }
+
+    public function testConvertingPeriodToEventClearsPeriodType(): void
+    {
+        [$user, $club] = $this->seed('CE12');
+
+        $this->post($user, $club, ['kind' => 'period', 'title' => 'Per', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10', 'periodType' => 'closure']);
+        self::assertResponseStatusCodeSame(201);
+        $id = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Full PUT (resource replacement) that flips kind to event and omits periodType.
+        $this->client->request('PUT', "/api/calendar_entries/{$id}", [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['kind' => 'event', 'title' => 'Per', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('event', $data['kind']);
+        // null periodType is omitted from the serialized payload → cleared.
+        self::assertNull($data['periodType'] ?? null, 'converting a period to an event must clear periodType');
+    }
+
+    public function testDeletingPeriodCascadesDatedConstraints(): void
+    {
+        [$user, $club] = $this->seed('CE13');
+
+        $this->post($user, $club, ['kind' => 'period', 'title' => 'Barros off', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10', 'periodType' => 'closure']);
+        $entryId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Attach a dated constraint to the period.
+        $this->client->request('POST', '/api/constraints', [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Barros fermé',
+            'scope' => 'FACILITY',
+            'family' => 'FACILITY',
+            'ruleType' => 'HARD',
+            'calendarEntryId' => $entryId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $constraintId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Delete the period.
+        $this->client->request('DELETE', "/api/calendar_entries/{$entryId}", [], [], $this->authHeaders($user, $club));
+        self::assertResponseStatusCodeSame(204);
+
+        // The dated constraint is gone.
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(\App\Entity\Constraint::class)->find($constraintId));
+    }
+
+    public function testCollectionScopedToActiveSeason(): void
+    {
+        [$user, $club] = $this->seed('CE14');
+
+        // Entry in the active season (via API).
+        $this->post($user, $club, ['kind' => 'event', 'title' => 'Current', 'startDate' => '2026-05-12', 'endDate' => '2026-05-12']);
+        self::assertResponseStatusCodeSame(201);
+
+        // A past (archived) season with its own entry.
+        $this->scopeGucToClub($club->getId());
+        $old = new Season;
+        $old->setClubId($club->getId());
+        $old->setName('2024-2025');
+        $old->setStartDate(new DateTimeImmutable('2024-09-01'));
+        $old->setEndDate(new DateTimeImmutable('2025-06-30'));
+        $old->setStatus('archived');
+        $this->em->persist($old);
+        $oldEntry = new \App\Entity\CalendarEntry;
+        $oldEntry->setClubId($club->getId());
+        $oldEntry->setSeasonId($old->getId());
+        $oldEntry->setKind(\App\Enum\CalendarEntryKind::EVENT);
+        $oldEntry->setTitle('Stale');
+        $oldEntry->setStartDate(new DateTimeImmutable('2025-05-12'));
+        $oldEntry->setEndDate(new DateTimeImmutable('2025-05-12'));
+        $this->em->persist($oldEntry);
+        $this->em->flush();
+
+        $this->client->request('GET', '/api/calendar_entries', [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $titles = array_map(static fn (array $e): string => $e['title'], json_decode((string) $this->client->getResponse()->getContent(), true)['member']);
+        self::assertContains('Current', $titles);
+        self::assertNotContains('Stale', $titles, 'the collection must be scoped to the active season');
+    }
+
     public function testForeignEntryIsInvisible(): void
     {
         [$userA, $clubA] = $this->seed('CE8');

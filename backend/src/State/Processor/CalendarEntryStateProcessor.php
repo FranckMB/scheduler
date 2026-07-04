@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
+use App\Entity\Constraint;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
@@ -54,7 +55,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function updateEntityFromInput(object $entity, object $input): void
     {
         if (null !== $input->kind) {
-            $entity->setKind($this->parseKind($input->kind));
+            $kind = $this->parseKind($input->kind);
+            $entity->setKind($kind);
+            // Converting to an event clears period-only fields so the row can
+            // never persist an inconsistent shape (kind=event + periodType set).
+            if (CalendarEntryKind::EVENT === $kind) {
+                $entity->setPeriodType(null);
+                $entity->setSchoolHolidayId(null);
+            }
         }
         if (null !== $input->title) {
             $entity->setTitle($input->title);
@@ -79,6 +87,32 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->createdBy) {
             $entity->setCreatedBy($input->createdBy);
+        }
+    }
+
+    /**
+     * Deleting a period also removes its dated constraints — otherwise they
+     * orphan with a dangling calendarEntryId, invisible to generation (filtered
+     * out by findPermanentByClubSeason) and to the user.
+     *
+     * @param array<string, mixed> $uriVariables
+     */
+    protected function processDelete(array $uriVariables, ?string $clubId): void
+    {
+        // Parent runs the not-found / cross-club (403) guard and removes the
+        // entry first; only then do we cascade to its dated constraints.
+        parent::processDelete($uriVariables, $clubId);
+
+        $id = $uriVariables['id'] ?? null;
+        if (\is_string($id) && '' !== $id) {
+            // Per-row remove (not bulk DQL DELETE): the `constraint` table is a
+            // reserved word and the tenant SQL filter injects an unquoted alias
+            // on bulk deletes → syntax error. UnitOfWork removes quote correctly.
+            $dated = $this->entityManager->getRepository(Constraint::class)->findBy(['calendarEntryId' => $id]);
+            foreach ($dated as $constraint) {
+                $this->entityManager->remove($constraint);
+            }
+            $this->entityManager->flush();
         }
     }
 
