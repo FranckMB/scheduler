@@ -80,6 +80,16 @@ final class SchoolHolidaysApiTest extends WebTestCase
         self::assertNotContains('ete', $types);
     }
 
+    public function testMalformedDateWindowReturns400(): void
+    {
+        [$user, $club] = $this->seed('SH4', 'A');
+        $this->em->flush();
+
+        // Non-existent calendar date passes a naive regex but must be rejected.
+        $this->client->request('GET', '/api/school-holidays?from=2026-13-01', [], [], $this->authHeaders($user, $club));
+        self::assertResponseStatusCodeSame(400);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

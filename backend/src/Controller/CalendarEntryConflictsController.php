@@ -7,9 +7,9 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\ConstraintFamily;
-use App\Repository\SeasonRepository;
 use DateInterval;
 use DatePeriod;
 use Doctrine\ORM\EntityManagerInterface;
@@ -32,22 +32,27 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class CalendarEntryConflictsController extends AbstractController
 {
+    use ResolvesCurrentClubTrait;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly SeasonRepository $seasonRepository,
         private readonly RequestStack $requestStack,
     ) {}
 
     #[Route('/api/calendar-entries/{id}/conflicts', name: 'api_calendar_entry_conflicts', methods: ['GET'])]
     public function __invoke(string $id): JsonResponse
     {
+        $currentClubId = $this->resolveCurrentClubId($this->requestStack);
+        if (null === $currentClubId) {
+            return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
+        }
+
         $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($id);
         if (!$entry instanceof CalendarEntry) {
             return $this->json(['error' => 'Calendar entry not found.'], Response::HTTP_NOT_FOUND);
         }
 
-        $currentClubId = $this->resolveCurrentClubId();
-        if (null !== $currentClubId && $entry->getClubId() !== $currentClubId) {
+        if ($entry->getClubId() !== $currentClubId) {
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
@@ -70,7 +75,10 @@ final class CalendarEntryConflictsController extends AbstractController
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
         }
 
-        $season = $this->seasonRepository->findActiveByClubId($entry->getClubId());
+        // The entry's OWN season baseline (not the active season) — an entry may
+        // belong to a past/other season; scoring it against a different season's
+        // plan would be wrong.
+        $season = $this->entityManager->find(Season::class, $entry->getSeasonId());
         $baselineId = $season?->getBaselineScheduleId();
         if (null === $baselineId) {
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => []]);
@@ -122,22 +130,5 @@ final class CalendarEntryConflictsController extends AbstractController
         }
 
         return $byWeekday;
-    }
-
-    private function resolveCurrentClubId(): ?string
-    {
-        $request = $this->requestStack->getCurrentRequest();
-
-        $clubId = $request?->attributes->get('_club_id');
-        if (\is_string($clubId) && '' !== $clubId) {
-            return $clubId;
-        }
-
-        $clubId = $request?->headers->get('X-Club-Id');
-        if (\is_string($clubId) && '' !== $clubId) {
-            return $clubId;
-        }
-
-        return null;
     }
 }

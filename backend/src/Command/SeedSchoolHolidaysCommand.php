@@ -63,11 +63,17 @@ final class SeedSchoolHolidaysCommand extends Command
 
         $created = 0;
         $updated = 0;
+        $skipped = 0;
         foreach ($periods as $row) {
             $zone = $row['zone'] ?? '';
             $type = $row['holidayType'] ?? '';
             $year = $row['schoolYear'] ?? '';
-            if ('' === $zone || '' === $type || '' === $year) {
+            $start = $this->parseDate($row['startDate'] ?? null);
+            $end = $this->parseDate($row['endDate'] ?? null);
+            if ('' === $zone || '' === $type || '' === $year || null === $start || null === $end) {
+                $io->warning(\sprintf('Skipped malformed row: %s', json_encode($row)));
+                ++$skipped;
+
                 continue;
             }
 
@@ -84,14 +90,35 @@ final class SeedSchoolHolidaysCommand extends Command
             }
 
             $entity->setLabel($row['label'] ?? '');
-            $entity->setStartDate(new DateTimeImmutable($row['startDate'] ?? 'now'));
-            $entity->setEndDate(new DateTimeImmutable($row['endDate'] ?? 'now'));
+            $entity->setStartDate($start);
+            $entity->setEndDate($end);
         }
 
         $this->entityManager->flush();
 
+        if ($skipped > 0) {
+            $io->warning(\sprintf('%d malformed row(s) skipped.', $skipped));
+
+            return Command::FAILURE;
+        }
+
         $io->success(\sprintf('School holidays seeded: %d created, %d updated.', $created, $updated));
 
         return Command::SUCCESS;
+    }
+
+    private function parseDate(?string $value): ?DateTimeImmutable
+    {
+        if (null === $value || 1 !== preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $date || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+
+        return $date;
     }
 }

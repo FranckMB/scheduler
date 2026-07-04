@@ -23,6 +23,8 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class SchoolHolidaysController extends AbstractController
 {
+    use ResolvesCurrentClubTrait;
+
     public function __construct(
         private readonly SchoolHolidayPeriodRepository $holidayRepository,
         private readonly ClubRepository $clubRepository,
@@ -33,12 +35,12 @@ final class SchoolHolidaysController extends AbstractController
     #[Route('/api/school-holidays', name: 'api_school_holidays', methods: ['GET'])]
     public function __invoke(): JsonResponse
     {
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
-        if (!\is_string($clubId) || '' === $clubId) {
+        $clubId = $this->resolveCurrentClubId($this->requestStack);
+        if (null === $clubId) {
             return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
         }
 
+        $request = $this->requestStack->getCurrentRequest();
         $club = $this->clubRepository->find($clubId);
         $zone = $club?->getSchoolZone();
         if (null === $zone || '' === $zone) {
@@ -47,10 +49,13 @@ final class SchoolHolidaysController extends AbstractController
 
         $season = $this->seasonRepository->findActiveByClubId($clubId);
 
-        $fromParam = $request?->query->get('from');
-        $toParam = $request?->query->get('to');
-        $from = $this->parseDate($fromParam) ?? $season?->getStartDate();
-        $to = $this->parseDate($toParam) ?? $season?->getEndDate();
+        // A provided-but-invalid from/to is a client error, not a silent
+        // fallback to the season window.
+        $from = $this->parseDate($request?->query->get('from')) ?? $season?->getStartDate();
+        $to = $this->parseDate($request?->query->get('to')) ?? $season?->getEndDate();
+        if (false === $from || false === $to) {
+            return $this->json(['error' => 'Query params from/to must be valid dates (YYYY-MM-DD).'], Response::HTTP_BAD_REQUEST);
+        }
         if (null === $from || null === $to) {
             return $this->json(['error' => 'No window: pass from/to or have an active season.'], Response::HTTP_BAD_REQUEST);
         }
@@ -70,12 +75,26 @@ final class SchoolHolidaysController extends AbstractController
         return $this->json(['zone' => $zone, 'items' => $items]);
     }
 
-    private function parseDate(mixed $value): ?DateTimeImmutable
+    /**
+     * null = param absent (use the season default); false = provided but invalid
+     * (400); DateTimeImmutable = a real calendar date. Strict: rejects both
+     * malformed strings and rollovers like 2026-02-30 / 2026-13-01.
+     */
+    private function parseDate(mixed $value): DateTimeImmutable|false|null
     {
-        if (!\is_string($value) || 1 !== preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        if (null === $value || '' === $value) {
             return null;
         }
+        if (!\is_string($value)) {
+            return false;
+        }
 
-        return new DateTimeImmutable($value);
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $date || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return false;
+        }
+
+        return $date;
     }
 }

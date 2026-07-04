@@ -59,15 +59,13 @@ final class SchoolZoneResolver
         return self::DEPARTMENT_ZONE[$department] ?? null;
     }
 
-    public function zoneForDepartment(string $department): ?string
-    {
-        return self::DEPARTMENT_ZONE[strtoupper($department)] ?? null;
-    }
-
     /**
-     * Best-effort: Corse (2A/2B) first, then any 2-digit window (leading or
-     * trailing of each digit run, covering both "69…" prefix and "…0069" forms)
-     * that matches a known metropolitan department.
+     * Best-effort AND conservative: collects every distinct department the code
+     * could encode (Corse 2A/2B tokens, plus the leading/trailing 2 digits of
+     * each digit run). Returns the department ONLY when the code points to a
+     * single one — if it is ambiguous (several plausible departments) or none,
+     * returns null so the zone degrades to manual entry rather than a confident
+     * wrong guess. The FFBB code format is not officially verified.
      */
     private function extractDepartment(?string $ffbbCode): ?string
     {
@@ -76,12 +74,13 @@ final class SchoolZoneResolver
         }
 
         $code = strtoupper($ffbbCode);
+        $candidates = [];
 
         if (str_contains($code, '2A')) {
-            return '2A';
+            $candidates['2A'] = true;
         }
         if (str_contains($code, '2B')) {
-            return '2B';
+            $candidates['2B'] = true;
         }
 
         preg_match_all('/\d+/', $code, $matches);
@@ -91,11 +90,15 @@ final class SchoolZoneResolver
             }
             foreach ([substr($run, 0, 2), substr($run, -2)] as $candidate) {
                 if (isset(self::DEPARTMENT_ZONE[$candidate])) {
-                    return $candidate;
+                    $candidates[$candidate] = true;
                 }
             }
         }
 
-        return null;
+        if (1 !== \count($candidates)) {
+            return null;
+        }
+
+        return (string) array_key_first($candidates);
     }
 }
