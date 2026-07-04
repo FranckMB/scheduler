@@ -12,7 +12,9 @@ use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\User;
 use App\Entity\Venue;
+use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +30,7 @@ final class ResetSeasonController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
+        private readonly ClubUserRepository $clubUserRepository,
     ) {}
 
     public function __invoke(): JsonResponse
@@ -38,6 +41,28 @@ final class ResetSeasonController extends AbstractController
 
         if (null === $clubId || null === $seasonId) {
             return $this->json(['error' => 'Missing club or season context.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Wiping the whole club is a management action: gate on an active
+        // management membership (mirrors ImportController/ClubStateProcessor).
+        // The tenant listener already resolved _club_id from the caller's JWT
+        // membership, so a non-member cannot reach another club here.
+        $user = $this->getUser();
+        $membership = $user instanceof User
+            ? $this->clubUserRepository->findActiveMembership($user->getId(), $clubId)
+            : null;
+        if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
+            return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
+        }
+
+        // Disable the Doctrine tenant filter for the bulk DELETEs: it appends
+        // `{table}.club_id = …` using the table name as the alias, which is
+        // invalid SQL for the reserved-word `constraint` table. The deletes are
+        // already scoped by clubId + seasonId explicitly, and PostgreSQL RLS
+        // (app.club_id GUC) still enforces the tenant boundary at the DB level.
+        $filters = $this->entityManager->getFilters();
+        if ($filters->isEnabled('tenant_filter')) {
+            $filters->disable('tenant_filter');
         }
 
         $deleted = 0;
