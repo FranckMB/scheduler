@@ -32,14 +32,14 @@ export function AppLayout() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-2">
+          <NavLink to="/" aria-label="Accueil" className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80">
             {data?.club?.logoUrl ? (
               <img src={data.club.logoUrl} alt="" className="size-6 rounded-full object-cover" />
             ) : (
               <CalendarCheck2 className="size-5 text-accent" />
             )}
             <span className="text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
-          </div>
+          </NavLink>
           <nav className="flex items-center gap-1">
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>

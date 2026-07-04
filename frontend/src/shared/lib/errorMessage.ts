@@ -18,10 +18,21 @@ export async function errorMessage(error: unknown): Promise<string> {
   }
 
   if (error instanceof HTTPError) {
+    // The ky client's beforeError hook already read the body and stashed the
+    // server's message (readable there, not post-hoc — see client.ts).
+    const attached = (error as { serverMessage?: string }).serverMessage;
+    if (typeof attached === "string" && attached.trim() !== "") {
+      return attached;
+    }
+
     const status = error.response.status;
 
     try {
-      const body = (await error.response.clone().json()) as ApiErrorBody;
+      // Read the error body directly (nothing else consumes it). Going through
+      // text()+parse rather than clone().json() avoids a locked-stream case that
+      // left the specific server message unread in the browser.
+      const raw = await error.response.text();
+      const body = (raw.trim() === "" ? {} : JSON.parse(raw)) as ApiErrorBody;
       const direct = body.error ?? body.message ?? body.detail;
       if (typeof direct === "string" && direct.trim() !== "") {
         return direct;
@@ -39,6 +50,7 @@ export async function errorMessage(error: unknown): Promise<string> {
       // body was not JSON — fall through to the status-based message
     }
 
+    if (status === 400) return "Requête invalide.";
     if (status === 403) return "Accès refusé.";
     if (status === 404) return "Ressource introuvable.";
     if (status === 409) return "Conflit : l'action n'a pas pu être effectuée.";

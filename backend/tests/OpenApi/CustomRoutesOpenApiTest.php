@@ -26,6 +26,7 @@ final class CustomRoutesOpenApiTest extends KernelTestCase
         $expected = [
             '/api/register',
             '/api/me',
+            '/api/me/password',
             '/api/schedule-slots/{id}/manual-edit/constraint',
             '/api/schedule-slots/{id}/manual-edit/lock',
             '/api/schedule-slots/{id}/manual-edit/one-time',

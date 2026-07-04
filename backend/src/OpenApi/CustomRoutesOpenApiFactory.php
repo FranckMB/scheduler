@@ -92,6 +92,49 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 '401' => new Response('Unauthorized'),
             ],
             summary: 'Hydrate the authenticated user and its active club context',
+        ), patch: new Operation(
+            operationId: 'patchApiMe',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Updated profile', [
+                    'type' => 'object',
+                    'properties' => [
+                        'id' => ['type' => 'string'],
+                        'email' => ['type' => 'string'],
+                        'firstName' => ['type' => 'string'],
+                        'lastName' => ['type' => 'string'],
+                    ],
+                ]),
+                '400' => new Response('Validation error (empty name / invalid email)'),
+                '409' => new Response('E-mail already in use'),
+            ],
+            summary: 'Update the connected user profile (name / e-mail)',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'properties' => [
+                    'firstName' => ['type' => 'string'],
+                    'lastName' => ['type' => 'string'],
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                ],
+            ]),
+        )));
+
+        $paths->addPath('/api/me/password', new PathItem(post: new Operation(
+            operationId: 'postApiMePassword',
+            tags: ['Auth'],
+            responses: [
+                '200' => new Response('Password changed'),
+                '400' => new Response('Wrong current password or new password too short'),
+            ],
+            summary: 'Change the connected user password (current password required)',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'required' => ['currentPassword', 'newPassword'],
+                'properties' => [
+                    'currentPassword' => ['type' => 'string'],
+                    'newPassword' => ['type' => 'string', 'minLength' => 8],
+                ],
+            ]),
         )));
 
         foreach ($this->manualEditPaths() as $path => $pathItem) {
