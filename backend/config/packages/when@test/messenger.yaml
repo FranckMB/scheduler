@@ -3,3 +3,5 @@ framework:
         transports:
             async:
                 dsn: 'sync://'
+            # In-memory in tests: never touch Redis for the failure transport.
+            failed: 'in-memory://'

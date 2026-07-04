@@ -19,3 +19,4 @@
 6. **Cache pool `cache.schedule`** — dedicated Redis pool for engine payloads, TTL 4h, invalidated by `CacheInvalidationListener`.
 7. **`SOFT_LOCK_PENALTY = 10_000`** in `ScheduleConstraintBuilder` — builder-side weight sent to the engine for soft-locked slots (distinct from the engine's own tier weights).
 8. **Test DB required** before PHPUnit: `make db-init-test` once, then `make phpunit` (`--group phase1`).
+9. **Stuck-schedule watchdog** `app:schedules:reconcile-stuck` (BCK-01) must run on a **cron in prod** (e.g. every 10 min): it fails `GENERATING` schedules abandoned by a crashed/OOM worker. Terminal-status nets are detailed in root `docs/project-map.md` §2.4.

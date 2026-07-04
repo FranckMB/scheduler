@@ -22,6 +22,7 @@ use App\Service\ScheduleResultImporter;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -44,6 +45,7 @@ final class GenerateScheduleHandler
         private ClubGenerationLock $clubGenerationLock,
         private DiagnosticMessageBuilder $diagnosticMessageBuilder,
         private TenantConnectionContext $tenantConnectionContext,
+        private ?LoggerInterface $logger = null,
         private ?DevScheduleReportWriter $devReportWriter = null,
     ) {}
 
@@ -96,8 +98,78 @@ final class GenerateScheduleHandler
 
         try {
             $this->generate($schedule, $message);
+        } catch (Throwable $exception) {
+            // BCK-01: any uncaught error (snapshot build, result import, a flush)
+            // must still leave a terminal status — a schedule frozen forever in
+            // GENERATING is the worst failure mode. Mercure publish is best-effort
+            // (see publishProgressSafely) and never reaches here.
+            $this->handleUnexpectedFailure($message, $exception);
         } finally {
             $this->clubGenerationLock->release($message->getClubId(), $lockToken);
+        }
+    }
+
+    /**
+     * Record a clean terminal failure for an otherwise-uncaught error.
+     *
+     * The unit of work may hold half-applied COMPLETED-path mutations (status,
+     * season baseline, onboarding flag) when the error fired after the solve —
+     * clear() discards them so we commit a FAILED that is *only* FAILED, never a
+     * half-success that leaves the season baseline pointing at a failed schedule.
+     *
+     * Deterministic failures are acked (not rethrown): retrying would re-run the
+     * whole ~650 s solve to fail again the same way. If the EntityManager was
+     * closed by the original error the row stays GENERATING and the stuck-schedule
+     * watchdog (app:schedules:reconcile-stuck) reconciles it — a bounded delay,
+     * versus the permanent GENERATING freeze that existed before this net.
+     */
+    private function handleUnexpectedFailure(GenerateScheduleMessage $message, Throwable $exception): void
+    {
+        $this->logger?->error('Schedule generation failed unexpectedly', [
+            'scheduleId' => $message->getScheduleId(),
+            'clubId' => $message->getClubId(),
+            'exception' => $exception,
+        ]);
+
+        if (!$this->entityManager->isOpen()) {
+            return;
+        }
+
+        try {
+            $this->entityManager->clear();
+            $schedule = $this->findSchedule($message->getScheduleId());
+            if (!$schedule instanceof Schedule) {
+                return;
+            }
+
+            $schedule->setStatus(ScheduleStatus::FAILED);
+            // Generic message: never leak raw exception detail (SQL, DSNs) to the
+            // client-facing diagnostic. The full exception is logged above.
+            $this->persistDiagnostic($schedule, 'internal_error', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation failed unexpectedly. Please regenerate.');
+            $this->entityManager->flush();
+            $this->publishProgressSafely($schedule, []);
+        } catch (Throwable) {
+            // Could not record the failure (e.g. DB connection gone): the
+            // watchdog reconciles this schedule on its next pass.
+        }
+    }
+
+    /**
+     * Mercure is best-effort: the frontend polls as a fallback (no hard SSE
+     * dependency), so a publish failure must never abort — nor undo — a result
+     * that has already been persisted. A missed event self-heals on the next poll.
+     *
+     * @param array<string, mixed> $result
+     */
+    private function publishProgressSafely(Schedule $schedule, array $result): void
+    {
+        try {
+            $this->publishProgress($schedule, $result);
+        } catch (Throwable $exception) {
+            $this->logger?->warning('Mercure publish failed (best-effort)', [
+                'scheduleId' => $schedule->getId(),
+                'exception' => $exception,
+            ]);
         }
     }
 
@@ -139,23 +211,25 @@ final class GenerateScheduleHandler
         } catch (TransportExceptionInterface) {
             $schedule->setStatus(ScheduleStatus::FAILED);
             $this->persistDiagnostic($schedule, 'engine_timeout', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation timed out.');
-            $this->publishProgress($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->entityManager->flush();
+            $this->publishProgressSafely($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
 
             return;
         } catch (Throwable $exception) {
             $this->failSchedule($schedule, 'engine_error', $exception->getMessage());
-            $this->publishProgress($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->entityManager->flush();
+            $this->publishProgressSafely($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
 
             return;
         }
 
+        // Persist the result BEFORE notifying: a COMPLETED solve must be durable
+        // even if Mercure is momentarily down (publish is best-effort below).
         $this->applyEngineResult($schedule, $result);
-        $this->publishProgress($schedule, $result);
         $this->entityManager->flush();
+        $this->publishProgressSafely($schedule, $result);
         $this->writeResultFilesIfEnabled($schedule, $lotDir);
     }
 
