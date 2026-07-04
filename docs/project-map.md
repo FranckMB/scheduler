@@ -63,6 +63,7 @@ All services share the Docker network `clubscheduler_network`.
   | `ResetSeasonController` | `DELETE /api/reset-season` | batch-delete season data |
   | `AuthController` / `PasswordController` | `POST /api/register`, `GET /api/me`, password reset | auth (JWT) |
   | `HealthController` | `GET /api/health` | `{"status":"ok"}` |
+- These plain `#[Route]` controllers are excluded from API Platform's auto OpenAPI; `App\OpenApi\CustomRoutesOpenApiFactory` re-adds `/api/register`, `/api/me` and the 3 `manual-edit` routes to the schema (G4/G5). Regenerate the snapshot on any API change: `php bin/console api:openapi:export > specs/courantes/openapi-snapshot.json`.
 
 ### 2.4 Async / messaging
 - **Transport:** Redis (`redis://redis:6379/messages`), `sync://` under test. Worker: `messenger-worker` container. Bounded `retry_strategy` (3 retries) + `failure_transport: failed` (`MESSENGER_FAILURE_TRANSPORT_DSN`, boot-safe default) — exhausted messages are preserved, never silently dropped.
