@@ -13,8 +13,12 @@ use App\Message\GenerateScheduleMessage;
 use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
+use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
+use App\Service\ScheduleDiagnosticsRecorder;
+use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
+use App\Service\SolverMetricsMapper;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -179,10 +183,11 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $em,
             $container->get(ScheduleConstraintBuilder::class),
             $container->get(ScheduleResultImporter::class),
-            $httpClient,
-            $hub,
+            new EngineClient($httpClient),
+            new ScheduleProgressPublisher($hub),
+            new ScheduleDiagnosticsRecorder($em, $container->get(DiagnosticMessageBuilder::class)),
+            new SolverMetricsMapper,
             $container->get(ClubGenerationLock::class),
-            $container->get(DiagnosticMessageBuilder::class),
             $container->get(TenantConnectionContext::class),
         );
 
