@@ -1,4 +1,4 @@
-import ky from "ky";
+import ky, { HTTPError } from "ky";
 
 import { useAuthStore } from "@/shared/stores/authStore";
 
@@ -29,6 +29,39 @@ export const api = ky.create({
             window.location.assign("/login");
           }
         }
+      },
+    ],
+    beforeError: [
+      // Read the server's error body HERE (still unconsumed) and stash a friendly
+      // message on the error; errorMessage() reads it. Reading the body post-hoc
+      // from the thrown HTTPError fails (stream already gone), which left toasts
+      // showing a generic status message instead of the real reason.
+      async (state) => {
+        const { error } = state;
+        if (error instanceof HTTPError) {
+          try {
+            const body = (await error.response.clone().json()) as {
+              error?: string;
+              message?: string;
+              detail?: string;
+              violations?: { message?: string }[];
+            };
+            const direct = body.error ?? body.message ?? body.detail;
+            let message = typeof direct === "string" ? direct.trim() : "";
+            if (message === "" && Array.isArray(body.violations)) {
+              message = body.violations
+                .map((v) => v.message)
+                .filter((m): m is string => typeof m === "string" && m.trim() !== "")
+                .join(" · ");
+            }
+            if (message !== "") {
+              (error as { serverMessage?: string }).serverMessage = message;
+            }
+          } catch {
+            // body not JSON → errorMessage falls back to a status-based sentence
+          }
+        }
+        return error;
       },
     ],
   },

@@ -168,6 +168,87 @@ final class AuthController extends AbstractController
         ]);
     }
 
+    /** Update the connected user's own profile (self-only by construction — SEC-02). */
+    #[Route('/api/me', name: 'api_me_update', methods: ['PATCH'])]
+    public function updateMe(Request $request): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        if (isset($data['firstName']) && \is_string($data['firstName'])) {
+            $firstName = trim($data['firstName']);
+            if ('' === $firstName) {
+                return $this->json(['error' => 'Le prénom est requis.'], 400);
+            }
+            $user->setFirstName($firstName);
+        }
+        if (isset($data['lastName']) && \is_string($data['lastName'])) {
+            $lastName = trim($data['lastName']);
+            if ('' === $lastName) {
+                return $this->json(['error' => 'Le nom est requis.'], 400);
+            }
+            $user->setLastName($lastName);
+        }
+        if (isset($data['email']) && \is_string($data['email'])) {
+            $email = strtolower(trim($data['email']));
+            if (false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
+                return $this->json(['error' => 'Adresse e-mail invalide.'], 400);
+            }
+            if ($email !== $user->getEmail()) {
+                if (null !== $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email])) {
+                    return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
+                }
+                $user->setEmail($email);
+            }
+        }
+
+        $this->entityManager->flush();
+
+        return $this->json([
+            'id' => $user->getId(),
+            'email' => $user->getEmail(),
+            'firstName' => $user->getFirstName(),
+            'lastName' => $user->getLastName(),
+        ]);
+    }
+
+    /** Change the connected user's password (requires the current one). */
+    #[Route('/api/me/password', name: 'api_me_password', methods: ['POST'])]
+    public function changePassword(Request $request): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        $current = \is_string($data['currentPassword'] ?? null) ? $data['currentPassword'] : '';
+        $new = \is_string($data['newPassword'] ?? null) ? $data['newPassword'] : '';
+
+        if (!$this->passwordHasher->isPasswordValid($user, $current)) {
+            return $this->json(['error' => 'Mot de passe actuel incorrect.'], 400);
+        }
+        if (\strlen($new) < 8) {
+            return $this->json(['error' => 'Le nouveau mot de passe doit faire au moins 8 caractères.'], 400);
+        }
+
+        $user->setPasswordHash($this->passwordHasher->hashPassword($user, $new));
+        $this->entityManager->flush();
+
+        return $this->json(['status' => 'ok']);
+    }
+
     private function createUser(string $email, string $password, string $firstName, string $lastName): User
     {
         $user = new User;

@@ -97,6 +97,107 @@
                     }
                 },
                 "summary": "Hydrate the authenticated user and its active club context"
+            },
+            "patch": {
+                "operationId": "patchApiMe",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated profile",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "email": {
+                                            "type": "string"
+                                        },
+                                        "firstName": {
+                                            "type": "string"
+                                        },
+                                        "lastName": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error (empty name / invalid email)"
+                    },
+                    "409": {
+                        "description": "E-mail already in use"
+                    }
+                },
+                "summary": "Update the connected user profile (name / e-mail)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "firstName": {
+                                        "type": "string"
+                                    },
+                                    "lastName": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/me/password": {
+            "post": {
+                "operationId": "postApiMePassword",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Password changed"
+                    },
+                    "400": {
+                        "description": "Wrong current password or new password too short"
+                    }
+                },
+                "summary": "Change the connected user password (current password required)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "currentPassword",
+                                    "newPassword"
+                                ],
+                                "properties": {
+                                    "currentPassword": {
+                                        "type": "string"
+                                    },
+                                    "newPassword": {
+                                        "type": "string",
+                                        "minLength": 8
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
             }
         },
         "/api/register": {
@@ -11933,6 +12034,10 @@
             },
             "Team.TeamInput": {
                 "type": "object",
+                "required": [
+                    "sportCategoryId",
+                    "name"
+                ],
                 "properties": {
                     "sportCategoryId": {
                         "type": [
@@ -11941,12 +12046,15 @@
                         ]
                     },
                     "priorityTierId": {
+                        "minimum": 0,
+                        "exclusiveMinimum": 0,
                         "type": [
                             "integer",
                             "null"
                         ]
                     },
                     "tierOrder": {
+                        "minimum": 0,
                         "type": [
                             "integer",
                             "null"
@@ -11970,18 +12078,23 @@
                         ]
                     },
                     "sessionsPerWeek": {
+                        "minimum": 0,
+                        "exclusiveMinimum": 0,
                         "type": [
                             "integer",
                             "null"
                         ]
                     },
                     "minSessionsOverride": {
+                        "minimum": 0,
                         "type": [
                             "integer",
                             "null"
                         ]
                     },
                     "matchDay": {
+                        "minimum": 0,
+                        "maximum": 6,
                         "type": [
                             "integer",
                             "null"
@@ -12028,10 +12141,7 @@
                             "null"
                         ]
                     }
-                },
-                "required": [
-                    "name"
-                ]
+                }
             },
             "Team.html": {
                 "type": "object",
