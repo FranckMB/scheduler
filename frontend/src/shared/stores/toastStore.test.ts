@@ -1,10 +1,33 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast, useToastStore } from "./toastStore";
 
 describe("toastStore", () => {
   beforeEach(() => {
     useToastStore.setState({ toasts: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("auto-dismisses after the delay", () => {
+    vi.useFakeTimers();
+    useToastStore.getState().push("Boom", "error");
+    expect(useToastStore.getState().toasts).toHaveLength(1);
+    vi.advanceTimersByTime(7000);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it("cancels the auto-dismiss timer on manual dismiss (no leak/double-fire)", () => {
+    vi.useFakeTimers();
+    const clear = vi.spyOn(globalThis, "clearTimeout");
+    const id = useToastStore.getState().push("Boom");
+    useToastStore.getState().dismiss(id);
+    expect(clear).toHaveBeenCalled();
+    // Advancing past the delay must not throw or resurrect anything.
+    vi.advanceTimersByTime(10000);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
   it("pushes a toast with the given variant and a unique id", () => {

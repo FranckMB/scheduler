@@ -8,6 +8,10 @@ import { toast } from "@/shared/stores/toastStore";
  * Surface every failure to the user (FRT-01/02). Mutations always toast on
  * error; queries toast only on a *first* load failure (a failed background
  * refetch that still has cached data to show stays silent).
+ *
+ * TanStack Query calls these cache-level onError handlers ONCE per error, after
+ * all retries are exhausted (not per attempt) — so `retry: 1` yields a single
+ * toast, not two.
  */
 function report(error: unknown): void {
   // 401 is handled by the ky client (session cleared + redirect to /login).

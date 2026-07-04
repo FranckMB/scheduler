@@ -16,6 +16,7 @@ interface ToastState {
 
 let seq = 0;
 const AUTO_DISMISS_MS: Record<ToastVariant, number> = { error: 7000, success: 4000, info: 5000 };
+const timers = new Map<number, number>();
 
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
@@ -23,11 +24,19 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const id = ++seq;
     set((s) => ({ toasts: [...s.toasts, { id, message, variant }] }));
     if (typeof window !== "undefined") {
-      window.setTimeout(() => get().dismiss(id), AUTO_DISMISS_MS[variant]);
+      timers.set(id, window.setTimeout(() => get().dismiss(id), AUTO_DISMISS_MS[variant]));
     }
     return id;
   },
-  dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismiss: (id) => {
+    // Cancel the auto-dismiss timer so a manual close doesn't leave it running.
+    const timer = timers.get(id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timers.delete(id);
+    }
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+  },
 }));
 
 /** Imperative helper for non-component code (query/mutation cache handlers). */
