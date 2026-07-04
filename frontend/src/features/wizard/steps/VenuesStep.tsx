@@ -114,10 +114,12 @@ export function VenuesStep() {
   const [capacity, setCapacity] = useState(1);
   const [venueName, setVenueName] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
-  const [confirmDeleteVenue, setConfirmDeleteVenue] = useState(false);
+  // Capture the venue at click time — the dropdown selection may change before
+  // the user confirms, and we must delete the venue the dialog is about.
+  const [pendingDeleteVenue, setPendingDeleteVenue] = useState<Venue | null>(null);
 
   const selected = venues.find((v) => v.id === (selectedId || venues[0]?.id)) ?? null;
-  const selectedSlotCount = selected ? slots.filter((s) => s.venueId === selected.id).length : 0;
+  const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
 
   const addVenue = (event: FormEvent) => {
     event.preventDefault();
@@ -192,7 +194,7 @@ export function VenuesStep() {
               ))}
             </Select>
             <CapacitySelect value={capacity} onChange={setCapacity} canSplit={selected.canSplit} className="h-9 w-52" />
-            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => setConfirmDeleteVenue(true)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
+            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => setPendingDeleteVenue(selected)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
               <Trash2 className="size-4" />
             </Button>
           </div>
@@ -210,24 +212,29 @@ export function VenuesStep() {
       )}
 
       <ConfirmDialog
-        open={confirmDeleteVenue && selected !== null}
+        open={pendingDeleteVenue !== null}
         title="Supprimer ce gymnase ?"
         description={
-          selected ? (
+          pendingDeleteVenue ? (
             <>
-              Le gymnase « {selected.name} »
-              {selectedSlotCount > 0 ? <> et ses {selectedSlotCount} créneau{selectedSlotCount > 1 ? "x" : ""} de disponibilité</> : null} seront
-              supprimés définitivement.
+              Le gymnase « {pendingDeleteVenue.name} »
+              {pendingDeleteSlotCount > 0 ? (
+                <>
+                  {" "}
+                  et ses {pendingDeleteSlotCount} créneau{pendingDeleteSlotCount > 1 ? "x" : ""} de disponibilité
+                </>
+              ) : null}{" "}
+              seront supprimés définitivement.
             </>
           ) : null
         }
         confirmLabel="Supprimer"
-        onCancel={() => setConfirmDeleteVenue(false)}
+        onCancel={() => setPendingDeleteVenue(null)}
         onConfirm={() => {
-          if (selected) {
-            delVenue.mutate(selected.id);
+          if (pendingDeleteVenue) {
+            delVenue.mutate(pendingDeleteVenue.id);
           }
-          setConfirmDeleteVenue(false);
+          setPendingDeleteVenue(null);
         }}
       />
     </div>

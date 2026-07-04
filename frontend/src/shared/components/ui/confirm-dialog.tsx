@@ -32,6 +32,12 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  // Keep the latest onCancel in a ref so the keydown effect depends only on
+  // `open` (an inline onCancel from the parent must not re-bind the listener).
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
 
   useEffect(() => {
     if (!open) {
@@ -41,7 +47,7 @@ export function ConfirmDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onCancel();
+        onCancelRef.current();
         return;
       }
       if (event.key === "Tab") {
@@ -65,7 +71,7 @@ export function ConfirmDialog({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) {
     return null;
