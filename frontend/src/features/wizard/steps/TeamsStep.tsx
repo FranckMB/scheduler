@@ -261,7 +261,7 @@ export function TeamsStep() {
   };
 
   // --- Sort mode: local reordering, committed atomically on exit ---
-  const { setFooterExtra } = useWizardFooter();
+  const { setFooterExtra, setSuppressScrollJump } = useWizardFooter();
   const [sortMode, setSortMode] = useState(false);
   const [lanes, setLanes] = useState<Record<number, string[]>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -337,6 +337,13 @@ export function TeamsStep() {
     );
     return () => setFooterExtra(null);
   }, [sortMode, teams.length, toggleSort, setFooterExtra]);
+
+  // Hide the floating scroll-jump arrows during drag-reorder (they'd sit over
+  // the drop zones and a mis-click would scroll-jump mid-sort).
+  useEffect(() => {
+    setSuppressScrollJump(sortMode);
+    return () => setSuppressScrollJump(false);
+  }, [sortMode, setSuppressScrollJump]);
 
   const laneOf = (id: string): number | null => {
     const zone = zoneTierId(id);

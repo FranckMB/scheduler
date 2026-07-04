@@ -1,6 +1,12 @@
 import { createContext, type ReactNode, useContext } from "react";
 
-/** Lets a step inject an action (e.g. "Trier") into the wizard's sticky footer, left of Suivant. */
-export const WizardFooterContext = createContext<{ setFooterExtra: (node: ReactNode) => void }>({ setFooterExtra: () => {} });
+interface WizardFooterApi {
+  /** Inject an action (e.g. "Trier") into the wizard's sticky footer, left of Suivant. */
+  setFooterExtra: (node: ReactNode) => void;
+  /** Hide the floating scroll-jump arrows (e.g. during Teams drag-reorder). */
+  setSuppressScrollJump: (v: boolean) => void;
+}
 
-export const useWizardFooter = (): { setFooterExtra: (node: ReactNode) => void } => useContext(WizardFooterContext);
+export const WizardFooterContext = createContext<WizardFooterApi>({ setFooterExtra: () => {}, setSuppressScrollJump: () => {} });
+
+export const useWizardFooter = (): WizardFooterApi => useContext(WizardFooterContext);
