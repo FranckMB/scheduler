@@ -21,3 +21,15 @@ export const uploadLogo = (file: File): Promise<{ logoUrl: string }> => {
 };
 
 export const deleteLogo = (): Promise<{ logoUrl: null }> => api.delete("club/logo").json();
+
+export interface ResetClubResult {
+  status: string;
+  deleted: number;
+}
+
+/**
+ * Wipe every piece of data entered for the current club/season (teams, venues,
+ * coaches, constraints, schedules) to start over. The season is resolved
+ * server-side (TenantFilterListener sets _season_id from the active season).
+ */
+export const resetClub = (): Promise<ResetClubResult> => api.delete("reset-season").json();
