@@ -12,7 +12,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'team_tag')]
 #[ORM\Index(name: 'idx_team_tag_club', columns: ['club_id'])]
 #[ORM\HasLifecycleCallbacks]
-class TeamTag
+class TeamTag implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]

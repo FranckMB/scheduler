@@ -11,6 +11,14 @@ use Doctrine\ORM\Query\Filter\SQLFilter;
  * Doctrine SQL filter that enforces tenant isolation by appending
  * `club_id = ?` to every query on entities that own a `club_id` column.
  *
+ * Kept column-based on purpose: it is **fail-secure**. Any entity with a
+ * club_id column is scoped whether or not it declares the explicit
+ * App\Entity\TenantOwnedInterface marker — so a forgotten marker can never open
+ * a cross-club leak here (nor in RLS, which is likewise column-keyed). The
+ * marker instead drives the *application-layer* guards (State providers /
+ * processors, BCK-03); TenantOwnedInterfaceCompletenessTest keeps the marker
+ * and the column set in lockstep so those guards stay complete.
+ *
  * The filter is activated per-request by TenantFilterListener.
  */
 class TenantFilter extends SQLFilter

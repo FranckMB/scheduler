@@ -2,10 +2,12 @@
 
 ## Overview
 
-ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation design has **two layers** — but only one is active today:
+ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation has **two layers, both active today**:
 
 1. **Application layer (ACTIVE)** — A Doctrine SQL filter (`TenantFilter`) transparently appends `club_id = ?` to every DQL/SQL query on entities that own a `club_id` column. **This is the effective tenant barrier.**
 2. **Database layer (ACTIVE since `Version20260703120000` — SEC-03 fixed)** — PostgreSQL Row-Level Security. Every `club_id` table carries `FORCE ROW LEVEL SECURITY` + a `tenant_isolation` policy keyed on the `app.club_id` GUC, the runtime connects as the restricted `app_user`, and the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped — the old out-of-transaction `SET LOCAL` was a no-op). Workers set their own GUC from the message's `clubId`. See `docs/security/rls.md` for the full architecture, the `club_user` bootstrap exception and the `clubscheduler` superadmin door.
+
+Tenant entities also carry the explicit `App\Entity\TenantOwnedInterface` marker (BCK-03): the generic State providers/processors gate item reads and `Put`/`Delete` by `instanceof TenantOwnedInterface` (replacing `method_exists('getClubId')`), a type-safe app-layer check layered on the column-based filter + RLS. `TenantOwnedInterfaceCompletenessTest` (phase1) keeps the marker set identical to the `club_id`-column set, so no tenant entity can slip past the app-layer guards.
 
 ⚠ Entities **without** a `club_id` column (`Club`, `User`) are NOT covered by the Doctrine filter — the tenant barrier does not apply to them. Their access control is enforced explicitly in their API Platform state provider/processor (SEC-01/SEC-02, fixed):
 - **Club** (`ClubStateProvider` / `ClubStateProcessor`): the collection is bounded to the caller's active `ClubUser` memberships (resolved via `ClubUserRepository::findActiveClubIds`, a raw query so the tenant filter does not narrow a multi-club member to one club); item read requires an active membership (else 404); `Put` requires an active **management role** — `owner` or `admin` (404 if no membership, 403 if member but `editor`/`viewer`). No bare `Post`/`Delete` (a club is created via `/api/register`; deletion needs a dedicated cascade flow, not yet exposed).

@@ -25,14 +25,14 @@ All processors extend `AbstractStateProcessor` which handles:
 
 1. **Season auto-resolution** — `resolveSeasonId()` finds the active season for the club. If no active season exists, the entity will fail with a DB NOT NULL constraint.
 2. **No `seasonId` header** — Frontend sends `X-Club-Id` but not `X-Season-Id`. The backend resolves it automatically.
-3. **Method_exists checks** — `setClubId`/`setSeasonId` are checked via `method_exists()` because not all entities have these fields.
+3. **Tenant guard is type-based (BCK-03)** — club scoping keys on `$entity instanceof App\Entity\TenantOwnedInterface` (POST stamps `setClubId`, PUT/DELETE deny on `getClubId` mismatch), NOT `method_exists`. `setSeasonId` is still probed via `method_exists()` (no marker interface for season). A new tenant entity MUST `implement TenantOwnedInterface` — enforced by `TenantOwnedInterfaceCompletenessTest`.
 4. **UUID strings** — All IDs are string UUIDs, never integers.
 5. **DTO mapping** — `createEntityFromInput()` maps DTO → Entity. `updateEntityFromInput()` maps DTO → existing Entity. `mapEntityToOutput()` maps Entity → ApiResource.
 
 ## Anti-Patterns
 
 - **Never** hardcode `seasonId` in a processor — always use `resolveSeasonId()`
-- **Never** skip `method_exists()` checks — some entities lack `setClubId`/`setSeasonId`
+- **Never** rely on `method_exists('getClubId')` for tenant scoping — use `instanceof TenantOwnedInterface` (BCK-03); a club_id entity that forgets the marker is caught by `TenantOwnedInterfaceCompletenessTest`
 - **Never** call `$entityManager->flush()` outside `AbstractStateProcessor` — the base class handles it
 
 ## Quick Reference
@@ -41,5 +41,5 @@ All processors extend `AbstractStateProcessor` which handles:
 |------|----------|
 | Add new entity processor | Extend `AbstractStateProcessor` + implement 4 abstract methods |
 | Fix 500 on POST | Check `season_id` NOT NULL + `resolveSeasonId()` working |
-| Add tenant field to entity | Add `setClubId`/`getClubId` + `setSeasonId`/`getSeasonId` |
+| Add tenant field to entity | `implements TenantOwnedInterface` (+ `getClubId`/`setClubId`) + `setSeasonId`/`getSeasonId` |
 | Test auto-save | Check `X-Club-Id` header present in request |

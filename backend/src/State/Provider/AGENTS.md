@@ -29,7 +29,7 @@ $queryBuilder->andWhere('e.clubId = :clubId')
 ## Critical Gotchas
 
 1. **Collection queries** — Always filtered by `clubId`. Cross-club data leaks are impossible.
-2. **Item lookups** — The provider checks `clubId` matches before returning the item.
+2. **Item lookups** — For an entity that `implements App\Entity\TenantOwnedInterface`, the provider checks `getClubId()` matches before returning it (BCK-03: `instanceof`, not `method_exists`). The DB-level `TenantFilter`/RLS already scope by the `club_id` column, so this is defence-in-depth.
 3. **Custom filters** — If you add `Filter` to an ApiResource, the provider must handle it.
 
 ## Anti-Patterns

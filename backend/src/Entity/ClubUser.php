@@ -14,7 +14,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_club_user_user', columns: ['user_id'])]
 #[ORM\UniqueConstraint(name: 'uniq_club_user_membership', columns: ['club_id', 'user_id'])]
 #[ORM\HasLifecycleCallbacks]
-class ClubUser
+class ClubUser implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]
