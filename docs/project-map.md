@@ -69,7 +69,7 @@ All services share the Docker network `clubscheduler_network`.
 - **`GenerateScheduleMessage`** (`scheduleId`, `clubId`, `timeoutSeconds`=650) → **`GenerateScheduleHandler`**: acquire `ClubGenerationLock` → build frozen snapshot (`ScheduleConstraintBuilder.buildForClubSeason()`) → `POST http://engine:8000/generate` → import via `ScheduleResultImporter` → write `ScheduleDiagnostic` → publish Mercure.
 - **`ExportPdfMessage`** → **`ExportPdfHandler`**: `PdfGenerator.generate()` → publish Mercure with export URLs.
 - **Mercure topic:** `club:{clubId}:schedule:{scheduleId}` (validated non-empty). `MERCURE_URL` env.
-- **`ClubGenerationLock`** (Redis): key `schedule_generation:club:{clubId}`, atomic `SETEX NX` + TTL, token-checked release.
+- **`ClubGenerationLock`** (Redis): key `schedule_generation:club:{clubId}`, atomic `SETEX NX` + TTL, **atomic token-checked release** (Lua compare-and-delete — BCK-02; a GET-then-DEL could delete another worker's lock after a TTL-expiry race).
 
 ### 2.5 Multi-tenant isolation (security-critical)
 1. `TenantFilter` (Doctrine SQL filter) appends `{table}.club_id = :param` on tenant entities; registered in `config/packages/doctrine.yaml`.

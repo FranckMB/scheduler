@@ -62,6 +62,27 @@ final class ConcurrentGenerationTest extends WebTestCase
         $this->lock->release($clubId, $token);
     }
 
+    /**
+     * BCK-02: the atomic compare-and-delete must actually delete when the token
+     * matches. Guards against a broken Lua script (e.g. wrong KEYS/ARGV index)
+     * that would leave the lock held forever — the wrong-token test above would
+     * still pass in that case, so this positive half is needed.
+     */
+    public function testReleaseWithCorrectTokenRemovesLock(): void
+    {
+        $clubId = 'club-' . uniqid();
+
+        $token = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($token);
+
+        $this->lock->release($clubId, $token);
+
+        $reacquired = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($reacquired, 'Lock must be free after release with the correct token');
+
+        $this->lock->release($clubId, $reacquired);
+    }
+
     protected function setUp(): void
     {
         $this->lock = self::getContainer()->get(ClubGenerationLock::class);
