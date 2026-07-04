@@ -2,6 +2,7 @@
 
 > **But** : base de réflexion écrite pour les prochaines features. Extraction des capacités décrites dans `specs/initiales/` (ClubScheduler v3 + Spécification des contraintes v2), confrontées à l'état **livré**.
 > **Statut** : ✅ livré · 🟡 partiel · ⬜ à faire. Les items déjà suivis pointent vers [`features-futures.md`](features-futures.md) (FF#) ou [`backend-gaps.md`](backend-gaps.md) (BG G#).
+> **Effort** (annoté sur les items actionnables, pour arbitrer sans re-poser la question) : **🟢 léger** (≈ ≤2 j, ciblé, peu de risque) · **🟡 moyen** (quelques jours, plusieurs fichiers/zones) · **🔴 lourd** (structurant / semaine+ / nouvelle archi ou dépendance de zone). L'effort estime le **coût de mise en œuvre**, pas la valeur produit.
 > **Sources** : `initiales/ClubScheduler_v3.md` (réf `v3 §x`), `initiales/ClubScheduler_Specification_des_contraintes_v2.md` (réf `contraintes-v2`). Ces specs sont **figées** — ne pas les modifier.
 
 Ce n'est pas un backlog priorisé : c'est la **carte** de ce que la vision d'origine contient et de ce qui reste à faire. On priorisera au moment de traiter chaque sujet.
@@ -36,15 +37,15 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
-| Architecture **templates → occurrences** (dates réelles, matérialisation glissante J+14) | ⬜ | v3 §3.5, §8.1 · FF#8 | `schedule_slot_occurrences` |
-| Occurrences : exceptions, annulations, déplacements, remplacements coach/salle, fusions | ⬜ | v3 §3.5 · FF#8 | |
-| **Périodes d'exception** (`period_templates` + `is_cutoff`, `period_template_slots` avec `team_ids[]`, `period_assignments`, `period_coach_responses`) | ⬜ | v3 §3.6, §8 · FF#2 | Vacances scolaires, coupures, mutualisation |
-| Scheduler quotidien @8h : détecte période sous 14j → assignment pending + alerte (J-7 rappel, J-3 rouge), jamais d'auto-action | ⬜ | v3 §8.2 · FF#2 | |
-| **Plans secondaires / alternatifs** (vacances, coupure, mutualisation) | ⬜ | v3 §8.1 · FF#2 | |
-| Collecte des besoins coach par **lien sans login** (questionnaire email → `period_coach_responses`) | ⬜ | v3 §8.2 · FF#2 | |
-| Mutualisation de créneau (`team_ids[]`, ex. SM1+SM2 même créneau) | ⬜ | v3 §3.6 · FF#2 | |
-| `school_holiday_periods` (API Éducation Nationale, zones A/B/C) | ⬜ | v3 §3.3 | Alimente les périodes |
-| **Vue calendrier annuel** (menu) — voir tous les plannings prévus sur l'année pour repérer les soucis + **vacances scolaires en cours** | ⬜ | — | Dérive la **zone de vacances** depuis la ville/région/département du club → dates de vacances associées. Dépend de la dérivation zone depuis l'adresse (§8) + `school_holiday_periods` |
+| Architecture **templates → occurrences** (dates réelles, matérialisation glissante J+14) | ⬜ | v3 §3.5, §8.1 · FF#8 | `schedule_slot_occurrences` · **🔴** (nouvelle archi temporelle — débloque toute la §2, la fermeture de salle, les plans secondaires) |
+| Occurrences : exceptions, annulations, déplacements, remplacements coach/salle, fusions | ⬜ | v3 §3.5 · FF#8 | **🔴** (dépend de templates→occurrences) |
+| **Périodes d'exception** (`period_templates` + `is_cutoff`, `period_template_slots` avec `team_ids[]`, `period_assignments`, `period_coach_responses`) | ⬜ | v3 §3.6, §8 · FF#2 | Vacances scolaires, coupures, mutualisation · **🔴** |
+| Scheduler quotidien @8h : détecte période sous 14j → assignment pending + alerte (J-7 rappel, J-3 rouge), jamais d'auto-action | ⬜ | v3 §8.2 · FF#2 | **🟡** cron + alertes, mais inutile sans les périodes (🔴 amont) |
+| **Plans secondaires / alternatifs** (vacances, coupure, mutualisation) | ⬜ | v3 §8.1 · FF#2 | **🔴** (dépend des occurrences + périodes) |
+| Collecte des besoins coach par **lien sans login** (questionnaire email → `period_coach_responses`) | ⬜ | v3 §8.2 · FF#2 | **🟡** en soi (lien tokenisé + form public), mais rattaché aux périodes ; **différenciateur produit fort** |
+| Mutualisation de créneau (`team_ids[]`, ex. SM1+SM2 même créneau) | ⬜ | v3 §3.6 · FF#2 | **🟡** |
+| `school_holiday_periods` (API Éducation Nationale, zones A/B/C) | ⬜ | v3 §3.3 | Alimente les périodes · **🟡** (intégration API + zones) |
+| **Vue calendrier annuel** (menu) — voir tous les plannings prévus sur l'année pour repérer les soucis + **vacances scolaires en cours** | ⬜ | — | Dérive la **zone de vacances** depuis la ville/région/département du club → dates de vacances associées. Dépend de la dérivation zone depuis l'adresse (§8) + `school_holiday_periods` · **🔴** (dépend §2 + zone) |
 
 ---
 
@@ -54,11 +55,11 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 |-----------|--------|-----|------|
 | Wizard initial de saisie | ✅ | v3 §9.1 | Livré (6 étapes, reconstruit) — dépasse le draft 4 étapes |
 | Auto-save serveur du brouillon (`GET/PUT /api/clubs/{id}/draft` + `clubs.draft_data`) | ✅ | v3 §9.1 · BG G1/G2 | **Tranché : abandonné** — la persistance **par entité** (chaque salle/équipe/coach POST/PUT à la saisie, le store wizard ne tient aucune donnée) couvre déjà le besoin ; un draft-blob serait une 2e source de vérité. Ferme BG G1/G2 |
-| **Mode démo** (club fictif pré-rempli, génération 30s avant saisie) | ⬜ | v3 §9.1, §12.3 | À faire (différé wizard) |
-| **Wizard transition de saison** (5 étapes hybride : salles diff / coachs keep-modify-archive / équipes keep-modify-dissolve / passations & priorités / récap) | ⬜ | v3 §9.2 · FF#3 | `SeasonTransitionService` |
-| Capitalisation des contraintes entre saisons (copie éditable, `parent_*_id` self-FK) | ⬜ | v3 §3.1, contraintes-v2 §3 · FF#3 | |
-| Politique de rétention (2 saisons max, saison N-1 read-only, purge RGPD, `solver_metrics` 6 mois) | ⬜ | v3 §3.2, §9.3 | |
-| **Réinitialiser son club** (RAZ des données pour repartir de zéro) | 🟡 | — | `ResetSeasonController` (`DELETE /api/reset-season`) existe côté données saison ; manque une action « reset club » assumée + son UI (avec confirmation) |
+| **Mode démo** (club fictif pré-rempli, génération 30s avant saisie) | ⬜ | v3 §9.1, §12.3 | À faire (différé wizard) · **🟡** (fixture club fictif + parcours dédié) — **fort levier de vente** |
+| **Wizard transition de saison** (5 étapes hybride : salles diff / coachs keep-modify-archive / équipes keep-modify-dissolve / passations & priorités / récap) | ⬜ | v3 §9.2 · FF#3 | `SeasonTransitionService` · **🔴** (nouveau service + wizard 5 étapes) |
+| Capitalisation des contraintes entre saisons (copie éditable, `parent_*_id` self-FK) | ⬜ | v3 §3.1, contraintes-v2 §3 · FF#3 | **🔴** (dépend de la transition de saison) |
+| Politique de rétention (2 saisons max, saison N-1 read-only, purge RGPD, `solver_metrics` 6 mois) | ⬜ | v3 §3.2, §9.3 | **🟡** (commande de purge + verrou lecture-seule N-1) — jalon RGPD |
+| **Réinitialiser son club** (RAZ des données pour repartir de zéro) | 🟡 | — | `ResetSeasonController` (`DELETE /api/reset-season`) existe côté données saison ; manque une action « reset club » assumée + son UI (avec confirmation) · **🟢** (l'ossature existe : élargir le controller + modale de confirmation) |
 
 ---
 
@@ -67,12 +68,12 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
 | **Cycle de vie planning** : `VALIDATED` (fini/verrouillé lecture seule), rouvrir, planning principal (baseline) vs secondaires | ✅ | — | Livré (PR #15) : `/validate` · `/reopen` · `/set-baseline`, verrou serveur sur les 4 chemins d'édition, modale de responsabilité. Cascade principal→secondaires reportée (dépend des occurrences). → [`planning-lifecycle-validated.md`](../courantes/planning-lifecycle-validated.md) |
-| Niveaux de lock NONE/SOFT/HARD (enum, ≤30 min = SOFT silencieux) | 🟡 | v3 §3.5, §11.4 | Schéma + lock HARD/SOFT posables ; règle « ≤30min = SOFT auto » à vérifier |
-| **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` |
-| **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées |
-| `ScheduleDiffService` (diff lisible entre 2 snapshots) | ⬜ | v3 §6.2 · FF#11 | |
-| **Grille de réservation** (étape Contraintes, pré-génération) : grille type disponibilités, **clic = affecter une équipe** à un créneau ; affiche les **créneaux déjà placés** en base (`schedule_slot_templates`) | ⬜ | — | Remplace la liste déroulante actuelle (`ReservationPanel`). Réutiliser le style `VenueAvailabilityGrid`. Idée gestionnaire (recette) — les réservations posées ⇒ HARD locks à la génération |
-| Routes manual-edit documentées (OpenAPI) + naming `schedule-slots` vs `schedule_slot_templates` | 🟡 | BG G5/G6 | Endpoints existent, non documentés |
+| Niveaux de lock NONE/SOFT/HARD (enum, ≤30 min = SOFT silencieux) | 🟡 | v3 §3.5, §11.4 | Schéma + lock HARD/SOFT posables ; règle « ≤30min = SOFT auto » à vérifier · **🟢** (vérif + petite règle applicative) |
+| **Dialogue post-modification** (déplacement significatif → créer contrainte permanente / lock SOFT|HARD / occurrence one-time « convertir en contrainte ? ») | 🟡 | v3 §11.4 · FF#4 | Service de base existe ; manque création de contrainte permanente + `source_occurrence_id` · **🟡** (le `source_occurrence_id` dépend des occurrences 🔴) |
+| **Alerte diagnostic cliquable → focus dans la grille** | ⬜ | | Cliquer une alerte (ex. créneau vide / `unused_slot`) doit **sélectionner et afficher** le créneau concerné dans la grille du planning, comme si l'utilisateur l'avait cliqué. Implique d'**afficher les créneaux vides** (disponibilités non utilisées) dans la grille, pas seulement les séances placées · **🟡** (pur frontend, mais afficher les créneaux vides change le rendu grille) — **transforme le rapport en outil de travail** |
+| `ScheduleDiffService` (diff lisible entre 2 snapshots) | ⬜ | v3 §6.2 · FF#11 | **🟡** (les snapshots existent déjà — `snapshot_data`) |
+| **Grille de réservation** (étape Contraintes, pré-génération) : grille type disponibilités, **clic = affecter une équipe** à un créneau ; affiche les **créneaux déjà placés** en base (`schedule_slot_templates`) | ⬜ | — | Remplace la liste déroulante actuelle (`ReservationPanel`). Réutiliser le style `VenueAvailabilityGrid`. Idée gestionnaire (recette) — les réservations posées ⇒ HARD locks à la génération · **🔴** (nouvelle grille interactive) |
+| Routes manual-edit documentées (OpenAPI) + naming `schedule-slots` vs `schedule_slot_templates` | ✅ | BG G5/G6 | **Livré (PR #43, BCK-F)** : `CustomRoutesOpenApiFactory` documente les 3 routes `manual-edit` ; G6 tranché **snake_case canonique** (routes custom gardent leur kebab-case) |
 
 ---
 
@@ -83,20 +84,20 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | Isolation 3 couches (ClubVoter + TenantFilterListener + RLS FORCE) | ✅ | v3 §10.1 | Livré (listener priorité 7) |
 | Verrou de génération (1/club, Messenger + asyncio.Lock engine) | ✅ | v3 §5.1 | `ConcurrentGenerationTest` |
 | Snapshot gelé (`snapshot_data` + `snapshot_hash`) | ✅ | v3 §10.2 | |
-| **Optimistic locking** (`version` + 409 sur conflit) | 🟡 | v3 §10.2 | `version` exposé ; gestion 409 à généraliser/vérifier |
-| **Rate limiting** (api 200/min, generate 5/h, pdf 10/h par club) | ⬜ | v3 §10.2 | À vérifier/implémenter (register limité seulement) |
-| **Deux users DB** (app_user sans DDL + migration_user) | ⬜ | v3 §10.1 | À vérifier |
-| CacheInvalidationListener ciblé (Venue/Coach/Team/Schedule) | 🟡 | v3 §6.2 · FF#9 | Stub actuel |
-| `ClubTimeService` (UTC ↔ fuseau club) | ⬜ | v3 §6.2 · FF#10 | |
+| **Optimistic locking** (`version` + 409 sur conflit) | 🟡 | v3 §10.2 | `version` exposé ; gestion 409 à généraliser/vérifier · **🟡** |
+| **Rate limiting** (api 200/min, generate 5/h, pdf 10/h par club) | ⬜ | v3 §10.2 | À vérifier/implémenter (register limité seulement) · **🟢** (le `RateLimiter` Symfony est déjà en place pour register — répliquer par route/club) — utile avant prod |
+| **Deux users DB** (app_user sans DDL + migration_user) | ⬜ | v3 §10.1 | À vérifier · **🟢** (RLS tourne déjà en `app_user` vs connexion `admin` — surtout de la vérif/durcissement) |
+| CacheInvalidationListener ciblé (Venue/Coach/Team/Schedule) | 🟡 | v3 §6.2 · FF#9 | Stub actuel · **🟡** |
+| `ClubTimeService` (UTC ↔ fuseau club) | ⬜ | v3 §6.2 · FF#10 | **🟡** (transverse — toucher tout affichage horaire) |
 
 ### Rôles & membres (non couvert par les initiales — issu du hors-scope wizard)
 
 | Évolution | Statut | Note |
 |-----------|--------|------|
-| **Rôles non-admin** (coach / lecteur au-delà d'`admin`) + modèle de permissions | ⬜ | Aujourd'hui `ClubUser.role` est **hardcodé `'admin'`** au register ; pas de différenciation de droits |
-| **Gestion des membres** (inviter / changer rôle / désactiver) — écran admin club | ⬜ | `ClubUser` (membership) existe ; pas d'UI |
+| **Rôles non-admin** (coach / lecteur au-delà d'`admin`) + modèle de permissions | ⬜ | Aujourd'hui `ClubUser.role` est **hardcodé `'admin'`** au register ; pas de différenciation de droits · **🔴** (modèle de permissions + voters à câbler partout ; `isManagementRole` existe déjà comme amorce) |
+| **Gestion des membres** (inviter / changer rôle / désactiver) — écran admin club | ⬜ | `ClubUser` (membership) existe ; pas d'UI · **🟡** (CRUD membership + écran ; dépend en partie des rôles) |
 | **Approbation des demandes d'adhésion** (rejoindre un club → membre `pending`) | ✅ | Flux register → membre pending + `WaitingApprovalPage` côté demandeur ; approbation admin livrée (`PendingMembersSection`, approuver/refuser), désormais section **Demandes** du hub `/club` (PR #36) |
-| **Modifier ses informations personnelles** (nom, email, mot de passe) | ⬜ | Nav « Profil » existe + reset mot de passe ; manque l'édition du profil (prénom/nom/email) + changement de mot de passe connecté |
+| **Modifier ses informations personnelles** (nom, email, mot de passe) | ⬜ | Nav « Profil » existe + reset mot de passe ; manque l'édition du profil (prénom/nom/email) + changement de mot de passe connecté · **🟢** (formulaire + endpoint `PATCH /api/me` ; User self-only déjà en place) |
 
 ---
 
@@ -106,10 +107,10 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
-| 4 plans tarifaires (Découverte/Petit/Club/Grand) : max_teams/venues/generations, prix en DB | ⬜ | v3 §12.1 | Table `plans` + modèle à vérifier |
-| Bridage **Découverte** : 3 générations/saison (lock conversion), coach-joueur off, passations off, travel off, 1 contrainte préférée/équipe, pas de PDF, pas de transition saison | ⬜ | v3 §12.2 | Verrou de conversion clé |
-| Enforcement `generation_count_season` (compteur par saison) | ⬜ | v3 §3.2 | Champ existe, pas d'enforcement |
-| `billing_cycle` / `plan_expires_at` | ⬜ | v3 §3.2 | Modèle |
+| 4 plans tarifaires (Découverte/Petit/Club/Grand) : max_teams/venues/generations, prix en DB | ⬜ | v3 §12.1 | Table `plans` + modèle à vérifier · **🟡** (`Club.planId` existe déjà — reste la table `plans` + les limites) |
+| Bridage **Découverte** : 3 générations/saison (lock conversion), coach-joueur off, passations off, travel off, 1 contrainte préférée/équipe, pas de PDF, pas de transition saison | ⬜ | v3 §12.2 | Verrou de conversion clé · **🔴** (enforcement transversal sur chaque feature — business-critique, pas de SaaS sans ça) |
+| Enforcement `generation_count_season` (compteur par saison) | ⬜ | v3 §3.2 | Champ existe, pas d'enforcement · **🟢** (incrémenter + garde dans `GenerateScheduleController`) — 1re brique du bridage |
+| `billing_cycle` / `plan_expires_at` | ⬜ | v3 §3.2 | Modèle · **🟢** (champs déjà sur `Club` — reste la logique d'expiration) |
 
 ---
 
@@ -118,11 +119,11 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
 | 4 tests bloquants CI (TenantIsolation, TenantCache, ConcurrentGeneration, ContractSchema) | ✅ | v3 §13.2 | Livrés + CI vert |
-| Golden datasets (simple/medium/dense/impossible/**vacation_week**/**partial_regen**) | 🟡 | v3 §13.5 | Base présente ; vacation_week/partial_regen à vérifier |
-| Invariants Hypothesis (no double-booking, coach unique, coach-joueur cohérent, HARD préservé, tier-S jamais sacrifié si D placé) | 🟡 | v3 §13.5 | Partiel |
-| Tests unitaires frontend (Vitest + RTL) | 🟡 | v3 §13.3 · FF#12 | Livrés depuis (wizard/planning testés) — FF à requalifier |
-| E2E Playwright (onboarding→génération→PDF) | 🟡 | v3 §13.3 · FF#13 | Auth e2e existe ; parcours complet à finir |
-| Gate perf (dense_club < 180s) | ⬜ | v3 §13.6 | Critère de sortie MVP-strict |
+| Golden datasets (simple/medium/dense/impossible/**vacation_week**/**partial_regen**) | 🟡 | v3 §13.5 | Base présente ; vacation_week/partial_regen à vérifier · **🟡** (vacation_week dépend du modèle occurrences 🔴) |
+| Invariants Hypothesis (no double-booking, coach unique, coach-joueur cohérent, HARD préservé, tier-S jamais sacrifié si D placé) | 🟡 | v3 §13.5 | Partiel · **🟡** |
+| Tests unitaires frontend (Vitest + RTL) | 🟡 | v3 §13.3 · FF#12 | Livrés depuis (wizard/planning testés) — FF à requalifier · **🟢** (compléter la couverture existante) |
+| E2E Playwright (onboarding→génération→PDF) | 🟡 | v3 §13.3 · FF#13 | Auth e2e existe (mais **rouge**, cf. audit FRT-07) ; parcours complet à finir · **🟡** — commencer par **réparer `auth.spec` (2/3 rouge) 🟢** |
+| Gate perf (dense_club < 180s) | ✅ | v3 §13.6 | **Livré (série ENGINE, cf. l.185)** : gate perf ajouté sur fixture dense. À re-confirmer dans une édition d'audit |
 
 ---
 
@@ -130,14 +131,14 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
-| Import Excel équipes (template basket) | 🟡 | v3 §9.1, §12.3 | Backend livré (`POST /clubs/{id}/import-teams`, `FfbbExcelImporter`) ; **UI wizard différée** — l'API FFBB à venir remplacera l'import manuel |
+| Import Excel équipes (template basket) | 🟡 | v3 §9.1, §12.3 | Backend livré (`POST /clubs/{id}/import-teams`, `FfbbExcelImporter`) ; **UI wizard différée** — l'API FFBB à venir remplacera l'import manuel · **🟢** (brancher l'UI sur l'endpoint existant) |
 | Import CSV salles & coachs | ✅ | v3 §9.1 | **Tranché : abandonné** — peu de lignes (1-5 salles, ~10 coachs), pas de format standard ; la saisie manuelle suffit |
-| **Fermetures de salle** (`VenueClosure` date+raison → regen partielle) | ⬜ | v3 §3.4 · BG G3 | **Reporté** : dépend du modèle templates→occurrences (§2, absent) — une fermeture **datée** n'a pas d'occurrence à annuler tant que le planning reste une semaine-type |
-| Connecteurs **API municipales** (`venues.source` manual/municipal/external_api + `external_ref`) | ⬜ | v3 §1.4 · FF#20 | V2 |
-| Import équipes **FFBB** (code club, `ffbb_team_id`) | ⬜ | v3 §1.4 · FF#19 | V2 |
-| Import **calendrier de matchs FFBB** (`competitions`, `ffbb_club_code`) | ⬜ | v3 §1.4 · FF#19 | V2 |
-| **Planification des matchs** (entraînements + matchs) | ⬜ | v3 §1.4 · FF#21 | V2 |
-| Dérivation fuseau/zone depuis l'adresse (API Géo + timezonedb → `school_zone`) | ⬜ | v3 §3.2 | |
+| **Fermetures de salle** (`VenueClosure` date+raison → regen partielle) | ⬜ | v3 §3.4 · BG G3 | **Reporté** : dépend du modèle templates→occurrences (§2, absent) — une fermeture **datée** n'a pas d'occurrence à annuler tant que le planning reste une semaine-type · **🔴** (bloqué par §2) |
+| Connecteurs **API municipales** (`venues.source` manual/municipal/external_api + `external_ref`) | ⬜ | v3 §1.4 · FF#20 | V2 · **🔴** |
+| Import équipes **FFBB** (code club, `ffbb_team_id`) | ⬜ | v3 §1.4 · FF#19 | V2 · **🟡** (infra `ffbb_team_id`/`ffbbClubCode` déjà anticipée) — **supprime la moitié de la saisie** |
+| Import **calendrier de matchs FFBB** (`competitions`, `ffbb_club_code`) | ⬜ | v3 §1.4 · FF#19 | V2 · **🔴** (dépend de la planification matchs) |
+| **Planification des matchs** (entraînements + matchs) | ⬜ | v3 §1.4 · FF#21 | V2 · **🔴** |
+| Dérivation fuseau/zone depuis l'adresse (API Géo + timezonedb → `school_zone`) | ⬜ | v3 §3.2 | **🟡** (intégration API Géo → alimente les vacances scolaires) |
 
 ---
 
@@ -146,20 +147,20 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Évolution | Statut | Réf | Note |
 |-----------|--------|-----|------|
 | Export PDF async (worker Puppeteer mono-thread) | ✅ | v3 §2.1 | Livré ; **rétention** (base/period/manual/is_pinned) ⬜ |
-| **Audit trail** (`audit_logs` append-only, BRIN, purge RGPD, async) | ⬜ | v3 §3.2 · FF#6 | |
-| Table `solver_metrics` (perf par génération, partition mensuelle, purge 6 mois) | ⬜ | v3 §3.5 · FF#7 | |
-| Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ |
-| Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; **warnings de réservation livrés** (PR #14 : créneau surchargé vs capacité, quota séances/semaine, 2 séances le même jour — non bloquants, le solveur reste l'autorité) ; **warning équipe compétitive classée rang D · Bonus** (PR #35, dérivé du label du tier, non bloquant). Liste complète de warnings à compléter |
+| **Audit trail** (`audit_logs` append-only, BRIN, purge RGPD, async) | ⬜ | v3 §3.2 · FF#6 | **🟡** (table + Doctrine listener + purge) — jalon RGPD |
+| Table `solver_metrics` (perf par génération, partition mensuelle, purge 6 mois) | ⬜ | v3 §3.5 · FF#7 | **🟡** (les métriques sont déjà calculées par `SolverMetricsMapper` — reste à les persister/partitionner) |
+| Diagnostics avec **suggestions actionnables** (jsonb = actions + liens entités) | 🟡 | v3 §7 | Diagnostics texte livrés ; actions cliquables ⬜ · **🟡** (jumeau de l'« alerte cliquable » §4) |
+| Validation temps réel à la saisie (coach-joueur = seule erreur bloquante ; le reste = warnings) | 🟡 | v3 §11.3 | Wizard valide par étape ; **warnings de réservation livrés** (PR #14 : créneau surchargé vs capacité, quota séances/semaine, 2 séances le même jour — non bloquants, le solveur reste l'autorité) ; **warning équipe compétitive classée rang D · Bonus** (PR #35, dérivé du label du tier, non bloquant). Liste complète de warnings à compléter · **🟢** (compléter la liste au fil de l'eau) |
 | Push temps réel (Mercure statut/score) | ✅ | v3 §2, §6 | Livré |
 | **Identité visuelle par club** (couleur d'accent + logo) | ✅ | Livré 2026-07-02 : accent + logo + extraction 3 couleurs + écran /club (reste : stockage prod S3) → [`identite-visuelle-club.md`](../courantes/identite-visuelle-club.md) |
-| `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ |
-| `max_days_per_week` coach (calcul dynamique + override checkbox) | 🟡 | v3 §3.4 | À vérifier |
-| App **mobile** (React Native/Expo, consultation → exceptions V2) | ⬜ | v3 §1.4 · FF#14 | P2 |
-| Notifications coach (email PDF → push + lien consultation sans login) | ⬜ | v3 §1.4 · FF#17 | P2 |
-| Stats & analytics (taux de remplissage, heures-coach/semaine) | ⬜ | v3 §1.4 · FF#16 | P2 |
-| Dashboard super-admin (multi-clubs) | ⬜ | v3 §14.3 · FF#15 | P2 |
-| **Multi-sport** (handball/gym/volley, modèle générique) | ⬜ | v3 §1.4 · FF#18 | V2 |
-| Doc OpenAPI de `AuthController` (`/api/register`, `/api/me`) | ⬜ | BG G4 | |
+| `team_tags` / `team_tag_assignments` + règles facility par tag | 🟡 | contraintes-v2 | Tags système + ciblage tag livrés ; FACILITY_FORBIDDEN/PREFERRED_TEAM_TAG dédiés ⬜ · **🟡** |
+| `max_days_per_week` coach (calcul dynamique + override checkbox) | 🟡 | v3 §3.4 | À vérifier · **🟢** |
+| App **mobile** (React Native/Expo, consultation → exceptions V2) | ⬜ | v3 §1.4 · FF#14 | P2 · **🔴** (à ne pas faire avant clients payants — web responsive + PDF suffisent) |
+| Notifications coach (email PDF → push + lien consultation sans login) | ⬜ | v3 §1.4 · FF#17 | P2 · **🟡** |
+| Stats & analytics (taux de remplissage, heures-coach/semaine) | ⬜ | v3 §1.4 · FF#16 | P2 · **🟡** (peu coûteux une fois les occurrences là ; demande d'AG) |
+| Dashboard super-admin (multi-clubs) | ⬜ | v3 §14.3 · FF#15 | P2 · **🔴** |
+| **Multi-sport** (handball/gym/volley, modèle générique) | ⬜ | v3 §1.4 · FF#18 | V2 · **🔴** (attendre une vraie demande) |
+| Doc OpenAPI de `AuthController` (`/api/register`, `/api/me`) | ✅ | BG G4 | **Livré (PR #43, BCK-F)** : `CustomRoutesOpenApiFactory` |
 
 ---
 
@@ -170,13 +171,13 @@ Polish frontend discuté, non structurant mais confort d'usage.
 | Évolution | Statut | Note |
 |-----------|--------|------|
 | **Refonte de la navigation** — menu principal **à gauche** (Accueil, Assistant…) ; header **réduit** pour gagner de l'espace au centre ; **burger en haut à droite** pour Profil + déconnexion + thème dark/light | 🟡 | **Burger haut-droite livré** (PR #36) : menu unifié Club · Profil · Thème · Logout (`shared/components/ui/menu.tsx`), header allégé (nav gauche = Accueil · Assistant). **Reste** : menu latéral gauche + sous-menu Assistant (l. suivantes) |
-| **Assistant = menu avec ses étapes en sous-menu** (les 6 étapes du wizard sous l'entrée « Assistant » du menu gauche) | ⬜ | Remplace la colonne d'étapes interne du wizard |
-| **Clic sur le nom / logo du club → Accueil** | ⬜ | Raccourci d'accueil |
+| **Assistant = menu avec ses étapes en sous-menu** (les 6 étapes du wizard sous l'entrée « Assistant » du menu gauche) | ⬜ | Remplace la colonne d'étapes interne du wizard · **🟡** (refonte nav wizard) |
+| **Clic sur le nom / logo du club → Accueil** | ⬜ | Raccourci d'accueil · **🟢** (un `<Link>`) |
 | **« Demandes » fusionné dans « Gestion du club »** | ✅ | Livré (PR #36) : `/club` devient un hub à sections dépliables (`AccordionSection`) — **Demandes** (admin-only, ouverte par défaut, `PendingMembersSection`) + **Visuel** (identité). Route `/pending-members` supprimée, entrée de nav retirée |
 | **Wizard : titre d'étape fixe en haut + Précédent/Suivant fixes en bas** (sticky header/footer) | ✅ | Livré : header (titre + n° d'étape) et footer Précédent/Suivant en `sticky` dans `WizardLayout.tsx`. Affiné (PR #37) : titre **unique** (h2 internes retirés des 6 steps), footer collé au **bas réel** (plus de bar flottant sur étape courte), nav gauche `w-44`, grille Génération raccourcie (`PlanningPage embedded`) pour ne pas passer sous le footer |
 | **Wizard : colonne d'étapes repliable / plein écran** | ✅ | Livré : toggle « Plein écran » replie la nav gauche (`navCollapsed`) ; le masquage forcé sur l'étape génération est retiré → l'utilisateur contrôle (résout aussi l'accès menu en régénération) |
-| **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances |
-| **i18n des diagnostics solveur** (fichier de traduction) | ⬜ | Alertes **en français** obligatoire. Aujourd'hui messages FR codés en dur dans l'engine + reste EN à éliminer (`soft_lock_moved`, `unused_slot`). Cible : clés + fichier de traduction (côté backend `DiagnosticMessageBuilder` ou front) plutôt que du texte en dur dans l'engine |
+| **Menu : entrée « calendrier annuel »** | ⬜ | Voir §2 — vue annuelle des plannings + vacances · **🔴** (dépend §2) |
+| **i18n des diagnostics solveur** (fichier de traduction) | ⬜ | Alertes **en français** obligatoire. Aujourd'hui messages FR codés en dur dans l'engine + reste EN à éliminer (`soft_lock_moved`, `unused_slot`). Cible : clés + fichier de traduction (côté backend `DiagnosticMessageBuilder` ou front) plutôt que du texte en dur dans l'engine · **🟢** (éliminer 2-3 clés EN dans `DiagnosticMessageBuilder` — FR obligatoire produit) |
 
 ---
 
