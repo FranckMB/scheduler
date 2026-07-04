@@ -1,6 +1,6 @@
 # Backend Gaps — Frontend-Forward Spec vs Backend/Engine
 
-Last verified @ 2026-06-30
+Last verified @ 2026-07-04 (BCK-F: G4/G5 closed, G6 decided; G2/G4 shape facts refreshed)
 
 > Identifie les gaps entre les specs frontend-forward (`frontend-spec.md`,
 > `frontend-wizard.md`, `frontend-components.md`) et l'état réel du backend
@@ -76,11 +76,11 @@ objets imbriqués et booléens.
 `clubs.transition_data` (jsonb)").
 
 **Current backend state :**
-- `Club` schema (`openapi-snapshot.json`) : 15 propriétés, **aucune**
-  `transitionData` ou `draftData`. Propriétés : `id`, `name`, `slug`,
-  `timezone`, `locale`, `schoolZone`, `billingCycle`, `planId`, `planExpiresAt`,
-  `ffbbClubCode`, `generationCountSeason`, `onboardingCompleted`, `createdAt`,
-  `updatedAt`, `version`.
+- `Club` schema (`openapi-snapshot.json`) : **18** propriétés (mis à jour
+  2026-07-04), **aucune** `transitionData` ou `draftData`. Propriétés : `id`,
+  `name`, `slug`, `timezone`, `locale`, `schoolZone`, `billingCycle`, `planId`,
+  `planExpiresAt`, `ffbbClubCode`, `generationCountSeason`, `onboardingCompleted`,
+  `logoUrl`, `accentColor`, `accentPalette`, `createdAt`, `updatedAt`, `version`.
 - `Season` schema : `transitionData: object` avec `additionalProperties:
   {type: ["string", "null"]}` — soit `Map<string, string|null>`, pas du
   jsonb free-form.
@@ -162,10 +162,10 @@ l'OpenAPI snapshot avec schemas de request/response complets. Soit via
 `#[OpenApi\Attributes]` sur `AuthController`, soit via un provider OpenAPI
 custom, soit via NelmioApiDocBundle.
 
-**Délégué à backend future plan :** Ajouter la documentation OpenAPI pour
-`AuthController`. Les endpoints fonctionnent déjà — c'est un gap de
-documentation, pas d'implémentation. Le frontend peut utiliser les endpoints
-en s'appuyant sur `backend-inventory.md` §3 en attendant.
+**✅ Résolu (2026-07-04, BCK-F) :** `App\OpenApi\CustomRoutesOpenApiFactory`
+documente `/api/register` et `/api/me` dans l'OpenAPI (snapshot régénéré). Le
+shape réel : register lit `club_name` (snake) ; `/api/me` renvoie l'objet riche
+listé dans la décision de fin de document. Endpoints inchangés.
 
 ---
 
@@ -203,9 +203,11 @@ OpenAPI contient déjà `lockLevel` (enum string), `temporaryLock` (boolean),
 `temporaryLockFor` (string|null) — les champs existent pour supporter lock et
 one-time edit.
 
-**Délégué à backend future plan :** Ajouter documentation OpenAPI pour
-`ManualEditController`. Résoudre l'inconsistance de naming
-`schedule-slots` vs `schedule_slot_templates` (voir G6).
+**✅ Résolu (2026-07-04, BCK-F) :** les 3 routes `manual-edit` sont documentées
+dans l'OpenAPI via `CustomRoutesOpenApiFactory`. Le naming reste tel quel : les
+custom controllers gardent le kebab-case (`manual-edit`), les ressources CRUD le
+snake_case (`schedule_slot_templates`) — G6 tranche snake_case côté specs, sans
+renommer les routes existantes.
 
 ---
 
@@ -289,9 +291,9 @@ dans `frontend-wizard.md` concernant `onboarding_completed` sont obsolètes
 | G1 | Missing endpoint | ~~High~~ **Closed** | wizard §7 | **Abandonné** — persistance par entité suffit (voir note) |
 | G2 | Type mismatch | ~~High~~ **Closed** | wizard §7 | **Abandonné** — pas de draft-blob `clubs.draft_data` |
 | G3 | Missing endpoint + Unimplemented | ~~Medium~~ **Deferred** | wizard §2 | **Reporté** — VenueClosure dépend du modèle occurrences (absent) |
-| G4 | Unstable shape (OpenAPI doc) | Low | spec §9 | Add OpenAPI docs for AuthController |
-| G5 | Unstable shape (OpenAPI doc + naming) | Medium | spec §9 | Add OpenAPI docs + resolve naming |
-| G6 | Unstable shape (systematic) | Medium | spec §9, wizard §1 | Decide convention, update specs or API Platform |
+| G4 | Unstable shape (OpenAPI doc) | ~~Low~~ **Closed** | spec §9 | **Done** — `CustomRoutesOpenApiFactory` documents `/api/register` + `/api/me` |
+| G5 | Unstable shape (OpenAPI doc + naming) | ~~Medium~~ **Closed** | spec §9 | **Done** — same factory documents the 3 `manual-edit` routes; naming decided (G6) |
+| G6 | Unstable shape (systematic) | ~~Medium~~ **Decided** | spec §9, wizard §1 | **snake_case is canonical** — the frontend HTTP client uses the OpenAPI paths verbatim; specs updated |
 | G7 | Spec correction (not a gap) | Info | wizard §5, §7, §9 | None — correct frontend-wizard.md |
 
 > **Décision (2026-07) :** **G1 + G2 abandonnés** — le wizard persiste **par
@@ -301,6 +303,16 @@ dans `frontend-wizard.md` concernant `onboarding_completed` sont obsolètes
 > de vérité divergente → non retenu. **G3 (VenueClosure) reporté** : une
 > fermeture datée n'a pas d'occurrence à annuler tant que le planning est une
 > semaine-type (dépend du modèle templates→occurrences, absent). Détail :
-> `specs/evolution/roadmap.md` §3/§8. G4 et G5 sont des gaps de
-> documentation OpenAPI — les endpoints fonctionnent déjà. G6 est un
-> mismatch de naming à résoudre avant que le frontend ne code les appels API.
+> `specs/evolution/roadmap.md` §3/§8.
+>
+> **Décision (2026-07-04, BCK-F) :** **G4 + G5 fermés** — `App\OpenApi\CustomRoutesOpenApiFactory`
+> (décorateur de `api_platform.openapi.factory`) documente désormais `/api/register`,
+> `/api/me` et les 3 routes `manual-edit` dans l'OpenAPI (snapshot régénéré, 48 paths ;
+> guardé par `CustomRoutesOpenApiTest`). **G6 tranché : snake_case est canonique** — le
+> client HTTP frontend consomme les paths OpenAPI tels quels ; les specs frontend qui
+> citaient du kebab-case sont à corriger vers snake_case (pas de changement backend).
+>
+> **Rappels de forme (rafraîchis) :** G2 — `Club` a **18** propriétés (ajout `logoUrl`,
+> `accentColor`, `accentPalette`), toujours **sans** `draft_data`/`transitionData`.
+> G4 — `/api/register` lit `club_name` (snake) ; `/api/me` renvoie
+> `{id, email, firstName, lastName, membershipStatus, role, club{id,name,onboardingCompleted,logoUrl,accentColor,accentPalette}|null, baselineScheduleId, hasGenerated}`.
