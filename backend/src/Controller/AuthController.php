@@ -16,6 +16,7 @@ use App\Repository\SportRepository;
 use App\Service\TenantConnectionContext;
 use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -209,7 +210,13 @@ final class AuthController extends AbstractController
             }
         }
 
-        $this->entityManager->flush();
+        try {
+            $this->entityManager->flush();
+        } catch (UniqueConstraintViolationException) {
+            // The findOneBy check above is not atomic with the flush — a
+            // concurrent request could have taken the email in between.
+            return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
+        }
 
         return $this->json([
             'id' => $user->getId(),
