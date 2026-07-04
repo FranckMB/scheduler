@@ -107,7 +107,38 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Registered \u2014 returns a JWT and the membership status"
+                        "description": "Registered \u2014 returns a JWT and the membership status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "token": {
+                                            "type": "string"
+                                        },
+                                        "membershipStatus": {
+                                            "type": "string",
+                                            "enum": [
+                                                "none",
+                                                "pending",
+                                                "active"
+                                            ]
+                                        },
+                                        "user": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "description": "Validation error"
@@ -2255,7 +2286,22 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Constraint created \u2014 returns its id"
+                        "description": "Constraint created \u2014 returns its id",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "constraintId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "description": "Missing/invalid field"
@@ -2268,7 +2314,6 @@
                     }
                 },
                 "summary": "Attach a manual constraint to a schedule slot",
-                "description": "schedule-slot template id",
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -2303,7 +2348,19 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lock applied"
+                        "description": "Lock applied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "description": "Missing/invalid lockLevel"
@@ -2349,7 +2406,19 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "One-time update applied"
+                        "description": "One-time update applied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "description": "Invalid body"

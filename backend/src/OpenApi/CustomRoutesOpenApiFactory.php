@@ -35,7 +35,17 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'postApiRegister',
             tags: ['Auth'],
             responses: [
-                '201' => new Response('Registered — returns a JWT and the membership status'),
+                '201' => $this->jsonResponse('Registered — returns a JWT and the membership status', [
+                    'type' => 'object',
+                    'properties' => [
+                        'token' => ['type' => 'string'],
+                        'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
+                        'user' => ['type' => 'object', 'properties' => [
+                            'id' => ['type' => 'string'],
+                            'email' => ['type' => 'string'],
+                        ]],
+                    ],
+                ]),
                 '400' => new Response('Validation error'),
                 '409' => new Response('Email already registered'),
                 '429' => new Response('Too many attempts (rate limited)'),
@@ -96,14 +106,25 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
      */
     private function manualEditPaths(): array
     {
-        $slotId = 'schedule-slot template id';
+        $messageResponse = static fn (string $description): Response => new Response(
+            $description,
+            new ArrayObject(['application/json' => ['schema' => [
+                'type' => 'object', 'properties' => ['message' => ['type' => 'string']],
+            ]]]),
+        );
 
         return [
             '/api/schedule-slots/{id}/manual-edit/constraint' => new PathItem(post: new Operation(
                 operationId: 'postManualEditConstraint',
                 tags: ['ManualEdit'],
                 responses: [
-                    '201' => new Response('Constraint created — returns its id'),
+                    '201' => $this->jsonResponse('Constraint created — returns its id', [
+                        'type' => 'object',
+                        'properties' => [
+                            'message' => ['type' => 'string'],
+                            'constraintId' => ['type' => 'string'],
+                        ],
+                    ]),
                     '400' => new Response('Missing/invalid field'),
                     '404' => new Response('Slot not found'),
                     '409' => new Response('Schedule is validated (read-only)'),
@@ -118,13 +139,12 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'createdBy' => ['type' => 'string'],
                     ],
                 ]),
-                description: $slotId,
             )),
             '/api/schedule-slots/{id}/manual-edit/lock' => new PathItem(post: new Operation(
                 operationId: 'postManualEditLock',
                 tags: ['ManualEdit'],
                 responses: [
-                    '200' => new Response('Lock applied'),
+                    '200' => $messageResponse('Lock applied'),
                     '400' => new Response('Missing/invalid lockLevel'),
                     '404' => new Response('Slot not found'),
                     '409' => new Response('Schedule is validated (read-only)'),
@@ -140,7 +160,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'postManualEditOneTime',
                 tags: ['ManualEdit'],
                 responses: [
-                    '200' => new Response('One-time update applied'),
+                    '200' => $messageResponse('One-time update applied'),
                     '400' => new Response('Invalid body'),
                     '404' => new Response('Slot not found'),
                     '409' => new Response('Conflict (validated schedule or overlapping slot)'),
@@ -160,6 +180,16 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
     private function jsonBody(array $schema): RequestBody
     {
         return new RequestBody(content: new ArrayObject([
+            'application/json' => ['schema' => $schema],
+        ]));
+    }
+
+    /**
+     * @param array<string, mixed> $schema
+     */
+    private function jsonResponse(string $description, array $schema): Response
+    {
+        return new Response($description, new ArrayObject([
             'application/json' => ['schema' => $schema],
         ]));
     }
