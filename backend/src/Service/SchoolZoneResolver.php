@@ -40,7 +40,7 @@ final class SchoolZoneResolver
         '22' => 'B', '29' => 'B', '35' => 'B', '56' => 'B',
         '14' => 'B', '27' => 'B', '50' => 'B', '61' => 'B', '76' => 'B',
         '67' => 'B', '68' => 'B',
-        '2A' => 'B', '2B' => 'B',
+        '2A' => 'B', '2B' => 'B', '20' => 'B', // Corse (alpha 2A/2B or legacy numeric 20)
         // Zone C
         '77' => 'C', '93' => 'C', '94' => 'C',
         '11' => 'C', '30' => 'C', '34' => 'C', '48' => 'C', '66' => 'C',
@@ -60,12 +60,11 @@ final class SchoolZoneResolver
     }
 
     /**
-     * Best-effort AND conservative: collects every distinct department the code
-     * could encode (Corse 2A/2B tokens, plus the leading/trailing 2 digits of
-     * each digit run). Returns the department ONLY when the code points to a
-     * single one — if it is ambiguous (several plausible departments) or none,
-     * returns null so the zone degrades to manual entry rather than a confident
-     * wrong guess. The FFBB code format is not officially verified.
+     * FFBB club code = 3-letter league prefix + 4-digit zero-padded department +
+     * sequence. Examples: GES0067060 → 67 (Bas-Rhin), GUY0973021 → 973 (Guyane,
+     * a DOM → no A/B/C zone). Corse can appear numerically (0020) or as 2A/2B.
+     * Returns null for any code that does not fit this shape or that maps to a
+     * non-metropolitan department → the zone degrades to manual entry.
      */
     private function extractDepartment(?string $ffbbCode): ?string
     {
@@ -73,32 +72,25 @@ final class SchoolZoneResolver
             return null;
         }
 
-        $code = strtoupper($ffbbCode);
-        $candidates = [];
+        $code = strtoupper(trim($ffbbCode));
 
-        if (str_contains($code, '2A')) {
-            $candidates['2A'] = true;
-        }
-        if (str_contains($code, '2B')) {
-            $candidates['2B'] = true;
-        }
-
-        preg_match_all('/\d+/', $code, $matches);
-        foreach ($matches[0] as $run) {
-            if (\strlen($run) < 2) {
-                continue;
+        if (1 === preg_match('/^[A-Z]{3}(\d{4})/', $code, $m)) {
+            $n = (int) $m[1];
+            if (20 === $n) {
+                return '20'; // Corse (legacy numeric form)
             }
-            foreach ([substr($run, 0, 2), substr($run, -2)] as $candidate) {
-                if (isset(self::DEPARTMENT_ZONE[$candidate])) {
-                    $candidates[$candidate] = true;
-                }
+            if ($n < 1 || $n > 95) {
+                return null; // 0 invalid; ≥96 = DOM/TOM (no metropolitan A/B/C zone)
             }
+
+            return \sprintf('%02d', $n); // 67, 05, 69…
         }
 
-        if (1 !== \count($candidates)) {
-            return null;
+        // Corse in alpha form (2A/2B) right after the league prefix.
+        if (1 === preg_match('/^[A-Z]{3}\d*(2[AB])/', $code, $m)) {
+            return $m[1];
         }
 
-        return (string) array_key_first($candidates);
+        return null;
     }
 }

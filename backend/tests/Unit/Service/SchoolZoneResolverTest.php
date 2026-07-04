@@ -13,30 +13,26 @@ final class SchoolZoneResolverTest extends TestCase
 {
     private SchoolZoneResolver $resolver;
 
-    public function testResolveSingleDepartmentPerZone(): void
+    public function testResolveRealFfbbCodes(): void
     {
-        // Unambiguous codes embedding exactly one department.
-        self::assertSame('A', $this->resolver->resolveFromFfbbCode('LR0069'));  // 69 Rhône
-        self::assertSame('B', $this->resolver->resolveFromFfbbCode('XX0059'));  // 59 Nord
-        self::assertSame('C', $this->resolver->resolveFromFfbbCode('XX0075'));  // 75 Paris
-        self::assertSame('B', $this->resolver->resolveFromFfbbCode('CORSE2A')); // Corse → B
+        // Format: 3-letter league + 4-digit dept + sequence.
+        self::assertSame('B', $this->resolver->resolveFromFfbbCode('GES0067060')); // Strasbourg, Bas-Rhin
+        self::assertSame('A', $this->resolver->resolveFromFfbbCode('ARA0069001')); // Rhône
+        self::assertSame('C', $this->resolver->resolveFromFfbbCode('IDF0075001')); // Paris
+        self::assertSame('A', $this->resolver->resolveFromFfbbCode('XXX0001001')); // Ain (zero-padded)
+        self::assertSame('B', $this->resolver->resolveFromFfbbCode('COR0020001')); // Corse numeric
     }
 
-    public function testSpecExampleEmbeddedDepartment(): void
+    public function testDomDepartmentHasNoZone(): void
     {
-        // Spec §4bis: …0069… → 69 = Rhône, zone A.
-        self::assertSame('A', $this->resolver->resolveFromFfbbCode('LR0069IDF'));
+        // Guyane (973) is a DOM → no A/B/C zone → manual entry.
+        self::assertNull($this->resolver->resolveFromFfbbCode('GUY0973021'));
     }
 
-    public function testAmbiguousCodeDegradesToNull(): void
+    public function testMalformedCodeReturnsNull(): void
     {
-        // Two plausible departments (69 and 12) → refuse to guess.
-        self::assertNull($this->resolver->resolveFromFfbbCode('69ABC12'));
-    }
-
-    public function testUndecidableCodeReturnsNull(): void
-    {
-        self::assertNull($this->resolver->resolveFromFfbbCode('ABCDEF'));
+        self::assertNull($this->resolver->resolveFromFfbbCode('ABCDEF'));   // no dept digits
+        self::assertNull($this->resolver->resolveFromFfbbCode('12ABC34'));  // not the FFBB shape
         self::assertNull($this->resolver->resolveFromFfbbCode(null));
         self::assertNull($this->resolver->resolveFromFfbbCode(''));
     }
