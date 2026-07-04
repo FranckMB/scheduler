@@ -34,10 +34,16 @@ class TeamStateProvider extends AbstractStateProvider
             $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
         }
 
-        $isActive = $request?->query->get('isActive');
-        if (\is_string($isActive) && '' !== $isActive) {
-            $qb->andWhere('e.isActive = :isActive')
-               ->setParameter('isActive', filter_var($isActive, \FILTER_VALIDATE_BOOL));
+        // Only a present, recognized boolean ('true'/'false'/'1'/'0'/…) filters.
+        // Guard the raw string first: an absent param must skip the filter — NOT
+        // fall through to filter_var(null, …), which returns false and would
+        // silently apply "isActive = false" to every unfiltered listing.
+        $isActiveRaw = $request?->query->get('isActive');
+        if (\is_string($isActiveRaw) && '' !== $isActiveRaw) {
+            $isActive = filter_var($isActiveRaw, \FILTER_VALIDATE_BOOL, \FILTER_NULL_ON_FAILURE);
+            if (null !== $isActive) {
+                $qb->andWhere('e.isActive = :isActive')->setParameter('isActive', $isActive);
+            }
         }
 
         return false;

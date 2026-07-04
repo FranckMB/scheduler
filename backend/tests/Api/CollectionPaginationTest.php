@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Api;
 
 use App\Entity\Season;
+use App\Entity\SportCategory;
+use App\Entity\Team;
 use App\Entity\Venue;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,9 +40,55 @@ final class CollectionPaginationTest extends WebTestCase
         self::assertCount(30, $member, 'the page itself is still capped at the 30-item page size');
     }
 
+    /**
+     * BCK-05: the ?isActive= wiring must filter only when the param is present.
+     * An absent param must return ALL teams — regression guard for the
+     * filter_var(null) → false trap that silently applied "isActive = false".
+     */
+    public function testTeamIsActiveFilter(): void
+    {
+        [$token, $clubId] = $this->register();
+        $this->seedTeam($clubId, 'Active team', true);
+        $this->seedTeam($clubId, 'Inactive team', false);
+
+        self::assertSame(2, $this->total($this->get('/api/teams', $token)), 'no filter → all teams');
+        self::assertSame(1, $this->total($this->get('/api/teams?isActive=true', $token)), 'only active');
+        self::assertSame(1, $this->total($this->get('/api/teams?isActive=false', $token)), 'only inactive');
+        self::assertSame(2, $this->total($this->get('/api/teams?isActive=notabool', $token)), 'garbage → filter skipped');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
+    }
+
+    /** @param array<string, mixed> $data */
+    private function total(array $data): ?int
+    {
+        return $data['totalItems'] ?? $data['hydra:totalItems'] ?? null;
+    }
+
+    private function seedTeam(string $clubId, string $name, bool $isActive): void
+    {
+        $container = self::getContainer();
+        $em = $container->get(EntityManagerInterface::class);
+        $container->get(TenantConnectionContext::class)->setClubId($clubId);
+
+        $season = $em->getRepository(Season::class)->findOneBy(['clubId' => $clubId]);
+        $category = $em->getRepository(SportCategory::class)->findOneBy(['clubId' => $clubId]);
+        self::assertInstanceOf(Season::class, $season);
+        self::assertInstanceOf(SportCategory::class, $category);
+
+        $team = new Team;
+        $team->setClubId($clubId);
+        $team->setSeasonId($season->getId());
+        $team->setSportCategoryId($category->getId());
+        $team->setPriorityTierId(1);
+        $team->setName($name);
+        $team->setSessionsPerWeek(2);
+        $team->setIsActive($isActive);
+        $em->persist($team);
+        $em->flush();
     }
 
     private function seedVenues(string $clubId, int $count): void
