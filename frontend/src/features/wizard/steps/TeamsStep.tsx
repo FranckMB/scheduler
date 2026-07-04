@@ -416,6 +416,7 @@ export function TeamsStep() {
           "Étape 1/6 · Équipes" (WizardLayout). Keep the contextual description. */}
       <p className="mb-2 text-sm text-muted-foreground">
         Listez vos équipes et donnez à chacune un <strong>rang</strong> : il tranche quand les créneaux manquent — les mieux classées passent d'abord.
+        Le <strong>niveau de jeu</strong> (division FFBB) est indépendant : il décrit la compétition, pas la priorité de placement.
       </p>
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {(Object.entries(TIER_MEANING) as [string, string][]).map(([label, meaning]) => (

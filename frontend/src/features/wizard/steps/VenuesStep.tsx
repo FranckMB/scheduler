@@ -2,6 +2,7 @@ import { Check, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 
@@ -113,8 +114,10 @@ export function VenuesStep() {
   const [capacity, setCapacity] = useState(1);
   const [venueName, setVenueName] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
+  const [confirmDeleteVenue, setConfirmDeleteVenue] = useState(false);
 
   const selected = venues.find((v) => v.id === (selectedId || venues[0]?.id)) ?? null;
+  const selectedSlotCount = selected ? slots.filter((s) => s.venueId === selected.id).length : 0;
 
   const addVenue = (event: FormEvent) => {
     event.preventDefault();
@@ -189,7 +192,7 @@ export function VenuesStep() {
               ))}
             </Select>
             <CapacitySelect value={capacity} onChange={setCapacity} canSplit={selected.canSplit} className="h-9 w-52" />
-            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => delVenue.mutate(selected.id)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
+            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => setConfirmDeleteVenue(true)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
               <Trash2 className="size-4" />
             </Button>
           </div>
@@ -205,6 +208,28 @@ export function VenuesStep() {
           {null !== editingSlot ? <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} onClose={() => setEditingSlot(null)} /> : null}
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteVenue && selected !== null}
+        title="Supprimer ce gymnase ?"
+        description={
+          selected ? (
+            <>
+              Le gymnase « {selected.name} »
+              {selectedSlotCount > 0 ? <> et ses {selectedSlotCount} créneau{selectedSlotCount > 1 ? "x" : ""} de disponibilité</> : null} seront
+              supprimés définitivement.
+            </>
+          ) : null
+        }
+        confirmLabel="Supprimer"
+        onCancel={() => setConfirmDeleteVenue(false)}
+        onConfirm={() => {
+          if (selected) {
+            delVenue.mutate(selected.id);
+          }
+          setConfirmDeleteVenue(false);
+        }}
+      />
     </div>
   );
 }
