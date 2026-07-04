@@ -1,18 +1,20 @@
 import { Crop, ImagePlus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
 import type { MeResponse } from "@/features/auth/api";
 import { PendingMembersSection } from "@/features/auth/PendingMembersSection";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { LogoCropper } from "./LogoCropper";
-import { useDeleteLogo, useUpdateAppearance, useUploadLogo } from "./queries";
+import { useDeleteLogo, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -176,6 +178,37 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
   );
 }
 
+function DangerSection() {
+  const reset = useResetClub();
+  const navigate = useNavigate();
+  const [confirm, setConfirm] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Supprime définitivement toutes les données saisies (équipes, gymnases, coachs, contraintes, plannings) pour repartir de zéro. Le club et les
+        comptes membres sont conservés.
+      </p>
+      <Button variant="destructive" onClick={() => setConfirm(true)} disabled={reset.isPending}>
+        {reset.isPending ? <Spinner className="size-4" /> : <Trash2 className="size-4" />}
+        Réinitialiser le club
+      </Button>
+
+      <ConfirmDialog
+        open={confirm}
+        title="Réinitialiser le club ?"
+        description="Toutes les équipes, gymnases, coachs, contraintes et plannings seront définitivement supprimés. Cette action est irréversible."
+        confirmLabel="Tout supprimer"
+        onCancel={() => setConfirm(false)}
+        onConfirm={() => {
+          setConfirm(false);
+          reset.mutate(undefined, { onSuccess: () => navigate("/wizard") });
+        }}
+      />
+    </div>
+  );
+}
+
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   return (
@@ -197,6 +230,11 @@ function ClubHub({ me }: { me: MeResponse }) {
             clubName={me.club?.name ?? ""}
           />
         </AccordionSection>
+        {isAdmin ? (
+          <AccordionSection title="Réinitialiser le club">
+            <DangerSection />
+          </AccordionSection>
+        ) : null}
       </div>
     </div>
   );
