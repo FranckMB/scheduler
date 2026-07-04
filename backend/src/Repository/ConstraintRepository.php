@@ -33,6 +33,25 @@ final class ConstraintRepository extends ServiceEntityRepository
     }
 
     /**
+     * Permanent (non-dated) constraints only — the base plan. Dated constraints
+     * (calendarEntryId set) belong to a CalendarEntry period and must NOT feed
+     * base-plan generation. See accueil-cockpit-temporel.md §9ter.c.
+     *
+     * @return list<Constraint>
+     */
+    public function findPermanentByClubSeason(string $clubId, string $seasonId): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.clubId = :clubId')
+            ->andWhere('c.seasonId = :seasonId')
+            ->andWhere('c.calendarEntryId IS NULL')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * @return list<Constraint>
      */
     public function findByScope(string $scope, string $targetId): array

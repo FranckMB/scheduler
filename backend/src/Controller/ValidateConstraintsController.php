@@ -46,8 +46,10 @@ final class ValidateConstraintsController extends AbstractController
             return $this->json(['error' => 'No active season.'], Response::HTTP_BAD_REQUEST);
         }
 
+        // Base plan only: dated (calendar-entry) constraints are validated in
+        // their period context, not here. See accueil-cockpit-temporel.md §9ter.c.
         /** @var list<Constraint> $constraints */
-        $constraints = $this->constraintRepository->findByClubSeason($clubId, $seasonId);
+        $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
 
         $errors = [];
         foreach ($constraints as $constraint) {

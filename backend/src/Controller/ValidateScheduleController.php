@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Entity\Season;
 use App\Enum\ScheduleStatus;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -50,6 +52,18 @@ final class ValidateScheduleController extends AbstractController
         }
 
         $schedule->setStatus(ScheduleStatus::VALIDATED);
+
+        // Sticky cockpit-unlock: first time the season's baseline plan is
+        // validated, stamp the milestone. Idempotent, never reset on reopen.
+        // See accueil-cockpit-temporel.md §2ter.
+        $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+        if ($season instanceof Season
+            && $schedule->getId() === $season->getBaselineScheduleId()
+            && null === $season->getSocleValidatedAt()
+        ) {
+            $season->setSocleValidatedAt(new DateTimeImmutable);
+        }
+
         $this->entityManager->flush();
 
         return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::VALIDATED->value], Response::HTTP_OK);

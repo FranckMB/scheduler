@@ -57,6 +57,26 @@ final class SetBaselineTest extends WebTestCase
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/set-baseline");
 
         self::assertResponseIsSuccessful();
+
+        // Validate-then-baseline order also stamps the sticky cockpit unlock.
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNotNull($reloaded?->getSocleValidatedAt());
+    }
+
+    public function testBaseliningCompletedScheduleDoesNotStampUnlock(): void
+    {
+        [$user, , $season] = $this->seed('BASE6');
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/set-baseline");
+        self::assertResponseIsSuccessful();
+
+        // COMPLETED (not yet validated) baseline → no unlock; the socle isn't locked-in yet.
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNull($reloaded?->getSocleValidatedAt());
     }
 
     public function testDraftScheduleCannotBeMainPlan(): void

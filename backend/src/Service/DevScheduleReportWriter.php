@@ -90,8 +90,9 @@ final class DevScheduleReportWriter
             '',
         ];
 
-        // 1. Contraintes métier (Constraint entity)
-        $constraints = $this->entityManager->getRepository(Constraint::class)->findByClubSeason($clubId, $seasonId);
+        // 1. Contraintes métier (Constraint entity) — plan de base seul, les
+        // contraintes datées (CalendarEntry) sont hors périmètre du rapport.
+        $constraints = $this->entityManager->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId);
         $activeConstraints = array_filter($constraints, static fn (Constraint $c): bool => $c->getIsActive());
         if ([] !== $activeConstraints) {
             // Sort by ruleType (HARD first), then sortOrder

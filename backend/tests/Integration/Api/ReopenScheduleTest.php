@@ -48,6 +48,23 @@ final class ReopenScheduleTest extends WebTestCase
         self::assertSame(ScheduleStatus::COMPLETED, $reloaded?->getStatus());
     }
 
+    public function testReopenKeepsStickyCockpitUnlock(): void
+    {
+        [$user, , $season] = $this->seed('REO5');
+        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $season->setBaselineScheduleId($schedule->getId());
+        $season->setSocleValidatedAt(new DateTimeImmutable('2026-01-15 10:00:00'));
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/reopen");
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNotNull($reloaded?->getSocleValidatedAt(), 'reopen must NOT clear the sticky cockpit unlock');
+    }
+
     public function testNonValidatedScheduleCannotBeReopened(): void
     {
         [$user, , $season] = $this->seed('REO2');

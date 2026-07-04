@@ -37,6 +37,7 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         $entity->setCreatedBy($input->createdBy);
         $entity->setSource($input->source);
         $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
+        $entity->setCalendarEntryId($input->calendarEntryId);
         $entity->setIsActive($input->isActive ?? true);
         $entity->setSortOrder($input->sortOrder ?? 0);
 
@@ -78,6 +79,9 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->sourceOccurrenceId) {
             $entity->setSourceOccurrenceId($input->sourceOccurrenceId);
+        }
+        if (null !== $input->calendarEntryId) {
+            $entity->setCalendarEntryId($input->calendarEntryId);
         }
         if (null !== $input->isActive) {
             $entity->setIsActive($input->isActive);

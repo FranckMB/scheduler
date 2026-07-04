@@ -47,6 +47,10 @@ class ConstraintInput
     #[Groups(['write'])]
     public ?string $sourceOccurrenceId = null;
 
+    /** Set to attach this constraint to a CalendarEntry (period) — excludes it from base generation. */
+    #[Groups(['write'])]
+    public ?string $calendarEntryId = null;
+
     #[Groups(['write'])]
     public ?bool $isActive = null;
 

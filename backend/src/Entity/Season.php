@@ -50,6 +50,14 @@ class Season implements TenantOwnedInterface
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $baselineScheduleId = null;
 
+    /**
+     * Sticky cockpit-unlock milestone: set once when the baseline schedule is
+     * first VALIDATED; NEVER reset (reopen does not re-lock the cockpit).
+     * See accueil-cockpit-temporel.md §2ter.
+     */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $socleValidatedAt = null;
+
     /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
     private array $transitionData = [];
@@ -184,6 +192,18 @@ class Season implements TenantOwnedInterface
     public function getBaselineScheduleId(): ?string
     {
         return $this->baselineScheduleId;
+    }
+
+    public function getSocleValidatedAt(): ?DateTimeImmutable
+    {
+        return $this->socleValidatedAt;
+    }
+
+    public function setSocleValidatedAt(?DateTimeImmutable $socleValidatedAt): self
+    {
+        $this->socleValidatedAt = $socleValidatedAt;
+
+        return $this;
     }
 
     public function setBaselineScheduleId(?string $baselineScheduleId): self
