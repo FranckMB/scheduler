@@ -13,6 +13,7 @@ use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -47,6 +48,46 @@ final class ValidateScheduleTest extends WebTestCase
         $this->em->clear();
         $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
         self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
+    }
+
+    public function testValidatingBaselineStampsStickyCockpitUnlock(): void
+    {
+        [$user, , $season] = $this->seed('VAL5');
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $season->setBaselineScheduleId($schedule->getId());
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNotNull($reloaded?->getSocleValidatedAt(), 'validating the baseline must stamp socleValidatedAt');
+
+        // Surfaced to the frontend via /api/me (stateless firewall → Bearer).
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class);
+        $this->client->request('GET', '/api/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $jwt->create($user),
+        ]);
+        self::assertResponseIsSuccessful();
+        $me = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertNotNull($me['socleValidatedAt']);
+    }
+
+    public function testValidatingNonBaselineDoesNotStampUnlock(): void
+    {
+        [$user, , $season] = $this->seed('VAL6');
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        // No baseline designation → not the socle.
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNull($reloaded?->getSocleValidatedAt());
     }
 
     public function testNonCompletedScheduleCannotBeValidated(): void

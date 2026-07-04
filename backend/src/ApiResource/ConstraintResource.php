@@ -73,6 +73,9 @@ class ConstraintResource
     public ?string $sourceOccurrenceId = null;
 
     #[Groups(['read'])]
+    public ?string $calendarEntryId = null;
+
+    #[Groups(['read'])]
     public bool $isActive = false;
 
     #[Groups(['read'])]
@@ -95,6 +98,7 @@ class ConstraintResource
         $dto->createdBy = $entity->getCreatedBy();
         $dto->source = $entity->getSource();
         $dto->sourceOccurrenceId = $entity->getSourceOccurrenceId();
+        $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->isActive = $entity->getIsActive();
         $dto->sortOrder = $entity->getSortOrder();
 

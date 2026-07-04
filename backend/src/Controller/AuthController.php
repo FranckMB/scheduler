@@ -136,6 +136,7 @@ final class AuthController extends AbstractController
         $club = null;
         $clubEntity = null;
         $baselineScheduleId = null;
+        $socleValidatedAt = null;
         if (null !== $clubUser) {
             $membershipStatus = $clubUser->getIsActive() ? 'active' : 'pending';
             $clubEntity = $this->clubRepository->find($clubUser->getClubId());
@@ -153,6 +154,7 @@ final class AuthController extends AbstractController
                     'status' => 'active',
                 ]);
                 $baselineScheduleId = $season?->getBaselineScheduleId();
+                $socleValidatedAt = $season?->getSocleValidatedAt()?->format(\DATE_ATOM);
             }
         }
 
@@ -165,6 +167,7 @@ final class AuthController extends AbstractController
             'role' => null !== $clubUser ? $clubUser->getRole() : null,
             'club' => $club,
             'baselineScheduleId' => $baselineScheduleId,
+            'socleValidatedAt' => $socleValidatedAt,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
         ]);
     }

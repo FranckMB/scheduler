@@ -82,7 +82,9 @@ final class ScheduleConstraintBuilder
             }
         }
 
-        $constraints = $em->getRepository(Constraint::class)->findByClubSeason($clubId, $seasonId);
+        // Base plan only: dated constraints (attached to a CalendarEntry period)
+        // are excluded from generation. See accueil-cockpit-temporel.md §9ter.c.
+        $constraints = $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId);
 
         // Pre-load venue availabilities to avoid N+1 queries in serializeVenue()
         $availabilitiesByVenue = [];

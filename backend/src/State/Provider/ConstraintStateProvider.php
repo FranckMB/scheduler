@@ -49,6 +49,10 @@ class ConstraintStateProvider extends AbstractStateProvider
                 $qb->andWhere('e.ruleType = :ruleType')
                    ->setParameter('ruleType', $request->query->get('ruleType'));
             }
+            if ($request->query->has('calendarEntryId')) {
+                $qb->andWhere('e.calendarEntryId = :calendarEntryId')
+                   ->setParameter('calendarEntryId', $request->query->get('calendarEntryId'));
+            }
         }
 
         $query = $qb->getQuery();

@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -56,6 +57,14 @@ final class SetBaselineController extends AbstractController
         }
 
         $season->setBaselineScheduleId($schedule->getId());
+
+        // Sticky cockpit-unlock: covers the validate-then-baseline order — a
+        // schedule already VALIDATED being designated baseline stamps the
+        // milestone. Idempotent, never reset. See accueil-cockpit-temporel.md §2ter.
+        if (ScheduleStatus::VALIDATED === $schedule->getStatus() && null === $season->getSocleValidatedAt()) {
+            $season->setSocleValidatedAt(new DateTimeImmutable);
+        }
+
         $this->entityManager->flush();
 
         return $this->json(['baselineScheduleId' => $schedule->getId()], Response::HTTP_OK);

@@ -16,6 +16,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_constraint_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_constraint_scope_family', columns: ['scope', 'family'])]
 #[ORM\Index(name: 'idx_constraint_rule_type', columns: ['rule_type'])]
+#[ORM\Index(name: 'idx_constraint_calendar_entry', columns: ['calendar_entry_id'])]
 #[ORM\HasLifecycleCallbacks]
 class Constraint implements TenantOwnedInterface
 {
@@ -69,6 +70,14 @@ class Constraint implements TenantOwnedInterface
 
     #[ORM\Column(type: 'string', length: 180, nullable: true)]
     private ?string $sourceOccurrenceId = null;
+
+    /**
+     * When set, this constraint is DATED — it belongs to a CalendarEntry (period)
+     * and is EXCLUDED from base-plan generation (see
+     * ConstraintRepository::findPermanentByClubSeason). null = permanent constraint.
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $calendarEntryId = null;
 
     #[ORM\Column(type: 'boolean', options: ['default' => true])]
     private bool $isActive = true;
@@ -273,6 +282,18 @@ class Constraint implements TenantOwnedInterface
     public function setSourceOccurrenceId(?string $sourceOccurrenceId): self
     {
         $this->sourceOccurrenceId = $sourceOccurrenceId;
+
+        return $this;
+    }
+
+    public function getCalendarEntryId(): ?string
+    {
+        return $this->calendarEntryId;
+    }
+
+    public function setCalendarEntryId(?string $calendarEntryId): self
+    {
+        $this->calendarEntryId = $calendarEntryId;
 
         return $this;
     }
