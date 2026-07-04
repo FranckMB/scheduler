@@ -53,7 +53,7 @@ Grosse zone quasi entièrement à faire — l'appli ne gère aujourd'hui qu'un p
 | **Plans secondaires / alternatifs** (vacances, coupure, mutualisation) | ⬜ | v3 §8.1 · FF#2 | **♻ = overlays de période bornés** (cockpit §6), pas des plans plein-saison. Générés via le **wizard en mode période** (structure R/O, contraintes actives) · **🟡** (palier B) |
 | Collecte des besoins coach par **lien sans login** (questionnaire email → `period_coach_responses`) | ⬜ | v3 §8.2 · FF#2 | **🟡** en soi (lien tokenisé + form public), mais rattaché aux périodes ; **différenciateur produit fort** (cockpit palier C) |
 | Mutualisation de créneau (`team_ids[]`, ex. SM1+SM2 même créneau) | ⬜ | v3 §3.6 · FF#2 | **🟡** (`periodType=mutualisation`, cockpit §9ter.e — remplaçante partielle) |
-| `school_holiday_periods` (API Éducation Nationale, zones A/B/C) | ⬜ | v3 §3.3 | **♻ Simplifié (cockpit §4bis)** : **zone dérivée du code FFBB** (département → zone), périodes **stockées en base et seedées 1×/an** (commande d'import), **pas d'API au runtime** · **🟢** |
+| `school_holiday_periods` (API Éducation Nationale, zones A/B/C) | ✅ | v3 §3.3 | **Livré (PR-2 cockpit palier A)** : table globale `school_holiday_period` (hors RLS), seed idempotent `app:school-holidays:seed` (JSON versionné, pas d'API runtime), `GET /api/school-holidays` filtré par zone. Zone dérivée du code FFBB (`SchoolZoneResolver`) au register + backfill. ⚠ heuristique FFBB→dép. non vérifiée officiellement, fallback zone manuelle |
 | **Vue calendrier annuel** (menu) — voir tous les plannings prévus sur l'année pour repérer les soucis + **vacances scolaires en cours** | ⬜ | — | **♻ = le cockpit lui-même** (cockpit §5) : calendrier mois entier, jour courant entouré, couche d'exceptions + vacances de la zone. **Livrable tôt (palier A)** en mode projection · **🟡** |
 
 ---
@@ -147,7 +147,7 @@ Zone entièrement à faire — aucun bridage plan aujourd'hui.
 | Import équipes **FFBB** (code club, `ffbb_team_id`) | ⬜ | v3 §1.4 · FF#19 | V2 · **🟡** (infra `ffbb_team_id`/`ffbbClubCode` déjà anticipée) — **supprime la moitié de la saisie** |
 | Import **calendrier de matchs FFBB** (`competitions`, `ffbb_club_code`) | ⬜ | v3 §1.4 · FF#19 | V2 · **🔴** (dépend de la planification matchs) |
 | **Planification des matchs** (entraînements + matchs) | ⬜ | v3 §1.4 · FF#21 | V2 · **🔴** |
-| Dérivation fuseau/zone depuis l'adresse (API Géo + timezonedb → `school_zone`) | ⬜ | v3 §3.2 | **♻ Simplifié (cockpit §4bis)** : `school_zone` **dérivé du `ffbbClubCode`** (département → zone, table fixe), **pas d'API Géo ni de géocodage d'adresse** — la donnée est déjà là · **🟢** |
+| Dérivation fuseau/zone depuis l'adresse (API Géo + timezonedb → `school_zone`) | 🟡 | v3 §3.2 | **Zone livrée (PR-2)** : `school_zone` dérivé du `ffbbClubCode` par `SchoolZoneResolver` (dép.→zone, table fixe), **pas d'API Géo** · reste le **fuseau** (`ClubTimeService`, ligne §6.2). ⚠ heuristique FFBB→dép. best-effort, fallback zone manuelle |
 
 ---
 

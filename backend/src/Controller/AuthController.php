@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
+use App\Service\SchoolZoneResolver;
 use App\Service\TenantConnectionContext;
 use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
@@ -38,6 +39,7 @@ final class AuthController extends AbstractController
         private readonly SportRepository $sportRepository,
         private readonly RateLimiterFactory $authRegisterLimiter,
         private readonly TenantConnectionContext $tenantConnectionContext,
+        private readonly SchoolZoneResolver $schoolZoneResolver,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -148,6 +150,7 @@ final class AuthController extends AbstractController
                     'logoUrl' => $clubEntity->getLogoUrl(),
                     'accentColor' => $clubEntity->getAccentColor(),
                     'accentPalette' => $clubEntity->getAccentPalette(),
+                    'schoolZone' => $clubEntity->getSchoolZone(),
                 ];
                 $season = $this->entityManager->getRepository(Season::class)->findOneBy([
                     'clubId' => $clubEntity->getId(),
@@ -282,6 +285,9 @@ final class AuthController extends AbstractController
         $club->setLocale('fr');
         $club->setOnboardingCompleted(false);
         $club->setFfbbClubCode($ara);
+        // Best-effort academic zone from the FFBB code (accueil-cockpit-temporel §4bis);
+        // null when undecidable → stays manually editable via Club PATCH.
+        $club->setSchoolZone($this->schoolZoneResolver->resolveFromFfbbCode($ara));
         $this->entityManager->persist($club);
 
         return $club;

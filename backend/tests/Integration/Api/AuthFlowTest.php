@@ -38,6 +38,19 @@ final class AuthFlowTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'NEWARA1']));
     }
 
+    public function testRegisterDerivesSchoolZoneFromFfbbCode(): void
+    {
+        // FFBB code embedding department 69 (Rhône) → academic zone A.
+        $this->register([
+            'email' => 'zone@club.fr', 'password' => 'password123',
+            'firstName' => 'Zoe', 'lastName' => 'Ne', 'ara' => 'LR0069IDF', 'club_name' => 'Zone Club',
+        ]);
+
+        self::assertResponseStatusCodeSame(201);
+        $club = $this->em->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'LR0069IDF']);
+        self::assertSame('A', $club?->getSchoolZone());
+    }
+
     public function testRegisterExistingAraCreatesPendingMembership(): void
     {
         // First registration creates the club (active admin).
