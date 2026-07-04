@@ -17,7 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_constraint_scope_family', columns: ['scope', 'family'])]
 #[ORM\Index(name: 'idx_constraint_rule_type', columns: ['rule_type'])]
 #[ORM\HasLifecycleCallbacks]
-class Constraint
+class Constraint implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]

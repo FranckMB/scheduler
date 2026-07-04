@@ -14,7 +14,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_sport_category_sport', columns: ['sport_id'])]
 #[ORM\Index(name: 'idx_sport_category_club', columns: ['club_id'])]
 #[ORM\HasLifecycleCallbacks]
-class SportCategory
+class SportCategory implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]

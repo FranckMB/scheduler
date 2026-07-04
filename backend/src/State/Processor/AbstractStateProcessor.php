@@ -8,6 +8,7 @@ use ApiPlatform\Metadata\DeleteOperationInterface;
 use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
+use App\Entity\TenantOwnedInterface;
 use App\Repository\SeasonRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -103,7 +104,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $entity = $this->createEntityFromInput($input);
         $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
 
-        if (null !== $clubId && method_exists($entity, 'setClubId')) {
+        if (null !== $clubId && $entity instanceof TenantOwnedInterface) {
             $entity->setClubId($clubId);
         }
         if (null !== $resolvedSeasonId && method_exists($entity, 'setSeasonId')) {
@@ -131,7 +132,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new NotFoundHttpException('Resource not found');
         }
 
-        if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+        if (null !== $clubId && $entity instanceof TenantOwnedInterface && $entity->getClubId() !== $clubId) {
             throw new AccessDeniedHttpException('Access denied');
         }
 
@@ -156,7 +157,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new NotFoundHttpException('Resource not found');
         }
 
-        if (null !== $clubId && method_exists($entity, 'getClubId') && $entity->getClubId() !== $clubId) {
+        if (null !== $clubId && $entity instanceof TenantOwnedInterface && $entity->getClubId() !== $clubId) {
             throw new AccessDeniedHttpException('Access denied');
         }
 

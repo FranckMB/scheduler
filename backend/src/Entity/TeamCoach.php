@@ -16,7 +16,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_team_coach_coach', columns: ['coach_id'])]
 #[ORM\UniqueConstraint(name: 'uniq_team_coach_role', columns: ['team_id', 'coach_id', 'role'])]
 #[ORM\HasLifecycleCallbacks]
-class TeamCoach
+class TeamCoach implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]

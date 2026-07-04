@@ -17,7 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_schedule_diagnostic_coach', columns: ['coach_id'])]
 #[ORM\Index(name: 'idx_schedule_diagnostic_venue', columns: ['venue_id'])]
 #[ORM\HasLifecycleCallbacks]
-class ScheduleDiagnostic
+class ScheduleDiagnostic implements TenantOwnedInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]
