@@ -2,6 +2,7 @@ import { Lock, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
@@ -19,6 +20,14 @@ const FAMILIES: { key: ConstraintFamily; label: string }[] = [
 ];
 
 const RULES: ConstraintRuleType[] = ["PREFERRED", "HARD", "BONUS", "LOCK"];
+
+/** Libellés gestionnaire (jamais l'enum brut à l'écran). */
+const RULE_LABEL: Record<ConstraintRuleType, string> = {
+  HARD: "Obligatoire",
+  PREFERRED: "Préféré",
+  BONUS: "Bonus",
+  LOCK: "Verrouillé",
+};
 
 function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) => void }) {
   return (
@@ -124,6 +133,7 @@ export function ConstraintsStep() {
   const [venueMode, setVenueMode] = useState<"preferred" | "forbidden">("preferred");
   const [venueId, setVenueId] = useState("");
   const [coachId, setCoachId] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
@@ -278,7 +288,12 @@ export function ConstraintsStep() {
           </>
         )}
 
-        {"DAY" === family && <DayPicker days={days} toggle={toggleDay} />}
+        {"DAY" === family && (
+          <>
+            <span className="text-xs text-muted-foreground">à éviter :</span>
+            <DayPicker days={days} toggle={toggleDay} />
+          </>
+        )}
 
         {"FACILITY" === family && (
           <>
@@ -315,7 +330,7 @@ export function ConstraintsStep() {
         <Select aria-label="Règle" className="h-8 w-28" value={ruleType} onChange={(e) => setRuleType(e.target.value as ConstraintRuleType)}>
           {RULES.map((r) => (
             <option key={r} value={r}>
-              {r}
+              {RULE_LABEL[r]}
             </option>
           ))}
         </Select>
@@ -332,8 +347,8 @@ export function ConstraintsStep() {
           {list.map((c: Constraint) => (
             <li key={c.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
               <span className="flex-1">{c.name}</span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{c.ruleType}</span>
-              <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => del.mutate(c.id)}>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
+              <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
                 <Trash2 className="size-4" />
               </button>
             </li>
@@ -342,6 +357,20 @@ export function ConstraintsStep() {
       )}
         </>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Supprimer cette contrainte ?"
+        description={pendingDelete ? <>« {pendingDelete.name} » sera définitivement supprimée.</> : null}
+        confirmLabel="Supprimer"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) {
+            del.mutate(pendingDelete.id);
+          }
+          setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }
