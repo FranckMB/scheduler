@@ -25,10 +25,12 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiResource(shortName: 'Team', operations: [
     new GetCollection,
     new Get,
-    new Post,
+    new Post(validationContext: ['groups' => ['Default', 'create']]),
     new Put,
     new Delete,
 ], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
+// Honored by TeamStateProvider::applyRequestFilters (the custom provider bypasses
+// API Platform's built-in Doctrine filters) — documented AND functional (BCK-05).
 #[ApiFilter(BooleanFilter::class, properties: ['isActive'])]
 #[ApiFilter(SearchFilter::class, properties: ['seasonId' => 'exact'])]
 class TeamResource

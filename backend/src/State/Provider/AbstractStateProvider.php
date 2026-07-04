@@ -6,10 +6,13 @@ namespace App\State\Provider;
 
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\Pagination\Pagination;
+use ApiPlatform\State\Pagination\TraversablePaginator;
 use ApiPlatform\State\ProviderInterface;
 use App\Entity\TenantOwnedInterface;
+use ArrayIterator;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
+use Doctrine\ORM\Tools\Pagination\Paginator as DoctrinePaginator;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
@@ -27,7 +30,7 @@ abstract class AbstractStateProvider implements ProviderInterface
     ) {}
 
     /**
-     * @return TOutput|array<int, TOutput>|null
+     * @return TOutput|iterable<int, TOutput>|null
      */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
@@ -58,7 +61,12 @@ abstract class AbstractStateProvider implements ProviderInterface
      *
      * @return array<int, TOutput>
      */
-    protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
+    /**
+     * @param array<string, mixed> $context
+     *
+     * @return iterable<int, TOutput>
+     */
+    protected function provideCollection(Operation $operation, array $context, ?string $clubId): iterable
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('e')
@@ -68,17 +76,23 @@ abstract class AbstractStateProvider implements ProviderInterface
         // A bounded result set (all rows of one parent) bypasses the default 30-item pagination.
         $bounded = $this->applyRequestFilters($qb);
 
-        if (!$bounded && $this->pagination->isEnabled($operation, $context)) {
-            $offset = $this->pagination->getOffset($operation, $context);
-            $limit = $this->pagination->getLimit($operation, $context);
-            $qb->setFirstResult($offset)
-               ->setMaxResults($limit);
+        if ($bounded || !$this->pagination->isEnabled($operation, $context)) {
+            return array_map([$this, 'mapEntityToOutput'], $qb->getQuery()->getResult());
         }
 
-        $query = $qb->getQuery();
-        $results = $query->getResult();
+        $offset = $this->pagination->getOffset($operation, $context);
+        $limit = $this->pagination->getLimit($operation, $context);
+        $qb->setFirstResult($offset)->setMaxResults($limit);
 
-        return array_map([$this, 'mapEntityToOutput'], $results);
+        // Return a paginator (not a bare array) so hydra:totalItems reflects the
+        // real row count, not just the page size, and hydra:view links appear
+        // (BCK-05). DoctrinePaginator issues the COUNT (filters/RLS honored).
+        $doctrinePaginator = new DoctrinePaginator($qb->getQuery(), fetchJoinCollection: false);
+        $total = \count($doctrinePaginator);
+        $items = array_map([$this, 'mapEntityToOutput'], iterator_to_array($doctrinePaginator));
+        $currentPage = $limit > 0 ? (int) floor($offset / $limit) + 1 : 1;
+
+        return new TraversablePaginator(new ArrayIterator($items), $currentPage, $limit, $total);
     }
 
     /**
