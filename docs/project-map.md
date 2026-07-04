@@ -70,7 +70,7 @@ All services share the Docker network `clubscheduler_network`.
 - **Terminal-status guarantee (BCK-01):** a schedule never freezes in `PENDING`/`GENERATING`. Three nets: (1) the handler catch-all clears the dirty unit-of-work and marks `FAILED` on any uncaught error; (2) `ScheduleGenerationFailureListener` (`WorkerMessageFailedEvent`, `willRetry()===false`) terminates permanently-failed messages (e.g. lock-exhaustion); (3) `app:schedules:reconcile-stuck` (cron) fails `GENERATING` schedules older than `--older-than` minutes (worker crash/OOM). PENDING is left to nets (1)/(2) to avoid racing a legitimately-queued message.
 - **`ExportPdfMessage`** → **`ExportPdfHandler`**: `PdfGenerator.generate()` → publish Mercure with export URLs.
 - **Mercure topic:** `club:{clubId}:schedule:{scheduleId}` (validated non-empty). `MERCURE_URL` env.
-- **`ClubGenerationLock`** (Redis): key `schedule_generation:club:{clubId}`, atomic `SETEX NX` + TTL, token-checked release.
+- **`ClubGenerationLock`** (Redis): key `schedule_generation:club:{clubId}`, atomic `SETEX NX` + TTL, **atomic token-checked release** (Lua compare-and-delete — BCK-02; a GET-then-DEL could delete another worker's lock after a TTL-expiry race).
 
 ### 2.5 Multi-tenant isolation (security-critical)
 1. `TenantFilter` (Doctrine SQL filter) appends `{table}.club_id = :param` on tenant entities; registered in `config/packages/doctrine.yaml`.

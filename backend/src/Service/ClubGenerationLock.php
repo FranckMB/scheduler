@@ -33,9 +33,16 @@ class ClubGenerationLock
         $redis = $this->connect();
         $key = self::KEY_PREFIX . $clubId;
 
-        if ($redis->get($key) === $token) {
-            $redis->del($key);
-        }
+        // Atomic compare-and-delete (BCK-02): only the holder whose token matches
+        // may delete the key, and the check + delete run as one Redis operation.
+        // The previous GET-then-DEL had a race — if the key's TTL expired and
+        // another worker re-acquired the lock between the two calls, this DEL
+        // would delete that other worker's lock.
+        $redis->eval(
+            'if redis.call(\'get\', KEYS[1]) == ARGV[1] then return redis.call(\'del\', KEYS[1]) else return 0 end',
+            [$key, $token],
+            1,
+        );
     }
 
     private function connect(): Redis
