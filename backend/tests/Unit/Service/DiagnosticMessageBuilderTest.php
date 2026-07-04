@@ -55,6 +55,41 @@ final class DiagnosticMessageBuilderTest extends TestCase
         self::assertStringNotContainsString('preferred slot', $result);
     }
 
+    public function testUnusedSlotRebuiltInFrench(): void
+    {
+        // Engine sends a raw English "…: no team assigned" message → rebuild locally.
+        $diagnostic = [
+            'type' => 'unused_slot',
+            'venueId' => 'v1',
+            'dayOfWeek' => 3,
+            'startTime' => '18:00',
+            'durationMinutes' => 90,
+            'message' => 'Gym Foo Wednesday 18:00-19:30: no team assigned',
+        ];
+
+        $result = $this->builder->build($diagnostic, [], [], ['v1' => 'Gymnase Foo']);
+
+        self::assertStringContainsString('Gymnase Foo', $result);
+        self::assertStringContainsString('mercredi', $result);
+        self::assertStringContainsString('18:00', $result);
+        self::assertStringContainsString('19:30', $result);
+        self::assertStringNotContainsString('no team assigned', $result);
+    }
+
+    public function testUnusedSlotSundayUsesFrenchDayName(): void
+    {
+        // ISO dayOfWeek 7 = dimanche (the engine mislabels it as "7").
+        $result = $this->builder->build(
+            ['type' => 'unused_slot', 'venueId' => 'v1', 'dayOfWeek' => 7, 'startTime' => '10:00', 'durationMinutes' => 60],
+            [],
+            [],
+            ['v1' => 'Gymnase A'],
+        );
+
+        self::assertStringContainsString('dimanche', $result);
+        self::assertStringNotContainsString('(7', $result);
+    }
+
     protected function setUp(): void
     {
         $this->builder = new DiagnosticMessageBuilder;
