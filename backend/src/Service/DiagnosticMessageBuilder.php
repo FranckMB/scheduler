@@ -6,6 +6,17 @@ namespace App\Service;
 
 final class DiagnosticMessageBuilder
 {
+    /** ISO day-of-week (1=Monday..7=Sunday) → French, matching the backend/frontend convention. */
+    private const DAY_NAMES = [
+        1 => 'lundi',
+        2 => 'mardi',
+        3 => 'mercredi',
+        4 => 'jeudi',
+        5 => 'vendredi',
+        6 => 'samedi',
+        7 => 'dimanche',
+    ];
+
     /**
      * @param array<string, mixed>  $diagnostic
      * @param array<string, string> $teamNames  teamId => name
@@ -24,14 +35,17 @@ final class DiagnosticMessageBuilder
         // The engine already emits precise, manager-ready French messages that
         // name the teams / venue / coach + day + time + reason (who/when/why).
         // Prefer them; the localized builders below are only a fallback for
-        // payloads that arrive without a rich message. soft_lock_moved is the
-        // exception: the engine still sends a raw English message for it, so we
-        // always rebuild that one locally.
+        // payloads that arrive without a rich message. soft_lock_moved and
+        // unused_slot are the exceptions: the engine still sends a raw English
+        // message for those, so we always rebuild them locally (unused_slot also
+        // fixes the engine's Sunday day-name mislabel — it maps day 0=Sunday
+        // while the payload's dayOfWeek is ISO 1=Monday..7=Sunday).
         return match ($type) {
             'unplaced' => '' !== $engineMessage ? $engineMessage : $this->buildUnplaced($diagnostic, $teamNames),
             'conflict' => '' !== $engineMessage ? $engineMessage : $this->buildConflict($diagnostic, $teamNames, $coachNames, $venueNames),
             'coach_overload' => '' !== $engineMessage ? $engineMessage : $this->buildCoachOverload($diagnostic, $coachNames),
             'soft_lock_moved' => $this->buildSoftLockMoved($diagnostic, $teamNames, $venueNames),
+            'unused_slot' => $this->buildUnusedSlot($diagnostic, $venueNames),
             default => '' !== $engineMessage ? $engineMessage : 'Diagnostic inconnu.',
         };
     }
@@ -137,6 +151,50 @@ final class DiagnosticMessageBuilder
             'Le créneau préféré de %s a été déplacé par le solveur pour un meilleur ajustement global.',
             $teamName,
         );
+    }
+
+    /**
+     * @param array<string, mixed>  $diagnostic
+     * @param array<string, string> $venueNames
+     */
+    private function buildUnusedSlot(array $diagnostic, array $venueNames): string
+    {
+        $venueId = $this->extractId($diagnostic, 'venueId', 'venue_id');
+        $venueName = null !== $venueId ? ($venueNames[$venueId] ?? $venueId) : 'Un gymnase';
+
+        $dayOfWeek = (int) ($diagnostic['dayOfWeek'] ?? $diagnostic['day_of_week'] ?? 0);
+        $day = self::DAY_NAMES[$dayOfWeek] ?? '';
+        $start = $this->hhmm((string) ($diagnostic['startTime'] ?? $diagnostic['start_time'] ?? ''));
+        $duration = (int) ($diagnostic['durationMinutes'] ?? $diagnostic['duration_minutes'] ?? 0);
+        $end = '' !== $start && $duration > 0 ? $this->addMinutes($start, $duration) : '';
+
+        $slot = '';
+        if ('' !== $start) {
+            $slot = '' !== $end ? \sprintf('de %s à %s', $start, $end) : \sprintf('à %s', $start);
+        }
+        $when = trim($day . ' ' . $slot);
+
+        return \sprintf(
+            'Créneau disponible non utilisé : %s%s — aucune équipe n\'y est placée.',
+            $venueName,
+            '' !== $when ? \sprintf(' (%s)', $when) : '',
+        );
+    }
+
+    private function hhmm(string $time): string
+    {
+        return 1 === preg_match('/(\d{2}):(\d{2})/', $time, $matches) ? $matches[0] : $time;
+    }
+
+    private function addMinutes(string $hhmm, int $minutes): string
+    {
+        if (1 !== preg_match('/^(\d{2}):(\d{2})/', $hhmm, $matches)) {
+            return '';
+        }
+
+        $total = (((int) $matches[1]) * 60 + (int) $matches[2] + $minutes) % (24 * 60);
+
+        return \sprintf('%02d:%02d', intdiv($total, 60), $total % 60);
     }
 
     /** @param array<string, mixed> $diagnostic */
