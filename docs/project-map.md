@@ -65,8 +65,9 @@ All services share the Docker network `clubscheduler_network`.
   | `HealthController` | `GET /api/health` | `{"status":"ok"}` |
 
 ### 2.4 Async / messaging
-- **Transport:** Redis (`redis://redis:6379/messages`), `sync://` under test. Worker: `messenger-worker` container.
-- **`GenerateScheduleMessage`** (`scheduleId`, `clubId`, `timeoutSeconds`=650) → **`GenerateScheduleHandler`**: acquire `ClubGenerationLock` → build frozen snapshot (`ScheduleConstraintBuilder.buildForClubSeason()`) → `POST http://engine:8000/generate` → import via `ScheduleResultImporter` → write `ScheduleDiagnostic` → publish Mercure.
+- **Transport:** Redis (`redis://redis:6379/messages`), `sync://` under test. Worker: `messenger-worker` container. Bounded `retry_strategy` (3 retries) + `failure_transport: failed` (`MESSENGER_FAILURE_TRANSPORT_DSN`, boot-safe default) — exhausted messages are preserved, never silently dropped.
+- **`GenerateScheduleMessage`** (`scheduleId`, `clubId`, `timeoutSeconds`=650) → **`GenerateScheduleHandler`**: acquire `ClubGenerationLock` → build frozen snapshot (`ScheduleConstraintBuilder.buildForClubSeason()`) → `POST http://engine:8000/generate` → import via `ScheduleResultImporter` → write `ScheduleDiagnostic` → **flush (persist result)** → publish Mercure **best-effort** (the frontend polls as fallback, so a publish failure never discards a persisted solve).
+- **Terminal-status guarantee (BCK-01):** a schedule never freezes in `PENDING`/`GENERATING`. Three nets: (1) the handler catch-all clears the dirty unit-of-work and marks `FAILED` on any uncaught error; (2) `ScheduleGenerationFailureListener` (`WorkerMessageFailedEvent`, `willRetry()===false`) terminates permanently-failed messages (e.g. lock-exhaustion); (3) `app:schedules:reconcile-stuck` (cron) fails `GENERATING` schedules older than `--older-than` minutes (worker crash/OOM). PENDING is left to nets (1)/(2) to avoid racing a legitimately-queued message.
 - **`ExportPdfMessage`** → **`ExportPdfHandler`**: `PdfGenerator.generate()` → publish Mercure with export URLs.
 - **Mercure topic:** `club:{clubId}:schedule:{scheduleId}` (validated non-empty). `MERCURE_URL` env.
 - **`ClubGenerationLock`** (Redis): key `schedule_generation:club:{clubId}`, atomic `SETEX NX` + TTL, token-checked release.

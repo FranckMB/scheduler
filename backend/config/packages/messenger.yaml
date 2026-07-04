@@ -1,7 +1,27 @@
+parameters:
+    # Boot-safe fallback: an environment that forgets to define the var still
+    # boots (the transport is lazy — the real DSN comes from .env / deploy env,
+    # e.g. redis://redis:6379/messages/failed in Docker). Prevents an
+    # "Environment variable not found" kernel crash taking the whole API down.
+    env(MESSENGER_FAILURE_TRANSPORT_DSN): 'redis://localhost:6379/messages/failed'
+
 framework:
     messenger:
+        # After all retries are exhausted, a failed message is preserved here
+        # (inspectable via messenger:failed:show) instead of being silently
+        # dropped. The schedule row's terminal status is reconciled separately
+        # by the handler's catch-all and the stuck-schedule watchdog (BCK-01).
+        failure_transport: failed
+
         transports:
-            async: "%env(MESSENGER_TRANSPORT_DSN)%"
+            async:
+                dsn: "%env(MESSENGER_TRANSPORT_DSN)%"
+                retry_strategy:
+                    max_retries: 3
+                    delay: 2000
+                    multiplier: 2
+                    max_delay: 60000
+            failed: "%env(MESSENGER_FAILURE_TRANSPORT_DSN)%"
 
         routing:
             App\Message\GenerateScheduleMessage: async
