@@ -58,6 +58,8 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 All custom agents/skills are **manual / user-triggered**. No hidden automation, with one pre-existing exception documented in `docs/project-map.md` (the `code-review-graph` PostToolUse hook).
 
+**Git discipline (non-negotiable).** **NEVER commit directly on `main`** — always branch first (feature/fix/**docs & specs included**), commit on the branch, open a PR. **NEVER merge a PR without the user's explicit go** — the user keeps the hand on everything that lands on `main`. Push the branch freely (no CI gating), but stop at "PR ready, waiting for your go" and never run `gh pr merge` before it. Applies to **every** change, doc-only ones too.
+
 **Two lanes.** Pick the lane BEFORE starting and say which one applies:
 - **Full lane** (default for any feature, behaviour change, API/schema change, or anything touching a structuring axis §7.1).
 - **Light lane** — only if ALL true: ≤2 files, no behaviour/API/schema change, no structuring axis touched (typo, label, doc, tiny fix). Cycle: implement → relevant tests green locally → doc check declaration → `/code-review` → PR → user go.
