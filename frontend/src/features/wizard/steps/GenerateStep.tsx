@@ -58,11 +58,12 @@ export function GenerateStep() {
     }
     settled.current = true;
     clearReservations();
+    // Point the embedded planning at THIS run's schedule (not a stale overlay a
+    // "Voir le plan" click may have left selected in the planning store).
+    if (null !== scheduleId) {
+      setSelectedScheduleId(scheduleId);
+    }
     if (periodMode) {
-      // Show the overlay in the embedded planning; refresh the cockpit link.
-      if (null !== scheduleId) {
-        setSelectedScheduleId(scheduleId);
-      }
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     } else {
@@ -136,7 +137,9 @@ export function GenerateStep() {
           <p className="max-w-sm text-sm text-muted-foreground">
             {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
           </p>
-          <Button size="lg" onClick={start}>
+          {/* Period mode: wait for the entry to load so an existing overlay is
+              regenerated (not duplicated → backend 422). */}
+          <Button size="lg" onClick={start} disabled={periodMode && !periodEntry}>
             <Rocket className="size-4" />
             {periodMode ? "Générer le plan de période" : "Lancer la génération"}
           </Button>

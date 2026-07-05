@@ -5,8 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
+import { toast } from "@/shared/stores/toastStore";
 
+import { OverlaysExistError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
@@ -112,6 +115,27 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const setBaselineMutation = useSetBaseline();
   const renameMutation = useRenameSchedule();
   const [validateOpen, setValidateOpen] = useState(false);
+  // Reopening the baseline with period overlays → 409; confirm to delete them.
+  const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
+
+  const reopen = (confirmDeleteOverlays?: boolean) => {
+    if (!validScheduleId) {
+      return;
+    }
+    reopenMutation.mutate(
+      { id: validScheduleId, confirmDeleteOverlays },
+      {
+        onSuccess: () => setReopenOverlayCount(null),
+        onError: (error) => {
+          if (error instanceof OverlaysExistError) {
+            setReopenOverlayCount(error.count);
+          } else {
+            toast.error("Réouverture impossible");
+          }
+        },
+      },
+    );
+  };
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
@@ -197,7 +221,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               actionBusy={actionBusy}
               onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
               onValidate={() => setValidateOpen(true)}
-              onReopen={() => validScheduleId && reopenMutation.mutate({ id: validScheduleId })}
+              onReopen={() => reopen()}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
               onRename={(name) => validScheduleId && renameMutation.mutate({ id: validScheduleId, name, status: selectedSchedule?.status ?? "COMPLETED" })}
               baselineScheduleId={baselineScheduleId}
@@ -260,6 +284,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={reopenOverlayCount !== null}
+        destructive
+        title="Rouvrir le socle ?"
+        description={`Rouvrir ce planning principal supprimera ${reopenOverlayCount ?? 0} calendrier${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        confirmLabel="Rouvrir et supprimer"
+        onConfirm={() => reopen(true)}
+        onCancel={() => setReopenOverlayCount(null)}
+      />
     </div>
   );
 }

@@ -38,7 +38,7 @@ export function CockpitPage() {
 
   return (
     <div className="space-y-4">
-      <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} overlayCount={radarEntries.filter((e) => null !== e.overlayScheduleId).length} />
+      <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} />

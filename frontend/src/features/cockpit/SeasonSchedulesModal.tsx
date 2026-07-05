@@ -40,14 +40,14 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
                 <p className="text-xs text-muted-foreground">
                   {STATUS_LABELS[s.status]}
                   {s.score !== null ? ` · score ${s.score}` : ""}
-                  {isBaseline ? " · Principal" : null !== s.calendarEntryId ? " · Période" : ""}
+                  {isBaseline ? " · Principal" : ""}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
                 <Button variant="outline" size="sm" onClick={() => consult(s.id)}>
                   Consulter
                 </Button>
-                {!isBaseline && null === s.calendarEntryId && (s.status === "COMPLETED" || s.status === "VALIDATED") ? (
+                {!isBaseline && (s.status === "COMPLETED" || s.status === "VALIDATED") ? (
                   <Button
                     variant="ghost"
                     size="sm"
