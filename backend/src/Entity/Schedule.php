@@ -13,6 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'schedule')]
 #[ORM\Index(name: 'idx_schedule_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_schedule_status', columns: ['status'])]
+#[ORM\Index(name: 'idx_schedule_calendar_entry', columns: ['calendar_entry_id'])]
 #[ORM\HasLifecycleCallbacks]
 class Schedule implements TenantOwnedInterface
 {
@@ -35,6 +36,14 @@ class Schedule implements TenantOwnedInterface
 
     #[ORM\Column(type: 'guid')]
     private string $seasonId;
+
+    /**
+     * When set, this schedule is the OVERLAY of a CalendarEntry period (palier B):
+     * a bounded secondary plan, never the season baseline. null = a season plan
+     * (base / work-loop). Inverse of CalendarEntry.overlayScheduleId.
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $calendarEntryId = null;
 
     #[ORM\Column(type: 'string', length: 180)]
     private string $name;
@@ -163,6 +172,18 @@ class Schedule implements TenantOwnedInterface
     public function setSeasonId(string $seasonId): self
     {
         $this->seasonId = $seasonId;
+
+        return $this;
+    }
+
+    public function getCalendarEntryId(): ?string
+    {
+        return $this->calendarEntryId;
+    }
+
+    public function setCalendarEntryId(?string $calendarEntryId): self
+    {
+        $this->calendarEntryId = $calendarEntryId;
 
         return $this;
     }

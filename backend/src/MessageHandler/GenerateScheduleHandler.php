@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\MessageHandler;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\Season;
@@ -154,7 +155,23 @@ final class GenerateScheduleHandler
 
     private function generate(Schedule $schedule, GenerateScheduleMessage $message): void
     {
-        $scheduleInput = $this->buildFrozenSnapshot($schedule);
+        // Overlay (palier B): build from the period entry instead of the base plan.
+        $overlayEntry = null;
+        if (null !== $schedule->getCalendarEntryId()) {
+            $overlayEntry = $this->entityManager->getRepository(CalendarEntry::class)->find($schedule->getCalendarEntryId());
+            if (!$overlayEntry instanceof CalendarEntry) {
+                // The period was deleted between queueing and running — fail terminally.
+                $this->failSchedule($schedule, 'overlay_entry_missing', 'The overlay period no longer exists.');
+                $this->entityManager->flush();
+                $this->progressPublisher->publishSafely($schedule, ['warnings' => ['The overlay period no longer exists.']]);
+
+                return;
+            }
+        }
+
+        $scheduleInput = $overlayEntry instanceof CalendarEntry
+            ? $this->constraintBuilder->buildForOverlay($schedule, $overlayEntry)
+            : $this->buildFrozenSnapshot($schedule);
         $schedule
             ->setStatus(ScheduleStatus::GENERATING)
             ->setSolverTimeoutSeconds($message->getTimeoutSeconds())
@@ -252,7 +269,10 @@ final class GenerateScheduleHandler
         $this->resultImporter->import($schedule, $result);
         $this->diagnosticsRecorder->record($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $this->assignBaselineIfFirst($schedule);
+        // An overlay (period plan) must NEVER become the season baseline.
+        if (null === $schedule->getCalendarEntryId()) {
+            $this->assignBaselineIfFirst($schedule);
+        }
         $this->completeOnboarding($schedule);
     }
 

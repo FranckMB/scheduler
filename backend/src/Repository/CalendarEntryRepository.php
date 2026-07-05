@@ -31,4 +31,27 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * Period entries of the season that carry a generated overlay (palier B) —
+     * the ones a baseline reopen would destroy.
+     *
+     * @return list<CalendarEntry>
+     */
+    public function findWithOverlayByClubSeason(string $clubId, string $seasonId): array
+    {
+        return $this->createQueryBuilder('e')
+            ->andWhere('e.clubId = :clubId')
+            ->andWhere('e.seasonId = :seasonId')
+            ->andWhere('e.overlayScheduleId IS NOT NULL')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function findOneByOverlayScheduleId(string $scheduleId): ?CalendarEntry
+    {
+        return $this->findOneBy(['overlayScheduleId' => $scheduleId]);
+    }
 }

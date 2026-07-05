@@ -63,6 +63,10 @@ class ScheduleResource
     #[Groups(['read'])]
     public ScheduleStatus $status;
 
+    /** Non-null → this is a period overlay (palier B), not a season plan. */
+    #[Groups(['read'])]
+    public ?string $calendarEntryId = null;
+
     #[Groups(['read'])]
     public ?int $score = null;
 
@@ -114,6 +118,7 @@ class ScheduleResource
         $dto->updatedAt = $entity->getUpdatedAt();
         $dto->name = $entity->getName();
         $dto->status = $entity->getStatus();
+        $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->score = $entity->getScore();
         $dto->solverSeed = $entity->getSolverSeed();
         $dto->snapshotHash = $entity->getSnapshotHash();

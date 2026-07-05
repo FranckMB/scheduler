@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
 use App\Entity\Team;
@@ -16,6 +18,8 @@ use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
@@ -123,6 +127,80 @@ final class ScheduleConstraintBuilder
     }
 
     /**
+     * Build the engine payload for a period OVERLAY (palier B). BYPASSES the
+     * schedule-input cache (overlays are rare; the base key stays clean).
+     *
+     * - closure (additive): permanent + dated constraints, and each closed venue
+     *   is expanded into per-team FACILITY HARD `forbiddenVenueId` constraints —
+     *   the engine understands `forbiddenVenueId` (→ forbidden_assignments) but
+     *   NOT `config.type=venue_closed`, so the expansion carries the semantics.
+     * - holiday (partial replacement): dated constraints only, full structure.
+     *
+     * slotTemplates are scoped to THIS overlay schedule (its own locks), not the
+     * base plan's — the base build (buildForClubSeason) is untouched.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildForOverlay(Schedule $schedule, CalendarEntry $entry): array
+    {
+        $em = $this->entityManager;
+        if (!$em instanceof EntityManagerInterface) {
+            throw new LogicException('ScheduleConstraintBuilder requires Doctrine for overlay builds.');
+        }
+
+        $clubId = $schedule->getClubId();
+        $seasonId = $schedule->getSeasonId();
+        $periodType = $entry->getPeriodType();
+
+        $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
+        $constraints = match ($periodType) {
+            CalendarEntryPeriodType::CLOSURE => array_merge(
+                $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
+                $dated,
+            ),
+            CalendarEntryPeriodType::HOLIDAY => $dated,
+            default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
+        };
+
+        // Preload venue availabilities for serializeVenue() (same as base build).
+        $availabilitiesByVenue = [];
+        if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
+            foreach ($this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $row) {
+                $availabilitiesByVenue[$row->getVenueId()][] = $row;
+            }
+        }
+        $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
+
+        $teams = $this->findByClubSeason(Team::class, $clubId, $seasonId, $em);
+
+        $payload = $this->buildPayload(
+            clubId: $clubId,
+            seasonId: $seasonId,
+            venues: $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+            teams: $teams,
+            coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId, $em),
+            teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId, $em),
+            coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId, $em),
+            // Overlay's OWN slot templates (its work-loop locks), not the base plan's.
+            slotTemplates: $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+            priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
+            solverSeed: $schedule->getSolverSeed(),
+            constraints: $constraints,
+        );
+
+        $this->currentAvailabilitiesByVenue = [];
+
+        if (CalendarEntryPeriodType::CLOSURE === $periodType) {
+            $payload['constraints'] = array_merge(
+                $payload['constraints'],
+                $this->expandClosedVenues($dated, $teams),
+            );
+        }
+
+        return $payload;
+    }
+
+    /**
      * In-memory builder kept for existing cross-stack contract coverage.
      *
      * @param array<Venue>                 $venues
@@ -213,6 +291,46 @@ final class ScheduleConstraintBuilder
                 static fn (?array $slotTemplate): bool => null !== $slotTemplate,
             )),
         ];
+    }
+
+    /**
+     * Expand each closed venue (scopeTargetId of the entry's active FACILITY
+     * dated constraints — same convention as CalendarEntryConflictsController)
+     * into per-team FACILITY HARD `forbiddenVenueId` constraints the engine
+     * honors (parse_v2_constraints → forbidden_assignments).
+     *
+     * @param array<Constraint> $dated
+     * @param array<Team>       $teams
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function expandClosedVenues(array $dated, array $teams): array
+    {
+        $closedVenueIds = [];
+        foreach ($dated as $constraint) {
+            if (ConstraintFamily::FACILITY === $constraint->getFamily() && $constraint->getIsActive() && null !== $constraint->getScopeTargetId()) {
+                $closedVenueIds[$constraint->getScopeTargetId()] = true;
+            }
+        }
+
+        $expanded = [];
+        foreach (array_keys($closedVenueIds) as $venueId) {
+            foreach ($teams as $team) {
+                $expanded[] = [
+                    'id' => \sprintf('overlay-closed:%s:%s', $venueId, $team->getId()),
+                    'scope' => ConstraintScope::TEAM->value,
+                    'scopeTargetId' => $team->getId(),
+                    'family' => ConstraintFamily::FACILITY->value,
+                    'ruleType' => ConstraintRuleType::HARD->value,
+                    'name' => 'Salle fermée (période)',
+                    'config' => ['forbiddenVenueId' => $venueId],
+                    'sortOrder' => 0,
+                    'isActive' => true,
+                ];
+            }
+        }
+
+        return $expanded;
     }
 
     /**

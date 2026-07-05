@@ -11,19 +11,32 @@ use App\Entity\Constraint;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Repository\SeasonRepository;
+use App\Service\OverlayManager;
 use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProcessor<CalendarEntry, CalendarEntryInput, CalendarEntryResource>
  *
- * Palier A: writing a CalendarEntry (or its dated Constraint via
- * Constraint.calendarEntryId) never touches the generation payload — dated
- * constraints are excluded from ConstraintRepository::findPermanentByClubSeason,
- * so the cached snapshot (club.{id}.schedule_input) needs no invalidation here.
- * Palier B (overlay generation) will change that and must invalidate the cache.
+ * Palier A: writing a dated Constraint (Constraint.calendarEntryId) never touches
+ * the BASE generation payload — dated constraints are excluded by
+ * ConstraintRepository::findPermanentByClubSeason. Palier B: overlay generation
+ * reads dated constraints via ScheduleConstraintBuilder::buildForOverlay, which
+ * BYPASSES the schedule-input cache entirely, so no invalidation is needed here.
  */
 class CalendarEntryStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonRepository $seasonRepository,
+        private readonly OverlayManager $overlayManager,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonRepository);
+    }
+
     protected function getEntityClass(): string
     {
         return CalendarEntry::class;
@@ -91,19 +104,29 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * Deleting a period also removes its dated constraints — otherwise they
-     * orphan with a dangling calendarEntryId, invisible to generation (filtered
-     * out by findPermanentByClubSeason) and to the user.
+     * Deleting a period removes its overlay schedule (palier B) AND its dated
+     * constraints — otherwise the overlay's slots/diagnostics and the dated
+     * constraints orphan (invisible to generation and to the user).
      *
      * @param array<string, mixed> $uriVariables
      */
     protected function processDelete(array $uriVariables, ?string $clubId): void
     {
+        // Delete the overlay BEFORE the parent removes the entry (we need the
+        // entry to read overlayScheduleId). Guard club ownership inline so a
+        // cross-club delete deletes nothing before the parent throws 403.
+        $id = $uriVariables['id'] ?? null;
+        if (\is_string($id) && '' !== $id) {
+            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($id);
+            if ($entry instanceof CalendarEntry && (null === $clubId || $entry->getClubId() === $clubId)) {
+                $this->overlayManager->deleteOverlayForEntry($entry);
+            }
+        }
+
         // Parent runs the not-found / cross-club (403) guard and removes the
-        // entry first; only then do we cascade to its dated constraints.
+        // entry; only then do we cascade to its dated constraints.
         parent::processDelete($uriVariables, $clubId);
 
-        $id = $uriVariables['id'] ?? null;
         if (\is_string($id) && '' !== $id) {
             // Per-row remove (not bulk DQL DELETE): the `constraint` table is a
             // reserved word and the tenant SQL filter injects an unquoted alias

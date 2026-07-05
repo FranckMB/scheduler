@@ -53,6 +53,11 @@ class ConstraintStateProvider extends AbstractStateProvider
                 $qb->andWhere('e.calendarEntryId = :calendarEntryId')
                    ->setParameter('calendarEntryId', $request->query->get('calendarEntryId'));
             }
+            // permanent=1 → base-plan constraints only (dated/period ones excluded),
+            // so the wizard's season Constraints step doesn't show period constraints.
+            if ('1' === $request->query->get('permanent')) {
+                $qb->andWhere('e.calendarEntryId IS NULL');
+            }
         }
 
         $query = $qb->getQuery();
