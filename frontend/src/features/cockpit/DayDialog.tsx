@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 
 import { useVenues } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
@@ -34,6 +35,13 @@ export function DayDialog({ iso, entries, onClose }: DayDialogProps) {
 
 function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onCreate: (m: Mode) => void; onClose: () => void }) {
   const deleteEntry = useDeleteEntry();
+  const [toDelete, setToDelete] = useState<CalendarEntry | null>(null);
+
+  const confirmDelete = () => {
+    if (!toDelete) return;
+    deleteEntry.mutate(toDelete.id, { onSuccess: () => toast.success("Entrée supprimée") });
+    setToDelete(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -50,7 +58,7 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
                 aria-label={`Supprimer ${entry.title}`}
                 className="rounded p-1 text-muted-foreground hover:text-destructive"
                 disabled={deleteEntry.isPending}
-                onClick={() => deleteEntry.mutate(entry.id, { onSuccess: () => toast.success("Entrée supprimée"), onError: () => toast.error("Suppression impossible") })}
+                onClick={() => setToDelete(entry)}
               >
                 <Trash2 className="size-4" />
               </button>
@@ -60,6 +68,20 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
       ) : (
         <p className="text-sm text-muted-foreground">Rien ce jour-là — la semaine type tourne normalement.</p>
       )}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Supprimer « ${toDelete?.title ?? ""} » ?`}
+        description={
+          toDelete?.overlayScheduleId
+            ? "Cette période a un plan de période généré : il sera supprimé aussi (à refaire si besoin)."
+            : "Cette entrée sera retirée du calendrier."
+        }
+        confirmLabel="Supprimer"
+        destructive={Boolean(toDelete?.overlayScheduleId)}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
 
       <div className="grid grid-cols-1 gap-2">
         <Button variant="outline" onClick={() => onCreate("event")}>
@@ -106,7 +128,7 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
     if (title.trim() === "" || !validEnd) return;
     createEvent.mutate(
       { title: title.trim(), startDate: iso, endDate, isDisruptive },
-      { onSuccess: () => { toast.success("Événement ajouté"); onDone(); }, onError: () => toast.error("Création impossible") },
+      { onSuccess: () => { toast.success("Événement ajouté"); onDone(); } },
     );
   };
 
@@ -141,7 +163,8 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
     const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Salle";
     createClosure.mutate(
       { title: title.trim() === "" ? `${venueName} fermé` : title.trim(), startDate: iso, endDate, venueId },
-      { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); }, onError: (e) => toast.error(e instanceof Error ? e.message : "Création impossible") },
+      // Errors are toasted by the hook itself (unmount-safe rollback message).
+      { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); } },
     );
   };
 

@@ -16,6 +16,7 @@ use App\Service\OverlayManager;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * @extends AbstractStateProcessor<CalendarEntry, CalendarEntryInput, CalendarEntryResource>
@@ -67,6 +68,20 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        // A period carrying a generated overlay cannot change identity: the overlay
+        // was built for THIS kind/periodType/window. Mutating any of them would leave
+        // the overlay semantically wrong (or crash the next regeneration in
+        // buildForOverlay). Title/status/isDisruptive edits stay allowed.
+        if (null !== $entity->getOverlayScheduleId()) {
+            $kindChanged = null !== $input->kind && $this->parseKind($input->kind) !== $entity->getKind();
+            $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
+            $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
+            $endChanged = null !== $input->endDate && $this->parseDate($input->endDate)->format('Y-m-d') !== $entity->getEndDate()->format('Y-m-d');
+            if ($kindChanged || $periodTypeChanged || $startChanged || $endChanged) {
+                throw new UnprocessableEntityHttpException('This period has a generated overlay plan. Delete the overlay plan before changing the period kind, type or dates.');
+            }
+        }
+
         if (null !== $input->kind) {
             $kind = $this->parseKind($input->kind);
             $entity->setKind($kind);

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { createConstraint } from "@/features/wizard/api";
+import { errorMessage } from "@/shared/lib/errorMessage";
+import { toast } from "@/shared/stores/toastStore";
 
 import * as cockpitApi from "./api";
 import type { CreateClosurePayload, CreateEventPayload } from "./api";
@@ -15,10 +17,16 @@ export function useCalendarEntries(from: string, to: string) {
 
 export function useCalendarEntry(id: string | null) {
   return useQuery({
-    queryKey: ["calendar-entry", id],
+    // Under the "calendar-entries" prefix so the shared invalidation (creation,
+    // overlay generation, reopen) also refreshes the detail — a singular key
+    // kept a stale overlayScheduleId for 30s after generating an overlay.
+    queryKey: ["calendar-entries", "detail", id],
     queryFn: () => cockpitApi.getCalendarEntry(id as string),
     enabled: null !== id,
     staleTime: 30_000,
+    // A 404 means the entry was deleted — the wizard exits period mode cleanly
+    // (WizardPage effect) instead of the global net toasting a raw error.
+    meta: { silent404: true },
   });
 }
 
@@ -95,6 +103,15 @@ export function useCreateVenueClosure() {
       }
       return entry;
     },
+    // Hook-level (unmount-safe): surfaces the tailored rollback message even if
+    // the DayDialog was closed while the two-call sequence was in flight.
+    onError: (error) => {
+      if (error instanceof Error && !("response" in error)) {
+        toast.error(error.message);
+        return;
+      }
+      void errorMessage(error).then((message) => toast.error(message));
+    },
     onSuccess: () => invalidateEntries(queryClient),
   });
 }
@@ -119,8 +136,14 @@ export function useCreateHolidayPeriod() {
 export function useDeleteEntry() {
   const queryClient = useQueryClient();
   return useMutation({
-    // The backend cascades the entry's dated constraints on delete.
+    // The backend cascades the entry's dated constraints AND its overlay
+    // schedule on delete → schedules and conflicts must refresh too, or the
+    // baseline banner keeps counting a ghost overlay ("Voir le plan" → 404).
     mutationFn: (id: string) => cockpitApi.deleteCalendarEntry(id),
-    onSuccess: () => invalidateEntries(queryClient),
+    onSuccess: () => {
+      invalidateEntries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
+    },
   });
 }

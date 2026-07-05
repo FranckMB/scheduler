@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
+use App\Entity\ConstraintConflict;
+use App\Entity\PeriodReminderLog;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -66,18 +71,37 @@ final class ResetSeasonController extends AbstractController
         }
 
         $deleted = 0;
+
+        // Children WITHOUT club/season columns first, resolved through their parent:
+        // conflicts hang off schedules, reminder logs off calendar entries. They must
+        // go before their parents' bulk DELETE or they orphan silently.
+        $deleted += $this->deleteBySubQuery(ConstraintConflict::class, 'scheduleId', Schedule::class, $clubId, $seasonId);
+        $deleted += $this->deleteBySubQuery(PeriodReminderLog::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
+
         foreach ([
             ScheduleDiagnostic::class,
             ScheduleSlotTemplate::class,
             Constraint::class,
             TeamCoach::class,
             CoachPlayerMembership::class,
+            CalendarEntry::class,
             Schedule::class,
             Team::class,
             Coach::class,
+            VenueTrainingSlot::class,
             Venue::class,
         ] as $entityClass) {
             $deleted += $this->deleteByClubSeason($entityClass, $clubId, $seasonId);
+        }
+
+        // The season anchors are gone with the schedules: clear them, otherwise the
+        // baseline points at a deleted row and the cockpit stays "unlocked"
+        // (socleValidatedAt sticky) with no plan behind it.
+        $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
+        if ($season instanceof Season && $season->getClubId() === $clubId) {
+            $season->setBaselineScheduleId(null);
+            $season->setSocleValidatedAt(null);
+            $this->entityManager->flush();
         }
 
         $this->entityManager->clear();
@@ -99,6 +123,28 @@ final class ResetSeasonController extends AbstractController
         }
 
         return null;
+    }
+
+    /**
+     * Delete rows of $entityClass whose $parentRefField points at a parent row
+     * (of $parentClass) belonging to this club+season. DQL DELETE with subquery.
+     */
+    private function deleteBySubQuery(string $entityClass, string $parentRefField, string $parentClass, string $clubId, string $seasonId): int
+    {
+        $sub = $this->entityManager->createQueryBuilder()
+            ->select('p.id')
+            ->from($parentClass, 'p')
+            ->where('p.clubId = :clubId')
+            ->andWhere('p.seasonId = :seasonId')
+            ->getDQL();
+
+        return (int) $this->entityManager->createQueryBuilder()
+            ->delete($entityClass, 'e')
+            ->where(\sprintf('e.%s IN (%s)', $parentRefField, $sub))
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->getQuery()
+            ->execute();
     }
 
     private function deleteByClubSeason(string $entityClass, string $clubId, string $seasonId): int

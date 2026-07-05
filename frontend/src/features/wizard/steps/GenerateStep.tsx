@@ -28,7 +28,7 @@ export function GenerateStep() {
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
-  const { data: schedules = [] } = useSchedules();
+  const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const launch = useLaunchGeneration();
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
@@ -42,6 +42,21 @@ export function GenerateStep() {
   const hasCompleted = periodMode ? overlayDone : schedules.some((s) => "COMPLETED" === s.status);
   const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
   const showPlanning = periodMode ? overlayDone : hasCompleted || (anyInFlight && null === scheduleId);
+
+  // Leaving mid-generation loses the local scheduleId; on return, re-adopt the
+  // period's in-flight overlay instead of offering a concurrent second launch.
+  const overlaySchedule = periodMode ? (schedules.find((s) => s.id === periodEntry?.overlayScheduleId) ?? null) : null;
+  useEffect(() => {
+    if (periodMode && null === scheduleId && overlaySchedule && IN_FLIGHT.includes(overlaySchedule.status)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot resume of an in-flight overlay
+      setScheduleId(overlaySchedule.id);
+    }
+  }, [periodMode, scheduleId, overlaySchedule]);
+
+  // §2bis warning: the FIRST overlay freezes the socle (editing the baseline
+  // afterwards destroys the overlays after an explicit confirm). Gated on the
+  // loaded list — an empty in-flight default would flash it for a non-first overlay.
+  const isFirstOverlay = periodMode && !schedulesLoading && !schedules.some((s) => null !== s.calendarEntryId);
 
   useEffect(() => {
     if (null === scheduleId) {
@@ -137,6 +152,11 @@ export function GenerateStep() {
           <p className="max-w-sm text-sm text-muted-foreground">
             {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
           </p>
+          {isFirstOverlay ? (
+            <p className="max-w-sm rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-muted-foreground">
+              Premier calendrier secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les calendriers secondaires (après confirmation).
+            </p>
+          ) : null}
           {/* Period mode: wait for the entry to load so an existing overlay is
               regenerated (not duplicated → backend 422). */}
           <Button size="lg" onClick={start} disabled={periodMode && !periodEntry}>

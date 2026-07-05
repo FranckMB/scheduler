@@ -1,3 +1,4 @@
+import { HTTPError } from "ky";
 import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +7,8 @@ import { useMe } from "@/features/auth/queries";
 import { useCalendarEntry } from "@/features/cockpit/queries";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+
+import { toast } from "@/shared/stores/toastStore";
 
 import { WizardFooterContext } from "./lib/footerSlot";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
@@ -75,8 +78,19 @@ export function WizardPage() {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const periodMode = "period" === mode;
-  const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  const { data: periodEntry, error: periodEntryError } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const validation = useStepValidation(stepId);
+
+  // The period mode is persisted (localStorage). If its entry was deleted in the
+  // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).
+  // The query is meta.silent404 — this toast is the only, explicit, feedback.
+  useEffect(() => {
+    if (periodMode && periodEntryError instanceof HTTPError && 404 === periodEntryError.response.status) {
+      toast.error("Cette période n'existe plus — retour à l'accueil.");
+      exitPeriodMode();
+      navigate("/");
+    }
+  }, [periodMode, periodEntryError, exitPeriodMode, navigate]);
   const index = WIZARD_STEPS.findIndex((s) => s.id === stepId);
   const currentStep = WIZARD_STEPS[index];
   const blocked = validation.errors.length > 0;

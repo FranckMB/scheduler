@@ -64,6 +64,26 @@ final class SchoolHolidaysApiTest extends WebTestCase
         self::assertSame([], $data['items']);
     }
 
+    public function testInvalidSchoolZoneOnClubIsRejected(): void
+    {
+        [$user, $club] = $this->seed('SH5', 'A');
+
+        // Zone must be A/B/C — an arbitrary string would silently break
+        // /api/school-holidays (empty list, no error).
+        $this->client->request('PUT', "/api/clubs/{$club->getId()}", [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => $club->getName(),
+            'slug' => $club->getSlug(),
+            'timezone' => 'Europe/Paris',
+            'locale' => 'fr',
+            'schoolZone' => 'Z',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422, 'an invalid school zone must be rejected');
+    }
+
     public function testWindowExcludesOutOfSeasonHolidays(): void
     {
         [$user, $club] = $this->seed('SH3', 'A');

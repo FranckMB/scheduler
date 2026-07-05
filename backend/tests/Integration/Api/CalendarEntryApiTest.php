@@ -314,6 +314,90 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($slotId), 'overlay slots must be purged');
     }
 
+    public function testDeletingPeriodWithValidatedOverlayIsRefused(): void
+    {
+        [$user, $club, $season] = $this->seed('CE17');
+
+        $this->scopeGucToClub($club->getId());
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setName('Overlay validé');
+        $overlay->setStatus(ScheduleStatus::VALIDATED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gym fermé');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        // The entry-delete cascade must not bypass the read-only guard that
+        // DELETE /api/schedules enforces on a VALIDATED plan.
+        $this->client->request('DELETE', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
+        self::assertResponseStatusCodeSame(409);
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'the validated overlay must survive');
+        self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()), 'the entry must survive');
+    }
+
+    public function testPeriodWithOverlayCannotMutateIdentity(): void
+    {
+        [$user, $club, $season] = $this->seed('CE16');
+
+        // Period entry carrying a generated overlay.
+        $this->scopeGucToClub($club->getId());
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setName('Overlay');
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gym fermé');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->persist($entry);
+        $this->em->flush();
+        $id = $entry->getId();
+
+        $base = ['title' => 'Gym fermé', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10'];
+
+        // periodType change → 422 (the overlay was generated for closure semantics).
+        $this->put($user, $club, $id, [...$base, 'kind' => 'period', 'periodType' => 'holiday']);
+        self::assertResponseStatusCodeSame(422, 'changing periodType under an overlay must be rejected');
+
+        // Window change → 422 (the overlay covers the old window).
+        $this->put($user, $club, $id, [...$base, 'kind' => 'period', 'periodType' => 'closure', 'endDate' => '2026-05-17']);
+        self::assertResponseStatusCodeSame(422, 'changing dates under an overlay must be rejected');
+
+        // kind → event → 422 (would orphan the overlay).
+        $this->put($user, $club, $id, [...$base, 'kind' => 'event']);
+        self::assertResponseStatusCodeSame(422, 'converting to event under an overlay must be rejected');
+
+        // Same identity, new title → allowed (cosmetic edits stay possible).
+        $this->put($user, $club, $id, [...$base, 'kind' => 'period', 'periodType' => 'closure', 'title' => 'Gym Barros fermé']);
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('Gym Barros fermé', $data['title']);
+    }
+
     public function testForeignEntryIsInvisible(): void
     {
         [$userA, $clubA] = $this->seed('CE8');
@@ -360,6 +444,17 @@ final class CalendarEntryApiTest extends WebTestCase
             'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user),
             'HTTP_X-Club-Id' => $club->getId(),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function put(User $user, Club $club, string $id, array $payload): void
+    {
+        $this->client->request('PUT', "/api/calendar_entries/{$id}", [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode($payload, \JSON_THROW_ON_ERROR));
     }
 
     /**

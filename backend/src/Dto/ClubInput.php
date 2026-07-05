@@ -31,6 +31,7 @@ class ClubInput
     #[Groups(['write'])]
     public ?int $generationCountSeason = null;
 
+    #[Assert\Choice(choices: ['A', 'B', 'C'], message: 'School zone must be A, B or C.')]
     #[Groups(['write'])]
     public ?string $schoolZone = null;
 

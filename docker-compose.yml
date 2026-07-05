@@ -155,6 +155,48 @@ services:
     networks:
       - clubscheduler_network
 
+  # Hourly maintenance loop. Both commands are idempotent so hourly is safe:
+  # periods:remind dedupes per (entry, threshold) via period_reminder_log, and
+  # reconcile-stuck only touches GENERATING schedules older than --older-than.
+  cron-runner:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        UID: ${USER_ID:-1000}
+        GID: ${GROUP_ID:-1000}
+    container_name: clubscheduler-cron-runner
+    working_dir: /app/backend
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    volumes:
+      - ./:/app:cached
+    env_file:
+      - ./.env
+    command: >-
+      sh -lc 'while true; do
+        if [ -f bin/console ]; then
+          php bin/console app:periods:remind --no-interaction || true;
+          php bin/console app:schedules:reconcile-stuck --older-than=60 --no-interaction || true;
+        fi;
+        sleep 3600;
+      done'
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Same PID-1 pattern as messenger-worker (no pgrep in the php image; a
+      # process-list grep would also self-match). PID 1 is the sh loop whose
+      # command line carries "sleep 3600".
+      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"sleep 3600\") === false ? 1 : 0);'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - clubscheduler_network
+
   engine:
     build:
       context: .

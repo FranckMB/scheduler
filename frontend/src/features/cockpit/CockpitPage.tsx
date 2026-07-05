@@ -22,8 +22,8 @@ export function CockpitPage() {
   // The radar surfaces upcoming to-dos season-wide, not just the visible month.
   const radarToday = todayISO();
   const { data: radarEntries = [] } = useCalendarEntries(radarToday, addDays(radarToday, 300));
-  const { data: holidays } = useSchoolHolidays();
-  const { data: schedules = [] } = useSchedules();
+  const { data: holidays, isLoading: holidaysLoading } = useSchoolHolidays();
+  const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
 
   if (isLoading) {
     return <FullPageSpinner />;
@@ -38,10 +38,10 @@ export function CockpitPage() {
 
   return (
     <div className="space-y-4">
-      <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} />
+      <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} onPrev={prev} onNext={next} />
-        <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} />
+        <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} zoneLoading={holidaysLoading} />
       </div>
     </div>
   );

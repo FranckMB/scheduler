@@ -73,12 +73,17 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->andWhere('e.kind = :kind')
             ->andWhere('e.status = :status')
             ->andWhere('e.overlayScheduleId IS NULL')
+            // Only overlay-capable period types: reminding about a cutoff/custom/
+            // mutualisation period would CTA into a 422 (overlay creation refuses
+            // them) — a cutoff means "no training", there is no plan to prepare.
+            ->andWhere('e.periodType IN (:generatingTypes)')
             ->andWhere('e.startDate >= :from')
             ->andWhere('e.startDate <= :to')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
             ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
             ->setParameter('status', \App\Enum\CalendarEntryStatus::ACTIVE)
+            ->setParameter('generatingTypes', [\App\Enum\CalendarEntryPeriodType::CLOSURE, \App\Enum\CalendarEntryPeriodType::HOLIDAY])
             ->setParameter('from', $today->format('Y-m-d'))
             ->setParameter('to', $today->modify(\sprintf('+%d days', $horizonDays))->format('Y-m-d'))
             ->orderBy('e.startDate', 'ASC')

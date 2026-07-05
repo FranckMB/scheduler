@@ -76,7 +76,9 @@ final class ReopenScheduleController extends AbstractController
                 // mid-loop failure must not leave a half-deleted, still-locked state).
                 $this->entityManager->wrapInTransaction(function () use ($overlays, $schedule): void {
                     foreach ($overlays as $entry) {
-                        $this->overlayManager->deleteOverlayForEntry($entry);
+                        // force: the user explicitly confirmed destroying the overlays,
+                        // VALIDATED ones included (this IS the authorized destructive path).
+                        $this->overlayManager->deleteOverlayForEntry($entry, force: true);
                     }
                     $schedule->setStatus(ScheduleStatus::COMPLETED);
                 });

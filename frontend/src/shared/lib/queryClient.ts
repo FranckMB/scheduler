@@ -26,12 +26,26 @@ export const queryClient = new QueryClient({
     queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
   },
   mutationCache: new MutationCache({
-    onError: (error) => report(error),
+    // A useMutation with a hook-level onError OWNS its error feedback (it must
+    // toast or dialog itself — hook-level callbacks survive unmount, unlike
+    // mutate()-level ones). The global net catches everything else, so a failure
+    // never toasts twice and never stays silent.
+    onError: (error, _variables, _context, mutation) => {
+      if (mutation.options.onError) {
+        return;
+      }
+      report(error);
+    },
   }),
   queryCache: new QueryCache({
     onError: (error, query) => {
       if (query.state.data !== undefined) {
         return; // stale data is still on screen — don't nag on a background refetch
+      }
+      // Queries flagged meta.silent404 handle a 404 themselves (deleted calendar
+      // entry → clean period-mode exit, not a raw error toast).
+      if (query.meta?.silent404 === true && error instanceof HTTPError && error.response.status === 404) {
+        return;
       }
       report(error);
     },
