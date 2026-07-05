@@ -42,6 +42,7 @@ export function AppLayout() {
           </NavLink>
           <nav className="flex items-center gap-1">
             <NavItem to="/">Accueil</NavItem>
+            <NavItem to="/planning">Planning</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
               <MenuItem to="/club" icon={<Settings />}>

@@ -32,6 +32,7 @@ vi.mock("./api", () => ({
   moveSlot: vi.fn(),
   generateSchedule: vi.fn(),
   validateSchedule: vi.fn(),
+  STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec", VALIDATED: "Validé" },
 }));
 
 vi.mock("@/features/auth/queries", () => ({

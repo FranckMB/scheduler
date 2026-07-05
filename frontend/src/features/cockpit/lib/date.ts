@@ -1,0 +1,59 @@
+/** Cockpit calendar date helpers — pure, no date library. All dates are ISO Y-m-d. */
+
+const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+export const monthLabel = (month: number): string => MONTH_LABELS[month] ?? "";
+
+/** Local Y-m-d (avoids the UTC shift of toISOString). */
+export function toISODate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function todayISO(): string {
+  return toISODate(new Date());
+}
+
+/** First and last ISO date covering the calendar grid for a given month (Monday-first, 6 weeks). */
+export function monthWindow(year: number, month: number): { from: string; to: string } {
+  const grid = buildMonthGrid(year, month);
+  return { from: grid[0].iso, to: grid[grid.length - 1].iso };
+}
+
+export interface GridDay {
+  iso: string;
+  day: number;
+  inMonth: boolean;
+}
+
+/**
+ * A 6-row Monday-first grid of the month. Leading/trailing days spill from the
+ * adjacent months so every row has 7 cells.
+ */
+export function buildMonthGrid(year: number, month: number): GridDay[] {
+  const first = new Date(year, month, 1);
+  // getDay(): 0=Sun..6=Sat → Monday-first offset (Mon=0 … Sun=6).
+  const offset = (first.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - offset);
+
+  const days: GridDay[] = [];
+  for (let i = 0; i < 42; i += 1) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    days.push({ iso: toISODate(d), day: d.getDate(), inMonth: d.getMonth() === month });
+  }
+  return days;
+}
+
+/** Whether ISO date `d` falls within the inclusive [start, end] range (string compare is safe for Y-m-d). */
+export function isWithin(d: string, start: string, end: string): boolean {
+  return d >= start && d <= end;
+}
+
+/** Whole days from `from` to `to` (ISO), floored, negative if `to` is before `from`. */
+export function daysUntil(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00`);
+  const b = Date.parse(`${to}T00:00:00`);
+  return Math.round((b - a) / 86_400_000);
+}

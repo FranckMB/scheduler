@@ -52,7 +52,8 @@ layouts (`src/app/router.tsx`).
 | `/forgot-password` | Demande de réinitialisation de mot de passe (`POST /api/password/forgot`) | Public | `AuthLayout` |
 | `/reset-password/:token` | Saisie du nouveau mot de passe (`POST /api/password/reset`) | Public | `AuthLayout` |
 | `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
-| `/` | **Boucle de travail planning** (`PlanningPage`) : grille `WeekGrid`, toolbar (sélecteur, régénérer, valider/rouvrir, planning principal ★, renommer), diagnostics, détail créneau | Required | `AppLayout` |
+| `/` | **Cockpit temporel** (`CockpitPage`, palier A) : bandeau planning principal (Ouvrir/Modifier/Tous les plannings) · calendrier mensuel des exceptions (événements/indispos/vacances, clic-jour → création) · radar (à traiter). **Débloqué (sticky) dès `me.socleValidatedAt` non null** ; sinon redirige vers `/planning` | Required | `AppLayout` |
+| `/planning` | **Boucle de travail planning** (`PlanningPage`, ex-`/`) : grille `WeekGrid`, toolbar (sélecteur, régénérer, valider/rouvrir, planning principal ★, renommer), diagnostics, détail créneau | Required | `AppLayout` |
 | `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `onboardingCompleted === false`) | Required | `AppLayout` |
 | `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression) et couleur d'accent (+ palette) appliquée à toute l'UI | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
@@ -63,6 +64,7 @@ layouts (`src/app/router.tsx`).
 - Pas de JWT dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`).
 - `membershipStatus === "pending"` → `/waiting`.
 - `club.onboardingCompleted === false` → redirect `/wizard` (sauf si déjà sur `/wizard`).
+- **Gate cockpit (sticky)** : `CockpitPage` redirige vers `/planning` tant que `me.socleValidatedAt === null` (le socle n'a jamais été validé). Le jalon est posé côté backend à la 1re validation du baseline et **jamais retiré** — voir `planning-lifecycle-validated.md` et `specs/evolution/accueil-cockpit-temporel.md` §2ter.
 
 ### Routes non livrées
 

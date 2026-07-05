@@ -41,6 +41,16 @@ async function collectionAll<T extends { id: string }>(path: string): Promise<T[
 }
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+
+/** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
+export const STATUS_LABELS: Record<ScheduleStatus, string> = {
+  DRAFT: "Brouillon",
+  PENDING: "En attente",
+  GENERATING: "Génération…",
+  COMPLETED: "Terminé",
+  FAILED: "Échec",
+  VALIDATED: "Validé",
+};
 export type LockLevel = "NONE" | "SOFT" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 

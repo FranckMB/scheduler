@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
-import type { Schedule, ScheduleStatus } from "./api";
+import { STATUS_LABELS, type Schedule } from "./api";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -12,15 +12,6 @@ const VIEWS: { key: ViewMode; label: string }[] = [
   { key: "coach", label: "Par coach" },
   { key: "equipe", label: "Par équipe" },
 ];
-
-const STATUS_LABELS: Record<ScheduleStatus, string> = {
-  DRAFT: "Brouillon",
-  PENDING: "En attente",
-  GENERATING: "Génération…",
-  COMPLETED: "Terminé",
-  FAILED: "Échec",
-  VALIDATED: "Validé",
-};
 
 interface PlanningToolbarProps {
   schedules: Schedule[];
