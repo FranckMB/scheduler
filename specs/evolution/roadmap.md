@@ -215,7 +215,7 @@ Polish frontend discuté, non structurant mais confort d'usage.
 | **Piège nouveau gymnase** : après ajout d'un 2ᵉ gymnase, sélection reste sur le 1ᵉʳ → créneaux posés sur le mauvais | 🟢 | **🟢** | **✅ Livré** : le gymnase créé est auto-sélectionné (`VenuesStep`, `onSuccess`) → les créneaux tombent au bon endroit |
 | **Polarité des jours invisible** : cocher un jour l'*interdit* (sens visible seulement après enregistrement) | 🟢 | **🟢** | Fix : label « éviter ces jours » |
 | **Pas d'indicateur « étape terminée »** dans le rail (navigation libre pour club existant) | 🟢 | **🟢** | Fix : coches d'état par étape |
-| **Focus non géré** après ajout (pas de retour au champ) ; **pas de dimanche** dans la grille alors que les contraintes l'autorisent ; colonne coach « a » / « Sans coach » (donnée à trancher) | 🟢 | **🟢** | **Focus ✅ Livré** (retour au champ nom après ajout équipe/gymnase/coach). **Reste** : dimanche dans la grille (à trancher — entraînement dominical ?), colonne coach « a » |
+| **Focus non géré** après ajout (pas de retour au champ) ; **pas de dimanche** dans la grille alors que les contraintes l'autorisent ; colonne coach « a » / « Sans coach » (donnée à trancher) | 🟢 | **🟢** | **Focus ✅ Livré** (retour au champ nom après ajout équipe/gymnase/coach). **Dimanche : tranché — abandonné** (≈95 % des clubs amateurs ne s'entraînent pas le dimanche ; une grille 7 colonnes ne se justifie pas pour les 5 %). À rouvrir seulement si un vrai club pilote le demande. **Reste** : colonne coach « a » |
 
 **Top 3 à faire en premier** (tous 🟢, ~1-2 j chacun, attaquent la confiance) : (1) feedback d'erreur global, (2) confirmation des suppressions, (3) libellés FR des contraintes + micro-copy Rang/Niveau.
 
