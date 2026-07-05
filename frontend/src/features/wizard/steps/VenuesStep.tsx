@@ -1,5 +1,5 @@
 import { Check, Plus, Trash2, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -130,6 +130,7 @@ function VenuesEditor() {
   const addSlot = useCreateSlot();
 
   const [name, setName] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [capacity, setCapacity] = useState(1);
@@ -139,7 +140,9 @@ function VenuesEditor() {
   // the user confirms, and we must delete the venue the dialog is about.
   const [pendingDeleteVenue, setPendingDeleteVenue] = useState<Venue | null>(null);
 
-  const selected = venues.find((v) => v.id === (selectedId || venues[0]?.id)) ?? null;
+  // Fall back to the first venue when the selected id isn't in the list yet
+  // (just-created, list refetching) so the panel never flashes "no venue".
+  const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0] ?? null;
   const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
 
   const addVenue = (event: FormEvent) => {
@@ -147,8 +150,15 @@ function VenuesEditor() {
     if ("" === name.trim()) {
       return;
     }
-    create.mutate({ name: name.trim(), canSplit: false });
+    // Select the freshly created venue so the slot grid targets it — otherwise
+    // the selection stays on the previous gym and slots land on the wrong one.
+    create.mutate(
+      { name: name.trim(), canSplit: false },
+      { onSuccess: (created) => setSelectedId(created.id) },
+    );
     setName("");
+    // Keep the cursor in the name field to add the next gym without re-clicking.
+    nameRef.current?.focus();
   };
 
   const emptyVenues = venues.filter((v) => !slots.some((s) => s.venueId === v.id));
@@ -160,7 +170,7 @@ function VenuesEditor() {
       </p>
 
       <form onSubmit={addVenue} className="mb-4 flex items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Input aria-label="Nom du gymnase" placeholder="Nom du gymnase" className="h-8 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input ref={nameRef} aria-label="Nom du gymnase" placeholder="Nom du gymnase" className="h-8 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
         <Button type="submit" size="icon" className="size-8" disabled={create.isPending} title="Ajouter un gymnase" aria-label="Ajouter un gymnase">
           <Plus className="size-4" />
         </Button>

@@ -1,5 +1,5 @@
 import { Plus, Trash2, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -146,6 +146,7 @@ function CoachesEditor() {
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [employee, setEmployee] = useState(false);
+  const firstRef = useRef<HTMLInputElement>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
 
@@ -158,6 +159,8 @@ function CoachesEditor() {
     setFirst("");
     setLast("");
     setEmployee(false);
+    // Back to the first-name field for the next coach.
+    firstRef.current?.focus();
   };
 
   return (
@@ -165,7 +168,7 @@ function CoachesEditor() {
       <p className="mb-4 text-sm text-muted-foreground">Ajoutez vos coachs, marquez les salariés, et liez-les à des équipes (coach, adjoint) ou aux équipes où ils jouent.</p>
 
       <form onSubmit={add} className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
-        <Input aria-label="Prénom" placeholder="Prénom" className="h-9 w-40" value={first} onChange={(e) => setFirst(e.target.value)} />
+        <Input ref={firstRef} aria-label="Prénom" placeholder="Prénom" className="h-9 w-40" value={first} onChange={(e) => setFirst(e.target.value)} />
         <Input aria-label="Nom" placeholder="Nom" className="h-9 w-40" value={last} onChange={(e) => setLast(e.target.value)} />
         <label className="flex items-center gap-1 text-sm text-muted-foreground">
           <input type="checkbox" checked={employee} onChange={(e) => setEmployee(e.target.checked)} />

@@ -207,15 +207,15 @@ Polish frontend discuté, non structurant mais confort d'usage.
 |-------|----------|--------|------|
 | **Échecs de mutation silencieux** (zéro `onError`/toast dans l'app) | 🔴 P0 | **🟢** | Un 422/500/offline n'affiche **rien**, et les champs se vident *avant* de savoir → donnée saisie perdue sans trace (vu en live : 422 muet sur Contraintes). = **FRT-01/02**. Fix : `MutationCache.onError` global + toast (sonner). **Meilleur ratio effort/valeur de tout le produit.** |
 | **Suppressions immédiates sans confirmation, cascade** | 🔴 P0 | **🟢/🟡** | 1 clic poubelle = équipe / gymnase (+ créneaux) détruits, pas d'undo, delete raté silencieux. Fix : modale de confirmation, surtout cascade gymnase |
-| **Aucun état de chargement** (vide ≡ en cours) | 🟡 | **🟢** | L'erreur bloquante « Ajoutez au moins une équipe » clignote avant l'arrivée des données. Fix : skeleton/`isLoading` |
+| **Aucun état de chargement** (vide ≡ en cours) | 🟡 | **🟢** | **✅ Livré** : `useStepValidation` reste neutre tant que les queries chargent (`isLoading`) → plus de flash « Ajoutez au moins une équipe » avant l'arrivée des données. Gardé par `useStepValidation.hook.test.tsx`. Skeletons de contenu restent optionnels |
 | **Jargon solveur brut** (`HARD`/`PREFERRED`/`BONUS`/`LOCK` affichés) | 🟡 | **🟢** | Badges anglais + dropdown tronqué « PREFERRI ». Fix : libellés FR (Obligatoire/Préféré/Bonus/Verrouillé). Lié à l'i18n diagnostics ci-dessus |
 | **Réservations en localStorage jamais revalidées** | 🟡 | **🟡** | Copie l'horaire au moment T ; si le créneau bouge/est supprimé → postée en LOCK HARD sur un horaire mort → solveur INFEASIBLE sans explication. Fix : référencer le slot + revalider au lancement (`useLaunchGeneration`) |
 | **Étape Équipes = 1 seul écran de N lignes** (saisie 1 par 1, pas d'import) | 🟡 | **🟡** | 49 équipes tapées à la main. L'endpoint import Excel **existe déjà** (§8) — le brancher au wizard. + corriger le bug React **duplicate keys** de cet écran |
 | **Deux classements concurrents non expliqués** : Rang (S/A/B/C/D priorité) vs Niveau de jeu (division FFBB) | 🟢 | **🟢** | Micro-copy expliquant qu'ils sont orthogonaux |
-| **Piège nouveau gymnase** : après ajout d'un 2ᵉ gymnase, sélection reste sur le 1ᵉʳ → créneaux posés sur le mauvais | 🟢 | **🟢** | Fix : auto-sélectionner le gymnase créé |
+| **Piège nouveau gymnase** : après ajout d'un 2ᵉ gymnase, sélection reste sur le 1ᵉʳ → créneaux posés sur le mauvais | 🟢 | **🟢** | **✅ Livré** : le gymnase créé est auto-sélectionné (`VenuesStep`, `onSuccess`) → les créneaux tombent au bon endroit |
 | **Polarité des jours invisible** : cocher un jour l'*interdit* (sens visible seulement après enregistrement) | 🟢 | **🟢** | Fix : label « éviter ces jours » |
 | **Pas d'indicateur « étape terminée »** dans le rail (navigation libre pour club existant) | 🟢 | **🟢** | Fix : coches d'état par étape |
-| **Focus non géré** après ajout (pas de retour au champ) ; **pas de dimanche** dans la grille alors que les contraintes l'autorisent ; colonne coach « a » / « Sans coach » (donnée à trancher) | 🟢 | **🟢** | Détails de polish |
+| **Focus non géré** après ajout (pas de retour au champ) ; **pas de dimanche** dans la grille alors que les contraintes l'autorisent ; colonne coach « a » / « Sans coach » (donnée à trancher) | 🟢 | **🟢** | **Focus ✅ Livré** (retour au champ nom après ajout équipe/gymnase/coach). **Reste** : dimanche dans la grille (à trancher — entraînement dominical ?), colonne coach « a » |
 
 **Top 3 à faire en premier** (tous 🟢, ~1-2 j chacun, attaquent la confiance) : (1) feedback d'erreur global, (2) confirmation des suppressions, (3) libellés FR des contraintes + micro-copy Rang/Niveau.
 

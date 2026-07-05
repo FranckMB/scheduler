@@ -237,6 +237,7 @@ function TeamsEditor() {
   const reorder = useReorderTeams();
 
   const [name, setName] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
   const [catId, setCatId] = useState("");
   const [tierId, setTierId] = useState(1);
   const [gender, setGender] = useState<Gender | "">("");
@@ -269,6 +270,8 @@ function TeamsEditor() {
       isActive: true,
     });
     setName("");
+    // Return focus to the name field so the next team can be typed straight away.
+    nameRef.current?.focus();
   };
 
   // --- Sort mode: local reordering, committed atomically on exit ---
@@ -462,7 +465,7 @@ function TeamsEditor() {
       ) : (
         <>
           <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 text-sm">
-            <Input aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-40 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input ref={nameRef} aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-40 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
             <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
