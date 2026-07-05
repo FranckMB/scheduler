@@ -7,10 +7,12 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -110,6 +112,18 @@ final class ScheduleOverlayCreationTest extends WebTestCase
 
         // Club A tries to overlay club B's entry → invisible under RLS → 422.
         $this->post($userA, $clubA, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entryB->getId()]);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testOverlayRejectedWithoutBaseline(): void
+    {
+        [$user, $club, $season] = $this->seed('OV9');
+        // Remove the seeded baseline → no socle yet.
+        $season->setBaselineScheduleId(null);
+        $this->em->flush();
+        $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
+
+        $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
         self::assertResponseStatusCodeSame(422);
     }
 
@@ -222,6 +236,17 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
         $season->setStatus('active');
         $this->em->persist($season);
+        $this->em->flush();
+
+        // An overlay is only allowed once the season has a validated baseline.
+        $baseline = new Schedule;
+        $baseline->setClubId($club->getId());
+        $baseline->setSeasonId($season->getId());
+        $baseline->setName('Baseline');
+        $baseline->setStatus(ScheduleStatus::VALIDATED);
+        $this->em->persist($baseline);
+        $this->em->flush();
+        $season->setBaselineScheduleId($baseline->getId());
 
         $this->em->flush();
 

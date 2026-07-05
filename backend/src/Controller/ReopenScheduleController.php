@@ -72,9 +72,16 @@ final class ReopenScheduleController extends AbstractController
                         ], $overlays),
                     ], Response::HTTP_CONFLICT);
                 }
-                foreach ($overlays as $entry) {
-                    $this->overlayManager->deleteOverlayForEntry($entry);
-                }
+                // Atomic: all overlay deletions + the reopen commit together (a
+                // mid-loop failure must not leave a half-deleted, still-locked state).
+                $this->entityManager->wrapInTransaction(function () use ($overlays, $schedule): void {
+                    foreach ($overlays as $entry) {
+                        $this->overlayManager->deleteOverlayForEntry($entry);
+                    }
+                    $schedule->setStatus(ScheduleStatus::COMPLETED);
+                });
+
+                return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::COMPLETED->value], Response::HTTP_OK);
             }
         }
 

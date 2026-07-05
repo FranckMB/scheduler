@@ -13,7 +13,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'schedule')]
 #[ORM\Index(name: 'idx_schedule_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_schedule_status', columns: ['status'])]
-#[ORM\Index(name: 'idx_schedule_calendar_entry', columns: ['calendar_entry_id'])]
+// Partial-unique: at most one overlay schedule per period entry (palier B).
+#[ORM\UniqueConstraint(name: 'uniq_schedule_calendar_entry', columns: ['calendar_entry_id'], options: ['where' => '(calendar_entry_id IS NOT NULL)'])]
 #[ORM\HasLifecycleCallbacks]
 class Schedule implements TenantOwnedInterface
 {

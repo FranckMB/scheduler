@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
 use App\Entity\Schedule;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\User;
@@ -124,11 +125,45 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         );
     }
 
+    public function testBaseBuildExcludesOverlaySlots(): void
+    {
+        [$club, $season] = $this->seed();
+        // A base schedule with one slot, and an overlay schedule with one slot.
+        $base = $this->overlaySchedule($club, $season, null, 'baaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+        $entry = $this->closurePeriod($club, $season);
+        $overlay = $this->overlaySchedule($club, $season, $entry, 'ceeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+        $baseVenue = '10000000-0000-4000-8000-000000000001';
+        $overlayVenue = '20000000-0000-4000-8000-000000000002';
+        $this->slot($base, $baseVenue);
+        $this->slot($overlay, $overlayVenue);
+        $this->em->flush();
+
+        $payload = $this->builder->buildForClubSeason($club->getId(), $season->getId());
+
+        $venues = array_map(static fn (array $s): string => $s['venueId'], $payload['slotTemplates']);
+        self::assertContains($baseVenue, $venues, 'base slots feed the base build');
+        self::assertNotContains($overlayVenue, $venues, 'overlay slots must NOT leak into the base build');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->builder = self::getContainer()->get(ScheduleConstraintBuilder::class);
+    }
+
+    private function slot(Schedule $schedule, string $venueId): void
+    {
+        $slot = new ScheduleSlotTemplate;
+        $slot->setClubId($schedule->getClubId());
+        $slot->setSeasonId($schedule->getSeasonId());
+        $slot->setScheduleId($schedule->getId());
+        $slot->setTeamId('99999999-9999-4999-8999-999999999999');
+        $slot->setVenueId($venueId);
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $this->em->persist($slot);
     }
 
     private function team(Club $club, Season $season, string $name): Team
@@ -182,14 +217,17 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         return $entry;
     }
 
-    private function overlaySchedule(Club $club, Season $season, CalendarEntry $entry): Schedule
+    private function overlaySchedule(Club $club, Season $season, ?CalendarEntry $entry, ?string $id = null): Schedule
     {
         $schedule = new Schedule;
+        if (null !== $id) {
+            $schedule->setId($id);
+        }
         $schedule->setClubId($club->getId());
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::DRAFT);
-        $schedule->setCalendarEntryId($entry->getId());
+        $schedule->setCalendarEntryId($entry?->getId());
         $this->em->persist($schedule);
 
         return $schedule;

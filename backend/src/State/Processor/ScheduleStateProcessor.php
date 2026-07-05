@@ -8,6 +8,7 @@ use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
+use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
@@ -65,6 +66,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             if (null !== $entry->getOverlayScheduleId()) {
                 throw new UnprocessableEntityHttpException('This period already has an overlay schedule.');
             }
+            // An overlay is built ON the socle: the season must have a baseline
+            // (otherwise the club would be onboarded with only an overlay, no base).
+            $season = $this->entityManager->getRepository(Season::class)->find($entry->getSeasonId());
+            if (!$season instanceof Season || null === $season->getBaselineScheduleId()) {
+                throw new UnprocessableEntityHttpException('The season has no baseline plan yet — validate the base plan first.');
+            }
+            // Bind the overlay to the ENTRY's season (not the active one) so the
+            // build reads the right season's structure + dated constraints.
+            $seasonId = $entry->getSeasonId();
         }
 
         /** @var ScheduleResource $output */

@@ -22,12 +22,14 @@ final class Version20260705120000 extends AbstractMigration
     public function up(Schema $schema): void
     {
         $this->addSql('ALTER TABLE schedule ADD calendar_entry_id UUID DEFAULT NULL');
-        $this->addSql('CREATE INDEX idx_schedule_calendar_entry ON schedule (calendar_entry_id)');
+        // Partial-unique: at most one overlay schedule per period entry — the DB
+        // backstop behind the app-level 422 guard (defeats a concurrent double POST).
+        $this->addSql('CREATE UNIQUE INDEX uniq_schedule_calendar_entry ON schedule (calendar_entry_id) WHERE calendar_entry_id IS NOT NULL');
     }
 
     public function down(Schema $schema): void
     {
-        $this->addSql('DROP INDEX idx_schedule_calendar_entry');
+        $this->addSql('DROP INDEX uniq_schedule_calendar_entry');
         $this->addSql('ALTER TABLE schedule DROP calendar_entry_id');
     }
 }

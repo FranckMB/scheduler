@@ -109,7 +109,9 @@ final class ScheduleConstraintBuilder
             coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId, $em),
             teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId, $em),
             coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId, $em),
-            slotTemplates: $this->findByClubSeason(ScheduleSlotTemplate::class, $clubId, $seasonId, $em),
+            // Base plan only: exclude OVERLAY schedules' slot templates (palier B),
+            // otherwise an overlay's locks would leak into the base generation.
+            slotTemplates: $this->findBaseSlotTemplates($clubId, $seasonId, $em),
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $solverSeed,
             constraints: $constraints,
@@ -351,6 +353,26 @@ final class ScheduleConstraintBuilder
             ['clubId' => $clubId, 'seasonId' => $seasonId],
             ['id' => 'ASC'],
         );
+    }
+
+    /**
+     * Slot templates of the club/season that belong to a BASE schedule (not an
+     * overlay). Excludes overlay slots — and orphan slots whose schedule row is
+     * gone — from base-plan generation. See palier B.
+     *
+     * @return array<ScheduleSlotTemplate>
+     */
+    private function findBaseSlotTemplates(string $clubId, string $seasonId, EntityManagerInterface $em): array
+    {
+        return $em->getRepository(ScheduleSlotTemplate::class)->createQueryBuilder('s')
+            ->andWhere('s.clubId = :clubId')
+            ->andWhere('s.seasonId = :seasonId')
+            ->andWhere('s.scheduleId IN (SELECT sch.id FROM ' . Schedule::class . ' sch WHERE sch.clubId = :clubId AND sch.seasonId = :seasonId AND sch.calendarEntryId IS NULL)')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->orderBy('s.id', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     /** @return array<string, mixed> */

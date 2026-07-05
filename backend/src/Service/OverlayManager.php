@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\CalendarEntry;
+use App\Entity\ConstraintConflict;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
+use App\Enum\ScheduleStatus;
 use App\Repository\CalendarEntryRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
  * Centralises overlay-schedule deletion (palier B). An overlay schedule's slots
@@ -26,7 +29,11 @@ final class OverlayManager
         private readonly CalendarEntryRepository $calendarEntryRepository,
     ) {}
 
-    /** Delete the overlay schedule of a period entry (if any) and clear the link. */
+    /**
+     * Delete the overlay schedule of a period entry (if any) and clear the link.
+     * Refuses (409) while the overlay is mid-generation — deleting it out from
+     * under the worker would orphan the slots it is about to import.
+     */
     public function deleteOverlayForEntry(CalendarEntry $entry): void
     {
         $overlayId = $entry->getOverlayScheduleId();
@@ -36,6 +43,7 @@ final class OverlayManager
 
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($overlayId);
         if ($schedule instanceof Schedule) {
+            $this->assertNotGenerating($schedule);
             $this->purgeArtifacts($overlayId);
             $this->entityManager->remove($schedule);
         }
@@ -45,16 +53,28 @@ final class OverlayManager
     }
 
     /**
-     * Purge a schedule's slots + diagnostics and reset any period entry pointing
-     * at it. Used when a Schedule is deleted directly (DELETE /api/schedules).
+     * Purge a schedule's slots + diagnostics + conflicts and reset the linked
+     * period entry. Used when a Schedule is deleted directly (DELETE /api/schedules).
      */
     public function purgeScheduleArtifacts(Schedule $schedule): void
     {
+        $this->assertNotGenerating($schedule);
         $this->purgeArtifacts($schedule->getId());
 
-        $entry = $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
+        // Forward link on the schedule identifies the entry directly; fall back
+        // to the reverse lookup for pre-palier-B rows with no marker.
+        $entry = null !== $schedule->getCalendarEntryId()
+            ? $this->entityManager->getRepository(CalendarEntry::class)->find($schedule->getCalendarEntryId())
+            : $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
         if ($entry instanceof CalendarEntry) {
             $entry->setOverlayScheduleId(null);
+        }
+    }
+
+    private function assertNotGenerating(Schedule $schedule): void
+    {
+        if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+            throw new ConflictHttpException('The overlay is being generated — wait for it to finish before deleting it.');
         }
     }
 
@@ -67,6 +87,9 @@ final class OverlayManager
         }
         foreach ($this->entityManager->getRepository(ScheduleDiagnostic::class)->findBy(['scheduleId' => $scheduleId]) as $diagnostic) {
             $this->entityManager->remove($diagnostic);
+        }
+        foreach ($this->entityManager->getRepository(ConstraintConflict::class)->findBy(['scheduleId' => $scheduleId]) as $conflict) {
+            $this->entityManager->remove($conflict);
         }
     }
 }
