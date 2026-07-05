@@ -38,7 +38,12 @@
 ### 1.5 Erreurs de saisie zone (correction audit)
 - ☐ Écran /club : la zone scolaire n'accepte que **A, B ou C** (autre valeur → erreur 422 affichée, plus d'échec silencieux).
 
-### 1.6 Réinitialiser le club (QW-4 + correction audit)
+### 1.6 Quick wins confiance saisie (PR #60)
+- ☐ **Auto-sélection gymnase** : étape Gymnases, ajoute un 2ᵉ gymnase → il devient **sélectionné automatiquement** (le panneau bascule dessus). Pose un créneau → il tombe bien sur le nouveau gymnase, pas sur le 1ᵉʳ.
+- ☐ **Pas de flash d'erreur au chargement** : recharge le wizard (F5) sur l'étape Équipes/Gymnases/Coachs → **aucun** « Ajoutez au moins une équipe/gymnase/coach » rouge ne clignote avant l'affichage des données.
+- ☐ **Focus rendu au champ** : ajoute une équipe (Entrée ou bouton +) → le curseur **repart direct dans le champ nom**, prêt pour la suivante. Idem sur Gymnases (champ nom) et Coachs (champ prénom).
+
+### 1.7 Réinitialiser le club (QW-4 + correction audit)
 À faire **en dernier** de cette section si tu veux garder tes données, ou sur un club jetable :
 - ☐ /club → « Réinitialiser » : modale de confirmation « Tout supprimer ».
 - ☐ Après reset : équipes, gymnases, **créneaux d'entraînement**, coachs, plannings, **entrées du calendrier cockpit** tous vides ; l'accueil redevient le work-loop (le jalon socle est remis à zéro). *(Correction audit : avant, les créneaux et le calendrier survivaient au reset.)*
