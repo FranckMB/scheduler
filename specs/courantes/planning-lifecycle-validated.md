@@ -109,7 +109,7 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED �
 - **Zone** : `backend/src` (Enum, Entity, Controller, State, Dto) + `backend/tests` + `frontend/src/features/planning` (+ union `wizard/api.ts`).
 - **Interdit** : `engine/**` (aucun changement) · `specs/initiales/**` · la **cascade** baseline→secondaires · le modèle occurrences.
 - **Fichiers probables** : `Enum/ScheduleStatus.php`, `Controller/{ValidateSchedule,Reopen,SetBaseline}Controller.php`, `Controller/GenerateScheduleController.php`, `Controller/ManualEditController.php`, `State/Processor/{Schedule,ScheduleSlotTemplate}StateProcessor.php`, `Dto/ScheduleInput.php` ; front `planning/{api,queries,PlanningToolbar,PlanningPage,SlotDetail,WeekGrid}.tsx`, `wizard/api.ts`. **Tests** : `ValidateScheduleTest`, `ReopenScheduleTest`, `SetBaselineTest`, gardes, tenant.
-- **Doc** : cette spec + `roadmap.md` (N3) + `backend-gaps.md` si pertinent.
+- **Doc** : cette spec + `roadmap.md` (N3).
 - **Revalidation si** : besoin de la cascade, ou fuite du statut dans le contrat engine, ou impact multi-zone non prévu.
 - **Aucun refactoring hors scope.**
 - **Ordre commits** : (1) backend enum+endpoints+gardes+tests → (2) frontend → (3) doc.

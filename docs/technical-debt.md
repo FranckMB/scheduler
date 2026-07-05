@@ -78,7 +78,7 @@ _The dormant two-pass fallback is an intentional, documented single-pass design;
 
 ### ✅ E6 — PREFERRED TIME TODOs moved to backlog — RESOLVED 2026-07-01
 - **Was:** two `# TODO: PREFERRED TIME not implemented` in `objective.py` + `constraints.py`.
-- **Fix:** replaced both with a pointer to a new backlog entry in `specs/evolution/features-futures.md` ("Backlog — PREFERRED TIME"), which lists both code sites.
+- **Fix:** replaced both with a pointer to a backlog entry ("Backlog — PREFERRED TIME"). *(That backlog file, `features-futures.md`, was since absorbed into `specs/evolution/roadmap.md`; PREFERRED TIME itself was delivered 2026-07-03, ENGINE series.)*
 
 > No dead modules, no obsolete files, no import cycles in `engine/`.
 
