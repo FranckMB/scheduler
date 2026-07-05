@@ -15,6 +15,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
+use App\Repository\PeriodReminderLogRepository;
 use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
 use App\Service\TenantConnectionContext;
@@ -24,6 +25,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
@@ -31,8 +33,8 @@ use Symfony\Component\Mime\RawMessage;
 
 /**
  * The reminder cron emails a club's managers about periods without an overlay
- * plan at J-14/J-7/J-3 — never auto-acting, tenant-isolated, and resilient to a
- * single club failing.
+ * plan, once per milestone (14/7/3-day bucket) via a sent-log — catch-up-safe,
+ * tenant-isolated, and red (exit non-zero) when the mailer is down.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -40,53 +42,54 @@ final class PeriodReminderCommandTest extends KernelTestCase
 {
     use TenantGucTrait;
 
+    private const TODAY = '2026-01-15';
+
     private EntityManagerInterface $em;
 
-    /** @var list<string> recipient emails captured by the spy mailer */
+    /** @var list<string> */
     private array $sentTo = [];
 
-    /** @var list<string> subjects captured by the spy mailer */
+    /** @var list<string> */
     private array $sentSubjects = [];
 
     private string $throwForRecipient = '';
 
-    public function testRemindsManagersAtEachThreshold(): void
+    public function testRemindsManagersInEachBucket(): void
     {
         foreach ([14, 7, 3] as $days) {
-            $this->sentTo = [];
-            $this->sentSubjects = [];
+            $this->reset();
             [, $season, $admin] = $this->seedClub('T' . $days);
-            $this->period($season, $this->today()->modify("+{$days} days"));
+            $this->period($season, $this->plus($days));
             $this->em->flush();
 
-            $this->runCommand('2026-01-15');
+            $this->runCommand();
 
-            self::assertContains($admin, $this->sentTo, "J-{$days} must email the manager");
+            self::assertContains($admin, $this->sentTo, "a period at J-{$days} must email the manager");
         }
     }
 
     public function testJ3SubjectIsRed(): void
     {
         [, $season] = $this->seedClub('RED');
-        $this->period($season, $this->today()->modify('+3 days'));
+        $this->period($season, $this->plus(2));
         $this->em->flush();
 
-        $this->runCommand('2026-01-15');
+        $this->runCommand();
 
         self::assertNotEmpty($this->sentSubjects);
         self::assertStringStartsWith('🔴', $this->sentSubjects[0]);
     }
 
-    public function testNoReminderWithOverlayOrOffThreshold(): void
+    public function testExcludedEntriesNeverRemind(): void
     {
-        [, $season, $admin] = $this->seedClub('OFF');
-        $this->period($season, $this->today()->modify('+14 days'), overlay: true); // has plan
-        $this->period($season, $this->today()->modify('+10 days')); // off threshold
-        $this->period($season, $this->today()->modify('-1 days')); // already started
-        $this->period($season, $this->today()->modify('+7 days'), status: CalendarEntryStatus::IGNORED); // ignored
+        [, $season, $admin] = $this->seedClub('EXC');
+        $this->period($season, $this->plus(14), overlay: true); // has plan
+        $this->period($season, $this->plus(7), status: CalendarEntryStatus::IGNORED); // ignored
+        $this->period($season, $this->plus(-1)); // already started
+        $this->period($season, $this->plus(20)); // beyond horizon
         $this->em->flush();
 
-        $this->runCommand('2026-01-15');
+        $this->runCommand();
 
         self::assertNotContains($admin, $this->sentTo);
         self::assertSame([], $this->sentTo);
@@ -95,47 +98,59 @@ final class PeriodReminderCommandTest extends KernelTestCase
     public function testDryRunSendsNothing(): void
     {
         [, $season] = $this->seedClub('DRY');
-        $this->period($season, $this->today()->modify('+14 days'));
+        $this->period($season, $this->plus(14));
         $this->em->flush();
 
-        $tester = $this->runCommand('2026-01-15', ['--dry-run' => true]);
+        $tester = $this->runCommand(dryRun: true);
 
         self::assertSame([], $this->sentTo);
         self::assertStringContainsString('would remind', $tester->getDisplay());
+        $this->em->clear();
     }
 
     public function testTenantIsolationBetweenClubs(): void
     {
         [, $seasonA, $adminA] = $this->seedClub('ISOA');
         [, $seasonB, $adminB] = $this->seedClub('ISOB');
-        $this->seedClub('ISOC'); // no period → must get nothing
-        $this->period($seasonA, $this->today()->modify('+14 days'));
-        $this->period($seasonB, $this->today()->modify('+7 days'));
+        $this->seedClub('ISOC'); // no period → gets nothing
+        $this->period($seasonA, $this->plus(14));
+        $this->period($seasonB, $this->plus(7));
         $this->em->flush();
 
-        $this->runCommand('2026-01-15');
+        $this->runCommand();
 
-        // Each manager only receives their own club's reminder.
-        self::assertSame([$adminA], array_values(array_unique(array_filter($this->sentTo, static fn (string $e): bool => $e === $adminA))));
         self::assertContains($adminA, $this->sentTo);
         self::assertContains($adminB, $this->sentTo);
         self::assertCount(2, $this->sentTo);
     }
 
-    public function testResilientToAFailingClub(): void
+    public function testResilientToAFailingClubAndReturnsFailure(): void
     {
         [, $seasonA, $adminA] = $this->seedClub('FAILA');
         [, $seasonB, $adminB] = $this->seedClub('FAILB');
-        $this->period($seasonA, $this->today()->modify('+14 days'));
-        $this->period($seasonB, $this->today()->modify('+14 days'));
+        $this->period($seasonA, $this->plus(14));
+        $this->period($seasonB, $this->plus(14));
         $this->em->flush();
 
-        // The mailer throws for club A's manager; club B must still be reminded.
         $this->throwForRecipient = $adminA;
-        $this->runCommand('2026-01-15');
+        $tester = $this->runCommand(expectSuccess: false);
 
+        self::assertSame(Command::FAILURE, $tester->getStatusCode(), 'a send failure must exit non-zero for cron monitors');
         self::assertNotContains($adminA, $this->sentTo);
         self::assertContains($adminB, $this->sentTo);
+    }
+
+    public function testMailerOutageExitsFailure(): void
+    {
+        [, $season, $admin] = $this->seedClub('OUT');
+        $this->period($season, $this->plus(14));
+        $this->em->flush();
+
+        $this->throwForRecipient = $admin;
+        $tester = $this->runCommand(expectSuccess: false);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertSame([], $this->sentTo);
     }
 
     public function testOnlyManagementRolesAreEmailed(): void
@@ -144,24 +159,51 @@ final class PeriodReminderCommandTest extends KernelTestCase
         $this->addMember($club, 'editor@club.fr', 'editor', true);
         $this->addMember($club, 'viewer@club.fr', 'viewer', true);
         $this->addMember($club, 'inactive@club.fr', 'admin', false);
-        $this->period($season, $this->today()->modify('+14 days'));
+        $this->period($season, $this->plus(14));
         $this->em->flush();
 
-        $this->runCommand('2026-01-15');
+        $this->runCommand();
 
         self::assertSame([$admin], $this->sentTo);
     }
 
-    public function testDailyIdempotence(): void
+    public function testIdempotentViaLog(): void
     {
         [, $season, $admin] = $this->seedClub('IDEM');
-        $this->period($season, $this->today()->modify('+14 days'));
+        $this->period($season, $this->plus(14));
         $this->em->flush();
 
-        // Runs the day after: the J-14 period is now J-13, no threshold matches.
-        $this->runCommand('2026-01-16');
+        $this->runCommand(); // logs bucket 14
+        self::assertSame([$admin], $this->sentTo);
 
-        self::assertNotContains($admin, $this->sentTo);
+        $this->reset();
+        $this->runCommand(); // same bucket already logged → nothing
+        self::assertSame([], $this->sentTo);
+    }
+
+    public function testCatchUpAfterAMissedRun(): void
+    {
+        [, $season, $admin] = $this->seedClub('CATCH');
+        // Period starts in 10 days; the J-14 run never happened. A run today must
+        // still emit the (unsent) bucket-14 reminder — no reminder is lost.
+        $this->period($season, $this->plus(10));
+        $this->em->flush();
+
+        $this->runCommand();
+
+        self::assertContains($admin, $this->sentTo);
+    }
+
+    public function testInvalidDateExitsFailureWithoutSending(): void
+    {
+        [, $season] = $this->seedClub('BADDATE');
+        $this->period($season, $this->plus(14));
+        $this->em->flush();
+
+        $tester = $this->runCommand(date: '2026-02-30', expectSuccess: false);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertSame([], $this->sentTo);
     }
 
     protected function setUp(): void
@@ -170,15 +212,18 @@ final class PeriodReminderCommandTest extends KernelTestCase
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
     }
 
-    private function today(): DateTimeImmutable
+    private function reset(): void
     {
-        return new DateTimeImmutable('2026-01-15 00:00:00');
+        $this->sentTo = [];
+        $this->sentSubjects = [];
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    private function runCommand(string $date, array $options = []): CommandTester
+    private function plus(int $days): DateTimeImmutable
+    {
+        return new DateTimeImmutable(self::TODAY)->modify(\sprintf('%+d days', $days));
+    }
+
+    private function runCommand(string $date = self::TODAY, bool $expectSuccess = true, bool $dryRun = false): CommandTester
     {
         $container = self::getContainer();
         $mailer = $this->createMock(MailerInterface::class);
@@ -200,12 +245,15 @@ final class PeriodReminderCommandTest extends KernelTestCase
             $container->get(CalendarEntryRepository::class),
             $container->get(ClubUserRepository::class),
             $container->get(SeasonRepository::class),
+            $container->get(PeriodReminderLogRepository::class),
             new PeriodReminderMailBuilder('http://localhost:5173'),
         );
 
         $tester = new CommandTester($command);
-        $tester->execute(['--date' => $date, ...$options]);
-        $tester->assertCommandIsSuccessful();
+        $tester->execute($dryRun ? ['--date' => $date, '--dry-run' => true] : ['--date' => $date]);
+        if ($expectSuccess) {
+            $tester->assertCommandIsSuccessful();
+        }
 
         return $tester;
     }
@@ -226,7 +274,6 @@ final class PeriodReminderCommandTest extends KernelTestCase
             $entry->setOverlayScheduleId('99999999-9999-4999-8999-999999999999');
         }
         $this->em->persist($entry);
-        // Flush under THIS club's GUC (RLS WITH CHECK) before another club scopes it.
         $this->em->flush();
     }
 
@@ -252,7 +299,7 @@ final class PeriodReminderCommandTest extends KernelTestCase
     }
 
     /**
-     * @return array{0: Club, 1: Season, 2: string} club, season, admin email
+     * @return array{0: Club, 1: Season, 2: string}
      */
     private function seedClub(string $tag): array
     {

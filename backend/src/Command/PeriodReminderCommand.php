@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
+use App\Entity\PeriodReminderLog;
 use App\Entity\Season;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
+use App\Repository\PeriodReminderLogRepository;
 use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
 use App\Service\TenantConnectionContext;
@@ -38,8 +41,10 @@ use Throwable;
 )]
 final class PeriodReminderCommand extends Command
 {
-    /** Days-before-start thresholds that trigger a reminder. J-3 is the "red" one. */
-    private const THRESHOLDS = [14, 7, 3];
+    /** Milestone buckets (days-before-start). The furthest is also the horizon. J-3 is "red". */
+    private const HORIZON = 14;
+
+    private bool $hadSendFailure = false;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -48,6 +53,7 @@ final class PeriodReminderCommand extends Command
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonRepository $seasonRepository,
+        private readonly PeriodReminderLogRepository $reminderLogRepository,
         private readonly PeriodReminderMailBuilder $mailBuilder,
     ) {
         parent::__construct();
@@ -63,7 +69,13 @@ final class PeriodReminderCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $dryRun = (bool) $input->getOption('dry-run');
+
         $today = $this->resolveToday($input->getOption('date'));
+        if (!$today instanceof DateTimeImmutable) {
+            $io->error('Invalid --date: expected a real calendar date YYYY-MM-DD.');
+
+            return Command::FAILURE;
+        }
 
         $clubIds = array_map(
             static fn (Club $club): string => $club->getId(),
@@ -86,7 +98,9 @@ final class PeriodReminderCommand extends Command
 
         $io->success(\sprintf('%d reminder email(s) %s.', $sent, $dryRun ? 'detected (dry-run)' : 'sent'));
 
-        return Command::SUCCESS;
+        // Exit non-zero if any send failed so a cron monitor sees the outage
+        // (a total mailer failure must NOT look like a healthy run).
+        return $this->hadSendFailure ? Command::FAILURE : Command::SUCCESS;
     }
 
     private function remindClub(string $clubId, DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io): int
@@ -98,41 +112,84 @@ final class PeriodReminderCommand extends Command
             return 0;
         }
 
-        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
-        if (!$club instanceof Club) {
-            return 0;
+        $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
+        if ([] === $periods) {
+            return 0; // No period in the horizon → skip the manager/club lookups.
         }
 
+        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
         $emails = $this->clubUserRepository->findManagementEmails($clubId);
 
         $sent = 0;
-        foreach (self::THRESHOLDS as $days) {
-            $targetDate = $today->modify(\sprintf('+%d days', $days));
-            foreach ($this->calendarEntryRepository->findPeriodsWithoutOverlayStartingOn($clubId, $season->getId(), $targetDate) as $entry) {
-                if ($dryRun) {
-                    $io->writeln(\sprintf('  <comment>would remind</comment> J-%d · %s (club %s) → %d manager(s)', $days, $entry->getTitle(), $clubId, \count($emails)));
-                    $sent += \count($emails);
+        foreach ($periods as $entry) {
+            $days = (int) $today->diff($entry->getStartDate())->format('%r%a');
+            $threshold = $this->bucket($days);
+            if (null === $threshold || $this->reminderLogRepository->alreadySent($entry->getId(), $threshold)) {
+                continue; // outside a bucket, or this milestone already emailed.
+            }
 
-                    continue;
+            if ($dryRun) {
+                $io->writeln(\sprintf('  <comment>would remind</comment> J-%d (bucket %d) · %s (club %s) → %d manager(s)', $days, $threshold, $entry->getTitle(), $clubId, \count($emails)));
+                $sent += \count($emails);
+
+                continue;
+            }
+
+            $sentForEntry = 0;
+            foreach ($emails as $to) {
+                try {
+                    $this->mailer->send($this->mailBuilder->build($to, $club instanceof Club ? $club->getName() : '', $entry, $days));
+                    ++$sentForEntry;
+                } catch (Throwable $e) {
+                    $this->hadSendFailure = true;
+                    $io->warning(\sprintf('Email to %s failed: %s', $to, $e->getMessage()));
                 }
-                foreach ($emails as $to) {
-                    try {
-                        $this->mailer->send($this->mailBuilder->build($to, $club->getName(), $entry, $days));
-                        ++$sent;
-                    } catch (Throwable $e) {
-                        $io->warning(\sprintf('Email to %s failed: %s', $to, $e->getMessage()));
-                    }
-                }
+            }
+            $sent += $sentForEntry;
+
+            // Mark the milestone sent only if it actually reached someone, so a
+            // failed run retries it next time instead of losing it.
+            if ($sentForEntry > 0) {
+                $this->markSent($entry, $threshold);
             }
         }
 
         return $sent;
     }
 
-    private function resolveToday(mixed $dateOption): DateTimeImmutable
+    private function markSent(CalendarEntry $entry, int $threshold): void
     {
-        $raw = \is_string($dateOption) && 1 === preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateOption) ? $dateOption : 'today';
+        $this->entityManager->persist(
+            (new PeriodReminderLog)->setCalendarEntryId($entry->getId())->setThreshold($threshold),
+        );
+        $this->entityManager->flush();
+    }
 
-        return new DateTimeImmutable($raw . ' 00:00:00');
+    /** The milestone bucket a period is in: 14 (>7..14d), 7 (>3..7d), 3 (0..3d), null otherwise. */
+    private function bucket(int $days): ?int
+    {
+        if ($days < 0 || $days > self::HORIZON) {
+            return null;
+        }
+        if ($days <= 3) {
+            return 3;
+        }
+
+        return $days <= 7 ? 7 : 14;
+    }
+
+    /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). Default = today. */
+    private function resolveToday(mixed $dateOption): ?DateTimeImmutable
+    {
+        if (!\is_string($dateOption) || '' === $dateOption) {
+            return new DateTimeImmutable('today');
+        }
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateOption);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $date || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+
+        return $date;
     }
 }

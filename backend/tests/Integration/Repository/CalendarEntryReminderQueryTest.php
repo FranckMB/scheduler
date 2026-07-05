@@ -20,8 +20,8 @@ use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
- * findPeriodsWithoutOverlayStartingOn feeds the reminder cron: exact-date match,
- * period + active + no-overlay only, tenant-scoped.
+ * findUpcomingPeriodsWithoutOverlay feeds the reminder cron: [today, today+14]
+ * window, period + active + no-overlay only, tenant-scoped.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -29,7 +29,8 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
 {
     use TenantGucTrait;
 
-    private const TARGET = '2026-05-04';
+    private const TODAY = '2026-04-30';
+    private const IN_WINDOW = '2026-05-04'; // today + 4
 
     private EntityManagerInterface $em;
 
@@ -39,52 +40,51 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
     {
         [$club, $season] = $this->seed('Q1');
         foreach ([CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY, CalendarEntryPeriodType::CUTOFF, CalendarEntryPeriodType::CUSTOM] as $type) {
-            $this->entry($club, $season, self::TARGET, kind: CalendarEntryKind::PERIOD, periodType: $type);
+            $this->entry($club, $season, self::IN_WINDOW, kind: CalendarEntryKind::PERIOD, periodType: $type);
         }
         $this->em->flush();
 
-        $rows = $this->repo->findPeriodsWithoutOverlayStartingOn($club->getId(), $season->getId(), new DateTimeImmutable(self::TARGET));
+        $rows = $this->query($club, $season);
         self::assertCount(4, $rows);
     }
 
-    public function testExcludesOverlayEventStatusDateAndSeason(): void
+    public function testExcludesOverlayEventStatusWindowAndSeason(): void
     {
         [$club, $season] = $this->seed('Q2');
-        $this->entry($club, $season, self::TARGET, overlay: true); // has plan
-        $this->entry($club, $season, self::TARGET, kind: CalendarEntryKind::EVENT); // event
-        $this->entry($club, $season, self::TARGET, status: CalendarEntryStatus::PROPOSED); // proposed
-        $this->entry($club, $season, self::TARGET, status: CalendarEntryStatus::IGNORED); // ignored
-        $this->entry($club, $season, '2026-05-05'); // off by one day
-        // Another season, same club, same date → excluded.
+        $this->entry($club, $season, self::IN_WINDOW, overlay: true); // has plan
+        $this->entry($club, $season, self::IN_WINDOW, kind: CalendarEntryKind::EVENT); // event
+        $this->entry($club, $season, self::IN_WINDOW, status: CalendarEntryStatus::PROPOSED); // proposed
+        $this->entry($club, $season, self::IN_WINDOW, status: CalendarEntryStatus::IGNORED); // ignored
+        $this->entry($club, $season, '2026-04-29'); // already started (before today)
+        $this->entry($club, $season, '2026-05-20'); // beyond the 14-day horizon
+        // Another season, same club, in window → excluded.
         $other = $this->season($club, 'archived');
-        $this->entry($club, $other, self::TARGET);
+        $this->entry($club, $other, self::IN_WINDOW);
         $this->em->flush();
 
-        $rows = $this->repo->findPeriodsWithoutOverlayStartingOn($club->getId(), $season->getId(), new DateTimeImmutable(self::TARGET));
-        self::assertSame([], $rows);
+        self::assertSame([], $this->query($club, $season));
     }
 
-    public function testTwoPeriodsSameDayBothReturned(): void
+    public function testWindowBounds(): void
     {
         [$club, $season] = $this->seed('Q3');
-        $this->entry($club, $season, self::TARGET);
-        $this->entry($club, $season, self::TARGET);
+        $this->entry($club, $season, self::TODAY); // day 0 → included
+        $this->entry($club, $season, '2026-05-14'); // today+14 → included
+        $this->entry($club, $season, '2026-05-15'); // today+15 → excluded
         $this->em->flush();
 
-        $rows = $this->repo->findPeriodsWithoutOverlayStartingOn($club->getId(), $season->getId(), new DateTimeImmutable(self::TARGET));
-        self::assertCount(2, $rows);
+        self::assertCount(2, $this->query($club, $season));
     }
 
     public function testOtherClubEntryInvisible(): void
     {
         [$clubA, $seasonA] = $this->seed('Q4A');
         [$clubB, $seasonB] = $this->seed('Q4B');
-        $this->entry($clubB, $seasonB, self::TARGET);
+        $this->entry($clubB, $seasonB, self::IN_WINDOW);
         $this->em->flush();
 
         $this->scopeGucToClub($clubA->getId());
-        $rows = $this->repo->findPeriodsWithoutOverlayStartingOn($clubA->getId(), $seasonA->getId(), new DateTimeImmutable(self::TARGET));
-        self::assertSame([], $rows);
+        self::assertSame([], $this->repo->findUpcomingPeriodsWithoutOverlay($clubA->getId(), $seasonA->getId(), new DateTimeImmutable(self::TODAY), 14));
     }
 
     protected function setUp(): void
@@ -92,6 +92,14 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->repo = self::getContainer()->get(CalendarEntryRepository::class);
+    }
+
+    /**
+     * @return list<CalendarEntry>
+     */
+    private function query(Club $club, Season $season): array
+    {
+        return $this->repo->findUpcomingPeriodsWithoutOverlay($club->getId(), $season->getId(), new DateTimeImmutable(self::TODAY), 14);
     }
 
     private function entry(

@@ -58,13 +58,14 @@ final class CalendarEntryRepository extends ServiceEntityRepository
 
     /**
      * Active period entries of the season that still have NO overlay plan and
-     * start exactly on $startDate — the reminder cron's J-14/J-7/J-3 targets.
-     * Only kind=PERIOD, status=ACTIVE carry an overlay; an event or a
-     * proposed/ignored entry is never reminded.
+     * start within [$today, $today + $horizonDays] — the reminder cron's horizon.
+     * A window (not an exact date) so a missed daily run still catches the period
+     * on the next run; the cron then picks the milestone bucket + dedups per
+     * (entry, threshold). Only kind=PERIOD, status=ACTIVE carry an overlay.
      *
      * @return list<CalendarEntry>
      */
-    public function findPeriodsWithoutOverlayStartingOn(string $clubId, string $seasonId, DateTimeImmutable $startDate): array
+    public function findUpcomingPeriodsWithoutOverlay(string $clubId, string $seasonId, DateTimeImmutable $today, int $horizonDays): array
     {
         return $this->createQueryBuilder('e')
             ->andWhere('e.clubId = :clubId')
@@ -72,12 +73,14 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->andWhere('e.kind = :kind')
             ->andWhere('e.status = :status')
             ->andWhere('e.overlayScheduleId IS NULL')
-            ->andWhere('e.startDate = :startDate')
+            ->andWhere('e.startDate >= :from')
+            ->andWhere('e.startDate <= :to')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
             ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
             ->setParameter('status', \App\Enum\CalendarEntryStatus::ACTIVE)
-            ->setParameter('startDate', $startDate->format('Y-m-d'))
+            ->setParameter('from', $today->format('Y-m-d'))
+            ->setParameter('to', $today->modify(\sprintf('+%d days', $horizonDays))->format('Y-m-d'))
             ->orderBy('e.startDate', 'ASC')
             ->getQuery()
             ->getResult();
