@@ -1,0 +1,195 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Command;
+
+use App\Entity\CalendarEntry;
+use App\Entity\Club;
+use App\Entity\PeriodReminderLog;
+use App\Entity\Season;
+use App\Repository\CalendarEntryRepository;
+use App\Repository\ClubUserRepository;
+use App\Repository\PeriodReminderLogRepository;
+use App\Repository\SeasonRepository;
+use App\Service\PeriodReminderMailBuilder;
+use App\Service\TenantConnectionContext;
+use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Mailer\MailerInterface;
+use Throwable;
+
+/**
+ * Daily reminder cron (cockpit palier C, v3 §8.2). Emails a club's managers when
+ * a period (closure/holiday/…) is approaching and still has NO overlay plan, at
+ * exactly J-14, J-7 and J-3 before it starts. It NEVER acts on its own — the
+ * radar surfaces the same to-dos in-app; this is the out-of-app nudge.
+ *
+ * Walks clubs on the runtime (RLS) connection like ReconcileStuckSchedulesCommand
+ * (club has no RLS policy → readable with empty GUC; each club's data read under
+ * its own GUC). A failure on one club never blocks the others.
+ */
+#[AsCommand(
+    name: 'app:periods:remind',
+    description: 'Email club managers about upcoming periods still lacking an overlay plan (J-14/J-7/J-3; never auto-acts).',
+)]
+final class PeriodReminderCommand extends Command
+{
+    /** Milestone buckets (days-before-start). The furthest is also the horizon. J-3 is "red". */
+    private const HORIZON = 14;
+
+    private bool $hadSendFailure = false;
+
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly TenantConnectionContext $tenantConnectionContext,
+        private readonly MailerInterface $mailer,
+        private readonly CalendarEntryRepository $calendarEntryRepository,
+        private readonly ClubUserRepository $clubUserRepository,
+        private readonly SeasonRepository $seasonRepository,
+        private readonly PeriodReminderLogRepository $reminderLogRepository,
+        private readonly PeriodReminderMailBuilder $mailBuilder,
+    ) {
+        parent::__construct();
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'List reminders without sending any email.');
+        $this->addOption('date', null, InputOption::VALUE_REQUIRED, 'Treat this YYYY-MM-DD as "today" (rehearsal/tests).');
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $io = new SymfonyStyle($input, $output);
+        $dryRun = (bool) $input->getOption('dry-run');
+
+        $today = $this->resolveToday($input->getOption('date'));
+        if (!$today instanceof DateTimeImmutable) {
+            $io->error('Invalid --date: expected a real calendar date YYYY-MM-DD.');
+
+            return Command::FAILURE;
+        }
+
+        $clubIds = array_map(
+            static fn (Club $club): string => $club->getId(),
+            $this->entityManager->getRepository(Club::class)->findAll(),
+        );
+        $this->entityManager->clear();
+
+        $sent = 0;
+        foreach ($clubIds as $clubId) {
+            try {
+                $sent += $this->remindClub($clubId, $today, $dryRun, $io);
+            } catch (Throwable $e) {
+                // One bad club must not block reminders for the others.
+                $io->warning(\sprintf('Club %s skipped: %s', $clubId, $e->getMessage()));
+            } finally {
+                $this->entityManager->clear();
+                $this->tenantConnectionContext->clear();
+            }
+        }
+
+        $io->success(\sprintf('%d reminder email(s) %s.', $sent, $dryRun ? 'detected (dry-run)' : 'sent'));
+
+        // Exit non-zero if any send failed so a cron monitor sees the outage
+        // (a total mailer failure must NOT look like a healthy run).
+        return $this->hadSendFailure ? Command::FAILURE : Command::SUCCESS;
+    }
+
+    private function remindClub(string $clubId, DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io): int
+    {
+        $this->tenantConnectionContext->setClubId($clubId);
+
+        $season = $this->seasonRepository->findActiveByClubId($clubId);
+        if (!$season instanceof Season) {
+            return 0;
+        }
+
+        $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
+        if ([] === $periods) {
+            return 0; // No period in the horizon → skip the manager/club lookups.
+        }
+
+        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
+        $emails = $this->clubUserRepository->findManagementEmails($clubId);
+
+        $sent = 0;
+        foreach ($periods as $entry) {
+            $days = (int) $today->diff($entry->getStartDate())->format('%r%a');
+            $threshold = $this->bucket($days);
+            if (null === $threshold || $this->reminderLogRepository->alreadySent($entry->getId(), $threshold)) {
+                continue; // outside a bucket, or this milestone already emailed.
+            }
+
+            if ($dryRun) {
+                $io->writeln(\sprintf('  <comment>would remind</comment> J-%d (bucket %d) · %s (club %s) → %d manager(s)', $days, $threshold, $entry->getTitle(), $clubId, \count($emails)));
+                $sent += \count($emails);
+
+                continue;
+            }
+
+            $sentForEntry = 0;
+            foreach ($emails as $to) {
+                try {
+                    $this->mailer->send($this->mailBuilder->build($to, $club instanceof Club ? $club->getName() : '', $entry, $days));
+                    ++$sentForEntry;
+                } catch (Throwable $e) {
+                    $this->hadSendFailure = true;
+                    $io->warning(\sprintf('Email to %s failed: %s', $to, $e->getMessage()));
+                }
+            }
+            $sent += $sentForEntry;
+
+            // Mark the milestone sent only if it actually reached someone, so a
+            // failed run retries it next time instead of losing it.
+            if ($sentForEntry > 0) {
+                $this->markSent($entry, $threshold);
+            }
+        }
+
+        return $sent;
+    }
+
+    private function markSent(CalendarEntry $entry, int $threshold): void
+    {
+        $this->entityManager->persist(
+            (new PeriodReminderLog)->setCalendarEntryId($entry->getId())->setThreshold($threshold),
+        );
+        $this->entityManager->flush();
+    }
+
+    /** The milestone bucket a period is in: 14 (>7..14d), 7 (>3..7d), 3 (0..3d), null otherwise. */
+    private function bucket(int $days): ?int
+    {
+        if ($days < 0 || $days > self::HORIZON) {
+            return null;
+        }
+        if ($days <= 3) {
+            return 3;
+        }
+
+        return $days <= 7 ? 7 : 14;
+    }
+
+    /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). Default = today. */
+    private function resolveToday(mixed $dateOption): ?DateTimeImmutable
+    {
+        if (!\is_string($dateOption) || '' === $dateOption) {
+            return new DateTimeImmutable('today');
+        }
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateOption);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $date || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+
+        return $date;
+    }
+}

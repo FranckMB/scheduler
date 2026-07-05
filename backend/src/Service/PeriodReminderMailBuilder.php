@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service;
+
+use App\Entity\CalendarEntry;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Mime\Email;
+
+/**
+ * Builds the "period without an overlay plan" reminder email (cockpit palier C).
+ * Isolated from the cron walker so the rendering is unit-testable on its own.
+ */
+final class PeriodReminderMailBuilder
+{
+    private const FROM_ADDRESS = 'no-reply@clubscheduler.app';
+
+    public function __construct(
+        #[Autowire('%env(default::FRONTEND_BASE_URL)%')]
+        private readonly string $frontendBaseUrl = '',
+    ) {}
+
+    public function build(string $to, string $clubName, CalendarEntry $entry, int $days): Email
+    {
+        $red = $days <= 3; // J-3 = the "red" alert (v3 §8.2).
+        $subject = \sprintf('%s %s dans %d j — pas de plan de période', $red ? '🔴' : '⏳', $entry->getTitle(), $days);
+
+        $lines = [
+            \sprintf('Club : %s', $clubName),
+            \sprintf('Période : %s', $entry->getTitle()),
+            \sprintf('Du %s au %s', $entry->getStartDate()->format('d/m/Y'), $entry->getEndDate()->format('d/m/Y')),
+            '',
+            \sprintf('Elle commence dans %d jour%s et n\'a pas encore de plan de période (calendrier secondaire).', $days, $days > 1 ? 's' : ''),
+            'Rien ne se fait tout seul — ouvre le cockpit pour l\'adapter.',
+        ];
+        if ('' !== $this->frontendBaseUrl) {
+            $lines[] = '';
+            $lines[] = rtrim($this->frontendBaseUrl, '/') . '/';
+        }
+
+        return (new Email)
+            ->from(self::FROM_ADDRESS)
+            ->to($to)
+            ->subject($subject)
+            ->text(implode("\n", $lines));
+    }
+}

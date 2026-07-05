@@ -64,4 +64,26 @@ final class ClubUserRepository extends ServiceEntityRepository
     {
         return \in_array($role, self::MANAGEMENT_ROLES, true);
     }
+
+    /**
+     * Emails of a club's active managers (owner + admin). Raw DBAL like
+     * findActiveClubIds so the tenant_filter does not narrow the result — the
+     * WHERE club_id already scopes it. Used by the reminder cron (no request
+     * tenant context). Editors/viewers and inactive memberships are excluded.
+     *
+     * @return list<string>
+     */
+    public function findManagementEmails(string $clubId): array
+    {
+        $placeholders = implode(', ', array_fill(0, \count(self::MANAGEMENT_ROLES), '?'));
+
+        /** @var list<string> $emails */
+        $emails = $this->getEntityManager()->getConnection()->fetchFirstColumn(
+            'SELECT u.email FROM club_user cu JOIN app_user u ON u.id = cu.user_id '
+            . 'WHERE cu.club_id = ? AND cu.is_active = true AND cu.role IN (' . $placeholders . ')',
+            [$clubId, ...self::MANAGEMENT_ROLES],
+        );
+
+        return $emails;
+    }
 }
