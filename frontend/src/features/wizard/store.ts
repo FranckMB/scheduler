@@ -13,11 +13,17 @@ export interface Reservation {
   durationMinutes: number;
 }
 
+/** "season" = base plan (onboarding/libre); "period" = overlay of a CalendarEntry (palier B). */
+export type WizardMode = "season" | "period";
+
 interface WizardState {
   stepId: WizardStepId;
   /** Furthest step index reached via "Suivant" — gates forward nav in guided mode. */
   maxIndex: number;
   reservations: Reservation[];
+  mode: WizardMode;
+  /** The period being adapted in "period" mode; null in "season" mode. */
+  calendarEntryId: string | null;
   setStep: (id: WizardStepId) => void;
   /** Go to a step and unlock everything up to it (resume-to-first-gap). */
   jumpTo: (id: WizardStepId) => void;
@@ -26,6 +32,10 @@ interface WizardState {
   addReservation: (r: Omit<Reservation, "id">) => void;
   removeReservation: (id: string) => void;
   clearReservations: () => void;
+  /** Enter period mode for a calendar entry — lands on Contraintes (structure is inherited). */
+  startPeriodMode: (calendarEntryId: string) => void;
+  /** Back to base-plan mode. */
+  exitPeriodMode: () => void;
 }
 
 const indexOf = (id: WizardStepId): number => WIZARD_STEPS.findIndex((s) => s.id === id);
@@ -36,6 +46,8 @@ export const useWizardStore = create<WizardState>()(
       stepId: "teams",
       maxIndex: 0,
       reservations: [],
+      mode: "season",
+      calendarEntryId: null,
       setStep: (stepId) => set({ stepId }),
       jumpTo: (stepId) => set((state) => ({ stepId, maxIndex: Math.max(state.maxIndex, indexOf(stepId)) })),
       next: () =>
@@ -51,16 +63,20 @@ export const useWizardStore = create<WizardState>()(
       addReservation: (r) => set((state) => ({ reservations: [...state.reservations, { ...r, id: crypto.randomUUID() }] })),
       removeReservation: (id) => set((state) => ({ reservations: state.reservations.filter((x) => x.id !== id) })),
       clearReservations: () => set({ reservations: [] }),
+      startPeriodMode: (calendarEntryId) => set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1, reservations: [] }),
+      exitPeriodMode: () => set({ mode: "season", calendarEntryId: null, stepId: "teams", reservations: [] }),
     }),
     {
       name: "cs-wizard",
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
         const prev = (null !== persistedState && "object" === typeof persistedState ? persistedState : {}) as Partial<WizardState>;
         return {
           stepId: prev.stepId ?? "teams",
           maxIndex: prev.maxIndex ?? 0,
           reservations: prev.reservations ?? [],
+          mode: prev.mode ?? "season",
+          calendarEntryId: prev.calendarEntryId ?? null,
         } as WizardState;
       },
     },

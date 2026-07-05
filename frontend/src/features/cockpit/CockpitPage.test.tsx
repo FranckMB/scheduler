@@ -12,7 +12,7 @@ vi.mock("@/features/auth/queries", () => ({
 }));
 
 vi.mock("@/features/planning/queries", () => ({
-  useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "" }] }),
+  useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null }] }),
   useReopenSchedule: () => ({ mutate: vi.fn(), isPending: false }),
   useSetBaseline: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -20,6 +20,8 @@ vi.mock("@/features/planning/queries", () => ({
 vi.mock("./queries", () => ({
   useCalendarEntries: () => ({ data: [] }),
   useSchoolHolidays: () => ({ data: { zone: "A", items: [] } }),
+  useCreateHolidayPeriod: () => ({ mutate: vi.fn(), isPending: false }),
+  useEntryConflicts: () => ({ data: undefined }),
 }));
 
 function renderCockpit() {

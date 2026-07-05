@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
+import { OverlaysExistError, STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { useReopenSchedule } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -12,27 +12,53 @@ import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 interface BaselineBannerProps {
   schedules: Schedule[];
   baselineScheduleId: string | null;
+  /** Number of period overlays in the season (for the proportional edit warning). */
+  overlayCount: number;
 }
 
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
-export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBannerProps) {
+export function BaselineBanner({ schedules, baselineScheduleId, overlayCount }: BaselineBannerProps) {
   const navigate = useNavigate();
   const reopen = useReopenSchedule();
-  const [confirmEdit, setConfirmEdit] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  // null = closed; number = the count of overlays a confirmed reopen will delete.
+  const [confirmDeleteCount, setConfirmDeleteCount] = useState<number | null>(null);
 
   const baseline = schedules.find((s) => s.id === baselineScheduleId) ?? null;
 
-  const edit = () => {
-    setConfirmEdit(false);
-    if (baseline && baseline.status === "VALIDATED") {
-      reopen.mutate(baseline.id, {
+  const startEdit = () => {
+    if (!baseline || baseline.status !== "VALIDATED") {
+      navigate("/planning");
+      return;
+    }
+    // Zero overlay = zero friction (spec §2bis): reopen straight away.
+    reopen.mutate(
+      { id: baseline.id },
+      {
+        onSuccess: () => navigate("/planning"),
+        onError: (error) => {
+          if (error instanceof OverlaysExistError) {
+            setConfirmDeleteCount(error.count);
+          } else {
+            toast.error("Réouverture impossible");
+          }
+        },
+      },
+    );
+  };
+
+  const confirmDestructiveEdit = () => {
+    if (!baseline) {
+      return;
+    }
+    setConfirmDeleteCount(null);
+    reopen.mutate(
+      { id: baseline.id, confirmDeleteOverlays: true },
+      {
         onSuccess: () => navigate("/planning"),
         onError: () => toast.error("Réouverture impossible"),
-      });
-    } else {
-      navigate("/planning");
-    }
+      },
+    );
   };
 
   return (
@@ -44,6 +70,7 @@ export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBanner
             <>
               {STATUS_LABELS[baseline.status]}
               {baseline.score !== null ? ` · score ${baseline.score}` : ""}
+              {overlayCount > 0 ? ` · ${overlayCount} calendrier${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
             </>
           ) : (
             "Aucun planning principal désigné"
@@ -54,22 +81,22 @@ export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBanner
         <Button variant="outline" size="sm" onClick={() => navigate("/planning")}>
           Ouvrir
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setConfirmEdit(true)} disabled={reopen.isPending}>
+        <Button variant="ghost" size="sm" onClick={startEdit} disabled={reopen.isPending}>
           Modifier…
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setListOpen(true)}>
-          Tous les plannings ({schedules.length})
+          Tous les plannings ({schedules.filter((s) => null === s.calendarEntryId).length})
         </Button>
       </div>
 
       <ConfirmDialog
-        open={confirmEdit}
-        destructive={false}
+        open={confirmDeleteCount !== null}
+        destructive
         title="Modifier le socle ?"
-        description="Modifier le planning principal rouvre l'édition. Une fois des calendriers secondaires créés, cela les supprimera."
-        confirmLabel="Modifier"
-        onConfirm={edit}
-        onCancel={() => setConfirmEdit(false)}
+        description={`Ceci supprimera ${confirmDeleteCount ?? 0} calendrier${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} secondaire${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        confirmLabel="Modifier et supprimer"
+        onConfirm={confirmDestructiveEdit}
+        onCancel={() => setConfirmDeleteCount(null)}
       />
 
       {listOpen ? <SeasonSchedulesModal schedules={schedules} baselineScheduleId={baselineScheduleId} onClose={() => setListOpen(false)} /> : null}

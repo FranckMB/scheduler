@@ -6,9 +6,13 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 
+import { useEntryConflicts } from "@/features/cockpit/queries";
+
 import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, hhmm } from "../lib/days";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import { useWizardStore } from "../store";
+import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
 const DURATIONS = [60, 75, 90, 105, 120];
@@ -101,6 +105,23 @@ function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canS
 }
 
 export function VenuesStep() {
+  const { mode, calendarEntryId } = useWizardStore();
+  const periodMode = "period" === mode;
+  const { data: venues = [] } = useWizardVenues();
+  const { data: conflicts } = useEntryConflicts(periodMode ? calendarEntryId : null);
+  if (periodMode) {
+    const closed = new Set(conflicts?.venueIds ?? []);
+    return (
+      <PeriodReadOnlyStructure
+        title="Gymnases"
+        items={venues.map((v) => ({ id: v.id, label: v.name, note: closed.has(v.id) ? "fermé cette période" : undefined }))}
+      />
+    );
+  }
+  return <VenuesEditor />;
+}
+
+function VenuesEditor() {
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
   const create = useCreateVenue();

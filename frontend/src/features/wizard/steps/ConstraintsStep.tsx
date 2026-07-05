@@ -114,7 +114,8 @@ function ReservationPanel({ teams, venues }: { teams: Team[]; venues: Venue[] })
 }
 
 export function ConstraintsStep() {
-  const { data: constraints = [] } = useWizardConstraints();
+  const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tags = [] } = useWizardTeamTags();
   const { data: coaches = [] } = useWizardCoaches();
@@ -198,7 +199,8 @@ export function ConstraintsStep() {
     if (null === payload) {
       return;
     }
-    create.mutate(payload);
+    // In period mode, attach the constraint to the entry → dated (excluded from base).
+    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload);
     setMinTime("");
     setMaxTime("");
     setDays(new Set());

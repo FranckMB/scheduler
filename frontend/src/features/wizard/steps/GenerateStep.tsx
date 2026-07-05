@@ -3,16 +3,18 @@ import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
+import { useCalendarEntry } from "@/features/cockpit/queries";
 import type { ScheduleStatus } from "@/features/planning/api";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useSchedules } from "@/features/planning/queries";
-
-const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
+import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 
 import { useLaunchGeneration, useScheduleStatus } from "../queries";
 import { useWizardStore } from "../store";
+
+const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
 
 // Hard client-side guard: if the backend/engine never answers, stop waiting
 // instead of polling forever and surface a retry.
@@ -21,7 +23,11 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export function GenerateStep() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
-  const { reservations, clearReservations } = useWizardStore();
+  const { reservations, clearReservations, mode, calendarEntryId } = useWizardStore();
+  const periodMode = "period" === mode;
+  const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
+
   const { data: schedules = [] } = useSchedules();
   const launch = useLaunchGeneration();
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -29,15 +35,14 @@ export function GenerateStep() {
 
   const { data: sched } = useScheduleStatus(scheduleId);
   const status = sched?.status ?? null;
-  const hasCompleted = schedules.some((s) => "COMPLETED" === s.status);
-  const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
-  // Show the embedded planning once a plan exists, and keep showing it while a
-  // regeneration runs (schedule leaves COMPLETED → still an in-flight schedule,
-  // not a first launch). The fancy waiting screen stays for the very first run
-  // (identified by a local scheduleId, cleared once the plan completes).
-  const showPlanning = hasCompleted || (anyInFlight && null === scheduleId);
 
-  // Stop waiting after the timeout even if the schedule is stuck GENERATING.
+  // Season mode keys completion off ANY completed schedule (first launch or
+  // regeneration). Period mode keys strictly off THIS overlay's status.
+  const overlayDone = periodMode && "COMPLETED" === status;
+  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => "COMPLETED" === s.status);
+  const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
+  const showPlanning = periodMode ? overlayDone : hasCompleted || (anyInFlight && null === scheduleId);
+
   useEffect(() => {
     if (null === scheduleId) {
       return;
@@ -46,19 +51,27 @@ export function GenerateStep() {
     return () => clearTimeout(t);
   }, [scheduleId]);
 
-  // Once a plan exists: drop the reservations (now applied) and refresh /me so
-  // the wizard nav unlocks (onboarding is completed at queue time server-side).
   const settled = useRef(false);
   useEffect(() => {
-    if (hasCompleted && !settled.current) {
-      settled.current = true;
-      clearReservations();
-      // Drop the first-run local id so later regenerations (via the planning
-      // toolbar) are recognised as regenerations, not a fresh launch.
+    if (!hasCompleted || settled.current) {
+      return;
+    }
+    settled.current = true;
+    clearReservations();
+    if (periodMode) {
+      // Show the overlay in the embedded planning; refresh the cockpit link.
+      if (null !== scheduleId) {
+        setSelectedScheduleId(scheduleId);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    } else {
+      // Guarded by settled.current → runs exactly once, no cascade.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setScheduleId(null);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     }
-  }, [hasCompleted, clearReservations, queryClient]);
+  }, [hasCompleted, periodMode, scheduleId, clearReservations, setSelectedScheduleId, queryClient]);
 
   const launching = launch.isPending;
   const failed = !launching && !showPlanning && (launch.isError || "FAILED" === status || timedOut);
@@ -71,21 +84,33 @@ export function GenerateStep() {
     launch.reset();
     setScheduleId(null);
     try {
-      const id = await launch.mutateAsync({ name: `Planning ${new Date().toLocaleDateString("fr-FR")}`, reservations });
+      const id = await launch.mutateAsync(
+        periodMode
+          ? {
+              name: periodEntry?.title ?? "Plan de période",
+              reservations,
+              calendarEntryId: calendarEntryId ?? undefined,
+              existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
+            }
+          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}`, reservations },
+      );
       setScheduleId(id);
     } catch {
       // launch.isError drives the failed state below.
     }
   };
 
-  // Plan ready (or regenerating) → show the planning inline (same screen).
   if (showPlanning) {
     return <PlanningPage embedded />;
   }
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner.</p>
+      <p className="mb-4 text-sm text-muted-foreground">
+        {periodMode
+          ? "Génère le plan de cette période (overlay). Il surcharge le planning principal sur la fenêtre, sans toucher au socle."
+          : "Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner."}
+      </p>
 
       {failed ? (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
@@ -108,10 +133,12 @@ export function GenerateStep() {
       ) : (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />
-          <p className="max-w-sm text-sm text-muted-foreground">Tout est prêt. Lancez la génération de votre planning.</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
+          </p>
           <Button size="lg" onClick={start}>
             <Rocket className="size-4" />
-            Lancer la génération
+            {periodMode ? "Générer le plan de période" : "Lancer la génération"}
           </Button>
         </div>
       )}

@@ -194,7 +194,8 @@ export interface TeamTag {
 
 export const listTeamTags = (): Promise<TeamTag[]> => collectionAll<TeamTag>("team_tags");
 
-export const listConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");
+/** Base plan constraints (permanent=1) or a period's dated constraints (calendarEntryId). */
+export const listConstraints = (params?: Record<string, string>): Promise<Constraint[]> => collectionAll<Constraint>("constraints", params);
 export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
 export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
 
@@ -206,10 +207,10 @@ export interface ValidateResult {
   conflicts: { constraint1Id: string; constraint2Id: string; reason: string }[];
 }
 
-/** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). */
-export async function validateConstraints(): Promise<ValidateResult> {
+/** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). Period mode scopes to a calendar entry. */
+export async function validateConstraints(calendarEntryId?: string): Promise<ValidateResult> {
   try {
-    return await api.post("constraints/validate").json<ValidateResult>();
+    return await api.post("constraints/validate", calendarEntryId ? { json: { calendarEntryId } } : undefined).json<ValidateResult>();
   } catch (error) {
     if (error instanceof HTTPError) {
       return (await error.response.json()) as ValidateResult;
@@ -218,7 +219,9 @@ export async function validateConstraints(): Promise<ValidateResult> {
   }
 }
 
-export const createSchedule = (name: string): Promise<{ id: string }> => api.post("schedules", { json: { name, status: "DRAFT" } }).json();
+/** Create a base plan (name only) or a period overlay (calendarEntryId set). */
+export const createSchedule = (name: string, calendarEntryId?: string): Promise<{ id: string }> =>
+  api.post("schedules", { json: { name, status: "DRAFT", ...(calendarEntryId ? { calendarEntryId } : {}) } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";

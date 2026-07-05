@@ -13,6 +13,15 @@ export function useCalendarEntries(from: string, to: string) {
   });
 }
 
+export function useCalendarEntry(id: string | null) {
+  return useQuery({
+    queryKey: ["calendar-entry", id],
+    queryFn: () => cockpitApi.getCalendarEntry(id as string),
+    enabled: null !== id,
+    staleTime: 30_000,
+  });
+}
+
 export function useSchoolHolidays() {
   return useQuery({
     queryKey: ["school-holidays"],
@@ -86,6 +95,23 @@ export function useCreateVenueClosure() {
       }
       return entry;
     },
+    onSuccess: () => invalidateEntries(queryClient),
+  });
+}
+
+/** "Adapter" on a school holiday first materialises it as a period entry (holiday), then period mode adapts it. */
+export function useCreateHolidayPeriod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (holiday: { schoolHolidayId: string; label: string; startDate: string; endDate: string }) =>
+      cockpitApi.createCalendarEntry({
+        kind: "period",
+        periodType: "holiday",
+        title: holiday.label,
+        startDate: holiday.startDate,
+        endDate: holiday.endDate,
+        schoolHolidayId: holiday.schoolHolidayId,
+      }),
     onSuccess: () => invalidateEntries(queryClient),
   });
 }

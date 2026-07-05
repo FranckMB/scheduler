@@ -73,7 +73,8 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const reservations = useWizardStore((s) => s.reservations);
-  const { data: constraintValidation } = useConstraintValidation("recap" === stepId);
+  const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  const { data: constraintValidation } = useConstraintValidation("recap" === stepId, periodEntryId);
 
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };

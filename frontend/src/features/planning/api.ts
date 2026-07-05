@@ -1,3 +1,5 @@
+import { HTTPError } from "ky";
+
 import { api } from "@/shared/api/client";
 
 /**
@@ -61,6 +63,8 @@ export interface Schedule {
   score: number | null;
   createdAt: string;
   updatedAt: string;
+  /** Non-null → this schedule is a period overlay (palier B), not a season plan. */
+  calendarEntryId: string | null;
 }
 
 export interface Slot {
@@ -145,8 +149,36 @@ export const generateSchedule = (id: string): Promise<unknown> => api.post(`sche
 /** Validate a COMPLETED schedule → VALIDATED (finished, read-only). */
 export const validateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/validate`).json();
 
-/** Reopen a VALIDATED schedule → COMPLETED (editable again). */
-export const reopenSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/reopen`).json();
+/** Thrown when reopening the baseline would delete period overlays (409). */
+export class OverlaysExistError extends Error {
+  readonly count: number;
+  readonly overlays: { entryId: string; title: string; overlayScheduleId: string }[];
+
+  constructor(count: number, overlays: { entryId: string; title: string; overlayScheduleId: string }[]) {
+    super("overlays_exist");
+    this.name = "OverlaysExistError";
+    this.count = count;
+    this.overlays = overlays;
+  }
+}
+
+/**
+ * Reopen a VALIDATED schedule → COMPLETED. Reopening the baseline with overlays
+ * → 409 {code:"overlays_exist"} unless confirmDeleteOverlays is passed.
+ */
+export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {
+  try {
+    return await api.post(`schedules/${id}/reopen`, opts?.confirmDeleteOverlays ? { json: { confirmDeleteOverlays: true } } : undefined).json();
+  } catch (error) {
+    if (error instanceof HTTPError && 409 === error.response.status) {
+      const body = (await error.response.json()) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      if ("overlays_exist" === body.code) {
+        throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
+      }
+    }
+    throw error;
+  }
+}
 
 /** Designate a finished schedule as the season's main plan (baseline). */
 export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules/${id}/set-baseline`).json();

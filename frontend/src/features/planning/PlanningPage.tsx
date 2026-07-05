@@ -19,12 +19,15 @@ import { WeekGrid } from "./WeekGrid";
 
 const IN_FLIGHT = ["PENDING", "GENERATING"];
 
-/** Latest finished schedule (VALIDATED or COMPLETED), else the most recent one, else null. */
-function pickDefaultSchedule(schedules: { id: string; status: string; createdAt: string }[]): string | null {
-  if (0 === schedules.length) {
+/** Latest finished SEASON schedule (VALIDATED or COMPLETED), else the most recent one, else null.
+ *  Period overlays (calendarEntryId set) are never auto-selected — they are reached explicitly
+ *  from the cockpit "Voir le plan". */
+function pickDefaultSchedule(schedules: { id: string; status: string; createdAt: string; calendarEntryId: string | null }[]): string | null {
+  const seasonPlans = schedules.filter((s) => null === s.calendarEntryId);
+  if (0 === seasonPlans.length) {
     return null;
   }
-  const byRecent = [...schedules].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const byRecent = [...seasonPlans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (byRecent.find((s) => "VALIDATED" === s.status || "COMPLETED" === s.status) ?? byRecent[0]).id;
 }
 
@@ -194,7 +197,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               actionBusy={actionBusy}
               onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
               onValidate={() => setValidateOpen(true)}
-              onReopen={() => validScheduleId && reopenMutation.mutate(validScheduleId)}
+              onReopen={() => validScheduleId && reopenMutation.mutate({ id: validScheduleId })}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
               onRename={(name) => validScheduleId && renameMutation.mutate({ id: validScheduleId, name, status: selectedSchedule?.status ?? "COMPLETED" })}
               baselineScheduleId={baselineScheduleId}

@@ -67,6 +67,8 @@ export interface CreateClosurePayload {
 export const getCalendarEntries = (from: string, to: string): Promise<CalendarEntry[]> =>
   collectionAll<CalendarEntry>("calendar_entries", { from, to });
 
+export const getCalendarEntry = (id: string): Promise<CalendarEntry> => api.get(`calendar_entries/${id}`).json();
+
 export const createCalendarEntry = (json: Record<string, unknown>): Promise<CalendarEntry> =>
   api.post("calendar_entries", { json }).json();
 

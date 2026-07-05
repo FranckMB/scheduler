@@ -1,7 +1,9 @@
-import { AlertTriangle, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
+import { useCalendarEntry } from "@/features/cockpit/queries";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
@@ -69,8 +71,11 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
 }
 
 export function WizardPage() {
-  const { stepId, maxIndex, setStep, jumpTo, next, prev } = useWizardStore();
+  const { stepId, maxIndex, mode, calendarEntryId, setStep, jumpTo, next, prev, exitPeriodMode } = useWizardStore();
   const { data: me } = useMe();
+  const navigate = useNavigate();
+  const periodMode = "period" === mode;
+  const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const validation = useStepValidation(stepId);
   const index = WIZARD_STEPS.findIndex((s) => s.id === stepId);
   const currentStep = WIZARD_STEPS[index];
@@ -81,8 +86,9 @@ export function WizardPage() {
   const [suppressScrollJump, setSuppressScrollJump] = useState(false);
   const footerCtx = useMemo(() => ({ setFooterExtra, setSuppressScrollJump }), []);
   // First-time club (not yet onboarded) → guided: forward steps stay locked
-  // until reached via "Suivant". Existing clubs edit freely.
-  const guided = me?.club?.onboardingCompleted === false;
+  // until reached via "Suivant". Existing clubs edit freely. Period mode is never
+  // guided (structure is inherited read-only; nav is open).
+  const guided = !periodMode && me?.club?.onboardingCompleted === false;
 
   // On first entry of a guided wizard, land on the first incomplete step
   // (no team → Équipes, no gym → Gymnases, …) so the user resumes where needed.
@@ -115,8 +121,30 @@ export function WizardPage() {
     }
   }, [guided, ready, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
+  const quitPeriod = () => {
+    exitPeriodMode();
+    navigate("/");
+  };
+
   return (
     <WizardFooterContext.Provider value={footerCtx}>
+      {periodMode ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
+          <span className="flex items-center gap-2">
+            <CalendarClock className="size-4 text-accent" />
+            <span className="font-medium">Mode période — {periodEntry?.title ?? "…"}</span>
+            {periodEntry ? (
+              <span className="text-muted-foreground">
+                du {periodEntry.startDate} au {periodEntry.endDate}
+              </span>
+            ) : null}
+          </span>
+          <Button variant="ghost" size="sm" onClick={quitPeriod}>
+            <X className="size-4" />
+            Quitter
+          </Button>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (

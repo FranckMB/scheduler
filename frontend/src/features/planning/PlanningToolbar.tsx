@@ -81,12 +81,16 @@ export function PlanningToolbar({
             onChange={(event) => onSelectSchedule(event.target.value)}
             className="h-8 rounded-md border border-input bg-background px-3 text-sm"
           >
-            {schedules.map((schedule) => (
-              <option key={schedule.id} value={schedule.id}>
-                {schedule.name}
-                {schedule.id === baselineScheduleId ? " ★" : ""}
-              </option>
-            ))}
+            {/* Season plans only; a selected overlay (from the cockpit) is added so it stays visible. */}
+            {schedules
+              .filter((schedule) => null === schedule.calendarEntryId || schedule.id === selectedScheduleId)
+              .map((schedule) => (
+                <option key={schedule.id} value={schedule.id}>
+                  {schedule.name}
+                  {schedule.id === baselineScheduleId ? " ★" : ""}
+                  {null !== schedule.calendarEntryId ? " · période" : ""}
+                </option>
+              ))}
           </select>
           {null !== selected && !isValidated ? (
             <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditingName(selected.name)} aria-label="Renommer le planning" title="Renommer">
@@ -147,7 +151,9 @@ export function PlanningToolbar({
             {STATUS_LABELS[selected.status]}
           </span>
           {null !== selected.score ? <span>score {selected.score}</span> : null}
-          {isBaseline ? (
+          {null !== selected.calendarEntryId ? (
+            <span className="rounded-full border border-accent/50 px-2 py-0.5 font-medium text-accent">Période</span>
+          ) : isBaseline ? (
             <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
               <Star className="size-3" />
               Planning principal
