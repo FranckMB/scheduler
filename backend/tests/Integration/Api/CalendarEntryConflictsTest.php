@@ -101,6 +101,26 @@ final class CalendarEntryConflictsTest extends WebTestCase
         self::assertSame(1, $data['conflicts'][0]['dayOfWeek']);
     }
 
+    public function testIgnoredEntryRaisesNoConflicts(): void
+    {
+        [$user, $club, $season] = $this->seed('CF5');
+        $schedule = $this->baseline($club, $season);
+        $this->slot($club, $season, $schedule, self::VENUE_X, 1, self::TEAM_MON);
+        $this->em->flush();
+
+        // Same setup as a conflicting closure — but the manager dismissed it.
+        $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10');
+        $entry->setStatus(\App\Enum\CalendarEntryStatus::IGNORED);
+        $this->em->flush();
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertSame([], $data['venueIds'], 'an ignored entry must not raise conflicts');
+        self::assertSame([], $data['conflicts']);
+    }
+
     public function testForeignEntryIsForbidden(): void
     {
         [$userA, $clubA] = $this->seed('CF3');

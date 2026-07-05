@@ -15,6 +15,7 @@ use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
+use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -70,26 +71,26 @@ final class PeriodReminderCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $dryRun = (bool) $input->getOption('dry-run');
 
-        $today = $this->resolveToday($input->getOption('date'));
-        if (!$today instanceof DateTimeImmutable) {
+        $dateOption = $input->getOption('date');
+        $forcedToday = $this->resolveToday($dateOption);
+        if (\is_string($dateOption) && '' !== $dateOption && !$forcedToday instanceof DateTimeImmutable) {
             $io->error('Invalid --date: expected a real calendar date YYYY-MM-DD.');
 
             return Command::FAILURE;
         }
 
-        $clubIds = array_map(
-            static fn (Club $club): string => $club->getId(),
-            $this->entityManager->getRepository(Club::class)->findAll(),
-        );
+        // Detached after clear(), but only id/name/timezone getters are read —
+        // no per-club re-SELECT inside the loop.
+        $clubs = $this->entityManager->getRepository(Club::class)->findAll();
         $this->entityManager->clear();
 
         $sent = 0;
-        foreach ($clubIds as $clubId) {
+        foreach ($clubs as $club) {
             try {
-                $sent += $this->remindClub($clubId, $today, $dryRun, $io);
+                $sent += $this->remindClub($club, $forcedToday, $dryRun, $io);
             } catch (Throwable $e) {
                 // One bad club must not block reminders for the others.
-                $io->warning(\sprintf('Club %s skipped: %s', $clubId, $e->getMessage()));
+                $io->warning(\sprintf('Club %s skipped: %s', $club->getId(), $e->getMessage()));
             } finally {
                 $this->entityManager->clear();
                 $this->tenantConnectionContext->clear();
@@ -103,8 +104,9 @@ final class PeriodReminderCommand extends Command
         return $this->hadSendFailure ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private function remindClub(string $clubId, DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io): int
+    private function remindClub(Club $club, ?DateTimeImmutable $forcedToday, bool $dryRun, SymfonyStyle $io): int
     {
+        $clubId = $club->getId();
         $this->tenantConnectionContext->setClubId($clubId);
 
         $season = $this->seasonRepository->findActiveByClubId($clubId);
@@ -112,12 +114,16 @@ final class PeriodReminderCommand extends Command
             return 0;
         }
 
+        // "Today" is the CLUB's calendar day, not the server's (a UTC cron near
+        // midnight would otherwise shift every bucket by one day for a Paris club).
+        // An explicit --date (rehearsal/tests) overrides for all clubs.
+        $today = $forcedToday ?? $this->clubToday($club);
+
         $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
         if ([] === $periods) {
-            return 0; // No period in the horizon → skip the manager/club lookups.
+            return 0; // No period in the horizon → skip the manager lookup.
         }
 
-        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
         $emails = $this->clubUserRepository->findManagementEmails($clubId);
 
         $sent = 0;
@@ -138,7 +144,7 @@ final class PeriodReminderCommand extends Command
             $sentForEntry = 0;
             foreach ($emails as $to) {
                 try {
-                    $this->mailer->send($this->mailBuilder->build($to, $club instanceof Club ? $club->getName() : '', $entry, $days));
+                    $this->mailer->send($this->mailBuilder->build($to, $club->getName(), $entry, $days));
                     ++$sentForEntry;
                 } catch (Throwable $e) {
                     $this->hadSendFailure = true;
@@ -178,11 +184,30 @@ final class PeriodReminderCommand extends Command
         return $days <= 7 ? 7 : 14;
     }
 
-    /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). Default = today. */
+    /**
+     * The club's current calendar day, materialized as a plain (server-TZ) date so
+     * diffs against date-only startDate columns stay whole days.
+     */
+    private function clubToday(Club $club): DateTimeImmutable
+    {
+        $timezone = 'Europe/Paris';
+        if ('' !== $club->getTimezone()) {
+            try {
+                new DateTimeZone($club->getTimezone());
+                $timezone = $club->getTimezone();
+            } catch (Throwable) {
+                // Invalid stored TZ → keep the FFBB default.
+            }
+        }
+
+        return new DateTimeImmutable(new DateTimeImmutable('now', new DateTimeZone($timezone))->format('Y-m-d'));
+    }
+
+    /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). No --date → null (per-club today). */
     private function resolveToday(mixed $dateOption): ?DateTimeImmutable
     {
         if (!\is_string($dateOption) || '' === $dateOption) {
-            return new DateTimeImmutable('today');
+            return null;
         }
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateOption);
         $errors = DateTimeImmutable::getLastErrors();

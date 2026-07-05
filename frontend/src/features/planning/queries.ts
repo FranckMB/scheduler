@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { toast } from "@/shared/stores/toastStore";
+
 import type { LockLevel, Schedule, SlotMovePatch } from "./api";
+import { OverlaysExistError } from "./api";
 import * as planningApi from "./api";
 
 const IN_FLIGHT: Schedule["status"][] = ["PENDING", "GENERATING"];
@@ -108,6 +111,14 @@ export function useReopenSchedule() {
   return useMutation({
     mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) =>
       planningApi.reopenSchedule(id, { confirmDeleteOverlays }),
+    // Hook-level = unmount-safe. OverlaysExistError is UI state (escalation
+    // dialog, handled by the caller's mutate-level onError); everything else
+    // toasts here so a failure is never silent.
+    onError: (error) => {
+      if (!(error instanceof OverlaysExistError)) {
+        toast.error("Réouverture impossible");
+      }
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });

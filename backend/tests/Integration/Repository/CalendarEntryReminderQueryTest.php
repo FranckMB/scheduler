@@ -36,8 +36,11 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
 
     private CalendarEntryRepository $repo;
 
-    public function testMatchesActivePeriodsWithoutOverlayForEveryPeriodType(): void
+    public function testMatchesOnlyOverlayCapablePeriodTypes(): void
     {
+        // Only closure/holiday can carry an overlay plan (ScheduleStateProcessor
+        // refuses the others with 422) — reminding about a cutoff would CTA into
+        // a dead end, and a cutoff ("no training") needs no plan anyway.
         [$club, $season] = $this->seed('Q1');
         foreach ([CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY, CalendarEntryPeriodType::CUTOFF, CalendarEntryPeriodType::CUSTOM] as $type) {
             $this->entry($club, $season, self::IN_WINDOW, kind: CalendarEntryKind::PERIOD, periodType: $type);
@@ -45,7 +48,10 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         $this->em->flush();
 
         $rows = $this->query($club, $season);
-        self::assertCount(4, $rows);
+        self::assertCount(2, $rows);
+        $types = array_map(static fn (CalendarEntry $e): ?CalendarEntryPeriodType => $e->getPeriodType(), $rows);
+        self::assertContains(CalendarEntryPeriodType::CLOSURE, $types);
+        self::assertContains(CalendarEntryPeriodType::HOLIDAY, $types);
     }
 
     public function testExcludesOverlayEventStatusWindowAndSeason(): void

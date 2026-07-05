@@ -32,9 +32,12 @@ final class OverlayManager
     /**
      * Delete the overlay schedule of a period entry (if any) and clear the link.
      * Refuses (409) while the overlay is mid-generation — deleting it out from
-     * under the worker would orphan the slots it is about to import.
+     * under the worker would orphan the slots it is about to import — and, unless
+     * $force, while it is VALIDATED (read-only means read-only; the entry-delete
+     * path must not bypass the guard DELETE /api/schedules enforces). The
+     * destructive reopen passes $force: the user explicitly confirmed destruction.
      */
-    public function deleteOverlayForEntry(CalendarEntry $entry): void
+    public function deleteOverlayForEntry(CalendarEntry $entry, bool $force = false): void
     {
         $overlayId = $entry->getOverlayScheduleId();
         if (null === $overlayId) {
@@ -44,6 +47,9 @@ final class OverlayManager
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($overlayId);
         if ($schedule instanceof Schedule) {
             $this->assertNotGenerating($schedule);
+            if (!$force && ScheduleStatus::VALIDATED === $schedule->getStatus()) {
+                throw new ConflictHttpException('The period plan is validated (read-only). Reopen it before deleting the period.');
+            }
             $this->purgeArtifacts($overlayId);
             $this->entityManager->remove($schedule);
         }

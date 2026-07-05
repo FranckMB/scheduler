@@ -4,7 +4,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
-import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, SchoolHoliday } from "./api";
 import { useCreateHolidayPeriod, useEntryConflicts } from "./queries";
@@ -14,10 +13,12 @@ interface RadarPanelProps {
   entries: CalendarEntry[];
   holidays: SchoolHoliday[];
   zone: string | null;
+  /** Holidays query still in flight — don't flash "zone à renseigner" meanwhile. */
+  zoneLoading?: boolean;
 }
 
 /** The manager's to-do, sorted by urgency. "Adapter" opens the wizard in period mode (palier B). */
-export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
+export function RadarPanel({ entries, holidays, zone, zoneLoading = false }: RadarPanelProps) {
   const today = todayISO();
   const navigate = useNavigate();
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
@@ -33,27 +34,33 @@ export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
     navigate("/planning");
   };
 
+  // The radar is a TO-DO list: entries the manager explicitly dismissed
+  // (status=ignored) must not resurface (the calendar still shows them).
+  const active = entries.filter((e) => e.status !== "ignored");
+
   // A holiday already materialised as a period entry (matched by schoolHolidayId).
+  // Ignored ones stay in the map so a dismissed holiday is skipped below, not re-proposed.
   const entryByHoliday = new Map(entries.filter((e) => null !== e.schoolHolidayId).map((e) => [e.schoolHolidayId as string, e]));
 
   const upcomingHolidays = holidays
     .filter((h) => h.startDate >= today)
+    .filter((h) => entryByHoliday.get(h.id)?.status !== "ignored")
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .slice(0, 3);
 
-  const disruptiveEvents = entries
+  const disruptiveEvents = active
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const closures = entries.filter((e) => e.kind === "period" && e.periodType === "closure" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const closures = active.filter((e) => e.kind === "period" && e.periodType === "closure" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const isEmpty = upcomingHolidays.length === 0 && disruptiveEvents.length === 0 && closures.length === 0 && zone !== null;
+  const isEmpty = upcomingHolidays.length === 0 && disruptiveEvents.length === 0 && closures.length === 0 && zone !== null && !zoneLoading;
 
   return (
     <aside className="space-y-3 rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">À traiter</h2>
 
-      {zone === null ? (
+      {zone === null && !zoneLoading ? (
         <RadarCard icon={<MapPin className="size-4" />} title="Zone scolaire à renseigner" detail="Renseigne la zone pour voir les vacances.">
           <Button variant="outline" size="sm" asChild>
             <Link to="/club">Renseigner</Link>
@@ -81,7 +88,7 @@ export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
                 onClick={() =>
                   createHoliday.mutate(
                     { schoolHolidayId: h.id, label: h.label, startDate: h.startDate, endDate: h.endDate },
-                    { onSuccess: (created) => adapt(created.id), onError: () => toast.error("Création impossible") },
+                    { onSuccess: (created) => adapt(created.id) },
                   )
                 }
               >

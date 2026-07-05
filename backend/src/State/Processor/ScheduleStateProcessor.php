@@ -99,6 +99,16 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         if (\is_string($id) && '' !== $id) {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
             if ($schedule instanceof Schedule && (null === $clubId || $schedule->getClubId() === $clubId)) {
+                // The baseline is never deletable (§9 cockpit) — it anchors the whole
+                // season (socle, overlays, /api/me.baselineScheduleId).
+                $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+                if ($season instanceof Season && $season->getBaselineScheduleId() === $schedule->getId()) {
+                    throw new ConflictHttpException('The baseline schedule cannot be deleted. Designate another baseline first.');
+                }
+                // A validated schedule is read-only: reopen it before deleting.
+                if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
+                    throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before deleting.');
+                }
                 $this->overlayManager->purgeScheduleArtifacts($schedule);
             }
         }
@@ -141,18 +151,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
         }
         // Status transitions go through the dedicated endpoints (generate/validate/reopen),
-        // never a free-form PUT.
+        // never a free-form PUT. The field is accepted but IGNORED (never applied):
+        // the frontend rename echoes a possibly-stale cached status, so rejecting a
+        // mismatch would 409 legitimate renames — while silently ignoring still makes
+        // fabricating a COMPLETED plan without generation impossible.
         if ('VALIDATED' === $input->status) {
             throw new ConflictHttpException('Use POST /schedules/{id}/validate to validate a schedule.');
         }
         if (null !== $input->name) {
             $entity->setName($input->name);
-        }
-        if (null !== $input->status) {
-            $status = ScheduleStatus::tryFrom($input->status);
-            if (null !== $status) {
-                $entity->setStatus($status);
-            }
         }
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);

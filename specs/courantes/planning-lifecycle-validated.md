@@ -47,7 +47,8 @@ Le `/validate` actuel **mélange** deux concepts. On sépare :
 - `GenerateScheduleController` : refuse la régénération si `schedule.status == VALIDATED`.
 - `ManualEditController` (constraint/lock/one-time) : refuse si le `schedule` du slot est `VALIDATED`.
 - `ScheduleSlotTemplateStateProcessor` : refuse create/update/delete si le schedule parent est `VALIDATED`.
-- `ScheduleStateProcessor` PUT : refuse **toute** modification, **nom inclus**, si `VALIDATED` — le verrou est **total** (« read only means read only »). Le nom s'édite **pendant l'édition** (états non verrouillés) ; pour renommer un planning validé → le **rouvrir** d'abord. Les transitions de statut passent par `generate`/`validate`/`reopen`, jamais via PUT (`status` retiré des champs librement writables).
+- `ScheduleStateProcessor` PUT : refuse **toute** modification, **nom inclus**, si `VALIDATED` — le verrou est **total** (« read only means read only »). Le nom s'édite **pendant l'édition** (états non verrouillés) ; pour renommer un planning validé → le **rouvrir** d'abord. Les transitions de statut passent par `generate`/`validate`/`reopen`, jamais via PUT : le champ `status` est **accepté mais tout changement → 409** (le rename frontend échoe le statut courant — inchangé = OK). Fabriquer un `COMPLETED` sans génération est donc impossible.
+- `ScheduleStateProcessor` DELETE : le **baseline n'est jamais supprimable** (409 — désigner un autre principal d'abord) et un planning `VALIDATED` **ne se supprime pas** (409 — le rouvrir d'abord). Gardé par `ScheduleLifecycleGuardTest` (phase1).
 
 > Le verrou front seul serait une illusion (contrarian-review) : l'enforcement est **serveur**.
 

@@ -7,7 +7,6 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
-import { toast } from "@/shared/stores/toastStore";
 
 import { OverlaysExistError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
@@ -126,11 +125,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       { id: validScheduleId, confirmDeleteOverlays },
       {
         onSuccess: () => setReopenOverlayCount(null),
+        // Generic failures are toasted by the hook (unmount-safe); only the
+        // 409 escalation is UI state handled here.
         onError: (error) => {
           if (error instanceof OverlaysExistError) {
             setReopenOverlayCount(error.count);
-          } else {
-            toast.error("Réouverture impossible");
           }
         },
       },

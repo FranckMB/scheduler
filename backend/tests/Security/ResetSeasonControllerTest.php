@@ -4,11 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Entity\CalendarEntry;
 use App\Entity\ClubUser;
+use App\Entity\PeriodReminderLog;
+use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -45,6 +53,72 @@ final class ResetSeasonControllerTest extends WebTestCase
 
         $after = $this->getJson('/api/venues', $token);
         self::assertSame(0, $this->totalItems($after), 'the club data must be wiped');
+    }
+
+    public function testResetWipesTrainingSlotsAndCockpitData(): void
+    {
+        [$token, , $clubId] = $this->register('RSTD');
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $this->scopeGucToClub($clubId);
+        $season = $em->getRepository(Season::class)->findOneBy(['clubId' => $clubId]);
+        self::assertInstanceOf(Season::class, $season);
+
+        // Venue + its weekly slot (venueId is a plain string column, no FK cascade).
+        $venue = new Venue;
+        $venue->setClubId($clubId);
+        $venue->setSeasonId($season->getId());
+        $venue->setName('Gymnase');
+        $venue->setSource('manual');
+        $em->persist($venue);
+        $em->flush();
+        $slot = new VenueTrainingSlot;
+        $slot->setClubId($clubId);
+        $slot->setSeasonId($season->getId());
+        $slot->setVenueId($venue->getId());
+        $slot->setDayOfWeek(2);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $em->persist($slot);
+
+        // Baseline schedule + validated socle + a period entry with a reminder log.
+        $schedule = new Schedule;
+        $schedule->setClubId($clubId);
+        $schedule->setSeasonId($season->getId());
+        $schedule->setName('Socle');
+        $schedule->setStatus(ScheduleStatus::VALIDATED);
+        $em->persist($schedule);
+        $em->flush();
+        $season->setBaselineScheduleId($schedule->getId());
+        $season->setSocleValidatedAt(new DateTimeImmutable);
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($clubId);
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Fermeture');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $em->persist($entry);
+        $em->flush();
+        $em->persist((new PeriodReminderLog)->setCalendarEntryId($entry->getId())->setThreshold(14));
+        $em->flush();
+        $slotId = $slot->getId();
+        $entryId = $entry->getId();
+        $seasonId = $season->getId();
+
+        $this->client->request('DELETE', '/api/reset-season', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseIsSuccessful();
+
+        $em->clear();
+        $this->scopeGucToClub($clubId);
+        self::assertNull($em->getRepository(VenueTrainingSlot::class)->find($slotId), 'training slots must be wiped (no FK to venue)');
+        self::assertNull($em->getRepository(CalendarEntry::class)->find($entryId), 'calendar entries must be wiped');
+        self::assertSame([], $em->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $entryId]), 'reminder logs must be wiped');
+        $freshSeason = $em->getRepository(Season::class)->find($seasonId);
+        self::assertInstanceOf(Season::class, $freshSeason);
+        self::assertNull($freshSeason->getBaselineScheduleId(), 'the baseline anchor must be cleared (its schedule is gone)');
+        self::assertNull($freshSeason->getSocleValidatedAt(), 'the socle milestone must be cleared — no plan is left behind it');
     }
 
     public function testResetRequiresAManagementRole(): void

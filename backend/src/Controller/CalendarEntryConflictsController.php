@@ -9,6 +9,7 @@ use App\Entity\Constraint;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use DateInterval;
 use DatePeriod;
@@ -56,7 +57,9 @@ final class CalendarEntryConflictsController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        if (CalendarEntryKind::PERIOD !== $entry->getKind()) {
+        // An IGNORED entry was explicitly dismissed by the manager: it must not
+        // keep raising conflicts (the radar would resurrect it as a to-do).
+        if (CalendarEntryKind::PERIOD !== $entry->getKind() || CalendarEntryStatus::IGNORED === $entry->getStatus()) {
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
         }
 

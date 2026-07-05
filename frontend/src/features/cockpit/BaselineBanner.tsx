@@ -5,17 +5,18 @@ import { OverlaysExistError, STATUS_LABELS, type Schedule } from "@/features/pla
 import { useReopenSchedule } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
-import { toast } from "@/shared/stores/toastStore";
 
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 
 interface BaselineBannerProps {
   schedules: Schedule[];
   baselineScheduleId: string | null;
+  /** Schedules query still in flight — don't flash "aucun planning principal". */
+  loading?: boolean;
 }
 
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
-export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBannerProps) {
+export function BaselineBanner({ schedules, baselineScheduleId, loading = false }: BaselineBannerProps) {
   const navigate = useNavigate();
   const reopen = useReopenSchedule();
   const [listOpen, setListOpen] = useState(false);
@@ -38,11 +39,11 @@ export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBanner
       { id: baseline.id },
       {
         onSuccess: () => navigate("/planning"),
+        // Generic failures are toasted by the hook (unmount-safe); only the
+        // 409 escalation is UI state handled here.
         onError: (error) => {
           if (error instanceof OverlaysExistError) {
             setConfirmDeleteCount(error.count);
-          } else {
-            toast.error("Réouverture impossible");
           }
         },
       },
@@ -56,7 +57,7 @@ export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBanner
     setConfirmDeleteCount(null);
     reopen.mutate(
       { id: baseline.id, confirmDeleteOverlays: true },
-      { onSuccess: () => navigate("/planning"), onError: () => toast.error("Réouverture impossible") },
+      { onSuccess: () => navigate("/planning") },
     );
   };
 
@@ -71,6 +72,8 @@ export function BaselineBanner({ schedules, baselineScheduleId }: BaselineBanner
               {baseline.score !== null ? ` · score ${baseline.score}` : ""}
               {overlayCount > 0 ? ` · ${overlayCount} calendrier${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
             </>
+          ) : loading ? (
+            "Chargement…"
           ) : (
             "Aucun planning principal désigné"
           )}

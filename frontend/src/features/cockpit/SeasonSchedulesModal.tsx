@@ -52,7 +52,7 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
                     variant="ghost"
                     size="sm"
                     disabled={setBaseline.isPending}
-                    onClick={() => setBaseline.mutate(s.id, { onSuccess: () => toast.success("Planning principal mis à jour"), onError: () => toast.error("Action impossible") })}
+                    onClick={() => setBaseline.mutate(s.id, { onSuccess: () => toast.success("Planning principal mis à jour") })}
                   >
                     Définir principal
                   </Button>
