@@ -93,7 +93,12 @@ export function useValidateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (scheduleId: string) => planningApi.validateSchedule(scheduleId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      // Validating the baseline stamps Season.socleValidatedAt (surfaced on /me),
+      // which unlocks the cockpit — refresh it so the home screen opens at once.
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 }
 
