@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { addDays, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -37,6 +37,12 @@ describe("cockpit date utils", () => {
     expect(isWithin("2026-05-04", "2026-05-04", "2026-05-10")).toBe(true);
     expect(isWithin("2026-05-10", "2026-05-04", "2026-05-10")).toBe(true);
     expect(isWithin("2026-05-11", "2026-05-04", "2026-05-10")).toBe(false);
+  });
+
+  it("adds days across month/year boundaries", () => {
+    expect(addDays("2026-05-30", 5)).toBe("2026-06-04");
+    expect(addDays("2026-12-30", 3)).toBe("2027-01-02");
+    expect(addDays("2026-05-04", 300)).toBe("2027-02-28");
   });
 
   it("counts whole days until", () => {

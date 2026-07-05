@@ -181,6 +181,8 @@ export interface ConstraintPayload {
   ruleType: ConstraintRuleType;
   config: Record<string, unknown>;
   isActive?: boolean;
+  /** Attach to a CalendarEntry (period) → dated constraint, excluded from base generation. */
+  calendarEntryId?: string;
 }
 
 export interface TeamTag {

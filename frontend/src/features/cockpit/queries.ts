@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { createConstraint } from "@/features/wizard/api";
+
 import * as cockpitApi from "./api";
 import type { CreateClosurePayload, CreateEventPayload } from "./api";
 
@@ -49,8 +51,9 @@ export function useCreateEvent() {
 
 /**
  * A venue closure is a period entry PLUS a dated FACILITY constraint that carries
- * the closed venue. Two calls: if the constraint fails, roll back the entry so we
- * never leave a period with no closed-venue constraint.
+ * the closed venue. Two calls: if the constraint fails, roll back the entry. If
+ * the rollback ALSO fails, surface a distinct error so the orphan period (a ⛔
+ * marker with no closed-venue constraint) is not hidden behind a generic failure.
  */
 export function useCreateVenueClosure() {
   const queryClient = useQueryClient();
@@ -64,7 +67,7 @@ export function useCreateVenueClosure() {
         endDate: payload.endDate,
       });
       try {
-        await cockpitApi.createConstraint({
+        await createConstraint({
           name: payload.title,
           scope: "FACILITY",
           scopeTargetId: payload.venueId,
@@ -74,7 +77,11 @@ export function useCreateVenueClosure() {
           calendarEntryId: entry.id,
         });
       } catch (error) {
-        await cockpitApi.deleteCalendarEntry(entry.id).catch(() => undefined);
+        try {
+          await cockpitApi.deleteCalendarEntry(entry.id);
+        } catch {
+          throw new Error("La salle n'a pas pu être bloquée et l'annulation a échoué — supprime la période à la main.");
+        }
         throw error;
       }
       return entry;

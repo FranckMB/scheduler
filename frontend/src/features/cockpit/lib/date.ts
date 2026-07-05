@@ -51,6 +51,12 @@ export function isWithin(d: string, start: string, end: string): boolean {
   return d >= start && d <= end;
 }
 
+/** ISO date `n` days after `iso`. */
+export function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return toISODate(new Date(y, m - 1, d + n));
+}
+
 /** Whole days from `from` to `to` (ISO), floored, negative if `to` is before `from`. */
 export function daysUntil(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00`);

@@ -26,7 +26,7 @@ export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const closures = entries.filter((e) => e.kind === "period" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const closures = entries.filter((e) => e.kind === "period" && e.periodType === "closure" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const isEmpty = upcomingHolidays.length === 0 && disruptiveEvents.length === 0 && closures.length === 0 && zone !== null;
 

@@ -1,9 +1,9 @@
-import { CalendarX2, PartyPopper, Trash2, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { CalendarX2, PartyPopper, Trash2 } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { useVenues } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
+import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry } from "./api";
@@ -21,33 +21,14 @@ interface DayDialogProps {
 export function DayDialog({ iso, entries, onClose }: DayDialogProps) {
   const [mode, setMode] = useState<Mode>("list");
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return createPortal(
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" aria-hidden="true" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label={`Jour ${iso}`} className="relative w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">{formatFrDate(iso)}</h2>
-          <button type="button" aria-label="Fermer" className="rounded p-1 text-muted-foreground hover:text-foreground" onClick={onClose}>
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="mt-4">
-          {mode === "list" ? <DayList entries={entries} onCreate={setMode} onClose={onClose} /> : null}
-          {mode === "event" ? <EventForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
-          {mode === "closure" ? <ClosureForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
-        </div>
+  return (
+    <Modal label={`Jour ${iso}`} title={formatFrDate(iso)} onClose={onClose}>
+      <div className="mt-4">
+        {mode === "list" ? <DayList entries={entries} onCreate={setMode} onClose={onClose} /> : null}
+        {mode === "event" ? <EventForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
+        {mode === "closure" ? <ClosureForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -120,8 +101,9 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
   const [isDisruptive, setDisruptive] = useState(false);
   const createEvent = useCreateEvent();
 
+  const validEnd = endDate >= iso;
   const submit = () => {
-    if (title.trim() === "") return;
+    if (title.trim() === "" || !validEnd) return;
     createEvent.mutate(
       { title: title.trim(), startDate: iso, endDate, isDisruptive },
       { onSuccess: () => { toast.success("Événement ajouté"); onDone(); }, onError: () => toast.error("Création impossible") },
@@ -139,7 +121,7 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
         <input type="checkbox" checked={isDisruptive} onChange={(e) => setDisruptive(e.target.checked)} />
         Perturbant (pas d'entraînement ce jour)
       </label>
-      <Button className="w-full" onClick={submit} disabled={createEvent.isPending || title.trim() === ""}>
+      <Button className="w-full" onClick={submit} disabled={createEvent.isPending || title.trim() === "" || !validEnd}>
         Enregistrer
       </Button>
     </FormShell>
@@ -153,12 +135,13 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
   const [venueId, setVenueId] = useState("");
   const createClosure = useCreateVenueClosure();
 
+  const validEnd = endDate >= iso;
   const submit = () => {
-    if (venueId === "") return;
+    if (venueId === "" || !validEnd) return;
     const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Salle";
     createClosure.mutate(
       { title: title.trim() === "" ? `${venueName} fermé` : title.trim(), startDate: iso, endDate, venueId },
-      { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); }, onError: () => toast.error("Création impossible") },
+      { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); }, onError: (e) => toast.error(e instanceof Error ? e.message : "Création impossible") },
     );
   };
 
@@ -177,7 +160,7 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
         Jusqu'au
         <input type="date" className={`${fieldClass} mt-1`} value={endDate} min={iso} onChange={(e) => setEndDate(e.target.value)} />
       </label>
-      <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === ""}>
+      <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validEnd}>
         Enregistrer
       </Button>
     </FormShell>

@@ -9,7 +9,7 @@ import { BaselineBanner } from "./BaselineBanner";
 import { MonthCalendar } from "./MonthCalendar";
 import { RadarPanel } from "./RadarPanel";
 import { useCalendarEntries, useSchoolHolidays } from "./queries";
-import { monthWindow } from "./lib/date";
+import { addDays, monthWindow, todayISO } from "./lib/date";
 
 /** Home cockpit — unlocked once the season's baseline plan has been validated (sticky). Before that, the work-loop is home. */
 export function CockpitPage() {
@@ -19,6 +19,9 @@ export function CockpitPage() {
 
   const { from, to } = monthWindow(cursor.year, cursor.month);
   const { data: entries = [] } = useCalendarEntries(from, to);
+  // The radar surfaces upcoming to-dos season-wide, not just the visible month.
+  const radarToday = todayISO();
+  const { data: radarEntries = [] } = useCalendarEntries(radarToday, addDays(radarToday, 300));
   const { data: holidays } = useSchoolHolidays();
   const { data: schedules = [] } = useSchedules();
 
@@ -38,7 +41,7 @@ export function CockpitPage() {
       <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} onPrev={prev} onNext={next} />
-        <RadarPanel entries={entries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} />
+        <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} />
       </div>
     </div>
   );
