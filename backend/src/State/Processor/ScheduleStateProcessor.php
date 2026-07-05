@@ -6,18 +6,104 @@ namespace App\State\Processor;
 
 use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
+use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
+use App\Entity\Season;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Repository\SeasonRepository;
+use App\Service\OverlayManager;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * @extends AbstractStateProcessor<Schedule, ScheduleInput, ScheduleResource>
  */
 class ScheduleStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonRepository $seasonRepository,
+        private readonly OverlayManager $overlayManager,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonRepository);
+    }
+
     protected function getEntityClass(): string
     {
         return Schedule::class;
+    }
+
+    /**
+     * A schedule carrying calendarEntryId is a period OVERLAY (palier B). Validate
+     * the target entry (422) before creation, then stamp the inverse link
+     * (CalendarEntry.overlayScheduleId) server-side — never trusting the client.
+     *
+     * @param ScheduleInput $input
+     *
+     * @return ScheduleResource
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        $entry = null;
+        if (null !== $input->calendarEntryId) {
+            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($input->calendarEntryId);
+            // Explicit club check (do not rely on RLS alone — the EM identity map
+            // can surface a cross-club entry loaded earlier in the same request).
+            if (!$entry instanceof CalendarEntry || (null !== $clubId && $entry->getClubId() !== $clubId)) {
+                throw new UnprocessableEntityHttpException('Unknown calendar entry.');
+            }
+            if (CalendarEntryKind::PERIOD !== $entry->getKind()) {
+                throw new UnprocessableEntityHttpException('Only a period entry can carry an overlay.');
+            }
+            if (!\in_array($entry->getPeriodType(), [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
+                throw new UnprocessableEntityHttpException('Overlay generation is only supported for closure and holiday periods.');
+            }
+            if (null !== $entry->getOverlayScheduleId()) {
+                throw new UnprocessableEntityHttpException('This period already has an overlay schedule.');
+            }
+            // An overlay is built ON the socle: the season must have a baseline
+            // (otherwise the club would be onboarded with only an overlay, no base).
+            $season = $this->entityManager->getRepository(Season::class)->find($entry->getSeasonId());
+            if (!$season instanceof Season || null === $season->getBaselineScheduleId()) {
+                throw new UnprocessableEntityHttpException('The season has no baseline plan yet — validate the base plan first.');
+            }
+            // Bind the overlay to the ENTRY's season (not the active one) so the
+            // build reads the right season's structure + dated constraints.
+            $seasonId = $entry->getSeasonId();
+        }
+
+        /** @var ScheduleResource $output */
+        $output = parent::processPost($input, $clubId, $seasonId);
+
+        if ($entry instanceof CalendarEntry) {
+            $entry->setOverlayScheduleId($output->id);
+            $this->entityManager->flush();
+        }
+
+        return $output;
+    }
+
+    /**
+     * @param array<string, mixed> $uriVariables
+     */
+    protected function processDelete(array $uriVariables, ?string $clubId): void
+    {
+        // Purge the schedule's slots/diagnostics (no FK cascade) and reset any
+        // period entry pointing at it, before the parent removes the row.
+        $id = $uriVariables['id'] ?? null;
+        if (\is_string($id) && '' !== $id) {
+            $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
+            if ($schedule instanceof Schedule && (null === $clubId || $schedule->getClubId() === $clubId)) {
+                $this->overlayManager->purgeScheduleArtifacts($schedule);
+            }
+        }
+
+        parent::processDelete($uriVariables, $clubId);
     }
 
     /**
@@ -38,6 +124,8 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);
         }
+        // Overlay marker (palier B) — POST only; never mutated on PUT.
+        $entity->setCalendarEntryId($input->calendarEntryId);
 
         return $entity;
     }

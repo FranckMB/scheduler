@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Schedule;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -241,10 +247,10 @@ final class CalendarEntryApiTest extends WebTestCase
         $old->setEndDate(new DateTimeImmutable('2025-06-30'));
         $old->setStatus('archived');
         $this->em->persist($old);
-        $oldEntry = new \App\Entity\CalendarEntry;
+        $oldEntry = new CalendarEntry;
         $oldEntry->setClubId($club->getId());
         $oldEntry->setSeasonId($old->getId());
-        $oldEntry->setKind(\App\Enum\CalendarEntryKind::EVENT);
+        $oldEntry->setKind(CalendarEntryKind::EVENT);
         $oldEntry->setTitle('Stale');
         $oldEntry->setStartDate(new DateTimeImmutable('2025-05-12'));
         $oldEntry->setEndDate(new DateTimeImmutable('2025-05-12'));
@@ -258,6 +264,56 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertNotContains('Stale', $titles, 'the collection must be scoped to the active season');
     }
 
+    public function testDeletingPeriodCascadesOverlaySchedule(): void
+    {
+        [$user, $club, $season] = $this->seed('CE15');
+
+        // A period entry with a generated overlay (schedule + one slot).
+        $this->scopeGucToClub($club->getId());
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setName('Overlay');
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gym fermé');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->persist($entry);
+        $overlay->setCalendarEntryId($entry->getId());
+
+        $slot = new ScheduleSlotTemplate;
+        $slot->setClubId($club->getId());
+        $slot->setSeasonId($season->getId());
+        $slot->setScheduleId($overlay->getId());
+        $slot->setTeamId('44444444-4444-4444-8444-444444444444');
+        $slot->setVenueId('55555555-5555-4555-8555-555555555555');
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $this->em->persist($slot);
+        $this->em->flush();
+
+        $overlayId = $overlay->getId();
+        $slotId = $slot->getId();
+
+        $this->client->request('DELETE', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        self::assertNull($this->em->getRepository(Schedule::class)->find($overlayId), 'overlay schedule must be purged');
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($slotId), 'overlay slots must be purged');
+    }
+
     public function testForeignEntryIsInvisible(): void
     {
         [$userA, $clubA] = $this->seed('CE8');
@@ -265,10 +321,10 @@ final class CalendarEntryApiTest extends WebTestCase
 
         // Create an entry in club B (scope the GUC to B first).
         $this->scopeGucToClub($clubB->getId());
-        $entryB = new \App\Entity\CalendarEntry;
+        $entryB = new CalendarEntry;
         $entryB->setClubId($clubB->getId());
         $entryB->setSeasonId($this->activeSeasonId($clubB));
-        $entryB->setKind(\App\Enum\CalendarEntryKind::EVENT);
+        $entryB->setKind(CalendarEntryKind::EVENT);
         $entryB->setTitle('Secret B');
         $entryB->setStartDate(new DateTimeImmutable('2026-05-12'));
         $entryB->setEndDate(new DateTimeImmutable('2026-05-12'));

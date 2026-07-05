@@ -20,4 +20,8 @@ class ScheduleInput
 
     #[Groups(['write'])]
     public ?int $solverSeed = null;
+
+    /** Set at POST to create this schedule as a period overlay (palier B); ignored on PUT. */
+    #[Groups(['write'])]
+    public ?string $calendarEntryId = null;
 }

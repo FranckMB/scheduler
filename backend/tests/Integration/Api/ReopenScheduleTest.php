@@ -4,11 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\Schedule;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -63,6 +71,64 @@ final class ReopenScheduleTest extends WebTestCase
         $this->em->clear();
         $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
         self::assertNotNull($reloaded?->getSocleValidatedAt(), 'reopen must NOT clear the sticky cockpit unlock');
+    }
+
+    public function testReopenBaselineWithOverlaysRequiresConfirm(): void
+    {
+        [$user, , $season] = $this->seed('REO6');
+        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $season->setBaselineScheduleId($baseline->getId());
+        $this->overlayEntry($season, 'Vacances Toussaint');
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$baseline->getId()}/reopen");
+
+        self::assertResponseStatusCodeSame(409);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('overlays_exist', $data['code']);
+        self::assertSame(1, $data['count']);
+        self::assertSame('Vacances Toussaint', $data['overlays'][0]['title']);
+    }
+
+    public function testReopenBaselineWithConfirmDeletesOverlays(): void
+    {
+        [$user, $club, $season] = $this->seed('REO7');
+        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $season->setBaselineScheduleId($baseline->getId());
+        [$entry, $overlayId, $slotId, $datedId] = $this->overlayEntry($season, 'Toussaint');
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$baseline->getId()}/reopen", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['confirmDeleteOverlays' => true], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        // Overlay schedule + its slots purged; entry + dated constraint kept, link reset.
+        self::assertNull($this->em->getRepository(Schedule::class)->find($overlayId));
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($slotId));
+        $reloadedEntry = $this->em->getRepository(CalendarEntry::class)->find($entry->getId());
+        self::assertNotNull($reloadedEntry);
+        self::assertNull($reloadedEntry->getOverlayScheduleId());
+        self::assertNotNull($this->em->getRepository(Constraint::class)->find($datedId), 'dated constraint is kept (period stays signalée)');
+    }
+
+    public function testReopenNonBaselineWithOverlaysUnaffected(): void
+    {
+        [$user, , $season] = $this->seed('REO8');
+        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $season->setBaselineScheduleId($baseline->getId());
+        $other = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $this->overlayEntry($season, 'Toussaint');
+        $this->em->flush();
+
+        // Reopening a non-baseline validated schedule ignores overlays.
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$other->getId()}/reopen");
+        self::assertResponseIsSuccessful();
     }
 
     public function testNonValidatedScheduleCannotBeReopened(): void
@@ -154,5 +220,59 @@ final class ReopenScheduleTest extends WebTestCase
         $this->em->flush();
 
         return $schedule;
+    }
+
+    /**
+     * A period entry with a generated overlay (schedule + one slot + dated FACILITY
+     * constraint).
+     *
+     * @return array{0: CalendarEntry, 1: string, 2: string, 3: string} entry, overlayId, slotId, datedConstraintId
+     */
+    private function overlayEntry(Season $season, string $title): array
+    {
+        $overlay = new Schedule;
+        $overlay->setClubId($season->getClubId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setName('Overlay ' . $title);
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($season->getClubId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle($title);
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->persist($entry);
+        $overlay->setCalendarEntryId($entry->getId());
+
+        $slot = new ScheduleSlotTemplate;
+        $slot->setClubId($season->getClubId());
+        $slot->setSeasonId($season->getId());
+        $slot->setScheduleId($overlay->getId());
+        $slot->setTeamId('44444444-4444-4444-8444-444444444444');
+        $slot->setVenueId('55555555-5555-4555-8555-555555555555');
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $this->em->persist($slot);
+
+        $dated = new Constraint;
+        $dated->setClubId($season->getClubId());
+        $dated->setSeasonId($season->getId());
+        $dated->setName('Salle fermée');
+        $dated->setScope(ConstraintScope::FACILITY);
+        $dated->setScopeTargetId('55555555-5555-4555-8555-555555555555');
+        $dated->setFamily(ConstraintFamily::FACILITY);
+        $dated->setRuleType(ConstraintRuleType::HARD);
+        $dated->setCalendarEntryId($entry->getId());
+        $this->em->persist($dated);
+        $this->em->flush();
+
+        return [$entry, $overlay->getId(), $slot->getId(), $dated->getId()];
     }
 }

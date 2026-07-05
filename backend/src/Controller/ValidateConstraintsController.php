@@ -46,10 +46,16 @@ final class ValidateConstraintsController extends AbstractController
             return $this->json(['error' => 'No active season.'], Response::HTTP_BAD_REQUEST);
         }
 
-        // Base plan only: dated (calendar-entry) constraints are validated in
-        // their period context, not here. See accueil-cockpit-temporel.md §9ter.c.
-        /** @var list<Constraint> $constraints */
-        $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
+        // Period scope (palier B): validate a period's dated constraints; else the
+        // base plan only (dated constraints excluded). See §9ter.c.
+        $calendarEntryId = $this->requestedCalendarEntryId($request);
+        if (null !== $calendarEntryId) {
+            /** @var list<Constraint> $constraints */
+            $constraints = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntryId, 'clubId' => $clubId]);
+        } else {
+            /** @var list<Constraint> $constraints */
+            $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
+        }
 
         $errors = [];
         foreach ($constraints as $constraint) {
@@ -74,5 +80,17 @@ final class ValidateConstraintsController extends AbstractController
             ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts],
             $valid ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY,
         );
+    }
+
+    private function requestedCalendarEntryId(?\Symfony\Component\HttpFoundation\Request $request): ?string
+    {
+        $content = $request?->getContent();
+        if (!\is_string($content) || '' === $content) {
+            return null;
+        }
+        $data = json_decode($content, true);
+        $id = \is_array($data) ? ($data['calendarEntryId'] ?? null) : null;
+
+        return \is_string($id) && '' !== $id ? $id : null;
     }
 }
