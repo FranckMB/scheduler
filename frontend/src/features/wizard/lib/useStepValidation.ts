@@ -66,15 +66,26 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
  * step only produces non-blocking reservation warnings (see above).
  */
 export function useStepValidation(stepId: WizardStepId): StepValidation {
-  const { data: teams = [] } = useWizardTeams();
-  const { data: venues = [] } = useWizardVenues();
-  const { data: slots = [] } = useVenueSlots();
-  const { data: coaches = [] } = useWizardCoaches();
+  const teamsQuery = useWizardTeams();
+  const venuesQuery = useWizardVenues();
+  const slotsQuery = useVenueSlots();
+  const coachesQuery = useWizardCoaches();
+  const { data: teams = [] } = teamsQuery;
+  const { data: venues = [] } = venuesQuery;
+  const { data: slots = [] } = slotsQuery;
+  const { data: coaches = [] } = coachesQuery;
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const reservations = useWizardStore((s) => s.reservations);
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const { data: constraintValidation } = useConstraintValidation("recap" === stepId, periodEntryId);
+
+  // On first load the queries default to [], which would flash a false blocking
+  // error ("Ajoutez au moins une équipe") before the data arrives. Stay neutral
+  // until they settle (isLoading = first load only, not background refetches).
+  if (teamsQuery.isLoading || venuesQuery.isLoading || slotsQuery.isLoading || coachesQuery.isLoading) {
+    return okValidation();
+  }
 
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
