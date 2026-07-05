@@ -408,12 +408,13 @@ if (!result.success) {
 ### Soumission
 
 1. Validation Zod globale → si erreurs, afficher par étape avec `role="alert"`
-2. Si valide, `PUT /api/clubs/{id}` avec `{ onboarding_completed: true }`
+2. Si valide, `PUT /api/clubs/{id}` avec `{ onboardingCompleted: true }`
 3. Redirection vers `/dashboard`
 
-> **Gap backend :** le champ `onboarding_completed` n'apparaît pas dans
-> `specs/courantes/openapi-snapshot.json` ni dans `backend-inventory.md`.
-> Voir §7 Auto-Save et `specs/evolution/backend-gaps.md` (à créer dans T19).
+> **Correction (ex-gap G7, fermé) :** le champ **existe** dans l'OpenAPI en
+> camelCase `Club.onboardingCompleted` (boolean, default false) — l'ancien
+> claim de gap (snake_case `onboarding_completed` absent) était une erreur de
+> doc. Décisions tracées dans `specs/evolution/roadmap.md`.
 
 ### UX
 
@@ -624,23 +625,15 @@ Wizard mount
       → si absent: initialWizardState
 ```
 
-### Gap backend — Server draft endpoint
+### Ex-gap backend — Server draft endpoint (tranché : abandonné)
 
-> **Le endpoint `PUT /api/clubs/{id}/draft` n'existe pas** dans
-> `specs/courantes/openapi-snapshot.json`. Le champ `transition_data` n'apparaît
-> ni dans l'OpenAPI ni dans `backend-inventory.md`. Le champ
-> `onboarding_completed` n'apparaît pas non plus.
->
-> **Action :** documenter ce gap dans `specs/evolution/backend-gaps.md` (à
-> créer dans T19). Le frontend implémente l'auto-save avec sessionStorage
-> uniquement jusqu'à ce que le backend expose le draft endpoint. Le contrat
-> d'interface est :
->
-> | Endpoint | Méthode | Body | Réponse | Statut |
-> |----------|---------|------|---------|--------|
-> | `/api/clubs/{id}/draft` | GET | — | `WizardState` (200) ou 404 | **Gap — à implémenter** |
-> | `/api/clubs/{id}/draft` | PUT | `WizardState` JSON | 204 | **Gap — à implémenter** |
-> | `/api/clubs/{id}` | PUT | `{ onboarding_completed: true }` | 200 | **Gap — champ absent** |
+> **Décision (2026-07, ex-gaps G1/G2, fermés)** : le draft serveur
+> `GET/PUT /api/clubs/{id}/draft` est **abandonné** — le wizard persiste **par
+> entité** (chaque salle/équipe/coach est POST/PUT à la saisie ; le store
+> wizard ne tient aucune donnée d'étape), ce qui couvre déjà « ne rien
+> perdre » ; un draft-blob serait une 2e source de vérité. Le champ
+> `onboardingCompleted` existe (camelCase, voir §5). Trace :
+> `specs/evolution/roadmap.md` §3.
 
 ### Test Cases
 
@@ -749,12 +742,12 @@ Wizard mount
 | `/api/priority-tiers` | GET | 3 | ✅ Présent |
 | `/api/teams/{id}` | PUT | 3 | ✅ Présent |
 | `/api/clubs/{id}` | GET, PUT | 4 | ✅ Présent |
-| `/api/clubs/{id}/draft` | GET, PUT | Auto-save | ❌ **Gap — voir §7** |
-| `/api/clubs/{id}` (`onboarding_completed`) | PUT | 4 | ❌ **Gap — champ absent** |
+| `/api/clubs/{id}/draft` | GET, PUT | Auto-save | ✂️ **Abandonné (ex-G1/G2)** — persistance par entité, voir §7 |
+| `/api/clubs/{id}` (`onboardingCompleted`) | PUT | 4 | ✅ Présent (camelCase — ex-G7, erreur de doc corrigée) |
 
 > Référence : `specs/courantes/openapi-snapshot.json` (paths vérifiés au
-> 2026-06-30, backend SHA `6e35a6ce`). Les gaps sont à documenter dans
-> `specs/evolution/backend-gaps.md` (à créer dans T19).
+> 2026-06-30, backend SHA `6e35a6ce`). Décisions sur les ex-gaps :
+> `specs/evolution/roadmap.md`.
 
 ---
 

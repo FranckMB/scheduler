@@ -2,7 +2,7 @@ Last verified @ feat/qw5-profile-logo (off main) 2026-07-04
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`.
 Changements récents :
-- **G4/G5 (backend-gaps)** : les routes Symfony custom `/api/register`, `/api/me`
+- **G4/G5 (ex `backend-gaps`, absorbé dans `specs/evolution/roadmap.md`)** : les routes Symfony custom `/api/register`, `/api/me`
   (AuthController) et `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}`
   (ManualEditController) sont désormais documentées dans l'OpenAPI via
   `App\OpenApi\CustomRoutesOpenApiFactory` (décorateur de `api_platform.openapi.factory`).
