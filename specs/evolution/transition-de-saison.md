@@ -64,6 +64,7 @@ Chaque année le club reconduit sa structure à 90 % (mêmes gymnases, souvent m
 4. **Rétention 2 saisons** (N + N-1 readonly), purge N-2.
 5. **Pas de modèle joueur** → copie de structure transparente (les joueurs qui montent sont hors app).
 6. **Événements club** reconduits en « garder ? + nouvelle date ».
+7. **Nommage des équipes = label libre du gestionnaire** — copié tel quel, éditable, **jamais renommé automatiquement**. La catégorie d'âge réelle vit dans `sportCategoryId` (structuré, séparé du nom) → **aucune logique de vieillissement/renommage** dans la transition.
 
 ## 7. Hors scope
 
@@ -72,9 +73,9 @@ Chaque année le club reconduit sa structure à 90 % (mêmes gymnases, souvent m
 - Rétention au-delà de N-1.
 - Renommage automatique des équipes (voir question ouverte).
 
-## 8. Question ouverte (à trancher au plan)
+## 8. Questions ouvertes
 
-- **Nommage des équipes** : par **catégorie d'âge stable** (« U13M1 » refillé chaque année → copie transparente, zéro renommage) ou par **année de naissance** (« 2012 » → le label glisse chaque an → étape de renommage nécessaire) ? Ne bloque pas le cadrage ; décide juste si le wizard P2 ajoute une étape de renommage.
+**Aucune.** Le nommage des équipes (seul point resté ouvert) est tranché : label libre du gestionnaire, jamais renommé auto, catégorie d'âge portée par `sportCategoryId` (décision §6.7). Le besoin est complet — prêt pour `/plan` (P1).
 
 ## 9. Axes structurants (§7.1) & vérification
 
