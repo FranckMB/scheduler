@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/shared/components/ui/card";
 
 import { useStepValidation } from "../lib/useStepValidation";
 import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
+import { useWizardStore } from "../store";
 
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
@@ -50,7 +51,8 @@ export function RecapStep() {
   const { data: slots = [] } = useVenueSlots();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
-  const { data: constraints = [] } = useWizardConstraints();
+  const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");

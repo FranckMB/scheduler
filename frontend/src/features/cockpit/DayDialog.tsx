@@ -68,7 +68,7 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
         <Button variant="outline" onClick={() => onCreate("closure")}>
           Signaler une indisponibilité
         </Button>
-        <Button variant="ghost" disabled title="Bientôt (palier B)">
+        <Button variant="ghost" disabled title="Période générique (custom) — à venir. Utilise « Signaler une indisponibilité » ou le radar vacances.">
           Créer une période…
         </Button>
       </div>

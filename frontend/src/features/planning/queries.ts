@@ -102,12 +102,16 @@ export function useValidateSchedule() {
   });
 }
 
-/** Reopen a VALIDATED schedule → COMPLETED (editable again). */
+/** Reopen a VALIDATED schedule → COMPLETED (editable again). Accepts the overlay-delete confirm flag. */
 export function useReopenSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (scheduleId: string) => planningApi.reopenSchedule(scheduleId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) =>
+      planningApi.reopenSchedule(id, { confirmDeleteOverlays }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+    },
   });
 }
 

@@ -188,8 +188,13 @@ export function useDeleteCoachPlayer() {
 
 // --- Constraints (W4) ---
 
-export function useWizardConstraints() {
-  return useQuery({ queryKey: ["wizard", "constraints"], queryFn: wizardApi.listConstraints, staleTime: 30_000 });
+/** In period mode, list the period's dated constraints; else base-plan (permanent) constraints. */
+export function useWizardConstraints(calendarEntryId?: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "constraints", calendarEntryId ?? "base"],
+    queryFn: () => wizardApi.listConstraints(calendarEntryId ? { calendarEntryId } : { permanent: "1" }),
+    staleTime: 30_000,
+  });
 }
 
 export function useWizardTeamTags() {
@@ -214,8 +219,13 @@ export function useDeleteConstraint() {
 
 // --- Recap + generate (W5) ---
 
-export function useConstraintValidation(enabled: boolean) {
-  return useQuery({ queryKey: ["wizard", "constraint_validation"], queryFn: wizardApi.validateConstraints, enabled, staleTime: 0 });
+export function useConstraintValidation(enabled: boolean, calendarEntryId?: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "constraint_validation", calendarEntryId ?? "base"],
+    queryFn: () => wizardApi.validateConstraints(calendarEntryId ?? undefined),
+    enabled,
+    staleTime: 0,
+  });
 }
 
 /** Poll a schedule's status while it is queued/generating; stops once terminal. */
@@ -238,11 +248,23 @@ export function useScheduleStatus(id: string | null) {
 export function useLaunchGeneration() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, reservations }: { name: string; reservations: Reservation[] }) => {
-      const schedule = await wizardApi.createSchedule(name);
+    mutationFn: async ({
+      name,
+      reservations,
+      calendarEntryId,
+      existingScheduleId,
+    }: {
+      name: string;
+      reservations: Reservation[];
+      calendarEntryId?: string;
+      existingScheduleId?: string;
+    }) => {
+      // Period mode reuses the entry's existing overlay schedule (regenerate);
+      // otherwise create a fresh schedule (base plan, or first overlay).
+      const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(name, calendarEntryId)).id;
       for (const r of reservations) {
         await wizardApi.createSlotTemplate({
-          scheduleId: schedule.id,
+          scheduleId,
           teamId: r.teamId,
           venueId: r.venueId,
           dayOfWeek: r.dayOfWeek,
@@ -251,8 +273,8 @@ export function useLaunchGeneration() {
           lockLevel: "HARD",
         });
       }
-      await wizardApi.generateSchedule(schedule.id);
-      return schedule.id;
+      await wizardApi.generateSchedule(scheduleId);
+      return scheduleId;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });

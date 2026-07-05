@@ -19,6 +19,8 @@ import {
   useWizardTeamCoaches,
   useWizardTeams,
 } from "../queries";
+import { useWizardStore } from "../store";
+import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
 
 function payload(coach: Coach, patch: Partial<Coach>) {
   return { firstName: coach.firstName, lastName: coach.lastName, email: coach.email, isEmployee: coach.isEmployee, isActive: coach.isActive, ...patch };
@@ -126,6 +128,15 @@ function CoachCard({ coach, teams, teamName, coachLinks, playerLinks }: CardProp
 }
 
 export function CoachesStep() {
+  const periodMode = useWizardStore((s) => s.mode === "period");
+  const { data: coaches = [] } = useWizardCoaches();
+  if (periodMode) {
+    return <PeriodReadOnlyStructure title="Coachs" items={coaches.map((c) => ({ id: c.id, label: `${c.firstName} ${c.lastName}`.trim() }))} />;
+  }
+  return <CoachesEditor />;
+}
+
+function CoachesEditor() {
   const { data: coaches = [] } = useWizardCoaches();
   const { data: teams = [] } = useWizardTeams();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();

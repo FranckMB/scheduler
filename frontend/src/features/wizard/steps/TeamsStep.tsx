@@ -13,6 +13,8 @@ import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload 
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
+import { useWizardStore } from "../store";
+import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
 
 // Manager-facing meaning of each priority tier (backend tier names are FFBB
 // competition levels; here we explain what the rank means for scheduling).
@@ -217,6 +219,15 @@ function TierZone({ tier, teamIds, teamById, onArrow }: TierZoneProps) {
 const zoneTierId = (id: string): number | null => (id.startsWith("zone-") ? Number(id.slice(5)) : null);
 
 export function TeamsStep() {
+  const periodMode = useWizardStore((s) => s.mode === "period");
+  const { data: teams = [] } = useWizardTeams();
+  if (periodMode) {
+    return <PeriodReadOnlyStructure title="Équipes" items={teams.map((t) => ({ id: t.id, label: t.name }))} />;
+  }
+  return <TeamsEditor />;
+}
+
+function TeamsEditor() {
   const { data: teams = [] } = useWizardTeams();
   const { data: categories = [] } = useSportCategories();
   const { data: tiers = [] } = usePriorityTiers();

@@ -6,7 +6,7 @@ import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"]): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01" });
+const schedule = (status: Schedule["status"]): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null });
 
 function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
   return render(

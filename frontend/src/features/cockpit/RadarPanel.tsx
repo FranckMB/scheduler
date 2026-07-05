@@ -1,10 +1,13 @@
 import { AlertTriangle, CalendarClock, MapPin, PartyPopper } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
+import { usePlanningStore } from "@/features/planning/store";
+import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
+import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, SchoolHoliday } from "./api";
-import { useEntryConflicts } from "./queries";
+import { useCreateHolidayPeriod, useEntryConflicts } from "./queries";
 import { daysUntil, todayISO } from "./lib/date";
 
 interface RadarPanelProps {
@@ -13,9 +16,25 @@ interface RadarPanelProps {
   zone: string | null;
 }
 
-/** The manager's to-do, sorted by urgency. Palier A surfaces; CTAs that generate an overlay are palier B. */
+/** The manager's to-do, sorted by urgency. "Adapter" opens the wizard in period mode (palier B). */
 export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
   const today = todayISO();
+  const navigate = useNavigate();
+  const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
+  const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
+  const createHoliday = useCreateHolidayPeriod();
+
+  const adapt = (entryId: string) => {
+    startPeriodMode(entryId);
+    navigate("/wizard");
+  };
+  const viewOverlay = (overlayScheduleId: string) => {
+    setSelectedScheduleId(overlayScheduleId);
+    navigate("/planning");
+  };
+
+  // A holiday already materialised as a period entry (matched by schoolHolidayId).
+  const entryByHoliday = new Map(entries.filter((e) => null !== e.schoolHolidayId).map((e) => [e.schoolHolidayId as string, e]));
 
   const upcomingHolidays = holidays
     .filter((h) => h.startDate >= today)
@@ -42,20 +61,43 @@ export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
         </RadarCard>
       ) : null}
 
-      {upcomingHolidays.map((h) => (
-        <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · pas de plan`}>
-          <Button variant="ghost" size="sm" disabled title="Génération de plan — à venir (palier B)">
-            Adapter
-          </Button>
-        </RadarCard>
-      ))}
+      {upcomingHolidays.map((h) => {
+        const entry = entryByHoliday.get(h.id);
+        return (
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "plan généré" : "pas de plan"}`}>
+            {entry?.overlayScheduleId ? (
+              <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
+                Voir le plan
+              </Button>
+            ) : entry ? (
+              <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
+                Adapter
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={createHoliday.isPending}
+                onClick={() =>
+                  createHoliday.mutate(
+                    { schoolHolidayId: h.id, label: h.label, startDate: h.startDate, endDate: h.endDate },
+                    { onSuccess: (created) => adapt(created.id), onError: () => toast.error("Création impossible") },
+                  )
+                }
+              >
+                Adapter
+              </Button>
+            )}
+          </RadarCard>
+        );
+      })}
 
       {disruptiveEvents.map((e) => (
         <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${e.startDate} · pas d'entraînement`} />
       ))}
 
       {closures.map((e) => (
-        <ClosureRadarItem key={e.id} entry={e} />
+        <ClosureRadarItem key={e.id} entry={e} onAdapt={() => adapt(e.id)} onView={() => e.overlayScheduleId && viewOverlay(e.overlayScheduleId)} />
       ))}
 
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}
@@ -63,19 +105,31 @@ export function RadarPanel({ entries, holidays, zone }: RadarPanelProps) {
   );
 }
 
-function ClosureRadarItem({ entry }: { entry: CalendarEntry }) {
+function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; onAdapt: () => void; onView: () => void }) {
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
+  const hasOverlay = null !== entry.overlayScheduleId;
 
   return (
     <RadarCard
-      icon={<AlertTriangle className="size-4 text-destructive" />}
+      icon={<AlertTriangle className={hasOverlay ? "size-4 text-accent" : "size-4 text-destructive"} />}
       title={entry.title}
-      detail={count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · plan secondaire absent` : "Indisponibilité signalée"}
+      detail={hasOverlay ? "Plan secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · plan secondaire absent` : "Indisponibilité signalée"}
     >
-      <Button variant="ghost" size="sm" disabled title="Adapter la période — à venir (palier B)">
-        Adapter
-      </Button>
+      {hasOverlay ? (
+        <>
+          <Button variant="outline" size="sm" onClick={onView}>
+            Voir le plan
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onAdapt}>
+            Ajuster
+          </Button>
+        </>
+      ) : (
+        <Button variant="outline" size="sm" onClick={onAdapt}>
+          Adapter
+        </Button>
+      )}
     </RadarCard>
   );
 }
@@ -90,7 +144,7 @@ function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; t
           <p className="text-xs text-muted-foreground">{detail}</p>
         </div>
       </div>
-      {children ? <div className="mt-2 flex justify-end">{children}</div> : null}
+      {children ? <div className="mt-2 flex justify-end gap-1">{children}</div> : null}
     </div>
   );
 }
