@@ -47,6 +47,7 @@ export function AppLayout() {
             <SeasonSelector />
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/planning">Planning</NavItem>
+            <NavItem to="/matchs">Matchs</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
               <MenuItem to="/club" icon={<Settings />}>
