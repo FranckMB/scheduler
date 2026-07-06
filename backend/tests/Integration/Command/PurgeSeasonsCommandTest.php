@@ -8,6 +8,8 @@ use App\Command\PurgeSeasonsCommand;
 use App\Entity\Club;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -57,9 +59,10 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
 
-        // N-2 (old) purged, row and children gone.
+        // N-2 (old) purged, row and children gone (team + its tag assignment).
         self::assertNull($this->em->getRepository(Season::class)->find($old->getId()));
         self::assertCount(0, $this->em->getRepository(Team::class)->findBy(['seasonId' => $old->getId()]));
+        self::assertCount(0, $this->em->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $old->getId()]));
         // current, N-1 and the future draft survive.
         self::assertNotNull($this->em->getRepository(Season::class)->find($past->getId()));
         self::assertNotNull($this->em->getRepository(Season::class)->find($current->getId()));
@@ -122,6 +125,21 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $team->setSessionsPerWeek(2);
         $team->setIsActive(true);
         $this->em->persist($team);
+
+        // A tag assignment in the N-2 season — the outlier table (season_id,
+        // no club_id) SeasonDataPurger must delete by season.
+        $tag = new TeamTag;
+        $tag->setClubId($club->getId());
+        $tag->setName('CUSTOM-' . substr($uid, -4));
+        $tag->setIsSystem(false);
+        $this->em->persist($tag);
+        $this->em->flush();
+
+        $assignment = new TeamTagAssignment;
+        $assignment->setSeasonId($old->getId());
+        $assignment->setTeamId($team->getId());
+        $assignment->setTagId($tag->getId());
+        $this->em->persist($assignment);
         $this->em->flush();
 
         return [$club, [$old, $past, $current, $draft]];

@@ -53,8 +53,8 @@ Chaque année le club reconduit sa structure à 90 % (mêmes gymnases, souvent m
 
 | Phase | Contenu | Livre |
 |---|---|---|
-| **P1 — Transition fonctionnelle** | Résolution multi-saison (N-1/N/N+1 + sélecteur + courante dérivée du calendrier + read-only N) · `SeasonTransitionService` (copie entrées) · rétention/purge. Le gestionnaire copie N→N+1 et **édite librement avec le wizard existant**, génère, valide. | La transition **marche de bout en bout** (plus de ressaisie). Cœur utile seul. |
-| **P2 — Revue guidée** | Wizard de revue par type (keep/modify/dissolve, réaffectation coach, re-classement priorité) + **re-datation des événements club** + alertes d'anticipation (mi-mai → mi-juillet). | Le **confort** qui rend la transition guidée et sans oubli. Sur P1. |
+| **P1 — Transition fonctionnelle** ✅ **LIVRÉ (PR #68/69/70, 2026-07-06)** | Résolution multi-saison (N-1/N/N+1 + sélecteur + courante dérivée du calendrier + read-only N) · `SeasonTransitionService` (copie entrées) · rétention/purge (`app:seasons:purge`). Le gestionnaire copie N→N+1 et **édite librement avec le wizard existant**, génère, valide. | La transition **marche de bout en bout** (plus de ressaisie). Cœur utile seul. |
+| **P2 — Revue guidée** ⬜ **à venir** | Wizard de revue par type (keep/modify/dissolve, réaffectation coach, re-classement priorité) + **re-datation des événements club** (`CalendarEntry kind=event` — non copiés en P1) + alertes d'anticipation (mi-mai → mi-juillet). Éventuel report des tags custom (dépend de la dette `TeamTagService`). | Le **confort** qui rend la transition guidée et sans oubli. Sur P1. |
 
 ## 6. Décisions tranchées
 

@@ -171,6 +171,30 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertCount(0, $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $target->getId()]));
     }
 
+    public function testCanPrepareNextSeasonInJuneFromAValidatedCurrentSeason(): void
+    {
+        // Real anticipation flow (spec §1): mid-June, the current season has a
+        // VALIDATED main plan; the manager prepares next season ahead of the
+        // rush. The transition works and N+1 starts with a null socle so the
+        // cockpit gate forces its own baseline.
+        $club = $this->minimalClub();
+        // Season 2025-26 (started Aug 2025) — current on 2026-06-01, and validated.
+        $current = $this->createSeason($club, 2025);
+        $current->setBaselineScheduleId('11111111-1111-4111-8111-111111111111');
+        $current->setSocleValidatedAt(new DateTimeImmutable('2025-10-01T10:00:00+00:00'));
+        $this->em->flush();
+
+        $june1 = new DateTimeImmutable('2026-06-01');
+        $target = $this->service->transition($current, $june1);
+
+        self::assertSame('draft', $target->getStatus());
+        self::assertNull($target->getBaselineScheduleId());
+        self::assertNull($target->getSocleValidatedAt());
+        // N+1 = the 2026-27 season-year.
+        self::assertSame('2026-08-01', $target->getStartDate()->format('Y-m-d'));
+        self::assertSame($current->getId(), $target->getTransitionData()['sourceSeasonId']);
+    }
+
     public function testEnginePayloadOfTransitionedSeasonReferencesCopiedEntities(): void
     {
         // Constraint-semantics NR (§7.1): a constraint copied by the transition
@@ -382,6 +406,23 @@ final class SeasonTransitionServiceTest extends KernelTestCase
             'coachConstraint' => $coachConstraint,
             'tag' => $tag,
         ]];
+    }
+
+    private function minimalClub(): Club
+    {
+        $uid = uniqid('', true);
+        $club = new Club;
+        $club->setName('Club juin');
+        $club->setSlug('club-juin-' . $uid);
+        $club->setTimezone('Europe/Paris');
+        $club->setLocale('fr');
+        $club->setOnboardingCompleted(true);
+        $club->setFfbbClubCode('JUN' . strtoupper(substr(md5($uid), 0, 10)));
+        $this->em->persist($club);
+        $this->em->flush();
+        $this->scopeGucToClub($club->getId());
+
+        return $club;
     }
 
     private function createSeason(Club $club, int $startYear): Season

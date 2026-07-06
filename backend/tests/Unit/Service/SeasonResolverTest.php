@@ -98,6 +98,24 @@ final class SeasonResolverTest extends TestCase
         self::assertFalse(SeasonResolver::isReadonlyAmong($draft, $seasons, $today));
     }
 
+    public function testReadonlyIsRelativeToCurrentSeasonNotAbsolute(): void
+    {
+        // The SAME season N is writable while it is current, and only becomes
+        // read-only once a LATER season (N+1) has become current — i.e. "je
+        // vois la saison précédente en lecture seule uniquement quand je suis
+        // en N+1".
+        $n = $this->season('2025-08-01', '2026-07-15');
+        $n1 = $this->season('2026-08-01', '2027-07-15');
+
+        // Alone, or while N is still current (before the N+1 pivot): N is NOT read-only.
+        self::assertFalse(SeasonResolver::isReadonlyAmong($n, [$n], new DateTimeImmutable('2026-03-01')));
+        self::assertFalse(SeasonResolver::isReadonlyAmong($n, [$n, $n1], new DateTimeImmutable('2026-07-14')));
+
+        // Once we cross into N+1 (after July 15), N flips to read-only.
+        self::assertFalse(SeasonResolver::isReadonlyAmong($n1, [$n, $n1], new DateTimeImmutable('2026-07-15')));
+        self::assertTrue(SeasonResolver::isReadonlyAmong($n, [$n, $n1], new DateTimeImmutable('2026-07-15')));
+    }
+
     private function season(string $start, string $end): Season
     {
         $season = new Season;
