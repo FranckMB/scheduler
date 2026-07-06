@@ -118,6 +118,20 @@ final class SeasonIsolationTest extends WebTestCase
         self::assertResponseStatusCodeSame(403);
     }
 
+    public function testResetSeasonOnAPastSeasonIsRefused(): void
+    {
+        [$club, $user] = $this->createClubWithTwoSeasons();
+        $this->scopeGucToClub($club->getId());
+        $past = $this->createSeason($club, SeasonResolver::seasonYear(new DateTimeImmutable('today')) - 1);
+        $this->em->flush();
+
+        // Wiping an archived season is refused (409) — the archive is frozen.
+        $this->client->request('DELETE', '/api/reset-season', [], [], $this->authHeaders($user) + [
+            'HTTP_X-Season-Id' => $past->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(409);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

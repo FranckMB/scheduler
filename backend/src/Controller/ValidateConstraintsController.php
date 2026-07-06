@@ -37,11 +37,7 @@ final class ValidateConstraintsController extends AbstractController
             return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
         }
 
-        $seasonId = $request?->attributes->get('_season_id');
-        if (!\is_string($seasonId) || '' === $seasonId) {
-            $season = $this->seasonResolver->currentSeason($clubId);
-            $seasonId = $season?->getId();
-        }
+        $seasonId = $this->seasonResolver->selectedOrCurrent($request, $clubId)?->getId();
         if (null === $seasonId) {
             return $this->json(['error' => 'No active season.'], Response::HTTP_BAD_REQUEST);
         }

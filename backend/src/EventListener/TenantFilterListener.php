@@ -42,6 +42,11 @@ class TenantFilterListener implements EventSubscriberInterface
         ];
     }
 
+    private static function isUuid(string $value): bool
+    {
+        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value);
+    }
+
     public function onKernelRequest(RequestEvent $event): void
     {
         if (!$event->isMainRequest()) {
@@ -62,10 +67,12 @@ class TenantFilterListener implements EventSubscriberInterface
         $clubId = $this->resolveClubId($request, $user);
 
         if (null === $clubId) {
-            // No tenant: only an explicit season header/attribute can apply (the
-            // active-season fallback needs a club anyway).
+            // No tenant: only an explicit season header/attribute can apply
+            // (the current-season fallback needs a club anyway). Ownership
+            // cannot be checked without a club, but the UUID shape can — a
+            // garbage value must never reach a downstream _season_id consumer.
             $explicitSeason = $this->resolveExplicitSeasonId($request);
-            if (null !== $explicitSeason) {
+            if (null !== $explicitSeason && self::isUuid($explicitSeason)) {
                 $request->attributes->set('_season_id', $explicitSeason);
             }
 
@@ -148,7 +155,7 @@ class TenantFilterListener implements EventSubscriberInterface
      */
     private function findClubSeason(string $seasonId, string $clubId): ?Season
     {
-        if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $seasonId)) {
+        if (!self::isUuid($seasonId)) {
             return null;
         }
 

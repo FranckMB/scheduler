@@ -7,7 +7,6 @@ namespace App\Command;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\PeriodReminderLog;
-use App\Entity\Season;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
@@ -114,13 +113,22 @@ final class PeriodReminderCommand extends Command
         // An explicit --date (rehearsal/tests) overrides for all clubs.
         $today = $forcedToday ?? $this->clubToday($club);
 
-        // Remind on the CURRENT season (calendar-derived), never a past one.
-        $season = $this->seasonResolver->currentSeason($clubId, $today);
-        if (!$season instanceof Season) {
+        // Remind across ALL the club's seasons: the date horizon does the real
+        // bounding. Keying on the current season only would go silent for a
+        // period of season N still upcoming right after the July-15 pivot
+        // (N+1 current, N period 4 days away → no e-mail).
+        $seasons = $this->seasonResolver->seasonsForClub($clubId);
+        if ([] === $seasons) {
             return 0;
         }
 
-        $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
+        $periods = [];
+        foreach ($seasons as $season) {
+            $periods = array_merge(
+                $periods,
+                $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON),
+            );
+        }
         if ([] === $periods) {
             return 0; // No period in the horizon → skip the manager lookup.
         }

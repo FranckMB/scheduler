@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Season;
 use App\Repository\SeasonRepository;
 use DateTimeImmutable;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Resolves which of a club's seasons is the CURRENT one, derived from the
@@ -52,6 +53,13 @@ final class SeasonResolver
      * Same derivation from an already-loaded list (avoids a second query when
      * the caller holds the club's seasons, e.g. /api/me).
      *
+     * Rule: seasons are binned by seasonYear(startDate). Inside TODAY'S bin,
+     * a season becomes current on its actual startDate (an early-start next
+     * season — e.g. 2026-07-01, same bin as the running one — must NOT win
+     * before it begins); a prepared not-yet-started season wins only once its
+     * bin is today's (the July-15 pivot). Empty bin → the latest
+     * already-started season, else the earliest (all-future club).
+     *
      * @param list<Season> $seasons ordered by startDate ASC
      */
     public static function currentAmong(array $seasons, ?DateTimeImmutable $today = null): ?Season
@@ -64,12 +72,31 @@ final class SeasonResolver
             return $seasons[0];
         }
 
-        $todayYear = self::seasonYear($today ?? new DateTimeImmutable('today'));
+        $today ??= new DateTimeImmutable('today');
+        $todayYear = self::seasonYear($today);
+        $todayIso = $today->format('Y-m-d');
 
+        $inBin = array_values(array_filter(
+            $seasons,
+            static fn (Season $s): bool => self::seasonYear($s->getStartDate()) === $todayYear,
+        ));
+        if ([] !== $inBin) {
+            $started = null;
+            foreach ($inBin as $season) {
+                if ($season->getStartDate()->format('Y-m-d') <= $todayIso) {
+                    // ASC list → last match = greatest started startDate.
+                    $started = $season;
+                }
+            }
+
+            return $started ?? $inBin[0];
+        }
+
+        // No season in today's bin: the latest already-started one (covers the
+        // window between an early season start and the July-15 pivot).
         $candidate = null;
         foreach ($seasons as $season) {
-            if (self::seasonYear($season->getStartDate()) <= $todayYear) {
-                // List is startDate ASC → the last match has the greatest startDate.
+            if ($season->getStartDate()->format('Y-m-d') <= $todayIso) {
                 $candidate = $season;
             }
         }
@@ -106,6 +133,21 @@ final class SeasonResolver
     public function currentSeason(string $clubId, ?DateTimeImmutable $today = null): ?Season
     {
         return self::currentAmong($this->seasonsForClub($clubId), $today);
+    }
+
+    /**
+     * The SELECTED season (validated `_season_id` request attribute set by
+     * TenantFilterListener), else the calendar-derived current one. Single
+     * home of the fallback shared by the custom controllers.
+     */
+    public function selectedOrCurrent(?Request $request, string $clubId): ?Season
+    {
+        $seasonId = $request?->attributes->get('_season_id');
+        if (\is_string($seasonId) && '' !== $seasonId) {
+            return $this->seasonRepository->find($seasonId);
+        }
+
+        return $this->currentSeason($clubId);
     }
 
     public function isCurrent(Season $season, ?DateTimeImmutable $today = null): bool

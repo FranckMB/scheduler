@@ -62,6 +62,21 @@ final class SeasonResolverTest extends TestCase
         self::assertSame($next, SeasonResolver::currentAmong([$buggy, $next], new DateTimeImmutable('2026-08-20')));
     }
 
+    public function testEarlyStartNextSeasonWaitsForItsActualStartDate(): void
+    {
+        // N+1 created with a startDate BEFORE the pivot (July 1 → same
+        // season-year bin as the running season): it must NOT become current
+        // before it actually starts, then must win from its startDate.
+        $n = $this->season('2025-08-01', '2026-06-30');
+        $early = $this->season('2026-07-01', '2027-06-30');
+        $seasons = [$n, $early];
+
+        self::assertSame($n, SeasonResolver::currentAmong($seasons, new DateTimeImmutable('2026-01-10')));
+        self::assertSame($n, SeasonResolver::currentAmong($seasons, new DateTimeImmutable('2026-06-30')));
+        self::assertSame($early, SeasonResolver::currentAmong($seasons, new DateTimeImmutable('2026-07-01')));
+        self::assertSame($early, SeasonResolver::currentAmong($seasons, new DateTimeImmutable('2026-07-20')));
+    }
+
     public function testAllFutureSeasonsFallBackToTheEarliest(): void
     {
         $a = $this->season('2098-08-01', '2099-07-15');

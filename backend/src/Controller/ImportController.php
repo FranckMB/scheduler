@@ -68,6 +68,18 @@ final class ImportController extends AbstractController
             return $this->json(['error' => 'seasonId is required.'], Response::HTTP_BAD_REQUEST);
         }
 
+        // The body seasonId must match the listener-resolved season: the
+        // season_filter scopes every read to the resolved one, so importing
+        // into another season would defeat the importer's dedupe lookups
+        // (duplicates) and produce rows invisible to the selected season.
+        $resolvedSeasonId = $request->attributes->get('_season_id');
+        if (!\is_string($resolvedSeasonId) || $seasonId !== $resolvedSeasonId) {
+            return $this->json(
+                ['error' => 'seasonId does not match the selected season (X-Season-Id).'],
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
         try {
             $result = $this->importer->import($file->getRealPath(), $id, $seasonId);
         } catch (InvalidArgumentException $e) {

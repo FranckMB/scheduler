@@ -60,6 +60,14 @@ final class ResetSeasonController extends AbstractController
             return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
         }
 
+        // A past season is an archive: wiping it must be refused (409, same
+        // idiom as the VALIDATED lock). Full readonly enforcement on every
+        // write path lands with SeasonAccessGuard (transition PR-3); the
+        // destructive reset is guarded right away.
+        if (true === $request?->attributes->get('_season_readonly')) {
+            return $this->json(['error' => 'This season is archived (read-only).'], Response::HTTP_CONFLICT);
+        }
+
         // Disable the Doctrine tenant + season filters for the bulk DELETEs:
         // they append `{table}.club_id/season_id = …` using the table name as
         // the alias, which is invalid SQL for the reserved-word `constraint`
