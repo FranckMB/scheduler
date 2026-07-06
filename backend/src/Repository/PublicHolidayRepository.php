@@ -25,6 +25,23 @@ final class PublicHolidayRepository extends ServiceEntityRepository
     }
 
     /**
+     * All rows (every zone) whose date falls in [from, to] — one query the import
+     * uses to pre-load existing rows and upsert in memory (avoids N+1 lookups).
+     *
+     * @return list<PublicHoliday>
+     */
+    public function findAllInWindow(DateTimeImmutable $from, DateTimeImmutable $to): array
+    {
+        return $this->createQueryBuilder('h')
+            ->andWhere('h.date >= :from')
+            ->andWhere('h.date <= :to')
+            ->setParameter('from', $from->format('Y-m-d'))
+            ->setParameter('to', $to->format('Y-m-d'))
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * National holidays UNION the given zone's territory-specific ones, within
      * the [from, to] window, chronological. A null zone still returns NATIONAL
      * (fériés nationaux apply to every club).

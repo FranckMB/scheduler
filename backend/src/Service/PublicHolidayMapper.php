@@ -49,7 +49,7 @@ final class PublicHolidayMapper
     /**
      * National (métropole) fériés within [fromYear, toYear], as normalized rows.
      *
-     * @param array<string, string> $metropole { "YYYY-MM-DD": label }
+     * @param array<array-key, mixed> $metropole raw etalab payload { "YYYY-MM-DD": label }
      *
      * @return list<array{date: DateTimeImmutable, label: string}>
      */
@@ -62,8 +62,8 @@ final class PublicHolidayMapper
      * Territory-specific fériés = dates present in the territory file but NOT in
      * métropole (each territory file is métropole ∪ its extras), within the window.
      *
-     * @param array<string, string> $metropole
-     * @param array<string, string> $territory
+     * @param array<array-key, mixed> $metropole
+     * @param array<array-key, mixed> $territory
      *
      * @return list<array{date: DateTimeImmutable, label: string}>
      */
@@ -73,31 +73,38 @@ final class PublicHolidayMapper
     }
 
     /**
-     * @param array<string, string> $entries { "YYYY-MM-DD": label }
+     * @param array<array-key, mixed> $entries raw etalab payload (values are
+     *                                         untrusted — non-string labels skipped)
      *
      * @return list<array{date: DateTimeImmutable, label: string}>
      */
     private function rowsInWindow(array $entries, int $fromYear, int $toYear): array
     {
         $rows = [];
-        foreach ($entries as $rawDate => $label) {
-            $year = $this->yearOf($rawDate);
-            if (null === $year || $year < $fromYear || $year > $toYear || '' === trim($label)) {
+        foreach ($entries as $rawDate => $rawLabel) {
+            $date = \is_string($rawDate) ? $this->parseDate($rawDate) : null;
+            $label = \is_string($rawLabel) ? trim($rawLabel) : '';
+            if (null === $date || '' === $label) {
                 continue;
             }
-            $rows[] = ['date' => new DateTimeImmutable($rawDate), 'label' => mb_substr(trim($label), 0, 120)];
+            $year = (int) $date->format('Y');
+            if ($year < $fromYear || $year > $toYear) {
+                continue;
+            }
+            $rows[] = ['date' => $date, 'label' => mb_substr($label, 0, 120)];
         }
 
         return $rows;
     }
 
     /**
-     * Strict leading-year extraction from a "YYYY-MM-DD" key; null on any other
-     * shape (mirrors the command's date guard).
+     * Strict "YYYY-MM-DD" → DateTimeImmutable; null on any other shape or a
+     * rollover date (e.g. 2026-13-01). Returns the parsed value so callers reuse
+     * it instead of re-parsing.
      */
-    private function yearOf(string $date): ?int
+    private function parseDate(string $date): ?DateTimeImmutable
     {
-        if (1 !== preg_match('/^(\d{4})-\d{2}-\d{2}$/', $date, $m)) {
+        if (1 !== preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             return null;
         }
 
@@ -107,6 +114,6 @@ final class PublicHolidayMapper
             return null;
         }
 
-        return (int) $m[1];
+        return $parsed;
     }
 }

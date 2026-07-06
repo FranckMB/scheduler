@@ -85,15 +85,27 @@ final class ImportPublicHolidaysCommand extends Command
             }
         }
 
+        // Pre-load existing rows for the window in ONE query, then upsert in
+        // memory (no per-row SELECT).
+        $existing = [];
+        if ([] !== $rows) {
+            $dates = array_column($rows, 'date');
+            foreach ($this->repository->findAllInWindow(min($dates), max($dates)) as $entity) {
+                $existing[$this->key($entity->getZone(), $entity->getDate())] = $entity;
+            }
+        }
+
         $created = 0;
         $updated = 0;
         foreach ($rows as $row) {
-            $entity = $this->repository->findOneByNaturalKey($row['zone'], $row['date']);
+            $key = $this->key($row['zone'], $row['date']);
+            $entity = $existing[$key] ?? null;
             if (null === $entity) {
                 $entity = new PublicHoliday;
                 $entity->setZone($row['zone']);
                 $entity->setDate($row['date']);
                 $this->entityManager->persist($entity);
+                $existing[$key] = $entity;
                 ++$created;
             } else {
                 ++$updated;
@@ -115,10 +127,15 @@ final class ImportPublicHolidaysCommand extends Command
         return Command::SUCCESS;
     }
 
+    private function key(string $zone, DateTimeImmutable $date): string
+    {
+        return $zone . '|' . $date->format('Y-m-d');
+    }
+
     /**
      * Fetches one etalab zone file → flat map { "YYYY-MM-DD": label }.
      *
-     * @return array<string, string>
+     * @return array<array-key, mixed>
      */
     private function fetchZoneFile(string $baseUrl, string $zoneFile): array
     {
@@ -126,9 +143,6 @@ final class ImportPublicHolidaysCommand extends Command
             'timeout' => 30,
         ]);
 
-        /** @var array<string, string> $data */
-        $data = $response->toArray();
-
-        return $data;
+        return $response->toArray();
     }
 }
