@@ -1,14 +1,20 @@
-Last verified @ feat/qw5-profile-logo (off main) 2026-07-04
+Last verified @ docs/graduate-holidays-courantes 2026-07-06
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`.
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **53 paths.**
 Changements récents :
+- **Calendriers (PR #53/#62/#63, rattrapage 2026-07-06)** : `GET /api/school-holidays` et
+  `GET /api/public-holidays` (contrôleurs Symfony custom) ajoutés à
+  `App\OpenApi\CustomRoutesOpenApiFactory` puis au snapshot — ils manquaient aux deux.
+  ⚠ Le même gap subsiste pour la plupart des autres routes `#[Route]` custom — liste
+  exhaustive + suivi dans `specs/evolution/roadmap.md` §9.
 - **G4/G5 (ex `backend-gaps`, absorbé dans `specs/evolution/roadmap.md`)** : les routes Symfony custom `/api/register`, `/api/me`
   (AuthController) et `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}`
-  (ManualEditController) sont désormais documentées dans l'OpenAPI via
+  (ManualEditController) sont documentées dans l'OpenAPI via
   `App\OpenApi\CustomRoutesOpenApiFactory` (décorateur de `api_platform.openapi.factory`).
-  49 paths. QW-5 ajoute `PATCH /api/me` (édition profil) + `POST /api/me/password`
+  QW-5 ajoute `PATCH /api/me` (édition profil) + `POST /api/me/password`
   (changement de mot de passe connecté).
 - `Team.level` (TeamLevel) exposé en lecture (`TeamResource`) et écrit (`TeamStateProcessor`).
 - `/api/users` (collection) retiré — ressource User self-only (SEC-02) ; opérations Club/User `Post`/`Delete` retirées (SEC-01/02).
 Règle (skill documentation-update) : régénérer ce snapshot à chaque changement d'API
-(resource, controller custom, DTO exposé) et bumper ce stamp.
+(resource, controller custom, DTO exposé) et bumper ce stamp. Une route custom n'apparaît
+dans l'export que si elle est déclarée dans `CustomRoutesOpenApiFactory`.

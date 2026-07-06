@@ -295,6 +295,577 @@
                 }
             }
         },
+        "/api/calendar_entries": {
+            "get": {
+                "operationId": "api_calendar_entries_get_collection",
+                "tags": [
+                    "CalendarEntry"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CalendarEntry collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "CalendarEntry.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CalendarEntry.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CalendarEntry"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CalendarEntry.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of CalendarEntry resources.",
+                "description": "Retrieves the collection of CalendarEntry resources.",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "The collection page number",
+                        "required": false,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        },
+                        "style": "form",
+                        "explode": true
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api_calendar_entries_post",
+                "tags": [
+                    "CalendarEntry"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "CalendarEntry resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a CalendarEntry resource.",
+                "description": "Creates a CalendarEntry resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new CalendarEntry resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/calendar_entries/{id}": {
+            "get": {
+                "operationId": "api_calendar_entries_id_get",
+                "tags": [
+                    "CalendarEntry"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CalendarEntry resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a CalendarEntry resource.",
+                "description": "Retrieves a CalendarEntry resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CalendarEntry identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_calendar_entries_id_put",
+                "tags": [
+                    "CalendarEntry"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CalendarEntry resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarEntry.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the CalendarEntry resource.",
+                "description": "Replaces the CalendarEntry resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CalendarEntry identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated CalendarEntry resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CalendarEntry.CalendarEntryInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_calendar_entries_id_delete",
+                "tags": [
+                    "CalendarEntry"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "CalendarEntry resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the CalendarEntry resource.",
+                "description": "Removes the CalendarEntry resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CalendarEntry identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/public-holidays": {
+            "get": {
+                "operationId": "getPublicHolidays",
+                "tags": [
+                    "Calendars"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "NATIONAL public holidays \u222a the club territory extras within the window (zone null \u2192 NATIONAL only)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "zone": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "date": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "national": {
+                                                        "type": "boolean"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context, invalid from/to, or no window (no active season) \u2014 a null zone still returns the NATIONAL f\u00e9ri\u00e9s (no short-circuit)"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    }
+                },
+                "summary": "Public holidays (jours f\u00e9ri\u00e9s) applying to the club (display-only, never feeds the solver)",
+                "parameters": [
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window start (YYYY-MM-DD) \u2014 defaults to the active season start"
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
+                    }
+                ]
+            }
+        },
+        "/api/school-holidays": {
+            "get": {
+                "operationId": "getSchoolHolidays",
+                "tags": [
+                    "Calendars"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "School holidays of the club zone within the window (zone null \u2192 empty items)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "zone": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "holidayType": {
+                                                        "type": "string"
+                                                    },
+                                                    "startDate": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "endDate": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "schoolYear": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context, or (when the club zone is set) invalid from/to or no window (no active season) \u2014 a null zone short-circuits to 200 with empty items"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    }
+                },
+                "summary": "School holidays of the club academic zone (display feed, read-only)",
+                "parameters": [
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window start (YYYY-MM-DD) \u2014 defaults to the active season start"
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
+                    }
+                ]
+            }
+        },
         "/api/clubs": {
             "get": {
                 "operationId": "api_clubs_get_collection",
@@ -8172,6 +8743,308 @@
     },
     "components": {
         "schemas": {
+            "CalendarEntry": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "kind": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "title": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endDate": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isDisruptive": {
+                        "default": false,
+                        "type": "boolean"
+                    },
+                    "periodType": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "schoolHolidayId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "overlayScheduleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "createdBy": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "CalendarEntry.CalendarEntryInput": {
+                "type": "object",
+                "required": [
+                    "kind",
+                    "title",
+                    "startDate",
+                    "endDate"
+                ],
+                "properties": {
+                    "kind": {
+                        "enum": [
+                            "event",
+                            "period"
+                        ],
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "title": {
+                        "maxLength": 180,
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "startDate": {
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "endDate": {
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "isDisruptive": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    },
+                    "periodType": {
+                        "enum": [
+                            "closure",
+                            "holiday",
+                            "cutoff",
+                            "mutualisation",
+                            "custom"
+                        ],
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "schoolHolidayId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "enum": [
+                            "proposed",
+                            "active",
+                            "ignored"
+                        ],
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "createdBy": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "CalendarEntry.html": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "kind": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "title": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endDate": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isDisruptive": {
+                        "default": false,
+                        "type": "boolean"
+                    },
+                    "periodType": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "schoolHolidayId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "overlayScheduleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "createdBy": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "CalendarEntry.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "kind": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "title": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "startDate": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "endDate": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "isDisruptive": {
+                                "default": false,
+                                "type": "boolean"
+                            },
+                            "periodType": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "schoolHolidayId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "status": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "overlayScheduleId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "createdBy": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
             "Club": {
                 "type": "object",
                 "properties": {
@@ -8321,6 +9194,21 @@
                         ]
                     },
                     "schoolZone": {
+                        "enum": [
+                            "A",
+                            "B",
+                            "C",
+                            "CORSE",
+                            "GUADELOUPE",
+                            "GUYANE",
+                            "MARTINIQUE",
+                            "MAYOTTE",
+                            "NOUVELLE_CALEDONIE",
+                            "POLYNESIE",
+                            "REUNION",
+                            "SAINT_PIERRE_MIQUELON",
+                            "WALLIS_FUTUNA"
+                        ],
                         "type": [
                             "string",
                             "null"
@@ -13378,6 +14266,10 @@
     },
     "security": [],
     "tags": [
+        {
+            "name": "CalendarEntry",
+            "description": "Resource 'CalendarEntry' operations."
+        },
         {
             "name": "Club",
             "description": "Resource 'Club' operations."
