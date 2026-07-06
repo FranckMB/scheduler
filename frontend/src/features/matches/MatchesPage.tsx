@@ -68,6 +68,10 @@ export function MatchesPage() {
   const grid = useMemo(() => buildWeekendGrid(weekendFixtures, venuesMap, teamsMap, outOfEnvelope), [weekendFixtures, venuesMap, teamsMap, outOfEnvelope]);
 
   const selectedFixture = allFixtures.find((f) => f.id === selectedFixtureId) ?? null;
+  const selectedEnvelope = useMemo(
+    () => (null === selectedFixture ? null : resolveEnvelope(selectedFixture, teamsMap, categoriesMap, windows)),
+    [selectedFixture, teamsMap, categoriesMap, windows],
+  );
 
   if (fixtures.isLoading || teams.isLoading || venues.isLoading) {
     return (
@@ -98,13 +102,14 @@ export function MatchesPage() {
             </CardContent>
           </Card>
 
-          {null !== selectedFixture && "HOME" === selectedFixture.homeAway ? (
+          {null !== selectedFixture && null !== selectedEnvelope && "HOME" === selectedFixture.homeAway ? (
             <PlacementPanel
+              key={selectedFixture.id}
               fixture={selectedFixture}
               venues={venues.data ?? []}
               teamLabel={teamsMap.get(selectedFixture.teamId)?.name ?? "Équipe ?"}
               categoryLabel={categoriesMap.get(teamsMap.get(selectedFixture.teamId)?.sportCategoryId ?? "")?.name ?? "—"}
-              envelope={resolveEnvelope(selectedFixture, teamsMap, categoriesMap, windows)}
+              envelope={selectedEnvelope}
               busy={placeFixture.isPending}
               onClose={() => setSelectedFixtureId(null)}
               onPlace={(input) =>

@@ -1,5 +1,5 @@
 import type { Fixture, Team, Venue } from "../api";
-import { timeToMinutes } from "./envelope";
+import { isoWeekday, timeToMinutes } from "./envelope";
 
 /** Home match footprint (spec §4bis): warm-up before kickoff + play after. */
 export const WARMUP_MINUTES = 30;
@@ -21,9 +21,7 @@ function toYmd(date: Date): string {
 /** The Saturday (Y-m-d) of the week (Mon..Sun) containing a date — a match's weekend bucket. */
 export function weekendKeyOf(dateStr: string): string {
   const date = new Date(`${dateStr}T00:00:00`);
-  const day = date.getDay(); // 0=Sun..6=Sat
-  const iso = 0 === day ? 7 : day; // 1..7
-  date.setDate(date.getDate() + (6 - iso)); // shift to that week's Saturday
+  date.setDate(date.getDate() + (6 - isoWeekday(dateStr))); // shift to that week's Saturday
   return toYmd(date);
 }
 

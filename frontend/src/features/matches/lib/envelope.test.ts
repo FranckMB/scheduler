@@ -60,6 +60,12 @@ describe("resolveEnvelope", () => {
     expect(env.windows).toHaveLength(0);
   });
 
+  it("does not map a team whose level is unknown (no blanket match)", () => {
+    const noLevel = new Map([[team().id, team({ level: null })]]);
+    const env = resolveEnvelope(fixture(), noLevel, categories, [window(), window({ id: "w-2", level: "REGIONAL", dayOfWeek: 7 })]);
+    expect(env.mapped).toBe(false);
+  });
+
   it("flags the wrong day as out of envelope", () => {
     // A Sunday match against a Saturday-only window.
     const env = resolveEnvelope(fixture({ matchDate: "2026-10-04" }), teams, categories, [window()]);

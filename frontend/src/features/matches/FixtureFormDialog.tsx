@@ -41,7 +41,15 @@ export function FixtureFormDialog({ teams, competitions, onClose }: FixtureFormD
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted-foreground">Équipe</span>
-          <select aria-label="Équipe" className={fieldClass} value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+          <select
+            aria-label="Équipe"
+            className={fieldClass}
+            value={teamId}
+            onChange={(e) => {
+              setTeamId(e.target.value);
+              setCompetitionId(""); // the old team's competition no longer applies
+            }}
+          >
             {teams.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}

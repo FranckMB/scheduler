@@ -61,8 +61,12 @@ export function resolveEnvelope(
       ? []
       : windows.filter((w) => {
           const categoryMatch = normalize(w.category) === normalize(categoryName);
-          const levelMatch = null === team.level || normalize(w.level) === normalize(team.level);
-          const genderMatch = null === w.gender || null === team.gender || normalize(w.gender) === normalize(team.gender);
+          // An unknown team level/gender must NOT match every window — that would
+          // map the team to levels/genders it does not belong to and mis-flag the
+          // envelope. Require the axis to be known and equal (a gender-null window
+          // is catalog-wide and still applies).
+          const levelMatch = null !== team.level && normalize(w.level) === normalize(team.level);
+          const genderMatch = null === w.gender || (null !== team.gender && normalize(w.gender) === normalize(team.gender));
           return categoryMatch && levelMatch && genderMatch;
         });
 
