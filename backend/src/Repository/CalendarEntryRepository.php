@@ -57,6 +57,29 @@ final class CalendarEntryRepository extends ServiceEntityRepository
     }
 
     /**
+     * Active period entries of the current tenant scope, ordered deterministically
+     * (startDate, then id) so a date covered by two periods always resolves to the
+     * same one. Relies on the ambient club+season Doctrine filters for scoping.
+     * A period "captures" the dates it covers: within it the base plan does not
+     * apply — its overlay if any, else no training plan at all (a closure means
+     * "no training", cf. findUpcomingPeriodsWithoutOverlay).
+     *
+     * @return list<CalendarEntry>
+     */
+    public function findActivePeriodsOrdered(): array
+    {
+        return $this->createQueryBuilder('e')
+            ->andWhere('e.kind = :kind')
+            ->andWhere('e.status = :status')
+            ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
+            ->setParameter('status', \App\Enum\CalendarEntryStatus::ACTIVE)
+            ->orderBy('e.startDate', 'ASC')
+            ->addOrderBy('e.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Active period entries of the season that still have NO overlay plan and
      * start within [$today, $today + $horizonDays] — the reminder cron's horizon.
      * A window (not an exact date) so a missed daily run still catches the period

@@ -108,6 +108,16 @@ même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet*
 > **jouée** (via `CoachPlayerMembership`) sur des créneaux qui se chevauchent (ou trajet infaisable) = conflit.
 > Le concept **et** le modèle sont déjà en base.
 
+> ✅ **Livré palier A PR-2 (2026-07-07) — périmètre coach seul, à la volée.** Service pur
+> **`MatchConflictDetector`** + endpoint `GET /api/fixtures/conflicts` (recalcul live, rien persisté ;
+> gradué dans [`../courantes/module-matchs.md`](../courantes/module-matchs.md)). Croise via **`TeamCoach`** :
+> **`MATCH_MATCH`** (deux matchs d'un même coach qui se chevauchent) et **`MATCH_TRAINING`** (match ↔
+> entraînement d'une équipe du coach, lu dans le **planning effectif à la date** — overlay de la période
+> ACTIVE si elle couvre la date, sinon baseline — créneau hebdo projeté sur le jour du match). Le volet
+> **joueur** (`CoachPlayerMembership`) et l'**envelope HARD** (jour/coup d'envoi imposé §6) restent à venir ;
+> le **trajet** (dimension spatiale) est palier B → un match AWAY sans coup d'envoi estimé ne produit pas
+> encore de conflit.
+
 **Autres conflits (non-personne), à couvrir aussi :**
 - **Gymnase** : deux matchs domicile sur le même terrain qui se chevauchent (le `VENUE_AT_MOST_ONE` existe).
 - **Jour imposé** : un match placé un autre jour que celui imposé par la ligue (§6).

@@ -200,6 +200,33 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             summary: 'League match-kickoff windows inherited by the club (global reference, read-only)',
         )));
 
+        $paths->addPath('/api/fixtures/conflicts', new PathItem(get: new Operation(
+            operationId: 'getFixtureConflicts',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('Same-coach time-occupancy conflicts (match↔match and match↔training) recomputed live for the current club/season', [
+                    'type' => 'object',
+                    'properties' => [
+                        'clubId' => ['type' => 'string'],
+                        'seasonId' => ['type' => 'string', 'nullable' => true],
+                        'conflicts' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'type' => ['type' => 'string', 'enum' => ['MATCH_MATCH', 'MATCH_TRAINING']],
+                            'coachId' => ['type' => 'string'],
+                            'start' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment start'],
+                            'end' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment end'],
+                            'left' => ['type' => 'object', 'nullable' => true, 'description' => 'MATCH_MATCH: first fixture'],
+                            'right' => ['type' => 'object', 'nullable' => true, 'description' => 'MATCH_MATCH: second fixture'],
+                            'fixture' => ['type' => 'object', 'nullable' => true, 'description' => 'MATCH_TRAINING: the match'],
+                            'training' => ['type' => 'object', 'nullable' => true, 'description' => 'MATCH_TRAINING: the training slot'],
+                        ]]],
+                    ],
+                ]),
+                '400' => new Response('No club in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+            ],
+            summary: 'Same-coach match/training conflict radar (read-only, computed on the fly)',
+        )));
+
         return $openApi;
     }
 
