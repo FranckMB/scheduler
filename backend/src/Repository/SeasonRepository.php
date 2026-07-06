@@ -18,16 +18,19 @@ final class SeasonRepository extends ServiceEntityRepository
         parent::__construct($registry, Season::class);
     }
 
-    public function findActiveByClubId(string $clubId): ?Season
+    /**
+     * All seasons of a club, oldest first. Season resolution (which one is
+     * current) lives in SeasonResolver — never key on `status` here.
+     *
+     * @return list<Season>
+     */
+    public function findAllByClubId(string $clubId): array
     {
         return $this->createQueryBuilder('s')
             ->andWhere('s.clubId = :clubId')
-            ->andWhere('s.status = :status')
             ->setParameter('clubId', $clubId)
-            ->setParameter('status', 'active')
-            ->orderBy('s.startDate', 'DESC')
-            ->setMaxResults(1)
+            ->orderBy('s.startDate', 'ASC')
             ->getQuery()
-            ->getOneOrNullResult();
+            ->getResult();
     }
 }

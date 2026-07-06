@@ -7,12 +7,11 @@ namespace App\Command;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\PeriodReminderLog;
-use App\Entity\Season;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
-use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -53,7 +52,7 @@ final class PeriodReminderCommand extends Command
         private readonly MailerInterface $mailer,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly ClubUserRepository $clubUserRepository,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly PeriodReminderLogRepository $reminderLogRepository,
         private readonly PeriodReminderMailBuilder $mailBuilder,
     ) {
@@ -109,17 +108,27 @@ final class PeriodReminderCommand extends Command
         $clubId = $club->getId();
         $this->tenantConnectionContext->setClubId($clubId);
 
-        $season = $this->seasonRepository->findActiveByClubId($clubId);
-        if (!$season instanceof Season) {
-            return 0;
-        }
-
         // "Today" is the CLUB's calendar day, not the server's (a UTC cron near
         // midnight would otherwise shift every bucket by one day for a Paris club).
         // An explicit --date (rehearsal/tests) overrides for all clubs.
         $today = $forcedToday ?? $this->clubToday($club);
 
-        $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
+        // Remind across ALL the club's seasons: the date horizon does the real
+        // bounding. Keying on the current season only would go silent for a
+        // period of season N still upcoming right after the July-15 pivot
+        // (N+1 current, N period 4 days away → no e-mail).
+        $seasons = $this->seasonResolver->seasonsForClub($clubId);
+        if ([] === $seasons) {
+            return 0;
+        }
+
+        $periods = [];
+        foreach ($seasons as $season) {
+            $periods = array_merge(
+                $periods,
+                $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON),
+            );
+        }
         if ([] === $periods) {
             return 0; // No period in the horizon → skip the manager lookup.
         }

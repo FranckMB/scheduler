@@ -9,7 +9,7 @@ use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\TenantOwnedInterface;
-use App\Repository\SeasonRepository;
+use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -27,7 +27,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     public function __construct(
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
-        protected readonly SeasonRepository $seasonRepository,
+        protected readonly SeasonResolver $seasonResolver,
     ) {}
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
@@ -89,7 +89,9 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             return null;
         }
 
-        $season = $this->seasonRepository->findActiveByClubId($clubId);
+        // Fallback when the listener set no _season_id (e.g. non-HTTP context):
+        // the calendar-derived current season, same rule as the listener.
+        $season = $this->seasonResolver->currentSeason($clubId);
 
         return $season?->getId();
     }

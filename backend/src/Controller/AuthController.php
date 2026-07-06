@@ -14,6 +14,7 @@ use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
 use App\Service\SchoolZoneResolver;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
@@ -40,6 +41,7 @@ final class AuthController extends AbstractController
         private readonly RateLimiterFactory $authRegisterLimiter,
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly SchoolZoneResolver $schoolZoneResolver,
+        private readonly SeasonResolver $seasonResolver,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -126,7 +128,7 @@ final class AuthController extends AbstractController
     }
 
     #[Route('/api/me', name: 'api_me', methods: ['GET'])]
-    public function me(): JsonResponse
+    public function me(Request $request): JsonResponse
     {
         $user = $this->getUser();
         if (!$user instanceof User) {
@@ -139,6 +141,8 @@ final class AuthController extends AbstractController
         $clubEntity = null;
         $baselineScheduleId = null;
         $socleValidatedAt = null;
+        $seasons = [];
+        $currentSeasonId = null;
         if (null !== $clubUser) {
             $membershipStatus = $clubUser->getIsActive() ? 'active' : 'pending';
             $clubEntity = $this->clubRepository->find($clubUser->getClubId());
@@ -152,12 +156,37 @@ final class AuthController extends AbstractController
                     'accentPalette' => $clubEntity->getAccentPalette(),
                     'schoolZone' => $clubEntity->getSchoolZone(),
                 ];
-                $season = $this->entityManager->getRepository(Season::class)->findOneBy([
-                    'clubId' => $clubEntity->getId(),
-                    'status' => 'active',
-                ]);
-                $baselineScheduleId = $season?->getBaselineScheduleId();
-                $socleValidatedAt = $season?->getSocleValidatedAt()?->format(\DATE_ATOM);
+
+                $allSeasons = $this->seasonResolver->seasonsForClub($clubEntity->getId());
+                $current = SeasonResolver::currentAmong($allSeasons);
+                $currentSeasonId = $current?->getId();
+
+                // The gates (cockpit/wizard) follow the SELECTED season
+                // (X-Season-Id → _season_id, validated by the listener), not
+                // blindly the current one — the frontend gate code stays as-is.
+                $selected = $current;
+                $selectedId = $request->attributes->get('_season_id');
+                if (\is_string($selectedId)) {
+                    foreach ($allSeasons as $candidate) {
+                        if ($candidate->getId() === $selectedId) {
+                            $selected = $candidate;
+                            break;
+                        }
+                    }
+                }
+                $baselineScheduleId = $selected?->getBaselineScheduleId();
+                $socleValidatedAt = $selected?->getSocleValidatedAt()?->format(\DATE_ATOM);
+
+                foreach ($allSeasons as $season) {
+                    $seasons[] = [
+                        'id' => $season->getId(),
+                        'name' => $season->getName(),
+                        'startDate' => $season->getStartDate()->format('Y-m-d'),
+                        'endDate' => $season->getEndDate()->format('Y-m-d'),
+                        'isCurrent' => $season->getId() === $currentSeasonId,
+                        'isReadonly' => SeasonResolver::isReadonlyAmong($season, $allSeasons),
+                    ];
+                }
             }
         }
 
@@ -172,6 +201,8 @@ final class AuthController extends AbstractController
             'baselineScheduleId' => $baselineScheduleId,
             'socleValidatedAt' => $socleValidatedAt,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
+            'seasons' => $seasons,
+            'currentSeasonId' => $currentSeasonId,
         ]);
     }
 
@@ -310,7 +341,7 @@ final class AuthController extends AbstractController
         $season->setClubId($club->getId());
         $season->setName((string) $currentYear);
         $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
-        $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
+        $season->setEndDate(new DateTimeImmutable(($currentYear + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
         $this->entityManager->persist($season);

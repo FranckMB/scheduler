@@ -35,7 +35,15 @@ final class OnboardingFlowTest extends WebTestCase
         // 2. A fresh club is EMPTY (tenant isolation — no other club's data leaks).
         self::assertCount(0, $this->get('/api/teams')['member']);
         self::assertCount(0, $this->get('/api/venues')['member']);
-        self::assertFalse($this->get('/api/me')['club']['onboardingCompleted']);
+        $me = $this->get('/api/me');
+        self::assertFalse($me['club']['onboardingCompleted']);
+
+        // The seeded season is sane and current (guards the historical
+        // endDate < startDate seed bug — SeasonResolver keys on startDate,
+        // but the stored window must still be coherent).
+        self::assertCount(1, $me['seasons']);
+        self::assertSame($me['seasons'][0]['id'], $me['currentSeasonId']);
+        self::assertGreaterThan($me['seasons'][0]['startDate'], $me['seasons'][0]['endDate']);
 
         // 3. Minimal data: one team, one gym with a slot, one coach.
         $categoryId = $this->get('/api/sport_categories')['member'][0]['id'];

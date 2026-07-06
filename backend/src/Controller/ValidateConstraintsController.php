@@ -6,8 +6,8 @@ namespace App\Controller;
 
 use App\Entity\Constraint;
 use App\Repository\ConstraintRepository;
-use App\Repository\SeasonRepository;
 use App\Service\ConstraintValidationService;
+use App\Service\SeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -23,7 +23,7 @@ final class ValidateConstraintsController extends AbstractController
 {
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
     ) {}
@@ -37,11 +37,7 @@ final class ValidateConstraintsController extends AbstractController
             return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
         }
 
-        $seasonId = $request?->attributes->get('_season_id');
-        if (!\is_string($seasonId) || '' === $seasonId) {
-            $season = $this->seasonRepository->findOneBy(['clubId' => $clubId, 'status' => 'active']);
-            $seasonId = $season?->getId();
-        }
+        $seasonId = $this->seasonResolver->selectedOrCurrent($request, $clubId)?->getId();
         if (null === $seasonId) {
             return $this->json(['error' => 'No active season.'], Response::HTTP_BAD_REQUEST);
         }
