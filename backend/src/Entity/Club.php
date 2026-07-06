@@ -48,7 +48,7 @@ class Club
     #[ORM\Column(type: 'integer')]
     private int $generationCountSeason = 0;
 
-    #[ORM\Column(type: 'string', length: 10, nullable: true)]
+    #[ORM\Column(type: 'string', length: 24, nullable: true)]
     private ?string $schoolZone = null;
 
     #[ORM\Column(type: 'string', length: 64)]
