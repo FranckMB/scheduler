@@ -54,6 +54,7 @@ final class PurgeSeasonsCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+        $this->hadFailure = false;
         $dryRun = (bool) $input->getOption('dry-run');
 
         $dateOption = $input->getOption('date');
@@ -65,14 +66,14 @@ final class PurgeSeasonsCommand extends Command
         }
 
         $clubFilter = $input->getOption('club');
-        $clubs = $this->entityManager->getRepository(Club::class)->findAll();
+        $repository = $this->entityManager->getRepository(Club::class);
+        $clubs = \is_string($clubFilter) && '' !== $clubFilter
+            ? array_filter([$repository->find($clubFilter)])
+            : $repository->findAll();
         $this->entityManager->clear();
 
         $purgedTotal = 0;
         foreach ($clubs as $club) {
-            if (\is_string($clubFilter) && '' !== $clubFilter && $club->getId() !== $clubFilter) {
-                continue;
-            }
             try {
                 $purgedTotal += $this->purgeClub($club->getId(), $today, $dryRun, $io);
             } catch (Throwable $e) {

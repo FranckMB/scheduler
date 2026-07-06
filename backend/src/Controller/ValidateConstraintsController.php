@@ -19,7 +19,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * over the club's constraints so the wizard can flag gross errors (a coach who
  * "starts after he ends", contradictory HARD rules…) BEFORE generating.
  */
-final class ValidateConstraintsController extends AbstractController implements SeasonScopedWriteInterface
+final class ValidateConstraintsController extends AbstractController
 {
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,

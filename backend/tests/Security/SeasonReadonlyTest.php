@@ -62,16 +62,43 @@ final class SeasonReadonlyTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
-    public function testCustomWriteControllerOnAPastSeasonIs409(): void
+    public function testManagementGatedControllerOnAPastSeasonIs409AfterAuth(): void
     {
         [$user, , $seasons] = $this->createClubWithThreeSeasons();
         [$past] = $seasons;
 
-        // reset-season is a SeasonScopedWrite controller → 409 on an archive.
+        // reset-season gates management-role (403) THEN refuses the archive
+        // (409, inline so authorization wins first). Admin user → 409.
         $this->client->request('DELETE', '/api/reset-season', [], [], $this->authHeaders($user) + [
             'HTTP_X-Season-Id' => $past->getId(),
         ]);
         self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testListenerGuardedControllerOnAPastSeasonIs409(): void
+    {
+        [$user, , $seasons] = $this->createClubWithThreeSeasons();
+        [$past] = $seasons;
+
+        // reorder-teams is a SeasonScopedWrite controller: the kernel.controller
+        // listener refuses the archive (409) before __invoke even reads the body.
+        $this->client->request('POST', '/api/teams/reorder', [], [], $this->authHeaders($user) + [
+            'HTTP_X-Season-Id' => $past->getId(),
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['teamIds' => []], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testConstraintValidationStaysReadableOnAPastSeason(): void
+    {
+        [$user, , $seasons] = $this->createClubWithThreeSeasons();
+        [$past] = $seasons;
+
+        // Pure read (validation report) — NOT a write, must not 409 on an archive.
+        $this->client->request('POST', '/api/constraints/validate', [], [], $this->authHeaders($user) + [
+            'HTTP_X-Season-Id' => $past->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(200);
     }
 
     public function testReadOnAPastSeasonIsAllowed(): void

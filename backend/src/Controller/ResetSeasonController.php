@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
+use App\Service\SeasonAccessGuard;
 use App\Service\SeasonDataPurger;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -16,12 +17,13 @@ use Symfony\Component\Routing\Attribute\Route;
 
 #[AsController]
 #[Route('/api/reset-season', name: 'reset_season', methods: ['DELETE'])]
-final class ResetSeasonController extends AbstractController implements SeasonScopedWriteInterface
+final class ResetSeasonController extends AbstractController
 {
     public function __construct(
         private readonly RequestStack $requestStack,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonDataPurger $seasonDataPurger,
+        private readonly SeasonAccessGuard $seasonAccessGuard,
     ) {}
 
     public function __invoke(): JsonResponse
@@ -46,8 +48,12 @@ final class ResetSeasonController extends AbstractController implements SeasonSc
             return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
         }
 
-        // Archived-season write refused (409) centrally by
-        // SeasonReadonlyGuardListener (this controller is SeasonScopedWrite).
+        // Archived-season write refused (409) — AFTER the management-role gate
+        // so authorization (403) precedes the state conflict. Inline (not the
+        // SeasonReadonlyGuardListener) precisely because this endpoint has its
+        // own 403 the listener would otherwise shadow.
+        $this->seasonAccessGuard->assertWritable($request);
+
         // Wipe the season's contents but KEEP the Season row (the club keeps
         // its current season, only re-emptied).
         $deleted = $this->seasonDataPurger->purge($clubId, $seasonId, deleteSeasonRow: false);
