@@ -159,6 +159,15 @@ Réservé à un admin **actif** du club (403 sinon) ; cible toujours restreinte 
 |-------|---------|------------|-------------|
 | `/api/constraints/validate` | POST | `ValidateConstraintsController` | Valide les contraintes du club/saison courants via `ConstraintValidationService` avant génération (règles contradictoires, incohérences). Retourne erreurs par contrainte + conflits. |
 
+### Calendriers — vacances scolaires & jours fériés
+
+Référentiels globaux display-only (jamais consommés par le solveur). Détail complet (modèle, zones, commandes d'import, règles) : [`vacances-scolaires-jours-feries.md`](vacances-scolaires-jours-feries.md).
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/school-holidays` | GET | `SchoolHolidaysController` | Vacances scolaires de la zone du club (`Club.schoolZone`) dans la fenêtre `from`/`to` (défaut : saison active). Zone null → `items: []`. |
+| `/api/public-holidays` | GET | `PublicHolidaysController` | Jours fériés `NATIONAL` ∪ extras du territoire du club, même fenêtre. Zone null → NATIONAL quand même. |
+
 ### Export PDF
 
 | Route | Méthode | Contrôleur | Description |

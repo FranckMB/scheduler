@@ -57,9 +57,11 @@ Three buckets, distinct meaning — keep them true:
 - **`courantes/`** — what the app does **today**. Must reflect reality: if a courante spec no longer matches the code, **update it**; if the feature was removed, **delete it**. When an `evolution` item ships, its behaviour lands here.
 - **`evolution/`** — what the app will do **later** (future/vision). When an item is delivered, **remove it from evolution** (it has graduated into `courantes`).
 
-**Graduation check (mandatory each run):** list the files/items in `specs/evolution/` whose feature is delivered (roadmap ✅, merged PR, code present) and graduate them now — move the "what it does" content into `courantes/` (or merge into the relevant courante spec) and delete/trim the evolution entry. The audit found shipped features still sitting in evolution/ months later (DOC-04); this check exists so it cannot recur.
+**Graduation check (mandatory each run, opposable):** for **every roadmap line whose status flips to ✅ (or gains a "Livré" note) in this run**, either **name the `courantes/` file that receives the behaviour** (create or extend it in the same pass) or **state in the change summary why no graduation applies**. Silence is not an option — "updated the roadmap line" alone is the failure mode this check blocks (2026-07-06: school-holidays + public-holidays imports fully specced in roadmap ✅ notes, nothing in courantes, snapshot stale across 2 PRs). Then also sweep `specs/evolution/` for older delivered items (roadmap ✅, merged PR, code present) and graduate them. The audit found shipped features still sitting in evolution/ months later (DOC-04).
 
-**API-change trigger:** if the work changed any API Platform resource, custom controller route, or DTO exposed over HTTP, regenerate `specs/courantes/openapi-snapshot.json` from the running backend and update `openapi-snapshot.meta.md` (SHA + date). A stale snapshot silently poisons the frontend type-gen pipeline.
+**Roadmap note = a line, not a spec.** A ✅ note holds status + PR ref + a pointer to the courante spec + the still-open remainder (⬜). If you are writing behavioural detail (filters, natural keys, endpoints, edge cases) into a roadmap note, stop: that content belongs in `courantes/`; the roadmap keeps the pointer.
+
+**API-change trigger:** if the work changed any API Platform resource, custom controller route, or DTO exposed over HTTP, regenerate `specs/courantes/openapi-snapshot.json` from the running backend and update `openapi-snapshot.meta.md` (SHA + date). A stale snapshot silently poisons the frontend type-gen pipeline. ⚠ A custom Symfony `#[Route]` is **invisible to the export** unless declared in `App\OpenApi\CustomRoutesOpenApiFactory` — a new custom route means a factory entry **plus** the regen; regenerating alone silently misses it.
 
 No `archive/` bucket — nothing is lost (git + `initiales` hold the history). When reconciling, flag files that are neither current nor future (e.g. one-off process/handoff notes) and propose removing them; do not silently delete large specs — surface the list first.
 
@@ -71,7 +73,7 @@ No `archive/` bucket — nothing is lost (git + `initiales` hold the history). W
 5. **Zone docs** (`<zone>/docs`, `docs/project-map.md`, `docs/testing/`, `docs/technique/`) — update the affected deep-dives; add a how-to/business doc if a new structuring mechanism appeared.
 6. **ADR** — if a structural decision was made, add one and reference it in `docs/architecture/adr-index.md`.
 7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
-8. **Change summary** — list files touched, facts corrected by the drift sweep, items graduated.
+8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per roadmap item marked delivered this run: → receiving courantes file, or the explicit reason no graduation applies**.
 
 ### Rules
 - **No filler.** A future agent must get something wrong without the line.

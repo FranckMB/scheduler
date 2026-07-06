@@ -141,7 +141,69 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        foreach ($this->holidayPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         return $openApi;
+    }
+
+    /**
+     * @return array<string, PathItem>
+     */
+    private function holidayPaths(): array
+    {
+        $windowParameters = [
+            ['name' => 'from', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'format' => 'date'], 'description' => 'Window start (YYYY-MM-DD) — defaults to the active season start'],
+            ['name' => 'to', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'format' => 'date'], 'description' => 'Window end (YYYY-MM-DD) — defaults to the active season end'],
+        ];
+
+        return [
+            '/api/school-holidays' => new PathItem(get: new Operation(
+                operationId: 'getSchoolHolidays',
+                tags: ['Calendars'],
+                responses: [
+                    '200' => $this->jsonResponse('School holidays of the club zone within the window (zone null → empty items)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'zone' => ['type' => 'string', 'nullable' => true],
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'label' => ['type' => 'string'],
+                                'holidayType' => ['type' => 'string'],
+                                'startDate' => ['type' => 'string', 'format' => 'date'],
+                                'endDate' => ['type' => 'string', 'format' => 'date'],
+                                'schoolYear' => ['type' => 'string'],
+                            ]]],
+                        ],
+                    ]),
+                    '400' => new Response('No club in context, invalid from/to, or no window (no active season)'),
+                ],
+                summary: 'School holidays of the club academic zone (display feed, read-only)',
+                parameters: $windowParameters,
+            )),
+            '/api/public-holidays' => new PathItem(get: new Operation(
+                operationId: 'getPublicHolidays',
+                tags: ['Calendars'],
+                responses: [
+                    '200' => $this->jsonResponse('NATIONAL public holidays ∪ the club territory extras within the window (zone null → NATIONAL only)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'zone' => ['type' => 'string', 'nullable' => true],
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'date' => ['type' => 'string', 'format' => 'date'],
+                                'label' => ['type' => 'string'],
+                                'national' => ['type' => 'boolean'],
+                            ]]],
+                        ],
+                    ]),
+                    '400' => new Response('No club in context, invalid from/to, or no window (no active season)'),
+                ],
+                summary: 'Public holidays (jours fériés) applying to the club (display-only, never feeds the solver)',
+                parameters: $windowParameters,
+            )),
+        ];
     }
 
     /**
