@@ -9,6 +9,7 @@ use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\TenantOwnedInterface;
+use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -28,6 +29,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
         protected readonly SeasonResolver $seasonResolver,
+        protected readonly SeasonAccessGuard $seasonAccessGuard,
     ) {}
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
@@ -35,6 +37,12 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
         $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+
+        // Archived-season writes are refused (409). Only season-scoped entities
+        // are gated — Club/User/Season carry no seasonId and stay editable.
+        if (method_exists($this->getEntityClass(), 'setSeasonId')) {
+            $this->seasonAccessGuard->assertWritable($request);
+        }
 
         if ($operation instanceof DeleteOperationInterface) {
             $this->processDelete($uriVariables, $clubId);

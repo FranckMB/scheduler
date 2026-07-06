@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
-final class ManualEditController extends AbstractController
+final class ManualEditController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private EntityManagerInterface $entityManager,

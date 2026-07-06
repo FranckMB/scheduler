@@ -95,7 +95,7 @@ describe("SeasonSelector", () => {
     expect(useSeasonStore.getState().selectedSeasonId).toBeNull();
   });
 
-  it("does not let the user switch into a read-only (past) season", async () => {
+  it("lets the user switch into a read-only season for consultation (server guards writes)", async () => {
     meData = {
       currentSeasonId: "sN",
       seasons: [season({ id: "sP", name: "2024-2025", isCurrent: false, isReadonly: true }), season({})],
@@ -103,12 +103,9 @@ describe("SeasonSelector", () => {
     renderSelector();
 
     await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
-    const readonlyItem = screen.getByText("2024-2025 · lecture seule");
-    await userEvent.click(readonlyItem);
+    await userEvent.click(screen.getByText("2024-2025 · lecture seule"));
 
-    // Still on the current season — the read-only row is inert.
-    expect(useSeasonStore.getState().selectedSeasonId).toBeNull();
-    expect(readonlyItem.closest("button")).toBeDisabled();
+    expect(useSeasonStore.getState().selectedSeasonId).toBe("sP");
   });
 
   it("resets a stale persisted selection to the current season", () => {

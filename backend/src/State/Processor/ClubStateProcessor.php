@@ -9,6 +9,7 @@ use App\Dto\ClubInput;
 use App\Entity\Club;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
+use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -25,10 +26,11 @@ class ClubStateProcessor extends AbstractStateProcessor
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
         private readonly Security $security,
         private readonly ClubUserRepository $clubUserRepository,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
     }
 
     protected function getEntityClass(): string

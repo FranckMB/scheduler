@@ -22,7 +22,7 @@ use Throwable;
  * promote a different finished plan afterwards. Distinct from validation
  * (locking). See planning-lifecycle-validated.md.
  */
-final class SetBaselineController extends AbstractController
+final class SetBaselineController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

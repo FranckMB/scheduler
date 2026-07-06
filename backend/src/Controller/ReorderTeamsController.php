@@ -19,7 +19,7 @@ use Throwable;
  * transaction. Replaces the N-concurrent-PUT approach of the sort UI, which raced
  * on Team's optimistic-lock version and dropped updates. See TeamsStep sort mode.
  */
-final class ReorderTeamsController extends AbstractController
+final class ReorderTeamsController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

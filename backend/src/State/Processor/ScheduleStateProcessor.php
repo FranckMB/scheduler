@@ -13,6 +13,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
 use App\Service\OverlayManager;
+use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -28,9 +29,10 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
         private readonly OverlayManager $overlayManager,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
     }
 
     protected function getEntityClass(): string

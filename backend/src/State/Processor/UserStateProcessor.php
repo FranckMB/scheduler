@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\UserResource;
 use App\Dto\UserInput;
 use App\Entity\User;
+use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -22,9 +23,10 @@ class UserStateProcessor extends AbstractStateProcessor
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
         private readonly Security $security,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
     }
 
     protected function getEntityClass(): string

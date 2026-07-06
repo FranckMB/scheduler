@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 
 #[AsController]
-final class ImportController extends AbstractController
+final class ImportController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
