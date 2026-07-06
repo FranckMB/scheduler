@@ -108,6 +108,20 @@ describe("RadarPanel", () => {
     expect(screen.queryByRole("button", { name: "Voir le plan" })).not.toBeInTheDocument();
   });
 
+  it("formats cutoff dates in short French, never raw ISO", () => {
+    renderRadar({ entries: [closure({ id: "cut1", periodType: "cutoff", title: "Coupure de Noël" })] });
+
+    // FUTURE window = 2999-01-05 → 2999-01-18: rendered as French short dates.
+    expect(screen.getByText(/Du 5 janv\. 2999 au 18 janv\. 2999 · aucun entraînement/)).toBeInTheDocument();
+    expect(screen.queryByText(/2999-01-05/)).not.toBeInTheDocument();
+  });
+
+  it("does not flash the all-clear while public holidays are still loading", () => {
+    renderRadar({ publicHolidaysLoading: true });
+
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+  });
+
   it("reminds about public holidays within 30 days, ignores farther ones", () => {
     const today = todayISO();
     renderRadar({
