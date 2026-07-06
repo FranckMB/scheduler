@@ -5,18 +5,45 @@ declare(strict_types=1);
 namespace App\Service;
 
 /**
- * Derives a club's academic holiday zone (A/B/C) from its FFBB club code, which
- * encodes the department (accueil-cockpit-temporel.md §4bis). The department →
- * zone table is the official Éducation nationale grouping (metropolitan France;
- * Corse → B; overseas → null).
+ * Derives a club's school holiday zone from its FFBB club code, which encodes
+ * the department (accueil-cockpit-temporel.md §4bis). Metropolitan France maps
+ * to A/B/C, Corse to its own CORSE regime, and each overseas territory (DOM/TOM)
+ * to its own code — all territories have a distinct official calendar
+ * (Éducation nationale open data). Unknown/unreadable → null (manual entry).
  *
  * ⚠ The FFBB-code → department extraction is BEST-EFFORT: the exact code format
- * is not officially verified, so extraction returns null when no metropolitan
- * department can be read. Zone is then left null and remains manually editable
- * on the club (Club.schoolZone via PATCH) — never overwritten when already set.
+ * is not officially verified, so extraction returns null when no department can
+ * be read. Zone is then left null and remains manually editable on the club
+ * (Club.schoolZone via PATCH) — never overwritten when already set.
  */
 final class SchoolZoneResolver
 {
+    /**
+     * Canonical closed set of the 13 school-zone codes (single source of truth,
+     * reused by FrenchSchoolCalendarMapper and guarded by a consistency test).
+     *
+     * @var list<string>
+     */
+    public const ZONES = [
+        'A', 'B', 'C', 'CORSE',
+        'GUADELOUPE', 'GUYANE', 'MARTINIQUE', 'MAYOTTE',
+        'NOUVELLE_CALEDONIE', 'POLYNESIE', 'REUNION',
+        'SAINT_PIERRE_MIQUELON', 'WALLIS_FUTUNA',
+    ];
+
+    /** @var array<int, string> overseas department number → territory zone code (numeric keys are int-coerced by PHP) */
+    private const DOM_TOM_ZONE = [
+        '971' => 'GUADELOUPE',
+        '972' => 'MARTINIQUE',
+        '973' => 'GUYANE',
+        '974' => 'REUNION',
+        '975' => 'SAINT_PIERRE_MIQUELON',
+        '976' => 'MAYOTTE',
+        '986' => 'WALLIS_FUTUNA',
+        '987' => 'POLYNESIE',
+        '988' => 'NOUVELLE_CALEDONIE',
+    ];
+
     /** @var array<int|string, string> department code → zone (A/B/C); numeric keys are int-coerced by PHP */
     private const DEPARTMENT_ZONE = [
         // Zone A
@@ -40,7 +67,7 @@ final class SchoolZoneResolver
         '22' => 'B', '29' => 'B', '35' => 'B', '56' => 'B',
         '14' => 'B', '27' => 'B', '50' => 'B', '61' => 'B', '76' => 'B',
         '67' => 'B', '68' => 'B',
-        '2A' => 'B', '2B' => 'B', '20' => 'B', // Corse (alpha 2A/2B or legacy numeric 20)
+        '2A' => 'CORSE', '2B' => 'CORSE', '20' => 'CORSE', // Corse (alpha 2A/2B or legacy numeric 20) — own regime
         // Zone C
         '77' => 'C', '93' => 'C', '94' => 'C',
         '11' => 'C', '30' => 'C', '34' => 'C', '48' => 'C', '66' => 'C',
@@ -56,15 +83,18 @@ final class SchoolZoneResolver
             return null;
         }
 
-        return self::DEPARTMENT_ZONE[$department] ?? null;
+        return self::DEPARTMENT_ZONE[$department]
+            ?? self::DOM_TOM_ZONE[$department]
+            ?? null;
     }
 
     /**
      * FFBB club code = 3-letter league prefix + 4-digit zero-padded department +
      * sequence. Examples: GES0067060 → 67 (Bas-Rhin), GUY0973021 → 973 (Guyane,
-     * a DOM → no A/B/C zone). Corse can appear numerically (0020) or as 2A/2B.
-     * Returns null for any code that does not fit this shape or that maps to a
-     * non-metropolitan department → the zone degrades to manual entry.
+     * a DOM). Corse can appear numerically (0020) or as 2A/2B. Metropolitan
+     * departments come back 2-digit; overseas (971–988) 3-digit. Returns null
+     * for any code that does not fit this shape or maps to no known territory →
+     * the zone degrades to manual entry.
      */
     private function extractDepartment(?string $ffbbCode): ?string
     {
@@ -79,11 +109,14 @@ final class SchoolZoneResolver
             if (20 === $n) {
                 return '20'; // Corse (legacy numeric form)
             }
-            if ($n < 1 || $n > 95) {
-                return null; // 0 invalid; ≥96 = DOM/TOM (no metropolitan A/B/C zone)
+            if ($n >= 1 && $n <= 95) {
+                return \sprintf('%02d', $n); // 67, 05, 69…
+            }
+            if ($n >= 971 && $n <= 988) {
+                return (string) $n; // DOM/TOM territory number (mapped via DOM_TOM_ZONE)
             }
 
-            return \sprintf('%02d', $n); // 67, 05, 69…
+            return null; // 0 invalid; other ≥96 = unknown territory → manual entry
         }
 
         // Corse in alpha form (2A/2B) right after the league prefix.

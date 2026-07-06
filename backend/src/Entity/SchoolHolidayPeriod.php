@@ -10,10 +10,12 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * National school-holiday reference data (Éducation nationale open data).
- * GLOBAL, not tenant-owned: same for every club, keyed on the academic zone
- * (A/B/C) which a club derives from its FFBB code. No club_id → no RLS (public
- * reference, like the `sport` table). Seeded once a year from a versioned JSON
- * (app:school-holidays:seed) — no network at runtime.
+ * GLOBAL, not tenant-owned: same for every club, keyed on the school zone
+ * (A/B/C, CORSE, or a DOM/TOM territory code — see SchoolZoneResolver::ZONES)
+ * which a club derives from its FFBB code. No club_id → no RLS (public
+ * reference, like the `sport` table). Populated from a versioned JSON fallback
+ * (app:school-holidays:seed) or the official ODS API (app:school-holidays:import).
+ * holidayType is an OPEN slug (métropole + overseas labels differ).
  * See specs/evolution/accueil-cockpit-temporel.md §4bis.
  */
 #[ORM\Entity(repositoryClass: SchoolHolidayPeriodRepository::class)]
@@ -30,13 +32,13 @@ class SchoolHolidayPeriod
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $createdAt;
 
-    #[ORM\Column(type: 'string', length: 1)]
+    #[ORM\Column(type: 'string', length: 24)]
     private string $zone;
 
     #[ORM\Column(type: 'string', length: 120)]
     private string $label;
 
-    #[ORM\Column(type: 'string', length: 20)]
+    #[ORM\Column(type: 'string', length: 40)]
     private string $holidayType;
 
     #[ORM\Column(type: 'date_immutable')]

@@ -1,5 +1,5 @@
 {
-  "_source": "Éducation nationale — calendrier scolaire officiel (métropole, zones A/B/C). endDate = veille de la rentrée (dernier jour sans école). été non inclus (frontière de saison, hors exceptions cockpit).",
+  "_source": "Éducation nationale — calendrier scolaire officiel (métropole, zones A/B/C + CORSE en repli du calendrier zone B). endDate = veille de la rentrée (dernier jour sans école). été non inclus (frontière de saison, hors exceptions cockpit). Fallback hors-ligne : app:school-holidays:import écrase avec les dates réelles (CORSE + DOM/TOM).",
   "periods": [
     { "zone": "A", "holidayType": "toussaint",  "label": "Vacances de la Toussaint", "schoolYear": "2025-2026", "startDate": "2025-10-18", "endDate": "2025-11-02" },
     { "zone": "B", "holidayType": "toussaint",  "label": "Vacances de la Toussaint", "schoolYear": "2025-2026", "startDate": "2025-10-18", "endDate": "2025-11-02" },
@@ -25,6 +25,15 @@
     { "zone": "C", "holidayType": "hiver",      "label": "Vacances d'Hiver",         "schoolYear": "2026-2027", "startDate": "2027-02-06", "endDate": "2027-02-21" },
     { "zone": "A", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2026-2027", "startDate": "2027-04-10", "endDate": "2027-04-25" },
     { "zone": "B", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2026-2027", "startDate": "2027-04-17", "endDate": "2027-05-02" },
-    { "zone": "C", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2026-2027", "startDate": "2027-04-03", "endDate": "2027-04-18" }
+    { "zone": "C", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2026-2027", "startDate": "2027-04-03", "endDate": "2027-04-18" },
+
+    { "zone": "CORSE", "holidayType": "toussaint",  "label": "Vacances de la Toussaint", "schoolYear": "2025-2026", "startDate": "2025-10-18", "endDate": "2025-11-02" },
+    { "zone": "CORSE", "holidayType": "noel",       "label": "Vacances de Noël",         "schoolYear": "2025-2026", "startDate": "2025-12-20", "endDate": "2026-01-04" },
+    { "zone": "CORSE", "holidayType": "hiver",      "label": "Vacances d'Hiver",         "schoolYear": "2025-2026", "startDate": "2026-02-14", "endDate": "2026-03-01" },
+    { "zone": "CORSE", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2025-2026", "startDate": "2026-04-11", "endDate": "2026-04-26" },
+    { "zone": "CORSE", "holidayType": "toussaint",  "label": "Vacances de la Toussaint", "schoolYear": "2026-2027", "startDate": "2026-10-17", "endDate": "2026-11-01" },
+    { "zone": "CORSE", "holidayType": "noel",       "label": "Vacances de Noël",         "schoolYear": "2026-2027", "startDate": "2026-12-19", "endDate": "2027-01-03" },
+    { "zone": "CORSE", "holidayType": "hiver",      "label": "Vacances d'Hiver",         "schoolYear": "2026-2027", "startDate": "2027-02-20", "endDate": "2027-03-07" },
+    { "zone": "CORSE", "holidayType": "printemps",  "label": "Vacances de Printemps",    "schoolYear": "2026-2027", "startDate": "2027-04-17", "endDate": "2027-05-02" }
   ]
 }
