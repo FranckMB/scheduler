@@ -1,7 +1,10 @@
-Last verified @ docs/graduate-holidays-courantes 2026-07-06
+Last verified @ feat/matchs-palier-a-pr2 2026-07-07
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **59 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **60 paths.**
 Changements récents :
+- **Module matchs palier A PR-2 (2026-07-07)** : route custom `GET /api/fixtures/conflicts`
+  (`FixtureConflictsController`, ajoutée à `CustomRoutesOpenApiFactory`) — radar de conflits coach à la volée.
+  Voir [`module-matchs.md`](module-matchs.md).
 - **Module matchs palier A PR-1 (2026-07-06)** : ressources `/api/competitions` + `/api/fixtures`
   (API Platform, `CompetitionResource`/`FixtureResource`) et route custom `GET /api/league-match-windows`
   (`LeagueMatchWindowsController`, ajoutée à `CustomRoutesOpenApiFactory`). Voir

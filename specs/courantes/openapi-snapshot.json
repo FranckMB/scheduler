@@ -3945,6 +3945,90 @@
                 }
             }
         },
+        "/api/fixtures/conflicts": {
+            "get": {
+                "operationId": "getFixtureConflicts",
+                "tags": [
+                    "Match"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Same-coach time-occupancy conflicts (match\u2194match and match\u2194training) recomputed live for the current club/season",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "clubId": {
+                                            "type": "string"
+                                        },
+                                        "seasonId": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "conflicts": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "MATCH_MATCH",
+                                                            "MATCH_TRAINING"
+                                                        ]
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string"
+                                                    },
+                                                    "start": {
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "description": "Overlap segment start"
+                                                    },
+                                                    "end": {
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "description": "Overlap segment end"
+                                                    },
+                                                    "left": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "description": "MATCH_MATCH: first fixture"
+                                                    },
+                                                    "right": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "description": "MATCH_MATCH: second fixture"
+                                                    },
+                                                    "fixture": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "description": "MATCH_TRAINING: the match"
+                                                    },
+                                                    "training": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "description": "MATCH_TRAINING: the training slot"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    }
+                },
+                "summary": "Same-coach match/training conflict radar (read-only, computed on the fly)"
+            }
+        },
         "/api/league-match-windows": {
             "get": {
                 "operationId": "getLeagueMatchWindows",
@@ -11069,6 +11153,10 @@
                 ],
                 "properties": {
                     "teamId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
@@ -11901,12 +11989,20 @@
                 ],
                 "properties": {
                     "teamId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "competitionId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
@@ -11950,13 +12046,17 @@
                         ]
                     },
                     "venueId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "kickoffTime": {
-                        "pattern": "^(\\d{2}:\\d{2})$",
+                        "pattern": "^(.*(^([01]\\d|2[0-3]):[0-5]\\d$).*)$",
                         "description": "HH:MM kickoff.",
                         "type": [
                             "string",

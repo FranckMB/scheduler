@@ -33,6 +33,8 @@ final class CustomRoutesOpenApiTest extends KernelTestCase
             '/api/schedule-slots/{id}/manual-edit/one-time',
             '/api/school-holidays',
             '/api/public-holidays',
+            '/api/league-match-windows',
+            '/api/fixtures/conflicts',
         ];
         foreach ($expected as $path) {
             self::assertArrayHasKey($path, $paths, $path . ' must be documented in the OpenAPI');
