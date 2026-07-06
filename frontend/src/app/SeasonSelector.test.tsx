@@ -95,6 +95,22 @@ describe("SeasonSelector", () => {
     expect(useSeasonStore.getState().selectedSeasonId).toBeNull();
   });
 
+  it("does not let the user switch into a read-only (past) season", async () => {
+    meData = {
+      currentSeasonId: "sN",
+      seasons: [season({ id: "sP", name: "2024-2025", isCurrent: false, isReadonly: true }), season({})],
+    };
+    renderSelector();
+
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    const readonlyItem = screen.getByText("2024-2025 · lecture seule");
+    await userEvent.click(readonlyItem);
+
+    // Still on the current season — the read-only row is inert.
+    expect(useSeasonStore.getState().selectedSeasonId).toBeNull();
+    expect(readonlyItem.closest("button")).toBeDisabled();
+  });
+
   it("resets a stale persisted selection to the current season", () => {
     meData = { currentSeasonId: "sN", seasons: [season({}), season({ id: "sD", name: "2026-2027", isCurrent: false })] };
     useSeasonStore.getState().setSelectedSeasonId("purged-season");
@@ -118,5 +134,21 @@ describe("SeasonSelector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Préparer" }));
     expect(transitionMock).toHaveBeenCalledWith("sN");
     await waitFor(() => expect(useSeasonStore.getState().selectedSeasonId).toBe("sD"));
+  });
+
+  it("ignores a double-click on the confirm button (single transition request)", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({}), season({ id: "sD", name: "2026-2027", isCurrent: false })] };
+    let resolve: (v: unknown) => void = () => {};
+    transitionMock.mockReturnValue(new Promise((r) => (resolve = r)));
+    renderSelector();
+
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    await userEvent.click(screen.getByText("Préparer la saison suivante…"));
+    const confirm = screen.getByRole("button", { name: "Préparer" });
+    await userEvent.click(confirm);
+    await userEvent.click(confirm); // second click while the first is in flight
+
+    resolve({ seasonId: "sD", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-15", counts: {} });
+    await waitFor(() => expect(transitionMock).toHaveBeenCalledTimes(1));
   });
 });

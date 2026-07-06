@@ -52,7 +52,10 @@ export function SeasonSelector() {
   };
 
   const launchTransition = async () => {
-    if (null === currentSeasonId) return;
+    // Guard a double-click on the confirm button: a second concurrent POST
+    // would race the backend successor check (mitigated by an advisory lock,
+    // but no reason to fire it).
+    if (null === currentSeasonId || transitionPending) return;
     setTransitionPending(true);
     try {
       const created = await transitionSeason(currentSeasonId);
@@ -91,15 +94,23 @@ export function SeasonSelector() {
           </span>
         }
       >
-        {seasons.map((season) => (
-          <MenuItem
-            key={season.id}
-            icon={season.id === selected.id ? <Check /> : <CalendarRange />}
-            onSelect={() => season.id !== selected.id && switchTo(season.id)}
-          >
-            {`${season.name} · ${badge(season)}`}
-          </MenuItem>
-        ))}
+        {seasons.map((season) => {
+          // Read-only (past) seasons are not switchable yet: without the
+          // server-side write guard (SeasonAccessGuard, PR-3) selecting one
+          // would expose archived data to edits. They stay listed (greyed)
+          // so the retention picture is visible; consulting them lands with PR-3.
+          const disabled = season.isReadonly || season.id === selected.id;
+          return (
+            <MenuItem
+              key={season.id}
+              disabled={disabled}
+              icon={season.id === selected.id ? <Check /> : <CalendarRange />}
+              onSelect={() => !disabled && switchTo(season.id)}
+            >
+              {`${season.name} · ${badge(season)}`}
+            </MenuItem>
+          );
+        })}
         <MenuItem icon={<CalendarPlus />} onSelect={() => setConfirmTransition(true)}>
           Préparer la saison suivante…
         </MenuItem>

@@ -39,8 +39,10 @@ export const api = ky.create({
         // Self-healing on a stale persisted season (e.g. purged server-side):
         // the backend 403s EVERY request carrying the dead X-Season-Id,
         // /api/me included — without this reset the app could never recover.
-        // Clearing drops the header, so a reload cannot loop.
-        if (state.response.status === 403 && state.request.headers.has("X-Season-Id")) {
+        // Keyed on the X-Season-Rejected marker (NOT any 403) so a legitimate
+        // authorization denial still surfaces its error instead of wiping the
+        // selection and hard-reloading. Clearing drops the header → no loop.
+        if (state.response.status === 403 && state.response.headers.has("X-Season-Rejected")) {
           useSeasonStore.getState().clear();
           if (typeof window !== "undefined") {
             window.location.reload();

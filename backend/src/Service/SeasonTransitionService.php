@@ -10,8 +10,6 @@ use App\Entity\Constraint;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
-use App\Entity\TeamTag;
-use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
@@ -21,11 +19,13 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
  * Season transition (spec transition-de-saison §2-3, P1): copies the ENTRIES
- * of season N into a fresh N+1 — venues, slots, coaches, teams, links, tag
- * assignments and PERMANENT constraints — never a generated plan (no
+ * of season N into a fresh N+1 — venues, slots, coaches, teams, links and
+ * PERMANENT constraints — never a generated plan (no
  * Schedule/SlotTemplate/Diagnostic and no CalendarEntry: events are re-dated
- * by the P2 guided review). The copy is a starting point, fully editable via
- * the existing wizard; lineage lives in the per-row parent_*_id columns.
+ * by the P2 guided review). System team tags re-derive on their own via
+ * TeamTagSyncListener; custom tags are not carried (see the flush note below).
+ * The copy is a starting point, fully editable via the existing wizard;
+ * lineage lives in the per-row parent_*_id columns.
  *
  * N+1 starts with baseline/socle null → the existing cockpit gate forces the
  * baseline work. Its `status` is 'draft' (display metadata only — resolution
@@ -55,18 +55,10 @@ final class SeasonTransitionService
     public function transition(Season $source, ?DateTimeImmutable $today = null): Season
     {
         $clubId = $source->getClubId();
-        $seasons = $this->seasonResolver->seasonsForClub($clubId);
 
-        $current = SeasonResolver::currentAmong($seasons, $today);
+        $current = $this->seasonResolver->currentSeason($clubId, $today);
         if (null === $current || $current->getId() !== $source->getId()) {
             throw new ConflictHttpException('Only the current season can be transitioned.');
-        }
-
-        $sourceYear = SeasonResolver::seasonYear($source->getStartDate());
-        foreach ($seasons as $existing) {
-            if (SeasonResolver::seasonYear($existing->getStartDate()) === $sourceYear + 1) {
-                throw new SeasonAlreadyTransitionedException($existing->getId());
-            }
         }
 
         // The caller's request may have the season_filter enabled on ANY
@@ -78,19 +70,50 @@ final class SeasonTransitionService
             $filters->disable('season_filter');
         }
 
-        return $this->entityManager->wrapInTransaction(fn (): Season => $this->copy($source));
+        return $this->entityManager->wrapInTransaction(function () use ($source, $clubId): Season {
+            // Serialize concurrent transitions of the same club: without this,
+            // two requests both pass the successor check and fork the club into
+            // duplicate N+1 seasons (no DB unique on club_id + season-year).
+            $this->entityManager->getConnection()->executeStatement(
+                'SELECT pg_advisory_xact_lock(hashtext(:club))',
+                ['club' => 'season-transition:' . $clubId],
+            );
+
+            // Re-check successor existence INSIDE the lock (the other request
+            // may have committed its N+1 while we waited on the lock).
+            $sourceYear = SeasonResolver::seasonYear($source->getStartDate());
+            foreach ($this->seasonResolver->seasonsForClub($clubId) as $existing) {
+                if (SeasonResolver::seasonYear($existing->getStartDate()) === $sourceYear + 1) {
+                    throw new SeasonAlreadyTransitionedException($existing->getId());
+                }
+            }
+
+            return $this->copy($source);
+        });
     }
 
-    private function copy(Season $source): Season
+    private function copy(Season $source, ?DateTimeImmutable $today = null): Season
     {
         $clubId = $source->getClubId();
         $sourceId = $source->getId();
 
+        // Shift the source window by whole years so the target lands in the
+        // NEXT season-year (source-year + 1). Anchored to today so a dormant
+        // club whose stale current season is years old still gets a next
+        // season that is actually upcoming, not another past one.
+        $today ??= new DateTimeImmutable('today');
+        $targetYear = max(
+            SeasonResolver::seasonYear($source->getStartDate()) + 1,
+            SeasonResolver::seasonYear($today) + 1,
+        );
+        $yearsToAdd = $targetYear - SeasonResolver::seasonYear($source->getStartDate());
+        $shift = \sprintf('+%d year', $yearsToAdd);
+
         $target = new Season;
         $target->setClubId($clubId);
-        $target->setName($this->nextName($source->getName()));
-        $target->setStartDate($source->getStartDate()->modify('+1 year'));
-        $target->setEndDate($source->getEndDate()->modify('+1 year'));
+        $target->setName($this->nextName($source->getName(), $yearsToAdd));
+        $target->setStartDate($source->getStartDate()->modify($shift));
+        $target->setEndDate($source->getEndDate()->modify($shift));
         $target->setStatus('draft');
         $target->setTransitionData([]);
         $this->entityManager->persist($target);
@@ -218,18 +241,30 @@ final class SeasonTransitionService
         // Permanent constraints only: dated ones (calendarEntryId set) belong
         // to season-N periods and die with them.
         foreach ($this->entityManager->getRepository(Constraint::class)->findBy(['clubId' => $clubId, 'seasonId' => $sourceId, 'calendarEntryId' => null]) as $constraint) {
+            [$scopeTargetId, $scopeDangling] = $this->remapScopeTarget($constraint, $maps);
+            // A dangling scope target (referenced entity already gone in N) →
+            // the constraint is broken in N already; do NOT propagate an
+            // invalid row (it would fail validation and skip enforcement).
+            if ($scopeDangling) {
+                continue;
+            }
+            [$config, $configDangling] = $this->remapConfig($constraint->getConfig(), $maps);
+            if ($configDangling) {
+                continue;
+            }
             $copy = new Constraint;
             $copy->setClubId($clubId);
             $copy->setSeasonId($target->getId());
             $copy->setName($constraint->getName());
             $copy->setDescription($constraint->getDescription());
             $copy->setScope($constraint->getScope());
-            $copy->setScopeTargetId($this->remapScopeTarget($constraint, $maps));
+            $copy->setScopeTargetId($scopeTargetId);
             $copy->setFamily($constraint->getFamily());
             $copy->setRuleType($constraint->getRuleType());
-            $copy->setConfig($this->remapConfig($constraint->getConfig(), $maps));
+            $copy->setConfig($config);
             $copy->setCreatedBy($constraint->getCreatedBy());
             $copy->setSource($constraint->getSource());
+            $copy->setSourceOccurrenceId($constraint->getSourceOccurrenceId());
             $copy->setIsActive($constraint->getIsActive());
             $copy->setSortOrder($constraint->getSortOrder());
             $copy->setParentConstraintId($constraint->getId());
@@ -244,8 +279,6 @@ final class SeasonTransitionService
             'teams' => \count($teamMap),
             'teamCoaches' => $teamCoaches,
             'coachPlayerMemberships' => $memberships,
-            // Completed after the main flush (see the custom-tags pass below).
-            'teamTagAssignments' => 0,
             'constraints' => $constraints,
         ];
 
@@ -258,35 +291,14 @@ final class SeasonTransitionService
             'transitionedTo' => $target->getId(),
         ]));
 
-        $this->entityManager->flush();
-
-        // Tag assignments AFTER the main flush: persisting the copied teams
-        // fires TeamTagSyncListener (postFlush), which wipes and re-derives
-        // the SYSTEM tag assignments of each touched team — a copy made
-        // before that point is silently deleted. System tags re-derive on
-        // their own; only the CUSTOM ones need copying (TeamTag itself is
-        // club-scoped and shared across seasons: same tagId).
-        $customTagIds = [];
-        foreach ($this->entityManager->getRepository(TeamTag::class)->findBy(['clubId' => $clubId, 'isSystem' => false]) as $tag) {
-            $customTagIds[$tag->getId()] = true;
-        }
-        $tagAssignments = 0;
-        // TeamTagAssignment has no clubId column — season-scoped only.
-        foreach ($this->entityManager->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $sourceId]) as $assignment) {
-            $teamId = $teamMap[$assignment->getTeamId()] ?? null;
-            if (null === $teamId || !isset($customTagIds[$assignment->getTagId()])) {
-                continue;
-            }
-            $copy = new TeamTagAssignment;
-            $copy->setSeasonId($target->getId());
-            $copy->setTeamId($teamId);
-            $copy->setTagId($assignment->getTagId());
-            $this->entityManager->persist($copy);
-            ++$tagAssignments;
-        }
-
-        $counts['teamTagAssignments'] = $tagAssignments;
-        $target->setTransitionData(array_merge($target->getTransitionData(), ['counts' => $counts]));
+        // Team tags are NOT copied: persisting the copied teams fires
+        // TeamTagSyncListener, which re-derives the SYSTEM tags for N+1 on its
+        // own. Custom-tag assignments are intentionally left out — the
+        // existing TeamTagService wipes every assignment (custom included) and
+        // re-creates only system tags on the next team edit, so a copied
+        // custom tag would be ephemeral. (Pre-existing limitation, tracked in
+        // the roadmap; carrying custom tags across seasons needs that fixed
+        // first.)
 
         $this->entityManager->flush();
 
@@ -305,43 +317,56 @@ final class SeasonTransitionService
         return $this->entityManager->getRepository($entityClass)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
     }
 
-    /** @param array{venues: array<string,string>, coaches: array<string,string>, teams: array<string,string>} $maps */
-    private function remapScopeTarget(Constraint $constraint, array $maps): ?string
+    /**
+     * @param array{venues: array<string,string>, coaches: array<string,string>, teams: array<string,string>} $maps
+     *
+     * @return array{0: ?string, 1: bool} [remapped id | null, dangling?] —
+     *                                    dangling = a non-CLUB scope whose target has no copy (broken in N)
+     */
+    private function remapScopeTarget(Constraint $constraint, array $maps): array
     {
         $targetId = $constraint->getScopeTargetId();
         if (null === $targetId) {
-            return null;
+            return [null, false]; // CLUB scope (or targetless) — nothing to remap.
         }
 
-        return match ($constraint->getScope()) {
+        $mapped = match ($constraint->getScope()) {
             ConstraintScope::TEAM => $maps['teams'][$targetId] ?? null,
             ConstraintScope::COACH => $maps['coaches'][$targetId] ?? null,
             ConstraintScope::FACILITY => $maps['venues'][$targetId] ?? null,
             default => null,
         };
+
+        return [$mapped, null === $mapped];
     }
 
     /**
      * @param array<string, mixed>                                                                            $config
      * @param array{venues: array<string,string>, coaches: array<string,string>, teams: array<string,string>} $maps
      *
-     * @return array<string, mixed>
+     * @return array{0: array<string, mixed>, 1: bool} [remapped config, dangling?] —
+     *                                                 dangling = a config id key points at an entity with no copy
      */
     private function remapConfig(array $config, array $maps): array
     {
         foreach (self::CONFIG_ID_KEYS as $key => $mapName) {
             if (isset($config[$key]) && \is_string($config[$key])) {
-                $config[$key] = $maps[$mapName][$config[$key]] ?? $config[$key];
+                $mapped = $maps[$mapName][$config[$key]] ?? null;
+                if (null === $mapped) {
+                    // Never carry a season-N id into N+1 — the reference is dead.
+                    return [$config, true];
+                }
+                $config[$key] = $mapped;
             }
         }
 
-        return $config;
+        return [$config, false];
     }
 
-    /** "2025" → "2026" · "2025-2026" → "2026-2027" · any other label: 4-digit years bumped, else kept. */
-    private function nextName(string $name): string
+    /** "2025" → "2026" · "2025-2026" → "2026-2027" · shifts each 4-digit year by $yearsToAdd; other labels kept. */
+    private function nextName(string $name, int $yearsToAdd): string
     {
-        $bumped = preg_replace_callback('/\d{4}/', static fn (array $m): string => (string) ((int) $m[0] + 1), $name);
+        $bumped = preg_replace_callback('/\d{4}/', static fn (array $m): string => (string) ((int) $m[0] + $yearsToAdd), $name);
 
         return $bumped ?? $name;
     }

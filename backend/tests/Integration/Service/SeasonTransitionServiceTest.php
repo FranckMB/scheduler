@@ -67,7 +67,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
 
         $counts = $target->getTransitionData()['counts'];
         self::assertSame(
-            ['venues' => 2, 'venueTrainingSlots' => 1, 'coaches' => 2, 'teams' => 2, 'teamCoaches' => 1, 'coachPlayerMemberships' => 1, 'teamTagAssignments' => 1, 'constraints' => 2],
+            ['venues' => 2, 'venueTrainingSlots' => 1, 'coaches' => 2, 'teams' => 2, 'teamCoaches' => 1, 'coachPlayerMemberships' => 1, 'constraints' => 2],
             $counts,
         );
 
@@ -93,10 +93,12 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $newMembership = $this->em->getRepository(CoachPlayerMembership::class)->findOneBy(['seasonId' => $target->getId()]);
         self::assertSame($newTeams[1]->getId(), $newMembership?->getTeamId());
 
-        // CUSTOM tag assignment: teamId remapped, tagId (club-scoped) kept.
-        // System tags are NOT copied — TeamTagSyncListener re-derives them.
-        $newAssignment = $this->em->getRepository(TeamTagAssignment::class)->findOneBy(['seasonId' => $target->getId(), 'tagId' => $refs['tag']->getId()]);
-        self::assertSame($newTeams[0]->getId(), $newAssignment?->getTeamId());
+        // Team tags are NOT copied by the transition — TeamTagSyncListener
+        // re-derives the SYSTEM tags for the copied teams on its own, and
+        // custom tags are intentionally left out (ephemeral pre-existing
+        // behaviour). So the custom tag from N must NOT appear in N+1.
+        $customInTarget = $this->em->getRepository(TeamTagAssignment::class)->findOneBy(['seasonId' => $target->getId(), 'tagId' => $refs['tag']->getId()]);
+        self::assertNull($customInTarget);
     }
 
     public function testConstraintsArePermanentOnlyWithRemappedTargets(): void
@@ -119,6 +121,45 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertSame($newVenueB?->getId(), $copied[1]->getConfig()['forbiddenVenueId']);
         // Lineage.
         self::assertSame($refs['coachConstraint']->getId(), $copied[0]->getParentConstraintId());
+    }
+
+    public function testDanglingConstraintReferencesAreSkippedNotPropagated(): void
+    {
+        [$club, $season] = $this->createClubGraph();
+        // A constraint whose scope target no longer exists in N (deleted entity)
+        // and one whose config id is dangling — both must NOT be copied.
+        $ghost = new Constraint;
+        $ghost->setClubId($club->getId());
+        $ghost->setSeasonId($season->getId());
+        $ghost->setName('Cible fantôme');
+        $ghost->setScope(ConstraintScope::TEAM);
+        $ghost->setScopeTargetId('deadbeef-0000-4000-8000-000000000000');
+        $ghost->setFamily(ConstraintFamily::TIME);
+        $ghost->setRuleType(ConstraintRuleType::HARD);
+        $ghost->setConfig(['maxStartTime' => '19:30']);
+        $this->em->persist($ghost);
+
+        $ghostConfig = new Constraint;
+        $ghostConfig->setClubId($club->getId());
+        $ghostConfig->setSeasonId($season->getId());
+        $ghostConfig->setName('Config fantôme');
+        $ghostConfig->setScope(ConstraintScope::CLUB);
+        $ghostConfig->setFamily(ConstraintFamily::FACILITY);
+        $ghostConfig->setRuleType(ConstraintRuleType::PREFERRED);
+        $ghostConfig->setConfig(['forbiddenVenueId' => 'deadbeef-1111-4000-8000-000000000000']);
+        $this->em->persist($ghostConfig);
+        $this->em->flush();
+
+        $target = $this->service->transition($season);
+
+        $copiedNames = array_map(
+            static fn (Constraint $c): string => $c->getName(),
+            $this->em->getRepository(Constraint::class)->findBy(['seasonId' => $target->getId()]),
+        );
+        self::assertNotContains('Cible fantôme', $copiedNames);
+        self::assertNotContains('Config fantôme', $copiedNames);
+        // The valid permanent constraints are still copied.
+        self::assertContains('Coach indispo', $copiedNames);
     }
 
     public function testNothingGeneratedIsCopied(): void
