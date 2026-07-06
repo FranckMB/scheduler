@@ -1,0 +1,260 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Entity;
+
+use App\Enum\FixtureHomeAway;
+use App\Enum\FixtureStatus;
+use App\Repository\FixtureRepository;
+use DateTimeImmutable;
+use Doctrine\ORM\Mapping as ORM;
+
+/**
+ * A single dated match (« match » is a PHP keyword → Fixture). The manager
+ * places HOME fixtures (venue + kickoff) to answer the league; AWAY fixtures
+ * are imposed and only counted (their kickoff is estimated). Season-scoped,
+ * tenant-owned. A null competitionId = a friendly (spec gestion-matchs §9).
+ *
+ * The opponent is a plain label here — the enriched global opponent directory
+ * (coords, travel) is palier B.
+ */
+#[ORM\Entity(repositoryClass: FixtureRepository::class)]
+#[ORM\Table(name: 'fixture')]
+#[ORM\Index(name: 'idx_fixture_club_season', columns: ['club_id', 'season_id'])]
+#[ORM\Index(name: 'idx_fixture_team', columns: ['team_id'])]
+#[ORM\Index(name: 'idx_fixture_date', columns: ['match_date'])]
+#[ORM\HasLifecycleCallbacks]
+class Fixture implements TenantOwnedInterface
+{
+    #[ORM\Id]
+    #[ORM\Column(type: 'guid')]
+    private string $id;
+
+    #[ORM\Version]
+    #[ORM\Column(type: 'integer')]
+    private int $version = 1;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $createdAt;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $updatedAt;
+
+    #[ORM\Column(type: 'guid')]
+    private string $clubId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $seasonId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $teamId;
+
+    /** Null = friendly (no FFBB competition/phase). */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $competitionId = null;
+
+    #[ORM\Column(type: 'date_immutable')]
+    private DateTimeImmutable $matchDate;
+
+    #[ORM\Column(length: 10, enumType: FixtureHomeAway::class)]
+    private FixtureHomeAway $homeAway;
+
+    #[ORM\Column(type: 'string', length: 180)]
+    private string $opponentLabel;
+
+    #[ORM\Column(length: 20, enumType: FixtureStatus::class, options: ['default' => 'UNPLACED'])]
+    private FixtureStatus $status = FixtureStatus::UNPLACED;
+
+    /** Home only: the venue that receives the match. */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $venueId = null;
+
+    /** Home: the placed kickoff. Away: the estimated kickoff (or null). */
+    #[ORM\Column(type: 'time_immutable', nullable: true)]
+    private ?DateTimeImmutable $kickoffTime = null;
+
+    public function __construct()
+    {
+        $this->id = $this->newUuid();
+        $now = new DateTimeImmutable;
+        $this->createdAt = $now;
+        $this->updatedAt = $now;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
+    }
+
+    public function setId(string $id): self
+    {
+        $this->id = $id;
+
+        return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
+    }
+
+    public function getCreatedAt(): DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function setCreatedAt(DateTimeImmutable $createdAt): self
+    {
+        $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getUpdatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function setUpdatedAt(DateTimeImmutable $updatedAt): self
+    {
+        $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
+
+    #[ORM\PreUpdate]
+    public function touchUpdatedAt(): void
+    {
+        $this->updatedAt = new DateTimeImmutable;
+    }
+
+    public function getClubId(): string
+    {
+        return $this->clubId;
+    }
+
+    public function setClubId(string $clubId): self
+    {
+        $this->clubId = $clubId;
+
+        return $this;
+    }
+
+    public function getSeasonId(): string
+    {
+        return $this->seasonId;
+    }
+
+    public function setSeasonId(string $seasonId): self
+    {
+        $this->seasonId = $seasonId;
+
+        return $this;
+    }
+
+    public function getTeamId(): string
+    {
+        return $this->teamId;
+    }
+
+    public function setTeamId(string $teamId): self
+    {
+        $this->teamId = $teamId;
+
+        return $this;
+    }
+
+    public function getCompetitionId(): ?string
+    {
+        return $this->competitionId;
+    }
+
+    public function setCompetitionId(?string $competitionId): self
+    {
+        $this->competitionId = $competitionId;
+
+        return $this;
+    }
+
+    public function getMatchDate(): DateTimeImmutable
+    {
+        return $this->matchDate;
+    }
+
+    public function setMatchDate(DateTimeImmutable $matchDate): self
+    {
+        $this->matchDate = $matchDate;
+
+        return $this;
+    }
+
+    public function getHomeAway(): FixtureHomeAway
+    {
+        return $this->homeAway;
+    }
+
+    public function setHomeAway(FixtureHomeAway $homeAway): self
+    {
+        $this->homeAway = $homeAway;
+
+        return $this;
+    }
+
+    public function getOpponentLabel(): string
+    {
+        return $this->opponentLabel;
+    }
+
+    public function setOpponentLabel(string $opponentLabel): self
+    {
+        $this->opponentLabel = $opponentLabel;
+
+        return $this;
+    }
+
+    public function getStatus(): FixtureStatus
+    {
+        return $this->status;
+    }
+
+    public function setStatus(FixtureStatus $status): self
+    {
+        $this->status = $status;
+
+        return $this;
+    }
+
+    public function getVenueId(): ?string
+    {
+        return $this->venueId;
+    }
+
+    public function setVenueId(?string $venueId): self
+    {
+        $this->venueId = $venueId;
+
+        return $this;
+    }
+
+    public function getKickoffTime(): ?DateTimeImmutable
+    {
+        return $this->kickoffTime;
+    }
+
+    public function setKickoffTime(?DateTimeImmutable $kickoffTime): self
+    {
+        $this->kickoffTime = $kickoffTime;
+
+        return $this;
+    }
+
+    private function newUuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+    }
+}

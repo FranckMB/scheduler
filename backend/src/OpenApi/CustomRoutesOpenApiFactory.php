@@ -174,6 +174,32 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             parameters: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string'], 'description' => 'Source season id (must be the current season)']],
         )));
 
+        $paths->addPath('/api/league-match-windows', new PathItem(get: new Operation(
+            operationId: 'getLeagueMatchWindows',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('Federation match-kickoff windows inherited by the club (league envelope, AURA default)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'league' => ['type' => 'string'],
+                        'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'id' => ['type' => 'string'],
+                            'league' => ['type' => 'string'],
+                            'category' => ['type' => 'string'],
+                            'level' => ['type' => 'string'],
+                            'gender' => ['type' => 'string', 'nullable' => true],
+                            'dayOfWeek' => ['type' => 'integer'],
+                            'kickoffMin' => ['type' => 'string'],
+                            'kickoffMax' => ['type' => 'string'],
+                        ]]],
+                    ],
+                ]),
+                '400' => new Response('No club in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+            ],
+            summary: 'League match-kickoff windows inherited by the club (global reference, read-only)',
+        )));
+
         return $openApi;
     }
 

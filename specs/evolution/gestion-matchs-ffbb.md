@@ -87,6 +87,20 @@ Les matchs traversent des villes → le no-overlap devient **« pas de chevauche
 deux événements consécutifs »**. Ex. : U13 domicile 14h puis SM1 extérieur à 40 min de route → **infaisable**
 même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet** (§7).
 
+### 4bis. L'empreinte-temps d'un match (tranché — le calcul du moteur)
+
+> **Décision terrain (2026-07-06) : un match occupe une personne plus longtemps que sa durée de jeu.**
+> C'est l'atome que le moteur de conflits chevauche entre coachs/joueurs.
+
+- **Match = 1h45 (105 min) de jeu + 30 min d'échauffement** avant le coup d'envoi.
+- **Domicile** : empreinte = échauffement (30) + match (105) = **2h15**, de `kickoff−30` à `kickoff+105`.
+- **Extérieur** : en plus, **trajet aller-retour** + **30 min de douche** + **15 min de battement** (se
+  changer). L'empreinte = `kickoff − (trajet_aller + 30)` → `kickoff + (105 + 30 + 15 + trajet_retour)`.
+  Le trajet vient de la **matrice (§7, palier B)** ; d'ici là il est **paramétré (0/estimé)**, les parts
+  fixes (échauffement/match/douche/battement) étant calculées dès le palier A.
+- Livré palier A PR-1 : service **`MatchFootprint`** (constantes ci-dessus, trajet injecté), testé
+  unitairement. Le chevauchement inter-personnes (le radar) = **PR-2**.
+
 > ✅ **Point de branchement identifié** : l'entité **`CoachPlayerMembership`** (`backend/src/Entity/
 > CoachPlayerMembership.php` — `coachId` + `teamId` + `position`, tenant-owned) modélise déjà « cette
 > personne (coach) joue dans cette équipe ». Le no-overlap personne des matchs **branche dessus** : une
@@ -296,6 +310,18 @@ surface de dates que le cockpit dessous, mais **lentille différente**. Le cockp
 l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 
 ---
+
+## 10bis. Workflow réel en 2 temps (précisé terrain 2026-07-06)
+
+1. **Temps 1 — résolution + réponse ligue.** Le gestionnaire **résout** ses matchs domicile (heure + salle)
+   puis les **saisit un à un dans FBI** pour répondre à la ligue. Statut de placement du match :
+   `UNPLACED → PLACED → SUBMITTED (saisi dans FBI) → VALIDATED (ligue confirme)`.
+2. **Temps 2 — confrontation des soucis.** Une fois la ligue ayant **validé**, le championnat est complet →
+   **confrontation des conflits coach/joueur** (le moteur, §4/§4bis).
+
+> Nuance importante : le moteur **détecte dès la saisie** (domicile placés + extérieurs estimés), pas
+> seulement après validation ligue — c'est **l'anticipation** (§1) qui est la valeur. Le jalon « ligue
+> valide » **verrouille** le championnat ; il ne conditionne pas l'apparition des conflits.
 
 ## 11. Paliers de valeur (ordre, pas un plan)
 

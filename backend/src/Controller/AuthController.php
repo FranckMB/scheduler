@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
+use App\Service\LeagueResolver;
 use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -41,6 +42,7 @@ final class AuthController extends AbstractController
         private readonly RateLimiterFactory $authRegisterLimiter,
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly SchoolZoneResolver $schoolZoneResolver,
+        private readonly LeagueResolver $leagueResolver,
         private readonly SeasonResolver $seasonResolver,
     ) {}
 
@@ -319,6 +321,10 @@ final class AuthController extends AbstractController
         // Best-effort academic zone from the FFBB code (accueil-cockpit-temporel §4bis);
         // null when undecidable → stays manually editable via Club PATCH.
         $club->setSchoolZone($this->schoolZoneResolver->resolveFromFfbbCode($ara));
+        // Best-effort FFBB league (région) from the code prefix — drives the
+        // match-window catalog envelope (spec gestion-matchs §6bis); null →
+        // falls back to the federation-default (AURA) at read time.
+        $club->setLeague($this->leagueResolver->resolveFromFfbbCode($ara));
         $this->entityManager->persist($club);
 
         return $club;

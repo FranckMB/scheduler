@@ -51,6 +51,10 @@ class Club
     #[ORM\Column(type: 'string', length: 24, nullable: true)]
     private ?string $schoolZone = null;
 
+    /** FFBB league (région) derived from ffbbClubCode (LeagueResolver) — match-window catalog envelope. */
+    #[ORM\Column(type: 'string', length: 24, nullable: true)]
+    private ?string $league = null;
+
     #[ORM\Column(type: 'string', length: 64)]
     private string $timezone = 'Europe/Paris';
 
@@ -214,6 +218,18 @@ class Club
     public function setSchoolZone(?string $schoolZone): self
     {
         $this->schoolZone = $schoolZone;
+
+        return $this;
+    }
+
+    public function getLeague(): ?string
+    {
+        return $this->league;
+    }
+
+    public function setLeague(?string $league): self
+    {
+        $this->league = $league;
 
         return $this;
     }
