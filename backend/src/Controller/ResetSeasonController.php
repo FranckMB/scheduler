@@ -60,14 +60,17 @@ final class ResetSeasonController extends AbstractController
             return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
         }
 
-        // Disable the Doctrine tenant filter for the bulk DELETEs: it appends
-        // `{table}.club_id = …` using the table name as the alias, which is
-        // invalid SQL for the reserved-word `constraint` table. The deletes are
-        // already scoped by clubId + seasonId explicitly, and PostgreSQL RLS
-        // (app.club_id GUC) still enforces the tenant boundary at the DB level.
+        // Disable the Doctrine tenant + season filters for the bulk DELETEs:
+        // they append `{table}.club_id/season_id = …` using the table name as
+        // the alias, which is invalid SQL for the reserved-word `constraint`
+        // table. The deletes are already scoped by clubId + seasonId
+        // explicitly, and PostgreSQL RLS (app.club_id GUC) still enforces the
+        // tenant boundary at the DB level.
         $filters = $this->entityManager->getFilters();
-        if ($filters->isEnabled('tenant_filter')) {
-            $filters->disable('tenant_filter');
+        foreach (['tenant_filter', 'season_filter'] as $filterName) {
+            if ($filters->isEnabled($filterName)) {
+                $filters->disable($filterName);
+            }
         }
 
         $deleted = 0;

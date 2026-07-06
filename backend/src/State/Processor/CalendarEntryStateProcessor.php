@@ -11,8 +11,8 @@ use App\Entity\Constraint;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
-use App\Repository\SeasonRepository;
 use App\Service\OverlayManager;
+use App\Service\SeasonResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -32,10 +32,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
-        SeasonRepository $seasonRepository,
+        SeasonResolver $seasonResolver,
         private readonly OverlayManager $overlayManager,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonRepository);
+        parent::__construct($entityManager, $requestStack, $seasonResolver);
     }
 
     protected function getEntityClass(): string

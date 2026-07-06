@@ -6,8 +6,8 @@ namespace App\Controller;
 
 use App\Entity\Constraint;
 use App\Repository\ConstraintRepository;
-use App\Repository\SeasonRepository;
 use App\Service\ConstraintValidationService;
+use App\Service\SeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -23,7 +23,7 @@ final class ValidateConstraintsController extends AbstractController
 {
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
     ) {}
@@ -39,7 +39,7 @@ final class ValidateConstraintsController extends AbstractController
 
         $seasonId = $request?->attributes->get('_season_id');
         if (!\is_string($seasonId) || '' === $seasonId) {
-            $season = $this->seasonRepository->findOneBy(['clubId' => $clubId, 'status' => 'active']);
+            $season = $this->seasonResolver->currentSeason($clubId);
             $seasonId = $season?->getId();
         }
         if (null === $seasonId) {

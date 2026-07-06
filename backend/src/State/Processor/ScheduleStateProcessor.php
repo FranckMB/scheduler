@@ -12,8 +12,8 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
-use App\Repository\SeasonRepository;
 use App\Service\OverlayManager;
+use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -27,10 +27,10 @@ class ScheduleStateProcessor extends AbstractStateProcessor
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
-        SeasonRepository $seasonRepository,
+        SeasonResolver $seasonResolver,
         private readonly OverlayManager $overlayManager,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonRepository);
+        parent::__construct($entityManager, $requestStack, $seasonResolver);
     }
 
     protected function getEntityClass(): string

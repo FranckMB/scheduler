@@ -8,6 +8,7 @@ use App\Entity\PublicHoliday;
 use App\Repository\ClubRepository;
 use App\Repository\PublicHolidayRepository;
 use App\Repository\SeasonRepository;
+use App\Service\SeasonResolver;
 use DateTimeImmutable;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +31,7 @@ final class PublicHolidaysController extends AbstractController
         private readonly PublicHolidayRepository $holidayRepository,
         private readonly ClubRepository $clubRepository,
         private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly RequestStack $requestStack,
     ) {}
 
@@ -45,7 +47,12 @@ final class PublicHolidaysController extends AbstractController
         $club = $this->clubRepository->find($clubId);
         $zone = $club?->getSchoolZone();
 
-        $season = $this->seasonRepository->findActiveByClubId($clubId);
+        // Default window = the SELECTED season (X-Season-Id → _season_id,
+        // validated by the listener), else the calendar-derived current one.
+        $seasonId = $request?->attributes->get('_season_id');
+        $season = \is_string($seasonId) && '' !== $seasonId
+            ? $this->seasonRepository->find($seasonId)
+            : $this->seasonResolver->currentSeason($clubId);
 
         // A provided-but-invalid from/to is a client error, not a silent
         // fallback to the season window.

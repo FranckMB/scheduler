@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\EventListener;
 
+use App\Doctrine\Filter\SeasonFilter;
 use App\Doctrine\Filter\TenantFilter;
+use App\Entity\Season;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Repository\SeasonRepository;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -23,6 +26,7 @@ class TenantFilterListener implements EventSubscriberInterface
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly TokenStorageInterface $tokenStorage,
         private readonly TenantConnectionContext $tenantConnectionContext,
     ) {}
@@ -98,13 +102,62 @@ class TenantFilterListener implements EventSubscriberInterface
         // no-op outside a transaction — see TenantConnectionContext).
         $this->tenantConnectionContext->setClubId($clubId);
 
-        // Season AFTER the GUC: the active-season fallback queries the
-        // RLS-protected season table — before the GUC it always found 0 rows
-        // and the header-less frontend flow lost its _season_id.
-        $seasonId = $this->resolveSeasonId($request, $clubId);
-        if (null !== $seasonId) {
-            $request->attributes->set('_season_id', $seasonId);
+        // Season AFTER the GUC: the season lookups query the RLS-protected
+        // season table — before the GUC they always found 0 rows and the
+        // header-less frontend flow lost its _season_id.
+        $seasons = $this->seasonResolver->seasonsForClub($clubId);
+
+        $explicitSeasonId = $this->resolveExplicitSeasonId($request);
+        if (null !== $explicitSeasonId) {
+            $season = $this->findClubSeason($explicitSeasonId, $clubId);
+            // Unknown, malformed or foreign-club season → 403, never a silent
+            // fallback (mirror of the spoofed X-Club-Id check above). RLS
+            // already hides other clubs' seasons from the lookup.
+            if (null === $season) {
+                $event->setResponse(new JsonResponse(
+                    ['error' => 'You do not have access to this season'],
+                    403,
+                ));
+
+                return;
+            }
+            $readonly = SeasonResolver::isReadonlyAmong($season, $seasons);
+        } else {
+            // Current season derived from the calendar (SeasonResolver) —
+            // replaces the historical single `status='active'` lookup. The
+            // current season is writable by definition.
+            $season = SeasonResolver::currentAmong($seasons);
+            $readonly = false;
         }
+
+        if (null !== $season) {
+            $request->attributes->set('_season_id', $season->getId());
+            $request->attributes->set('_season_readonly', $readonly);
+
+            /** @var SeasonFilter $seasonFilter */
+            $seasonFilter = $filterCollection->enable('season_filter');
+            $seasonFilter->setParameter('season_id', $season->getId(), 'uuid');
+        }
+    }
+
+    /**
+     * Loads a season by id and checks it belongs to the resolved club.
+     * Pre-validates the UUID shape: a malformed id must NOT reach Postgres
+     * (an "invalid input syntax for type uuid" error would abort the
+     * surrounding transaction under the test harness).
+     */
+    private function findClubSeason(string $seasonId, string $clubId): ?Season
+    {
+        if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $seasonId)) {
+            return null;
+        }
+
+        $season = $this->seasonRepository->find($seasonId);
+        if (null === $season || $season->getClubId() !== $clubId) {
+            return null;
+        }
+
+        return $season;
     }
 
     private function authenticatedUser(): ?User
@@ -155,28 +208,6 @@ class TenantFilterListener implements EventSubscriberInterface
         $seasonId = $request->headers->get('X-Season-Id');
         if (\is_string($seasonId) && '' !== $seasonId) {
             return $seasonId;
-        }
-
-        return null;
-    }
-
-    private function resolveSeasonId(Request $request, ?string $clubId): ?string
-    {
-        $seasonId = $this->resolveExplicitSeasonId($request);
-        if (null !== $seasonId) {
-            return $seasonId;
-        }
-
-        // Fallback: the club's single active season (RLS: requires the GUC —
-        // only call this after TenantConnectionContext::setClubId()).
-        if (null !== $clubId) {
-            $season = $this->seasonRepository->findOneBy([
-                'clubId' => $clubId,
-                'status' => 'active',
-            ]);
-            if (null !== $season) {
-                return $season->getId();
-            }
         }
 
         return null;

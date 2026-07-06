@@ -71,6 +71,9 @@ jobs:
       - name: TenantIsolationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
 
+      - name: SeasonIsolationTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SeasonIsolationTest.php --group phase1'
+
       - name: TenantCacheIsolationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantCacheIsolationTest.php --group phase1'
 

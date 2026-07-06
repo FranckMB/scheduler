@@ -33,11 +33,19 @@ The shared membership lookups (`findActiveMembership`, `findActiveClubIds`, `isM
 
 - Subscribes to `kernel.request` at **priority 7 — AFTER the security firewall** (priority 8), so the JWT user is authenticated by the time the tenant is resolved.
 - On each **main HTTP request**:
-  1. Resolves the current `club_id`: `_club_id` route attribute → `X-Club-Id` header → **the authenticated JWT user's single active `ClubUser` membership** (the frontend sends no header — the club is derived from the token). The active season is resolved the same way (`_season_id` → `X-Season-Id` → the club's active `Season`).
+  1. Resolves the current `club_id`: `_club_id` route attribute → `X-Club-Id` header → **the authenticated JWT user's single active `ClubUser` membership** (the frontend sends no header — the club is derived from the token).
   2. If a club came from a header/attribute and a user is present, validates the membership (403 if the user is not an active member — blocks a spoofed `X-Club-Id`).
   3. Enables the `tenant_filter` SQL filter and sets its `club_id` parameter.
   4. Executes `SET LOCAL app.club_id = '<uuid>'` on the PostgreSQL connection so that RLS policies are satisfied.
-- **Safety rule:** if no `club_id` can be resolved, the filter is **not** enabled and `SET LOCAL` is **not** executed. This prevents accidental cross-tenant queries.
+  5. Resolves the **season** (after the GUC — the season table is RLS-protected): explicit `_season_id` attribute / `X-Season-Id` header, **validated against the club** (unknown, malformed or foreign-club id → 403, never a silent fallback) → else the **calendar-derived current season** (`SeasonResolver`, July-15 pivot on `startDate` — `Season.status` is display metadata, never read for resolution). Sets `_season_id` + `_season_readonly` attributes and enables the **`season_filter`** SQL filter (clone of the tenant filter keyed on `season_id`) so every season-scoped read stays inside the selected season.
+- **Safety rule:** if no `club_id` can be resolved, the filters are **not** enabled and `SET LOCAL` is **not** executed. This prevents accidental cross-tenant queries. Same for the season: no resolvable season → `season_filter` stays off (mono-season behaviour unchanged).
+
+### Season scoping (multi-season, transition P1)
+
+- **Boundary type:** season isolation is an intra-club **correctness** boundary (a rolled-over club must never mix N-1/N/N+1 rows) — the **security** boundary stays the club (`tenant_filter` + RLS, which are club-only).
+- `SeasonFilter` (`backend/src/Doctrine/Filter/SeasonFilter.php`) is column-based/fail-secure like the tenant filter: any entity with a `season_id` column is scoped (bonus: covers `TeamTagAssignment`, which has no `club_id`); entities without it (Season, Club, ClubUser, TeamTag, SportCategory…) are untouched, so seasons stay listable for the selector.
+- `SeasonResolver` (`backend/src/Service/SeasonResolver.php`): `seasonYear(d) = Y if d ≥ Y-07-15 else Y-1`; current = greatest `startDate` among non-future season-years; single-season club → current unconditionally; `isReadonly` = season-year strictly before the current one.
+- Guarded by `tests/Security/SeasonIsolationTest.php` (blocking, phase1) and `tests/Unit/Service/SeasonResolverTest.php`.
 
 > **Ordering is load-bearing (fixed in tranche 3).** When this listener ran *before* the firewall (priority 8, same as the firewall — order undefined), a header-less request had no authenticated user yet → no club → the SQL filter stayed disabled and no RLS scope was set → **collection reads leaked every club's data**. It only surfaced without an `X-Club-Id` header, i.e. exactly the real frontend flow (`TenantFromJwtTest` used `loginUser`, which pre-injects the token and hid the ordering). Guarded now by `TenantJwtIsolationTest` (a real Bearer JWT) and `OnboardingFlowTest`.
 

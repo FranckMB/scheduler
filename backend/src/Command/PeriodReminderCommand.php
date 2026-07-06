@@ -11,8 +11,8 @@ use App\Entity\Season;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
-use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -53,7 +53,7 @@ final class PeriodReminderCommand extends Command
         private readonly MailerInterface $mailer,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly ClubUserRepository $clubUserRepository,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly SeasonResolver $seasonResolver,
         private readonly PeriodReminderLogRepository $reminderLogRepository,
         private readonly PeriodReminderMailBuilder $mailBuilder,
     ) {
@@ -109,15 +109,16 @@ final class PeriodReminderCommand extends Command
         $clubId = $club->getId();
         $this->tenantConnectionContext->setClubId($clubId);
 
-        $season = $this->seasonRepository->findActiveByClubId($clubId);
-        if (!$season instanceof Season) {
-            return 0;
-        }
-
         // "Today" is the CLUB's calendar day, not the server's (a UTC cron near
         // midnight would otherwise shift every bucket by one day for a Paris club).
         // An explicit --date (rehearsal/tests) overrides for all clubs.
         $today = $forcedToday ?? $this->clubToday($club);
+
+        // Remind on the CURRENT season (calendar-derived), never a past one.
+        $season = $this->seasonResolver->currentSeason($clubId, $today);
+        if (!$season instanceof Season) {
+            return 0;
+        }
 
         $periods = $this->calendarEntryRepository->findUpcomingPeriodsWithoutOverlay($clubId, $season->getId(), $today, self::HORIZON);
         if ([] === $periods) {

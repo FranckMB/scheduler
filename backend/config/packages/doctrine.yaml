@@ -36,6 +36,9 @@ doctrine:
             tenant_filter:
                 class: App\Doctrine\Filter\TenantFilter
                 enabled: false
+            season_filter:
+                class: App\Doctrine\Filter\SeasonFilter
+                enabled: false
 
 when@test:
     doctrine:

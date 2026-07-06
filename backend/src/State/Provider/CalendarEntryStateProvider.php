@@ -7,7 +7,6 @@ namespace App\State\Provider;
 use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\CalendarEntryResource;
 use App\Entity\CalendarEntry;
-use App\Repository\SeasonRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,7 +22,6 @@ class CalendarEntryStateProvider extends AbstractStateProvider
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
         Pagination $pagination,
-        private readonly SeasonRepository $seasonRepository,
     ) {
         parent::__construct($entityManager, $requestStack, $pagination);
     }
@@ -45,15 +43,14 @@ class CalendarEntryStateProvider extends AbstractStateProvider
             return false;
         }
 
-        // Scope to the club's active season so a rolled-over club never sees a
-        // previous season's entries (the tenant filter only scopes club_id).
-        $clubId = $request->attributes->get('_club_id') ?? $request->headers->get('X-Club-Id');
-        if (\is_string($clubId) && '' !== $clubId) {
-            $season = $this->seasonRepository->findActiveByClubId($clubId);
-            if (null !== $season) {
-                $qb->andWhere('e.seasonId = :seasonId')
-                   ->setParameter('seasonId', $season->getId());
-            }
+        // Scope to the SELECTED season (X-Season-Id → _season_id, validated by
+        // the listener) so a rolled-over club never sees another season's
+        // entries. Belt-and-braces with the season_filter — must use the same
+        // season or the two predicates would contradict and return nothing.
+        $seasonId = $request->attributes->get('_season_id');
+        if (\is_string($seasonId) && '' !== $seasonId) {
+            $qb->andWhere('e.seasonId = :seasonId')
+               ->setParameter('seasonId', $seasonId);
         }
 
         if ($request->query->has('kind')) {
