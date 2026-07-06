@@ -57,6 +57,12 @@ export function addDays(iso: string, n: number): string {
   return toISODate(new Date(y, m - 1, d + n));
 }
 
+/** Short French date for compact UI copy, e.g. "2026-12-19" → "19 déc. 2026". */
+export function frDateShort(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
 /** Whole days from `from` to `to` (ISO), floored, negative if `to` is before `from`. */
 export function daysUntil(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00`);

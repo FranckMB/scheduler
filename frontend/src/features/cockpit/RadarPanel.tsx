@@ -1,24 +1,30 @@
-import { AlertTriangle, CalendarClock, MapPin, PartyPopper } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
-import type { CalendarEntry, SchoolHoliday } from "./api";
+import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useCreateHolidayPeriod, useEntryConflicts } from "./queries";
-import { daysUntil, todayISO } from "./lib/date";
+import { daysUntil, frDateShort, todayISO } from "./lib/date";
+
+/** Public holidays further out than this are noise, not a to-do. */
+export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
 
 interface RadarPanelProps {
   entries: CalendarEntry[];
   holidays: SchoolHoliday[];
+  publicHolidays: PublicHoliday[];
+  /** Public-holidays query still in flight — don't flash the all-clear meanwhile. */
+  publicHolidaysLoading?: boolean;
   zone: string | null;
   /** Holidays query still in flight — don't flash "zone à renseigner" meanwhile. */
   zoneLoading?: boolean;
 }
 
 /** The manager's to-do, sorted by urgency. "Adapter" opens the wizard in period mode (palier B). */
-export function RadarPanel({ entries, holidays, zone, zoneLoading = false }: RadarPanelProps) {
+export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLoading = false, zone, zoneLoading = false }: RadarPanelProps) {
   const today = todayISO();
   const navigate = useNavigate();
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
@@ -52,9 +58,26 @@ export function RadarPanel({ entries, holidays, zone, zoneLoading = false }: Rad
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const closures = active.filter((e) => e.kind === "period" && e.periodType === "closure" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const upcomingPeriods = (periodType: CalendarEntryPeriodType): CalendarEntry[] =>
+    active.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const isEmpty = upcomingHolidays.length === 0 && disruptiveEvents.length === 0 && closures.length === 0 && zone !== null && !zoneLoading;
+  const closures = upcomingPeriods("closure");
+  // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
+  const cutoffs = upcomingPeriods("cutoff");
+
+  const upcomingPublicHolidays = publicHolidays
+    .filter((h) => h.date >= today && daysUntil(today, h.date) <= PUBLIC_HOLIDAY_HORIZON_DAYS)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const isEmpty =
+    upcomingHolidays.length === 0 &&
+    disruptiveEvents.length === 0 &&
+    closures.length === 0 &&
+    cutoffs.length === 0 &&
+    upcomingPublicHolidays.length === 0 &&
+    zone !== null &&
+    !zoneLoading &&
+    !publicHolidaysLoading;
 
   return (
     <aside className="space-y-3 rounded-lg border border-border bg-card p-4">
@@ -100,11 +123,24 @@ export function RadarPanel({ entries, holidays, zone, zoneLoading = false }: Rad
       })}
 
       {disruptiveEvents.map((e) => (
-        <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${e.startDate} · pas d'entraînement`} />
+        <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${frDateShort(e.startDate)} · pas d'entraînement`} />
       ))}
 
       {closures.map((e) => (
         <ClosureRadarItem key={e.id} entry={e} onAdapt={() => adapt(e.id)} onView={() => e.overlayScheduleId && viewOverlay(e.overlayScheduleId)} />
+      ))}
+
+      {cutoffs.map((e) => (
+        <RadarCard
+          key={e.id}
+          icon={<OctagonX className="size-4 text-destructive" />}
+          title={e.title}
+          detail={e.startDate === e.endDate ? `Le ${frDateShort(e.startDate)} · aucun entraînement` : `Du ${frDateShort(e.startDate)} au ${frDateShort(e.endDate)} · aucun entraînement`}
+        />
+      ))}
+
+      {upcomingPublicHolidays.map((h) => (
+        <RadarCard key={h.id} icon={<CalendarOff className="size-4 text-destructive" />} title={h.label} detail={`Dans ${daysUntil(today, h.date)} j · jour férié`} />
       ))}
 
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}

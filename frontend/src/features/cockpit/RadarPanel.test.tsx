@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry, SchoolHoliday } from "./api";
+import { addDays, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -40,7 +41,7 @@ function renderRadar(props: Partial<Parameters<typeof RadarPanel>[0]> = {}) {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <RadarPanel entries={[]} holidays={[]} zone="A" {...props} />
+        <RadarPanel entries={[]} holidays={[]} publicHolidays={[]} zone="A" {...props} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -95,5 +96,43 @@ describe("RadarPanel", () => {
   it("shows the all-clear when there is nothing to handle", () => {
     renderRadar();
     expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
+  });
+
+  it("shows an upcoming cutoff as a plain reminder without any CTA", () => {
+    renderRadar({ entries: [closure({ id: "cut1", periodType: "cutoff", title: "Coupure de Noël" })] });
+
+    expect(screen.getByText("Coupure de Noël")).toBeInTheDocument();
+    expect(screen.getByText(/aucun entraînement/)).toBeInTheDocument();
+    // Reminder only: no plan to prepare for a cutoff (no Adapter / Voir le plan).
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voir le plan" })).not.toBeInTheDocument();
+  });
+
+  it("formats cutoff dates in short French, never raw ISO", () => {
+    renderRadar({ entries: [closure({ id: "cut1", periodType: "cutoff", title: "Coupure de Noël" })] });
+
+    // FUTURE window = 2999-01-05 → 2999-01-18: rendered as French short dates.
+    expect(screen.getByText(/Du 5 janv\. 2999 au 18 janv\. 2999 · aucun entraînement/)).toBeInTheDocument();
+    expect(screen.queryByText(/2999-01-05/)).not.toBeInTheDocument();
+  });
+
+  it("does not flash the all-clear while public holidays are still loading", () => {
+    renderRadar({ publicHolidaysLoading: true });
+
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+  });
+
+  it("reminds about public holidays within 30 days, ignores farther ones", () => {
+    const today = todayISO();
+    renderRadar({
+      publicHolidays: [
+        { id: "ph1", date: addDays(today, 10), label: "Férié proche", national: true },
+        { id: "ph2", date: addDays(today, 60), label: "Férié lointain", national: true },
+      ],
+    });
+
+    expect(screen.getByText("Férié proche")).toBeInTheDocument();
+    expect(screen.getByText(/jour férié/)).toBeInTheDocument();
+    expect(screen.queryByText("Férié lointain")).not.toBeInTheDocument();
   });
 });

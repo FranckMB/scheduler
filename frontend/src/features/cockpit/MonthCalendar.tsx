@@ -3,29 +3,39 @@ import { useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
 
-import type { CalendarEntry, SchoolHoliday } from "./api";
+import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { DayDialog } from "./DayDialog";
 import { buildMonthGrid, isWithin, monthLabel, todayISO } from "./lib/date";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
+
+/** Single home of the entry→marker mapping (next periodType goes here, not in the JSX). */
+const entryIcon = (e: CalendarEntry): string => {
+  if (e.kind === "period") {
+    return e.periodType === "cutoff" ? "🛑" : "⛔";
+  }
+  return e.isDisruptive ? "🚫" : "🎉";
+};
 
 interface MonthCalendarProps {
   year: number;
   month: number;
   entries: CalendarEntry[];
   holidays: SchoolHoliday[];
+  publicHolidays: PublicHoliday[];
   onPrev: () => void;
   onNext: () => void;
 }
 
 /** Month grid of the exception layer (events / closures / holidays) — NOT the weekly base plan. */
-export function MonthCalendar({ year, month, entries, holidays, onPrev, onNext }: MonthCalendarProps) {
+export function MonthCalendar({ year, month, entries, holidays, publicHolidays, onPrev, onNext }: MonthCalendarProps) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const grid = buildMonthGrid(year, month);
   const today = todayISO();
 
   const entriesOn = (iso: string): CalendarEntry[] => entries.filter((e) => isWithin(iso, e.startDate, e.endDate));
   const isHoliday = (iso: string): boolean => holidays.some((h) => isWithin(iso, h.startDate, h.endDate));
+  const publicHolidayOn = (iso: string): PublicHoliday | undefined => publicHolidays.find((h) => h.date === iso);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -55,6 +65,7 @@ export function MonthCalendar({ year, month, entries, holidays, onPrev, onNext }
         {grid.map((cell) => {
           const dayEntries = entriesOn(cell.iso);
           const holiday = isHoliday(cell.iso);
+          const publicHoliday = publicHolidayOn(cell.iso);
           const isToday = cell.iso === today;
           return (
             <button
@@ -69,11 +80,14 @@ export function MonthCalendar({ year, month, entries, holidays, onPrev, onNext }
               aria-label={`Jour ${cell.iso}`}
             >
               <span className={cn("flex size-5 items-center justify-center rounded-full", isToday ? "bg-accent font-semibold text-accent-foreground" : "")}>{cell.day}</span>
-              <span className="flex flex-wrap gap-0.5">
+              <span className="flex flex-wrap items-center gap-0.5">
                 {holiday ? <span title="Vacances scolaires">🏖</span> : null}
+                {publicHoliday ? (
+                  <span role="img" aria-label={`Férié — ${publicHoliday.label}`} title={`Férié — ${publicHoliday.label}`} className="inline-block size-1.5 rounded-full bg-destructive" />
+                ) : null}
                 {dayEntries.map((e) => (
                   <span key={e.id} title={e.title}>
-                    {e.kind === "period" ? "⛔" : e.isDisruptive ? "🚫" : "🎉"}
+                    {entryIcon(e)}
                   </span>
                 ))}
               </span>

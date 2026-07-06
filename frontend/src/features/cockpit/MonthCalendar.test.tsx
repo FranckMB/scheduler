@@ -3,12 +3,13 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CalendarEntry, SchoolHoliday } from "./api";
+import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { MonthCalendar } from "./MonthCalendar";
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateCutoff: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/features/planning/queries", () => ({
@@ -34,12 +35,12 @@ const holidays: SchoolHoliday[] = [
   { id: "h1", label: "Pont de mai", holidayType: "printemps", startDate: "2026-05-14", endDate: "2026-05-17", schoolYear: "2025-2026" },
 ];
 
-function renderMay(entries: CalendarEntry[] = [], hols: SchoolHoliday[] = []) {
+function renderMay(entries: CalendarEntry[] = [], hols: SchoolHoliday[] = [], publicHols: PublicHoliday[] = []) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       {/* May 2026 — month is 0-indexed */}
-      <MonthCalendar year={2026} month={4} entries={entries} holidays={hols} onPrev={vi.fn()} onNext={vi.fn()} />
+      <MonthCalendar year={2026} month={4} entries={entries} holidays={hols} publicHolidays={publicHols} onPrev={vi.fn()} onNext={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -69,6 +70,21 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(screen.getByTitle("AG")).toHaveTextContent("🎉");
     // Holiday window 14→17 May = 4 beach markers.
     expect(screen.getAllByTitle("Vacances scolaires")).toHaveLength(4);
+  });
+
+  it("marks a cutoff 🛑 (distinct from other periods) on every day of its window", () => {
+    renderMay([entry({ id: "cut1", kind: "period", periodType: "cutoff", title: "Coupure de Noël", startDate: "2026-05-11", endDate: "2026-05-12" })]);
+
+    const markers = screen.getAllByTitle("Coupure de Noël");
+    expect(markers).toHaveLength(2);
+    expect(markers[0]).toHaveTextContent("🛑");
+  });
+
+  it("shows an accessible public-holiday dot on its exact day", () => {
+    renderMay([], [], [{ id: "ph1", date: "2026-05-01", label: "Fête du Travail", national: true }]);
+
+    // role/aria-label: the marker must be perceivable beyond the hover tooltip.
+    expect(screen.getByRole("img", { name: "Férié — Fête du Travail" })).toBeInTheDocument();
   });
 
   it("opens the day dialog on click with that day's entries", async () => {

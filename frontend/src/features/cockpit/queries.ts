@@ -5,7 +5,7 @@ import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import * as cockpitApi from "./api";
-import type { CreateClosurePayload, CreateEventPayload } from "./api";
+import type { CreateClosurePayload, CreateCutoffPayload, CreateEventPayload } from "./api";
 
 export function useCalendarEntries(from: string, to: string) {
   return useQuery({
@@ -34,6 +34,14 @@ export function useSchoolHolidays() {
   return useQuery({
     queryKey: ["school-holidays"],
     queryFn: cockpitApi.getSchoolHolidays,
+    staleTime: 3_600_000,
+  });
+}
+
+export function usePublicHolidays(from: string, to: string) {
+  return useQuery({
+    queryKey: ["public-holidays", from, to],
+    queryFn: () => cockpitApi.getPublicHolidays(from, to),
     staleTime: 3_600_000,
   });
 }
@@ -128,6 +136,22 @@ export function useCreateHolidayPeriod() {
         startDate: holiday.startDate,
         endDate: holiday.endDate,
         schoolHolidayId: holiday.schoolHolidayId,
+      }),
+    onSuccess: () => invalidateEntries(queryClient),
+  });
+}
+
+/** A cutoff means "no training on the window" — a bare period entry, no dated constraint, never an overlay. */
+export function useCreateCutoff() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateCutoffPayload) =>
+      cockpitApi.createCalendarEntry({
+        kind: "period",
+        periodType: "cutoff",
+        title: payload.title,
+        startDate: payload.startDate,
+        endDate: payload.endDate,
       }),
     onSuccess: () => invalidateEntries(queryClient),
   });

@@ -7,10 +7,12 @@ import type { CalendarEntry } from "./api";
 import { DayDialog } from "./DayDialog";
 
 const deleteMutate = vi.fn();
+const cutoffMutate = vi.fn();
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/features/planning/queries", () => ({
@@ -42,7 +44,10 @@ function renderDialog(entries: CalendarEntry[]) {
 }
 
 describe("DayDialog — deletion is always confirmed", () => {
-  beforeEach(() => deleteMutate.mockReset());
+  beforeEach(() => {
+    deleteMutate.mockReset();
+    cutoffMutate.mockReset();
+  });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
     renderDialog([entry({})]);
@@ -78,5 +83,27 @@ describe("DayDialog — deletion is always confirmed", () => {
     renderDialog([]);
 
     expect(screen.getByRole("button", { name: "Créer une période…" })).toBeDisabled();
+  });
+
+  it("creates a cutoff with the default title when left empty", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Coupure (pas d'entraînement)" }));
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure", startDate: "2026-05-12", endDate: "2026-05-12" }, expect.anything());
+  });
+
+  it("creates a cutoff with a custom title and end date", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Coupure (pas d'entraînement)" }));
+    await userEvent.type(screen.getByPlaceholderText(/Intitulé \(optionnel/), "Coupure de Noël");
+    const endInput = screen.getByLabelText("Jusqu'au");
+    await userEvent.clear(endInput);
+    await userEvent.type(endInput, "2026-05-18");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure de Noël", startDate: "2026-05-12", endDate: "2026-05-18" }, expect.anything());
   });
 });

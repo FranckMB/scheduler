@@ -1,4 +1,4 @@
-import { CalendarX2, PartyPopper, Trash2 } from "lucide-react";
+import { CalendarX2, OctagonX, PartyPopper, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useVenues } from "@/features/planning/queries";
@@ -8,9 +8,9 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry } from "./api";
-import { useCreateEvent, useCreateVenueClosure, useDeleteEntry } from "./queries";
+import { useCreateCutoff, useCreateEvent, useCreateVenueClosure, useDeleteEntry } from "./queries";
 
-type Mode = "list" | "event" | "closure";
+type Mode = "list" | "event" | "closure" | "cutoff";
 
 interface DayDialogProps {
   iso: string;
@@ -28,6 +28,7 @@ export function DayDialog({ iso, entries, onClose }: DayDialogProps) {
         {mode === "list" ? <DayList entries={entries} onCreate={setMode} onClose={onClose} /> : null}
         {mode === "event" ? <EventForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
         {mode === "closure" ? <ClosureForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
+        {mode === "cutoff" ? <CutoffForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
       </div>
     </Modal>
   );
@@ -50,7 +51,15 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
           {entries.map((entry) => (
             <li key={entry.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
               <span className="flex items-center gap-2">
-                {entry.kind === "period" ? <CalendarX2 className="size-4 text-destructive" /> : <PartyPopper className="size-4 text-accent" />}
+                {entry.kind === "period" ? (
+                  entry.periodType === "cutoff" ? (
+                    <OctagonX className="size-4 text-destructive" />
+                  ) : (
+                    <CalendarX2 className="size-4 text-destructive" />
+                  )
+                ) : (
+                  <PartyPopper className="size-4 text-accent" />
+                )}
                 <span>{entry.title}</span>
               </span>
               <button
@@ -90,6 +99,9 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
         <Button variant="outline" onClick={() => onCreate("closure")}>
           Signaler une indisponibilité
         </Button>
+        <Button variant="outline" onClick={() => onCreate("cutoff")}>
+          Coupure (pas d'entraînement)
+        </Button>
         <Button variant="ghost" disabled title="Période générique (custom) — à venir. Utilise « Signaler une indisponibilité » ou le radar vacances.">
           Créer une période…
         </Button>
@@ -117,6 +129,16 @@ function FormShell({ children, onBack }: { children: ReactNode; onBack: () => vo
 
 const fieldClass = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 
+/** Shared "Jusqu'au" end-date field of the three creation forms (event / closure / cutoff). */
+function EndDateField({ iso, value, onChange }: { iso: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block text-xs text-muted-foreground">
+      Jusqu'au
+      <input type="date" className={`${fieldClass} mt-1`} value={value} min={iso} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
 function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
   const [title, setTitle] = useState("");
   const [endDate, setEndDate] = useState(iso);
@@ -135,10 +157,7 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
   return (
     <FormShell onBack={onBack}>
       <input className={fieldClass} placeholder="Titre (AG, tournoi…)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-      <label className="block text-xs text-muted-foreground">
-        Jusqu'au
-        <input type="date" className={`${fieldClass} mt-1`} value={endDate} min={iso} onChange={(e) => setEndDate(e.target.value)} />
-      </label>
+      <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isDisruptive} onChange={(e) => setDisruptive(e.target.checked)} />
         Perturbant (pas d'entraînement ce jour)
@@ -179,11 +198,35 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
         ))}
       </select>
       <input className={fieldClass} placeholder="Intitulé (optionnel)" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <label className="block text-xs text-muted-foreground">
-        Jusqu'au
-        <input type="date" className={`${fieldClass} mt-1`} value={endDate} min={iso} onChange={(e) => setEndDate(e.target.value)} />
-      </label>
+      <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validEnd}>
+        Enregistrer
+      </Button>
+    </FormShell>
+  );
+}
+
+/** A cutoff is a bare period ("no training on the window") — no venue, no constraint, no overlay to generate. */
+function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState("");
+  const [endDate, setEndDate] = useState(iso);
+  const createCutoff = useCreateCutoff();
+
+  const validEnd = endDate >= iso;
+  const submit = () => {
+    if (!validEnd) return;
+    createCutoff.mutate(
+      { title: title.trim() === "" ? "Coupure" : title.trim(), startDate: iso, endDate },
+      { onSuccess: () => { toast.success("Coupure enregistrée"); onDone(); } },
+    );
+  };
+
+  return (
+    <FormShell onBack={onBack}>
+      <input className={fieldClass} placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
+      <p className="text-xs text-muted-foreground">Rappel affiché au calendrier (🛑) et au radar — le planning de base reste inchangé, rien à générer.</p>
+      <Button className="w-full" onClick={submit} disabled={createCutoff.isPending || !validEnd}>
         Enregistrer
       </Button>
     </FormShell>
