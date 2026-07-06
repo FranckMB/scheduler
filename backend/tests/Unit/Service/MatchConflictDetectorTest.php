@@ -160,6 +160,54 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertSame([], $this->detect($fixtures, $links, null, [], [self::BASELINE => $slots]));
     }
 
+    public function testActivePeriodWithoutOverlaySuspendsBaselineTraining(): void
+    {
+        // A closure/holiday recorded as an active period with NO overlay (training
+        // suspended, plan not regenerated) captures the date → the baseline slot is
+        // NOT checked, so no phantom conflict against a cancelled training.
+        $fixtures = [$this->fixture('fx-1', self::TEAM_1, '2026-10-04', '16:00')];
+        $links = [$this->link(self::COACH_A, self::TEAM_1)];
+        $activePeriods = [[
+            'start' => new DateTimeImmutable('2026-10-01'),
+            'end' => new DateTimeImmutable('2026-10-31'),
+            'scheduleId' => null, // period active but no overlay generated
+        ]];
+        $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '17:00', 90)];
+
+        self::assertSame([], $this->detect($fixtures, $links, self::BASELINE, $activePeriods, [self::BASELINE => $slots]));
+    }
+
+    public function testFootprintCrossingMidnightChecksNextDaySlots(): void
+    {
+        // Home match 23:00 on Sunday → footprint 22:30–00:45 (Monday). A Monday
+        // 00:00–01:00 training of the coach's team overlaps past midnight and must
+        // be caught even though the match date's weekday is Sunday.
+        $fixtures = [$this->fixture('fx-1', self::TEAM_1, '2026-10-04', '23:00')];
+        $links = [$this->link(self::COACH_A, self::TEAM_1)];
+        $slots = [$this->slot('sl-mon', self::BASELINE, self::TEAM_1, 1, '00:00', 60)]; // Monday 00:00–01:00
+
+        $conflicts = $this->detect($fixtures, $links, self::BASELINE, [], [self::BASELINE => $slots]);
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('MATCH_TRAINING', $conflicts[0]['type']);
+        self::assertSame('sl-mon', $conflicts[0]['training']['slotTemplateId']);
+    }
+
+    public function testAssignedSlotCoachDoesNotFlagCoCoaches(): void
+    {
+        // Team-1 has two coaches A and B; the overlapping Sunday slot is assigned to
+        // A only. Only A is double-booked — B (who does not run this slot) must not
+        // be flagged.
+        $fixtures = [$this->fixture('fx-1', self::TEAM_1, '2026-10-04', '16:00')];
+        $links = [$this->link(self::COACH_A, self::TEAM_1), $this->link(self::COACH_B, self::TEAM_1)];
+        $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '17:00', 90, self::COACH_A)];
+
+        $conflicts = $this->detect($fixtures, $links, self::BASELINE, [], [self::BASELINE => $slots]);
+
+        self::assertCount(1, $conflicts);
+        self::assertSame(self::COACH_A, $conflicts[0]['coachId']);
+    }
+
     /**
      * @param list<Fixture>                                                                     $fixtures
      * @param list<TeamCoach>                                                                   $links
@@ -199,13 +247,14 @@ final class MatchConflictDetectorTest extends TestCase
         return $link;
     }
 
-    private function slot(string $id, string $scheduleId, string $teamId, int $dayOfWeek, string $start, int $durationMinutes): ScheduleSlotTemplate
+    private function slot(string $id, string $scheduleId, string $teamId, int $dayOfWeek, string $start, int $durationMinutes, ?string $coachId = null): ScheduleSlotTemplate
     {
         $slot = new ScheduleSlotTemplate;
         $this->setId($slot, $id);
         $slot->setScheduleId($scheduleId);
         $slot->setTeamId($teamId);
         $slot->setVenueId('venue');
+        $slot->setCoachId($coachId);
         $slot->setDayOfWeek($dayOfWeek);
         $slot->setStartTime(DateTimeImmutable::createFromFormat('!H:i', $start) ?: new DateTimeImmutable('00:00'));
         $slot->setDurationMinutes($durationMinutes);

@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Entity\CalendarEntry;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
-use App\Enum\CalendarEntryKind;
-use App\Enum\CalendarEntryStatus;
+use App\Repository\CalendarEntryRepository;
 use App\Service\MatchConflictDetector;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,6 +34,7 @@ final class FixtureConflictsController extends AbstractController
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly RequestStack $requestStack,
         private readonly SeasonResolver $seasonResolver,
         private readonly MatchConflictDetector $detector,
@@ -59,27 +58,22 @@ final class FixtureConflictsController extends AbstractController
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
         $baselineScheduleId = $season?->getBaselineScheduleId();
 
-        // Active period entries carrying an overlay plan: on a match date they
-        // replace the base plan (user rule: "soit un overlay généré, soit le
-        // planning de base"). PROPOSED/IGNORED entries are not applied.
-        /** @var list<CalendarEntry> $periods */
-        $periods = $this->entityManager->getRepository(CalendarEntry::class)->findBy([
-            'kind' => CalendarEntryKind::PERIOD,
-            'status' => CalendarEntryStatus::ACTIVE,
-        ]);
-        $overlayPeriods = [];
+        // Active period entries capture the dates they cover: inside them the base
+        // plan does not apply (user rule "soit un overlay généré, soit le planning
+        // de base" — and a closure with no overlay means "no training"). Ordered
+        // so overlapping periods resolve deterministically.
+        $activePeriods = [];
         $scheduleIds = null !== $baselineScheduleId ? [$baselineScheduleId] : [];
-        foreach ($periods as $period) {
+        foreach ($this->calendarEntryRepository->findActivePeriodsOrdered() as $period) {
             $overlayId = $period->getOverlayScheduleId();
-            if (null === $overlayId) {
-                continue;
-            }
-            $overlayPeriods[] = [
+            $activePeriods[] = [
                 'start' => $period->getStartDate(),
                 'end' => $period->getEndDate(),
                 'scheduleId' => $overlayId,
             ];
-            $scheduleIds[] = $overlayId;
+            if (null !== $overlayId) {
+                $scheduleIds[] = $overlayId;
+            }
         }
 
         $slotsBySchedule = [];
@@ -93,7 +87,7 @@ final class FixtureConflictsController extends AbstractController
             }
         }
 
-        $conflicts = $this->detector->detect($fixtures, $teamCoachRows, $baselineScheduleId, $overlayPeriods, $slotsBySchedule);
+        $conflicts = $this->detector->detect($fixtures, $teamCoachRows, $baselineScheduleId, $activePeriods, $slotsBySchedule);
 
         return $this->json([
             'clubId' => $clubId,

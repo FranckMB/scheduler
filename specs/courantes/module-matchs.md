@@ -44,13 +44,17 @@ Croise l'empreinte-temps `MatchFootprint` d'un `Fixture` avec les autres occupat
 - **`MATCH_MATCH`** : deux `Fixture` d'équipes partageant un coach (via `TeamCoach.coachId`) dont les fenêtres
   d'occupation se chevauchent.
 - **`MATCH_TRAINING`** : un `Fixture` chevauchant un entraînement d'une équipe du coach, lu dans le **planning
-  effectif à la date du match** — l'overlay de la période ACTIVE qui couvre cette date (`CalendarEntry.
-  overlayScheduleId`) si elle existe, **sinon le planning de base** (`Season.baselineScheduleId`). Le créneau
-  hebdo (`ScheduleSlotTemplate`, `dayOfWeek`+`startTime`+`durationMinutes`) est **projeté sur la date du match**
-  (même jour ISO), puis chevauché.
+  effectif à la date du match**. Une période ACTIVE **capture** les dates qu'elle couvre : à l'intérieur le
+  planning de base ne s'applique pas — son **overlay** (`CalendarEntry.overlayScheduleId`) s'il existe, **sinon
+  aucun entraînement** (une coupure = « pas d'entraînement », donc aucun conflit fantôme). Hors période =
+  `Season.baselineScheduleId`. Le créneau hebdo (`ScheduleSlotTemplate`, `dayOfWeek`+`startTime`+`durationMinutes`)
+  est **projeté sur la date**, puis chevauché. Le coach en conflit = le `coachId` **assigné au créneau** s'il
+  existe, sinon les coachs de l'équipe du créneau (pas de faux positif sur un co-coach qui ne tient pas la séance).
 
-Chevauchement demi-ouvert (créneaux jointifs = pas de conflit). Un `Fixture` AWAY sans `kickoffTime` n'a pas
-d'empreinte (trajet = palier B) → il ne génère aucun conflit — voulu.
+Chevauchement demi-ouvert (créneaux jointifs = pas de conflit). Une empreinte qui **passe minuit** (coup d'envoi
+tardif) est vérifiée sur les **deux jours** qu'elle couvre. Périodes qui se chevauchent → résolution
+**déterministe** (ordre `startDate, id` via `CalendarEntryRepository::findActivePeriodsOrdered`). Un `Fixture`
+AWAY sans `kickoffTime` n'a pas d'empreinte (trajet = palier B) → il ne génère aucun conflit — voulu.
 
 ### Endpoint — `GET /api/fixtures/conflicts`
 

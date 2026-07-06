@@ -19,8 +19,11 @@ use DateTimeImmutable;
  * Two conflict kinds, both built on {@see MatchFootprint} occupancy windows:
  * - MATCH_MATCH: two fixtures of teams sharing a coach whose windows overlap.
  * - MATCH_TRAINING: a fixture overlapping a training of one of the coach's teams,
- *   read from the schedule EFFECTIVE on the match date — the overlay plan of the
- *   period covering that date if any, else the season baseline plan.
+ *   read from the schedule EFFECTIVE on the match date. An active period entry
+ *   CAPTURES the dates it covers — inside it the base plan does not apply: its
+ *   overlay if any, else no training plan at all (a closure means "no training").
+ *   Outside any period the season baseline applies. A footprint crossing midnight
+ *   is checked against BOTH calendar days it spans.
  *
  * Pure/stateless: the controller loads the scoped data and passes it in; this
  * class only crosses and overlaps, so it is unit-testable without a kernel.
@@ -33,12 +36,12 @@ final class MatchConflictDetector
     public function __construct(private readonly MatchFootprint $footprint) {}
 
     /**
-     * @param list<Fixture>                                                                     $fixtures           season fixtures (already club+season scoped)
-     * @param list<TeamCoach>                                                                   $teamCoachRows      coach↔team links (scoped)
-     * @param string|null                                                                       $baselineScheduleId the season's base plan, or null if none yet
-     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string}> $overlayPeriods
-     *                                                                                                              active period windows carrying an overlay plan
-     * @param array<string, list<ScheduleSlotTemplate>>                                         $slotsBySchedule    slots indexed by their scheduleId
+     * @param list<Fixture>                                                                          $fixtures           season fixtures (already club+season scoped)
+     * @param list<TeamCoach>                                                                        $teamCoachRows      coach↔team links (scoped)
+     * @param string|null                                                                            $baselineScheduleId the season's base plan, or null if none yet
+     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
+     *                                                                                                                   active period windows (ordered), scheduleId = their overlay or null
+     * @param array<string, list<ScheduleSlotTemplate>>                                              $slotsBySchedule    slots indexed by their scheduleId
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
@@ -46,13 +49,11 @@ final class MatchConflictDetector
         array $fixtures,
         array $teamCoachRows,
         ?string $baselineScheduleId,
-        array $overlayPeriods,
+        array $activePeriods,
         array $slotsBySchedule,
     ): array {
-        $teamsByCoach = [];
         $coachesByTeam = [];
         foreach ($teamCoachRows as $link) {
-            $teamsByCoach[$link->getCoachId()][$link->getTeamId()] = true;
             $coachesByTeam[$link->getTeamId()][$link->getCoachId()] = true;
         }
 
@@ -74,7 +75,7 @@ final class MatchConflictDetector
 
         return [
             ...$this->matchMatchConflicts($views),
-            ...$this->matchTrainingConflicts($views, $teamsByCoach, $baselineScheduleId, $overlayPeriods, $slotsBySchedule),
+            ...$this->matchTrainingConflicts($views, $coachesByTeam, $baselineScheduleId, $activePeriods, $slotsBySchedule),
         ];
     }
 
@@ -113,67 +114,71 @@ final class MatchConflictDetector
 
     /**
      * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, coachIds: list<string>}> $views
-     * @param array<string, array<string, true>>                                                                                     $teamsByCoach
-     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string}>                                      $overlayPeriods
+     * @param array<string, array<string, true>>                                                                                     $coachesByTeam
+     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}>                                 $activePeriods
      * @param array<string, list<ScheduleSlotTemplate>>                                                                              $slotsBySchedule
      *
      * @return list<array<string, mixed>>
      */
     private function matchTrainingConflicts(
         array $views,
-        array $teamsByCoach,
+        array $coachesByTeam,
         ?string $baselineScheduleId,
-        array $overlayPeriods,
+        array $activePeriods,
         array $slotsBySchedule,
     ): array {
         $conflicts = [];
         foreach ($views as $view) {
-            $fixture = $view['fixture'];
-            $matchDate = $fixture->getMatchDate();
-            $scheduleId = $this->effectiveScheduleId($matchDate, $overlayPeriods, $baselineScheduleId);
-            if (null === $scheduleId) {
-                continue;
-            }
-            $isoWeekday = (int) $matchDate->format('N');
-
-            foreach ($slotsBySchedule[$scheduleId] ?? [] as $slot) {
-                if ($slot->getDayOfWeek() !== $isoWeekday) {
+            // A footprint can cross midnight (late kickoff) — check every calendar
+            // day it spans, each resolving its own effective schedule + weekday.
+            foreach ($this->spannedDates($view['window']) as $date) {
+                $scheduleId = $this->effectiveScheduleId($date, $activePeriods, $baselineScheduleId);
+                if (null === $scheduleId) {
                     continue;
                 }
-                // The coach(es) of THIS fixture for whom the slot's team is one
-                // of their teams — that coach owes both the match and the training.
-                $coachIds = array_values(array_filter(
-                    $view['coachIds'],
-                    static fn (string $coachId): bool => isset($teamsByCoach[$coachId][$slot->getTeamId()]),
-                ));
-                if ([] === $coachIds) {
-                    continue;
-                }
+                $isoWeekday = (int) $date->format('N');
 
-                $trainingWindow = $this->slotWindowOnDate($matchDate, $slot);
-                if (!$this->overlaps($view['window'], $trainingWindow)) {
-                    continue;
-                }
+                foreach ($slotsBySchedule[$scheduleId] ?? [] as $slot) {
+                    if ($slot->getDayOfWeek() !== $isoWeekday) {
+                        continue;
+                    }
+                    // Who actually runs the training: the slot's assigned coach if
+                    // any, else any coach of the slot's team. Intersect with this
+                    // fixture's coaches — only a coach on BOTH sides is double-booked.
+                    $slotCoach = $slot->getCoachId();
+                    $trainingCoachIds = null !== $slotCoach
+                        ? [$slotCoach]
+                        : array_keys($coachesByTeam[$slot->getTeamId()] ?? []);
+                    $coachIds = array_values(array_intersect($view['coachIds'], $trainingCoachIds));
+                    if ([] === $coachIds) {
+                        continue;
+                    }
 
-                foreach ($coachIds as $coachId) {
-                    $conflicts[] = [
-                        'type' => 'MATCH_TRAINING',
-                        'coachId' => $coachId,
-                        'start' => $this->maxMoment($view['window']['start'], $trainingWindow['start'])->format(DateTimeImmutable::ATOM),
-                        'end' => $this->minMoment($view['window']['end'], $trainingWindow['end'])->format(DateTimeImmutable::ATOM),
-                        'fixture' => $this->fixtureView($fixture, $view['window']),
-                        'training' => [
-                            'slotTemplateId' => $slot->getId(),
-                            'scheduleId' => $slot->getScheduleId(),
-                            'teamId' => $slot->getTeamId(),
-                            'venueId' => $slot->getVenueId(),
-                            'dayOfWeek' => $slot->getDayOfWeek(),
-                            'startTime' => $slot->getStartTime()->format('H:i'),
-                            'durationMinutes' => $slot->getDurationMinutes(),
-                            'windowStart' => $trainingWindow['start']->format(DateTimeImmutable::ATOM),
-                            'windowEnd' => $trainingWindow['end']->format(DateTimeImmutable::ATOM),
-                        ],
-                    ];
+                    $trainingWindow = $this->slotWindowOnDate($date, $slot);
+                    if (!$this->overlaps($view['window'], $trainingWindow)) {
+                        continue;
+                    }
+
+                    foreach ($coachIds as $coachId) {
+                        $conflicts[] = [
+                            'type' => 'MATCH_TRAINING',
+                            'coachId' => $coachId,
+                            'start' => $this->maxMoment($view['window']['start'], $trainingWindow['start'])->format(DateTimeImmutable::ATOM),
+                            'end' => $this->minMoment($view['window']['end'], $trainingWindow['end'])->format(DateTimeImmutable::ATOM),
+                            'fixture' => $this->fixtureView($view['fixture'], $view['window']),
+                            'training' => [
+                                'slotTemplateId' => $slot->getId(),
+                                'scheduleId' => $slot->getScheduleId(),
+                                'teamId' => $slot->getTeamId(),
+                                'venueId' => $slot->getVenueId(),
+                                'dayOfWeek' => $slot->getDayOfWeek(),
+                                'startTime' => $slot->getStartTime()->format('H:i'),
+                                'durationMinutes' => $slot->getDurationMinutes(),
+                                'windowStart' => $trainingWindow['start']->format(DateTimeImmutable::ATOM),
+                                'windowEnd' => $trainingWindow['end']->format(DateTimeImmutable::ATOM),
+                            ],
+                        ];
+                    }
                 }
             }
         }
@@ -182,15 +187,35 @@ final class MatchConflictDetector
     }
 
     /**
-     * The schedule effective on a match date: the overlay of the first active
-     * period covering the date, else the season baseline. Null when neither
-     * exists (no plan to check against → no training conflict).
+     * The calendar days a window touches — its start day, plus its end day when
+     * the window crosses midnight (footprints are short, so at most two days).
      *
-     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string}> $overlayPeriods
+     * @param array{start: DateTimeImmutable, end: DateTimeImmutable} $window
+     *
+     * @return list<DateTimeImmutable> midnight of each spanned day
      */
-    private function effectiveScheduleId(DateTimeImmutable $date, array $overlayPeriods, ?string $baselineScheduleId): ?string
+    private function spannedDates(array $window): array
     {
-        foreach ($overlayPeriods as $period) {
+        $startDay = $window['start']->setTime(0, 0);
+        $endDay = $window['end']->setTime(0, 0);
+        if ($startDay->format('Y-m-d') === $endDay->format('Y-m-d')) {
+            return [$startDay];
+        }
+
+        return [$startDay, $endDay];
+    }
+
+    /**
+     * The schedule effective on a date. An active period covering the date
+     * captures it — its overlay (may be null → no training plan) wins; the first
+     * covering period in the ordered list decides. Outside any period the season
+     * baseline applies.
+     *
+     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
+     */
+    private function effectiveScheduleId(DateTimeImmutable $date, array $activePeriods, ?string $baselineScheduleId): ?string
+    {
+        foreach ($activePeriods as $period) {
             if ($date >= $period['start'] && $date <= $period['end']) {
                 return $period['scheduleId'];
             }
@@ -207,10 +232,8 @@ final class MatchConflictDetector
      */
     private function slotWindowOnDate(DateTimeImmutable $date, ScheduleSlotTemplate $slot): array
     {
-        $start = $date->setTime(
-            (int) $slot->getStartTime()->format('H'),
-            (int) $slot->getStartTime()->format('i'),
-        );
+        $slotStart = $slot->getStartTime();
+        $start = $date->setTime((int) $slotStart->format('H'), (int) $slotStart->format('i'));
 
         return ['start' => $start, 'end' => $start->add(new DateInterval('PT' . $slot->getDurationMinutes() . 'M'))];
     }
