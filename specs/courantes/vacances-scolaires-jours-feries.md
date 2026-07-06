@@ -15,9 +15,9 @@ Deux tables **globales** (référentiel national partagé, pas de `club_id`, hor
 
 ### Zones scolaires — 13 codes
 
-`SchoolZoneResolver::ZONES` (source de vérité unique, réutilisée par `FrenchSchoolCalendarMapper` et gardée par un test de cohérence) : `A`, `B`, `C`, `CORSE` + 9 DOM/TOM (`GUADELOUPE`, `GUYANE`, `MARTINIQUE`, `MAYOTTE`, `NOUVELLE_CALEDONIE`, `POLYNESIE`, `REUNION`, `SAINT_PIERRE_MIQUELON`, `WALLIS_FUTUNA`).
+`SchoolZoneResolver::ZONES` énumère les 13 codes : `A`, `B`, `C`, `CORSE` + 9 DOM/TOM (`GUADELOUPE`, `GUYANE`, `MARTINIQUE`, `MAYOTTE`, `NOUVELLE_CALEDONIE`, `POLYNESIE`, `REUNION`, `SAINT_PIERRE_MIQUELON`, `WALLIS_FUTUNA`). `FrenchSchoolCalendarMapper` ne réutilise **pas** cette constante en runtime — il a sa propre table `ZONE_LABEL_TO_CODE` (libellé de zone API → code) ; `FrenchSchoolCalendarMapperTest` garde la cohérence des deux listes (`assertContains(..., SchoolZoneResolver::ZONES)`). Ajouter une 14ᵉ zone impose donc de toucher **les deux** constantes.
 
-La zone du club (`Club.schoolZone`) est **dérivée du code FFBB** au register + backfill : 3 lettres de ligue + 4 chiffres zéro-paddés = département (`GES0067060` → 67 → B ; `GUY0973021` → 973 → GUYANE ; Corse `2A`/`2B`/`20` → CORSE). Extraction **best-effort** (format FFBB non officiellement vérifié) : illisible → `null`, saisie manuelle (PATCH club), jamais écrasée si déjà renseignée.
+La zone du club (`Club.schoolZone`) est **dérivée du code FFBB** au register + backfill : 3 lettres de ligue + 4 chiffres zéro-paddés = département (`GES0067060` → 67 → B ; `GUY0973021` → 973 → GUYANE ; Corse `2A`/`2B`/`20` → CORSE). Extraction **best-effort** (format FFBB non officiellement vérifié) : illisible → `null`, saisie manuelle (PATCH club), jamais écrasée si déjà renseignée. La migration `Version20260706120000` a élargi les colonnes de zone à la taxonomie 13 codes et **re-taggé les clubs corses `B → CORSE`** (down : `CORSE → B`).
 
 ## Alimentation (commandes console, idempotentes)
 
@@ -39,10 +39,10 @@ Deux routes custom `GET`, documentées dans l'OpenAPI via `CustomRoutesOpenApiFa
 
 | Route | Comportement |
 |-------|--------------|
-| `GET /api/school-holidays` | vacances de la **zone du club** dans la fenêtre `from`/`to` (défaut : saison active). Zone `null` → `items: []` (le frontend affiche un CTA « renseigner la zone ») |
-| `GET /api/public-holidays` | fériés `NATIONAL` **∪** extras du territoire du club, même fenêtre. Zone `null` → NATIONAL quand même (les fériés nationaux s'appliquent à tout club). Flag `national` par item |
+| `GET /api/school-holidays` | vacances de la **zone du club** dans la fenêtre `from`/`to` (défaut : saison active). Zone `null` → **court-circuit `200 {zone:null, items:[]}` avant toute validation de fenêtre** (le frontend affiche un CTA « renseigner la zone ») |
+| `GET /api/public-holidays` | fériés `NATIONAL` **∪** extras du territoire du club, même fenêtre. Zone `null` → NATIONAL quand même (les fériés nationaux s'appliquent à tout club) ; pas de court-circuit. Flag `national` par item |
 
-`from`/`to` fournis mais invalides → 400 (pas de fallback silencieux sur la saison) ; pas de fenêtre du tout (ni params ni saison active) → 400.
+Validation de fenêtre (quand elle s'exécute — c.-à-d. toujours pour `public-holidays`, et pour `school-holidays` seulement si la zone est renseignée) : `from`/`to` fournis mais invalides → 400 (pas de fallback silencieux sur la saison) ; pas de fenêtre du tout (ni params ni saison active) → 400. Pas de club en contexte → 400.
 
 ## Hors périmètre assumé
 

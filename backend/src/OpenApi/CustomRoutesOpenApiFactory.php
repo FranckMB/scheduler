@@ -14,12 +14,18 @@ use ArrayObject;
 use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
 
 /**
- * G4/G5: `/api/register`, `/api/me` (AuthController) and the three
- * `/api/schedule-slots/{id}/manual-edit/*` routes (ManualEditController) are
- * plain Symfony `#[Route]`s, not API Platform operations, so they were absent
- * from the generated OpenAPI (and the `specs/courantes/openapi-snapshot.json`).
- * This decorator injects their paths so `/api/docs` and the snapshot document
- * the full contract. The endpoints themselves are unchanged.
+ * Registry for custom Symfony `#[Route]`s that are NOT API Platform operations
+ * and would otherwise be absent from the generated OpenAPI (and the
+ * `specs/courantes/openapi-snapshot.json`). This decorator injects their paths
+ * so `/api/docs` and the snapshot document the full contract; the endpoints
+ * themselves are unchanged.
+ *
+ * ⚠ EVERY custom `#[Route]` must be declared here — a route missing from this
+ * factory is invisible to the export even after the snapshot is regenerated.
+ * Currently covered: `/api/register`, `/api/me` (AuthController),
+ * `/api/schedule-slots/{id}/manual-edit/*` (ManualEditController),
+ * `/api/school-holidays`, `/api/public-holidays` (holiday feeds). The remaining
+ * custom routes are tracked as a gap in `specs/evolution/roadmap.md` §9.
  */
 #[AsDecorator('api_platform.openapi.factory')]
 final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterface
@@ -177,7 +183,8 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             ]]],
                         ],
                     ]),
-                    '400' => new Response('No club in context, invalid from/to, or no window (no active season)'),
+                    '400' => new Response('No club in context, or (when the club zone is set) invalid from/to or no window (no active season) — a null zone short-circuits to 200 with empty items'),
+                    '401' => new Response('Unauthorized (missing/expired JWT)'),
                 ],
                 summary: 'School holidays of the club academic zone (display feed, read-only)',
                 parameters: $windowParameters,
@@ -198,7 +205,8 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             ]]],
                         ],
                     ]),
-                    '400' => new Response('No club in context, invalid from/to, or no window (no active season)'),
+                    '400' => new Response('No club in context, invalid from/to, or no window (no active season) — a null zone still returns the NATIONAL fériés (no short-circuit)'),
+                    '401' => new Response('Unauthorized (missing/expired JWT)'),
                 ],
                 summary: 'Public holidays (jours fériés) applying to the club (display-only, never feeds the solver)',
                 parameters: $windowParameters,

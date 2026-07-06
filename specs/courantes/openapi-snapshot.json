@@ -752,7 +752,10 @@
                         }
                     },
                     "400": {
-                        "description": "No club in context, invalid from/to, or no window (no active season)"
+                        "description": "No club in context, invalid from/to, or no window (no active season) \u2014 a null zone still returns the NATIONAL f\u00e9ri\u00e9s (no short-circuit)"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
                     }
                 },
                 "summary": "Public holidays (jours f\u00e9ri\u00e9s) applying to the club (display-only, never feeds the solver)",
@@ -832,7 +835,10 @@
                         }
                     },
                     "400": {
-                        "description": "No club in context, invalid from/to, or no window (no active season)"
+                        "description": "No club in context, or (when the club zone is set) invalid from/to or no window (no active season) \u2014 a null zone short-circuits to 200 with empty items"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
                     }
                 },
                 "summary": "School holidays of the club academic zone (display feed, read-only)",

@@ -1,14 +1,12 @@
 Last verified @ docs/graduate-holidays-courantes 2026-07-06
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`.
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **53 paths.**
 Changements récents :
 - **Calendriers (PR #53/#62/#63, rattrapage 2026-07-06)** : `GET /api/school-holidays` et
   `GET /api/public-holidays` (contrôleurs Symfony custom) ajoutés à
   `App\OpenApi\CustomRoutesOpenApiFactory` puis au snapshot — ils manquaient aux deux.
-  ⚠ Le même gap subsiste pour la plupart des autres routes `#[Route]` custom
-  (logo/appearance, memberships, lifecycle validate/reopen/set-baseline, reset-season,
-  conflicts, teams/reorder, password forgot/reset, health…) — consigné dans
-  `specs/evolution/roadmap.md` §9.
+  ⚠ Le même gap subsiste pour la plupart des autres routes `#[Route]` custom — liste
+  exhaustive + suivi dans `specs/evolution/roadmap.md` §9.
 - **G4/G5 (ex `backend-gaps`, absorbé dans `specs/evolution/roadmap.md`)** : les routes Symfony custom `/api/register`, `/api/me`
   (AuthController) et `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}`
   (ManualEditController) sont documentées dans l'OpenAPI via

@@ -9,10 +9,11 @@ use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
- * G4/G5 guard: the custom Symfony routes (AuthController, ManualEditController)
- * are plain #[Route]s excluded from API Platform's auto-generated OpenAPI, so
- * CustomRoutesOpenApiFactory injects them. This locks their presence in the
- * schema (and the regenerated specs/courantes/openapi-snapshot.json).
+ * Guard: the custom Symfony #[Route]s (AuthController, ManualEditController,
+ * SchoolHolidaysController, PublicHolidaysController) are excluded from API
+ * Platform's auto-generated OpenAPI, so CustomRoutesOpenApiFactory injects them.
+ * This locks their presence in the schema (and the regenerated
+ * specs/courantes/openapi-snapshot.json).
  */
 #[Group('phase1')]
 final class CustomRoutesOpenApiTest extends KernelTestCase
