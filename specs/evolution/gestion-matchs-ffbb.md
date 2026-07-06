@@ -147,10 +147,11 @@ rencontres reste à importer** quel que soit le réseau.
 
 ## 6. Contraintes & préférences (réutilisent le vocabulaire existant)
 
-- **Jour imposé par catégorie/niveau** (« U18/U21 Région = dimanche ») = contrainte **HARD** imposée par la
-  ligue. Réutilise le vocabulaire `Constraint` (family `DAY`, ruleType `HARD`) mais **appliqué au placement
-  manuel** (l'UI bloque / le radar signale la violation), **pas** au solveur. Le gestionnaire « fait sa
-  magie » = arbitre sous contraintes, comme il l'a fait sur l'entraînement.
+- **Jour + fenêtre horaire imposés par catégorie/niveau** (« U18 Région = dimanche 10h–16h30 ») = contrainte
+  **HARD** imposée par la ligue, **pré-seedée** via le catalogue-ligue (§6bis) — pas saisie à la main.
+  Réutilise le vocabulaire `Constraint` (family `DAY` + `TIME`, ruleType `HARD`) mais **appliqué au placement
+  manuel** (l'UI bloque / le radar signale la violation hors envelope), **pas** au solveur. Le gestionnaire
+  « fait sa magie » = arbitre sous contraintes, comme il l'a fait sur l'entraînement.
   ⚠ **Tension canevas** : la grille d'entraînement a **abandonné le dimanche** (décision roadmap §10). Les
   matchs le **réintroduisent** — le module match a un **calendrier week-end-centrique** (samedi/dimanche au
   centre), distinct du canevas lun-sam de l'entraînement.
@@ -158,6 +159,58 @@ rencontres reste à importer** quel que soit le réseau.
   = **`PREFERRED TIME` par équipe, champ 1re classe** (tranché). Sert **deux fois** : (a) suggérer/valider le
   placement domicile, (b) **estimer l'heure d'un match extérieur** non contrôlé (pour le radar personne).
   Cheap, haute valeur.
+
+---
+
+### 6bis. Le catalogue-ligue = seed des fenêtres autorisées (patron « vacances scolaires »)
+
+Chaque ligue/comité publie ses **fenêtres autorisées par catégorie × niveau** (jour(s) + plage de coup
+d'envoi). C'est une **contrainte HARD imposée** : le gestionnaire place **dedans**. Décision produit :
+
+> **On seede ces fenêtres comme un catalogue de référence** (comme `school_holidays` / `public_holidays` /
+> `BasketballCategoryCatalog`). Le club **hérite** de la base de sa ligue à la création → **base de travail
+> pré-remplie, éditable** : le gestionnaire narrow/préfère pour son club (« nos U15 toujours le samedi »),
+> ce qui alimente le `PREFERRED TIME` par équipe (§6). **Il ne saisit jamais les règles ligue à la main.**
+
+**Modèle** : table `LeagueMatchWindow` (ou catalogue) **globale**, clé = **ligue × catégorie × niveau
+(× genre parfois)** → liste de `(jour, coup d'envoi min, coup d'envoi max)`. La **ligue du club** se dérive
+du `ffbbClubCode` (département → ligue), même patron que `SchoolZoneResolver` (dép. → zone scolaire).
+L'**envelope HARD** = union des `(jour, fenêtre)` du catalogue ; le **choix club** = un sous-ensemble
+préféré. Le radar signale tout placement **hors envelope**.
+
+**Seed initial — Ligue AURA (Auvergne-Rhône-Alpes)**, fourni par le gestionnaire 2026-07-06 (à préserver) :
+
+*Niveau départemental :*
+
+| Catégorie | Jours & fenêtres de coup d'envoi |
+|---|---|
+| U9–U11 | samedi 9h30–17h |
+| U13 | samedi 13h–18h |
+| U15 | samedi 13h–18h **ou** dimanche 8h30–16h |
+| U18 | samedi 13h30–19h **ou** dimanche 8h30–16h30 |
+| U21 | vendredi 20h–20h30 · samedi 13h–20h30 · dimanche 8h30–17h30 |
+| Senior | vendredi 20h–21h · samedi 17h–21h · dimanche 8h–17h30 |
+
+*Niveau région :*
+
+| Catégorie | Jours & fenêtres de coup d'envoi |
+|---|---|
+| U13 Région | samedi 13h–18h |
+| U15 Région | samedi 13h–18h30 **et** dimanche 10h–16h30 |
+| U18 Région | dimanche 10h–16h30 |
+| U18 Région **Garçon** | dimanche 10h–17h30 |
+| U21 Région | dimanche 10h–17h30 |
+| Senior Région | samedi 17h30–21h **et** dimanche 10h–17h30 |
+
+**À noter (détails d'implémentation, non bloquants) :**
+- « et » / « ou » = même sens pour l'**envelope** (union des jours autorisés) — une équipe joue **un** jour,
+  le catalogue liste les jours **possibles** ; le gestionnaire tranche lequel.
+- La fenêtre est un **coup d'envoi** (« vendredi entre 20h–20h30 » = tip-off dans cette plage), pas une durée
+  de match — à distinguer d'une plage large type « samedi 13h–20h30 » (créneaux d'envoi étalés sur la
+  journée). Le grain exact (coup d'envoi vs « match tient dans la plage ») se tranche au schéma.
+- Le **genre** entre dans la clé pour certaines lignes (U18 Région Garçon). La clé du catalogue doit
+  l'accepter (nullable = tous genres).
+- **AURA n'est qu'un seed** ; d'autres ligues auront d'autres tables. Le catalogue est **par ligue**.
 
 ---
 
@@ -202,6 +255,7 @@ au bonus « repos après match » du solveur et sera **superseded** par ce modul
 | **Adversaire** | entité **globale** légère (nom club + **gymnase précis + coords**, enrichie par l'usage) → trajet + tendances |
 | **Amical** | un Match sans phase FFBB, date + créneau **100 % au choix** du gestionnaire → réserve le slot gym |
 | **Derogation** | match + créneau actuel + demande + motif + statut + deadline |
+| **LeagueMatchWindow** (catalogue) | **globale**, clé ligue × catégorie × niveau (× genre) → `(jour, coup d'envoi min/max)`. Seed AURA (§6bis), dérivée `ffbbClubCode`→ligue. Envelope HARD héritée par le club, éditable |
 
 **Réutilisé de l'existant** (le gros de la valeur vient du réemploi) :
 - le **no-overlap personne** (`COACH_NO_OVERLAP` / `COACH_PLAYER_NO_OVERLAP`) → moteur de conflits (§4) ;
@@ -211,7 +265,9 @@ au bonus « repos après match » du solveur et sera **superseded** par ce modul
 - la **grille interactive** (« créneaux vides + clic = placer ») — **3e usage** du même primitif après la
   grille de réservation pré-génération et la boucle d'ajustement (roadmap §4) ;
 - la **matrice trajet** (§7) ;
-- le patron **table globale** des fériés/vacances → l'annuaire adverse (§5bis).
+- le patron **table globale + seed** des fériés/vacances → l'annuaire adverse (§5bis) **et** le
+  catalogue-ligue des fenêtres (§6bis) ; le patron **dérivation `ffbbClubCode`** (`SchoolZoneResolver`) →
+  dép. → ligue.
 
 ---
 
@@ -239,9 +295,10 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 ## 11. Paliers de valeur (ordre, pas un plan)
 
 - **Palier A — le placement + le radar solo.** Import FFBB de la liste des rencontres (+ ajout manuel).
-  Modèle Competition/Phase/Match. Grille datée par gymnase (réemploi du primitif grille). Détection de
-  conflits **personne** (domicile-vs-domicile, jour HARD, match ↔ entraînement projeté) sur données **du
-  club**. Heures extérieures **estimées** par tendance. **→ Déjà énorme : le gestionnaire voit les soucis.**
+  Modèle Competition/Phase/Match. **Catalogue-ligue seedé (AURA)** → envelope HARD pré-remplie, éditable par
+  le club. Grille datée par gymnase (réemploi du primitif grille). Détection de conflits **personne**
+  (domicile-vs-domicile, hors-envelope HARD, match ↔ entraînement projeté) sur données **du club**. Heures
+  extérieures **estimées** par tendance. **→ Déjà énorme : le gestionnaire voit les soucis.**
 - **Palier B — la dérogation + le trajet.** Workflow dérogation (brouillon + suivi + deadline + radar).
   Matrice trajet siège↔ville → conflits **spatiaux** (temps + trajet). Annuaire adverse global amorcé.
 - **Palier C — l'effet réseau.** Auto-remplissage des heures/positions extérieures par le cross-club
@@ -264,7 +321,9 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 - **Fenêtre-type de match par équipe = `PREFERRED TIME`, champ 1re classe** (placement + estimation extérieur).
 - Deux besoins de données distincts : **liste des rencontres** (FFBB) vs **heures/positions extérieures**
   (réseau/estimées) — ne pas confondre.
-- **Jour imposé par catégorie = HARD** (vocabulaire `Constraint`, appliqué au placement, pas au solveur).
+- **Jour + fenêtre imposés par catégorie×niveau = HARD**, **pré-seedés via un catalogue-ligue** (patron
+  vacances/fériés) — le club **hérite et édite**, ne saisit jamais les règles. **Seed AURA capturé (§6bis).**
+  Ligue dérivée du `ffbbClubCode`. Genre dans la clé pour certaines lignes (U18 Région Garçon).
 - Calendrier match = **week-end-centrique** (réintroduit le dimanche, distinct du canevas entraînement).
 - **Module autonome, gating découplé** de la validation du socle ; mais **réutilise la saisie structure**
   (un club matchs-only fait quand même les étapes équipes/coachs/gymnases).
