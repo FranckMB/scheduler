@@ -95,17 +95,16 @@ export function SeasonSelector() {
         }
       >
         {seasons.map((season) => {
-          // Read-only (past) seasons are not switchable yet: without the
-          // server-side write guard (SeasonAccessGuard, PR-3) selecting one
-          // would expose archived data to edits. They stay listed (greyed)
-          // so the retention picture is visible; consulting them lands with PR-3.
-          const disabled = season.isReadonly || season.id === selected.id;
+          // Read-only (past) seasons are now switchable for CONSULTATION — the
+          // server refuses every write on them (SeasonAccessGuard, 409), and
+          // the UI shows a read-only banner + disabled write CTAs.
+          const isSelected = season.id === selected.id;
           return (
             <MenuItem
               key={season.id}
-              disabled={disabled}
-              icon={season.id === selected.id ? <Check /> : <CalendarRange />}
-              onSelect={() => !disabled && switchTo(season.id)}
+              disabled={isSelected}
+              icon={isSelected ? <Check /> : <CalendarRange />}
+              onSelect={() => !isSelected && switchTo(season.id)}
             >
               {`${season.name} · ${badge(season)}`}
             </MenuItem>

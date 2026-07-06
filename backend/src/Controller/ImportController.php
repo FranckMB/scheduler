@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Service\FfbbExcelImporter;
+use App\Service\SeasonAccessGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use RuntimeException;
@@ -25,6 +26,7 @@ final class ImportController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly FfbbExcelImporter $importer,
         private readonly ClubUserRepository $clubUserRepository,
+        private readonly SeasonAccessGuard $seasonAccessGuard,
     ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
@@ -45,6 +47,9 @@ final class ImportController extends AbstractController
         if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {
             return $this->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
         }
+
+        // Archived-season write refused (409) — AFTER auth so 403 wins first.
+        $this->seasonAccessGuard->assertWritable($request);
 
         $club = $this->entityManager->getRepository(Club::class)->find($id);
         if (!$club instanceof Club) {

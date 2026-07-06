@@ -24,7 +24,7 @@ use Throwable;
  * overlays exist destroys them (spec §2bis) — guarded by a 409 that the client
  * confirms with {"confirmDeleteOverlays": true}. See planning-lifecycle-validated.md.
  */
-final class ReopenScheduleController extends AbstractController
+final class ReopenScheduleController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

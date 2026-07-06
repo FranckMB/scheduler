@@ -38,11 +38,15 @@ final class OnboardingFlowTest extends WebTestCase
         $me = $this->get('/api/me');
         self::assertFalse($me['club']['onboardingCompleted']);
 
-        // The seeded season is sane and current (guards the historical
-        // endDate < startDate seed bug — SeasonResolver keys on startDate,
-        // but the stored window must still be coherent).
+        // Just-subscribed state: exactly ONE season, current, writable (not
+        // read-only), and no validated socle yet (the cockpit gate sends the
+        // fresh club to the work-loop). Guards the historical endDate <
+        // startDate seed bug too (window must stay coherent).
         self::assertCount(1, $me['seasons']);
         self::assertSame($me['seasons'][0]['id'], $me['currentSeasonId']);
+        self::assertTrue($me['seasons'][0]['isCurrent']);
+        self::assertFalse($me['seasons'][0]['isReadonly']);
+        self::assertNull($me['socleValidatedAt']);
         self::assertGreaterThan($me['seasons'][0]['startDate'], $me['seasons'][0]['endDate']);
 
         // 3. Minimal data: one team, one gym with a slot, one coach.

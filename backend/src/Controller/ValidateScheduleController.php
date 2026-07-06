@@ -22,7 +22,7 @@ use Throwable;
  * it (see ReopenScheduleController). Designating the season's main plan is a
  * separate action (SetBaselineController). See planning-lifecycle-validated.md.
  */
-final class ValidateScheduleController extends AbstractController
+final class ValidateScheduleController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

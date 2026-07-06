@@ -7,6 +7,7 @@ import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
+import { ReadonlySeasonBanner } from "./ReadonlySeasonBanner";
 import { SeasonSelector } from "./SeasonSelector";
 
 function NavItem({ to, children }: { to: string; children: string }) {
@@ -65,6 +66,7 @@ export function AppLayout() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">
+        <ReadonlySeasonBanner />
         <Outlet />
       </main>
     </div>

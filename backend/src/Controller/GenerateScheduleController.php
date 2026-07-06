@@ -18,7 +18,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
 use Throwable;
 
 #[AsController]
-final class GenerateScheduleController extends AbstractController
+final class GenerateScheduleController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
