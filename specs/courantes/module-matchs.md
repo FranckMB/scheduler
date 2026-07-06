@@ -64,6 +64,27 @@ d'API Platform). Recalcul **à la volée** à chaque appel, **rien n'est persist
 Réponse : `{ clubId, seasonId, conflicts: [{ type, coachId, start, end (segment de chevauchement),
 left/right | fixture/training }] }`.
 
+## Palier A — PR-3 (grille week-end UI, 2026-07-07)
+
+Feature frontend `frontend/src/features/matches/` (route `/matchs`, entrée nav). **Frontend seul**, consomme
+les endpoints PR-1/PR-2 — aucun ajout backend.
+
+- **Grille week-end** (`WeekendGrid` + `lib/weekendGrid.ts`) : calendrier daté week-end-centrique (colonnes =
+  date × gymnase, lignes = créneaux), distinct du canevas lun-sam de l'entraînement. Chaque match placé =
+  bloc de son **empreinte 2h15** (`kickoff−30 → kickoff+105`), libellé au coup d'envoi. Navigation ‹ › entre
+  week-ends. Les matchs non placés / AWAY-sans-heure vivent dans la liste « À placer ».
+- **Pose domicile** (`PlacementPanel`) : clic sur un match à placer → panneau (salle + heure) →
+  `PUT /api/fixtures/{id}` (full-replace, statut `PLACED`, corps reconstruit pour ne pas effacer opponent/
+  competition). **Envelope-ligue** : garde **HARD** (bouton désactivé hors fenêtre) quand l'équipe mappe une
+  fenêtre du catalogue ; **dégradation en repère indicatif** (non bloquant) quand le mapping catégorie/niveau
+  ne résout pas de façon fiable (`lib/envelope.ts`). Le radar serveur reste la vérité dure.
+- **Saisie manuelle** (`FixtureFormDialog`) : `POST /api/fixtures` (équipe, date, HOME/AWAY, adversaire,
+  compétition optionnelle = amical) — en attendant l'import FBI (PR-4).
+- **Radar affiché** (`ConflictRadar`) : `GET /api/fixtures/conflicts` en direct (invalidé à chaque mutation).
+- Tests : Vitest `lib/{weekendGrid,envelope}.test.ts`, `PlacementPanel`/`FixtureFormDialog`/`MatchesPage`
+  (.test.tsx) ; e2e Playwright `tests/e2e/matches.spec.ts` (login → créer → placer / garde hors-fenêtre).
+  ⚠ L'API omet les props null → `getFixtures` re-normalise `venueId`/`kickoffTime`/`competitionId` en `null`.
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
@@ -79,7 +100,7 @@ left/right | fixture/training }] }`.
 
 ## Reste palier A (à venir)
 
-`Team.preferredMatchWindow` + application de l'**envelope HARD** (catalogue-ligue) au placement · PR-3 **grille
-week-end** UI · PR-4 **import FBI**. **Joueurs** dans le moteur de conflits (nécessite un modèle de
-rattachement joueur→équipes) + paliers B (dérogation + trajet + annuaire adverse global) / C (effet réseau)
-plus tard.
+`Team.preferredMatchWindow` (backend) · **PR-4 import FBI** (la liste des rencontres). **Joueurs** dans le
+moteur de conflits (nécessite un modèle de rattachement joueur→équipes) + paliers B (dérogation + trajet +
+annuaire adverse global) / C (effet réseau) plus tard. ⚠ Envelope strictement HARD & fiable = nécessiterait
+une clé de jointure normalisée équipe↔fenêtre côté backend (aujourd'hui : dégradation indicative en UI).

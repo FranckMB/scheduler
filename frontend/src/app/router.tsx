@@ -9,6 +9,7 @@ import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
 import { ClubPage } from "@/features/club/ClubPage";
 import { CockpitPage } from "@/features/cockpit/CockpitPage";
+import { MatchesPage } from "@/features/matches/MatchesPage";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 import { WizardPage } from "@/features/wizard/WizardLayout";
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/", element: <CockpitPage /> },
           { path: "/planning", element: <PlanningPage /> },
+          { path: "/matchs", element: <MatchesPage /> },
           { path: "/wizard", element: <WizardPage /> },
           { path: "/club", element: <ClubPage /> },
           { path: "/profile", element: <ProfilePage /> },
