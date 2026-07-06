@@ -47,6 +47,9 @@ class CompetitionStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

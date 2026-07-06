@@ -7,6 +7,7 @@ namespace App\Tests\Integration\Command;
 use App\Command\SeedLeagueWindowsCommand;
 use App\Entity\LeagueMatchWindow;
 use App\Repository\LeagueMatchWindowRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -46,6 +47,31 @@ final class SeedLeagueWindowsCommandTest extends KernelTestCase
         $second->assertCommandIsSuccessful();
         self::assertStringContainsString('0 created, 21 updated', $second->getDisplay());
         self::assertCount(21, $this->repository->findAll());
+    }
+
+    public function testPrunesStaleWindowsOfSeededLeagues(): void
+    {
+        $this->runSeed()->assertCommandIsSuccessful();
+
+        // A window whose keyed field drifted from the file (e.g. renamed category)
+        // is stale — the file is the source of truth for the leagues it covers.
+        $stale = new LeagueMatchWindow;
+        $stale->setLeague('AURA');
+        $stale->setCategory('U99-obsolete');
+        $stale->setLevel('DEPARTEMENTAL');
+        $stale->setGender(null);
+        $stale->setDayOfWeek(6);
+        $stale->setKickoffMin(new DateTimeImmutable('10:00'));
+        $stale->setKickoffMax(new DateTimeImmutable('12:00'));
+        $this->em->persist($stale);
+        $this->em->flush();
+        self::assertCount(22, $this->repository->findAll());
+
+        $rerun = $this->runSeed();
+        $rerun->assertCommandIsSuccessful();
+        self::assertStringContainsString('1 pruned', $rerun->getDisplay());
+        self::assertCount(21, $this->repository->findAll());
+        self::assertNull($this->repository->findOneBy(['category' => 'U99-obsolete']));
     }
 
     protected function setUp(): void

@@ -24,7 +24,10 @@ final class Version20260706250000 extends AbstractMigration
     public function up(Schema $schema): void
     {
         $this->addSql('CREATE TABLE league_match_window (id UUID NOT NULL, created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL, league VARCHAR(24) NOT NULL, category VARCHAR(40) NOT NULL, level VARCHAR(20) NOT NULL, gender VARCHAR(10) DEFAULT NULL, day_of_week SMALLINT NOT NULL, kickoff_min TIME(0) WITHOUT TIME ZONE NOT NULL, kickoff_max TIME(0) WITHOUT TIME ZONE NOT NULL, PRIMARY KEY (id))');
-        $this->addSql('CREATE UNIQUE INDEX uniq_league_match_window ON league_match_window (league, category, level, gender, day_of_week, kickoff_min)');
+        // NULLS NOT DISTINCT (PG 15+): gender is nullable and 20/21 AURA rows
+        // are gender-null; without this the unique index would treat those NULLs
+        // as distinct and never reject a duplicate window.
+        $this->addSql('CREATE UNIQUE INDEX uniq_league_match_window ON league_match_window (league, category, level, gender, day_of_week, kickoff_min) NULLS NOT DISTINCT');
         $this->addSql('CREATE INDEX idx_league_match_window_league ON league_match_window (league)');
 
         $hasRole = (bool) $this->connection->fetchOne('SELECT 1 FROM pg_roles WHERE rolname = \'app_user\'');

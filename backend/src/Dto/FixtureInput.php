@@ -12,9 +12,11 @@ use Symfony\Component\Validator\Constraints as Assert;
 class FixtureInput
 {
     #[Assert\NotBlank]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $teamId = null;
 
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $competitionId = null;
 
@@ -36,11 +38,12 @@ class FixtureInput
     #[Groups(['write'])]
     public ?string $status = null;
 
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $venueId = null;
 
-    /** HH:MM kickoff. */
-    #[Assert\Regex(pattern: '/^\d{2}:\d{2}$/', message: 'kickoffTime must be HH:MM.')]
+    /** HH:MM kickoff (24h, strict range). */
+    #[Assert\Regex(pattern: '/^([01]\d|2[0-3]):[0-5]\d$/', message: 'kickoffTime must be a valid HH:MM (00:00–23:59).')]
     #[Groups(['write'])]
     public ?string $kickoffTime = null;
 }

@@ -11,6 +11,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 class CompetitionInput
 {
     #[Assert\NotBlank]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $teamId = null;
 

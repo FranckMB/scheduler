@@ -6,10 +6,12 @@ namespace App\State\Processor;
 
 use App\ApiResource\FixtureResource;
 use App\Dto\FixtureInput;
+use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
 use DateTimeImmutable;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * @extends AbstractStateProcessor<Fixture, FixtureInput, FixtureResource>
@@ -30,8 +32,10 @@ class FixtureStateProcessor extends AbstractStateProcessor
         if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
-        // competitionId nullable → friendly; explicit null clears it.
-        $entity->setCompetitionId('' === $input->competitionId ? null : $input->competitionId);
+        // competitionId nullable → friendly; explicit '' clears it.
+        $competitionId = '' === $input->competitionId ? null : $input->competitionId;
+        $this->assertCompetitionInScope($competitionId);
+        $entity->setCompetitionId($competitionId);
         if (null !== $input->matchDate) {
             $entity->setMatchDate(new DateTimeImmutable($input->matchDate));
         }
@@ -56,8 +60,13 @@ class FixtureStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        if (null !== $input->teamId) {
+            $entity->setTeamId($input->teamId);
+        }
         if (null !== $input->competitionId) {
-            $entity->setCompetitionId('' === $input->competitionId ? null : $input->competitionId);
+            $competitionId = '' === $input->competitionId ? null : $input->competitionId;
+            $this->assertCompetitionInScope($competitionId);
+            $entity->setCompetitionId($competitionId);
         }
         if (null !== $input->matchDate) {
             $entity->setMatchDate(new DateTimeImmutable($input->matchDate));
@@ -93,7 +102,28 @@ class FixtureStateProcessor extends AbstractStateProcessor
             return null;
         }
         $time = DateTimeImmutable::createFromFormat('!H:i', $value);
+        // Reject anything createFromFormat rolled over (belt-and-braces; the DTO
+        // regex already blocks out-of-range HH:MM before we get here).
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $time || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
 
-        return false === $time ? null : $time;
+        return $time;
+    }
+
+    /**
+     * A referenced competition must belong to the caller's club+season. em->find
+     * is tenant+season-filter aware (enabled per-request), so a foreign, deleted
+     * or nonexistent id resolves to null → 422 rather than a dangling reference.
+     */
+    private function assertCompetitionInScope(?string $competitionId): void
+    {
+        if (null === $competitionId) {
+            return;
+        }
+        if (null === $this->entityManager->find(Competition::class, $competitionId)) {
+            throw new UnprocessableEntityHttpException('Unknown competition for this club/season.');
+        }
     }
 }

@@ -59,12 +59,12 @@ final class SeedLeagueWindowsCommand extends Command
 
         /** @var array{windows?: list<array<string, mixed>>} $data */
         $data = json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
-        $windows = $data['windows'] ?? [];
+        $rawWindows = $data['windows'] ?? [];
 
-        $created = 0;
-        $updated = 0;
-        $skipped = 0;
-        foreach ($windows as $row) {
+        // Validate EVERY row before writing anything — a malformed file must not
+        // leave a partially-seeded catalog behind.
+        $parsed = [];
+        foreach ($rawWindows as $row) {
             $league = \is_string($row['league'] ?? null) ? $row['league'] : '';
             $category = \is_string($row['category'] ?? null) ? $row['category'] : '';
             $level = \is_string($row['level'] ?? null) ? $row['level'] : '';
@@ -74,39 +74,52 @@ final class SeedLeagueWindowsCommand extends Command
             $max = $this->parseTime($row['kickoffMax'] ?? null);
 
             if ('' === $league || '' === $category || '' === $level || $dayOfWeek < 1 || $dayOfWeek > 7 || null === $min || null === $max) {
-                $io->warning(\sprintf('Skipped malformed row: %s', json_encode($row)));
-                ++$skipped;
+                $io->error(\sprintf('Malformed row (nothing written): %s', json_encode($row)));
 
-                continue;
+                return Command::FAILURE;
             }
 
-            $entity = $this->repository->findOneByNaturalKey($league, $category, $level, $gender, $dayOfWeek, $min);
+            $parsed[] = compact('league', 'category', 'level', 'gender', 'dayOfWeek', 'min', 'max');
+        }
+
+        $leagues = array_values(array_unique(array_column($parsed, 'league')));
+        $created = 0;
+        $updated = 0;
+        // Track which rows the file still declares, per seeded league, so stale
+        // rows (a window whose keyed field was edited) are pruned — the file is
+        // the source of truth for the leagues it covers.
+        $kept = [];
+        foreach ($parsed as $row) {
+            $entity = $this->repository->findOneByNaturalKey($row['league'], $row['category'], $row['level'], $row['gender'], $row['dayOfWeek'], $row['min']);
             if (null === $entity) {
                 $entity = new LeagueMatchWindow;
-                $entity->setLeague($league);
-                $entity->setCategory($category);
-                $entity->setLevel($level);
-                $entity->setGender($gender);
-                $entity->setDayOfWeek($dayOfWeek);
-                $entity->setKickoffMin($min);
+                $entity->setLeague($row['league']);
+                $entity->setCategory($row['category']);
+                $entity->setLevel($row['level']);
+                $entity->setGender($row['gender']);
+                $entity->setDayOfWeek($row['dayOfWeek']);
+                $entity->setKickoffMin($row['min']);
                 $this->entityManager->persist($entity);
                 ++$created;
             } else {
                 ++$updated;
             }
+            $entity->setKickoffMax($row['max']);
+            $kept[$entity->getId()] = true;
+        }
 
-            $entity->setKickoffMax($max);
+        // Prune stale rows of the seeded leagues (edited/removed windows).
+        $pruned = 0;
+        foreach ($this->repository->findBy(['league' => $leagues]) as $existing) {
+            if (!isset($kept[$existing->getId()])) {
+                $this->entityManager->remove($existing);
+                ++$pruned;
+            }
         }
 
         $this->entityManager->flush();
 
-        if ($skipped > 0) {
-            $io->warning(\sprintf('%d malformed row(s) skipped.', $skipped));
-
-            return Command::FAILURE;
-        }
-
-        $io->success(\sprintf('League match windows seeded: %d created, %d updated.', $created, $updated));
+        $io->success(\sprintf('League match windows seeded: %d created, %d updated, %d pruned.', $created, $updated, $pruned));
 
         return Command::SUCCESS;
     }

@@ -32,21 +32,29 @@ final class LeagueMatchWindowRepository extends ServiceEntityRepository
     }
 
     /**
-     * The envelope a club inherits: its league's windows, falling back to the
-     * FEDERATION default (AURA) when that league is not catalogued yet.
-     * Ordered category → level → day → kickoff for stable display.
+     * The league a club effectively inherits: its own if catalogued, else the
+     * FEDERATION default (AURA). Single home of the fallback rule.
+     */
+    public function effectiveLeague(?string $league): string
+    {
+        if (null !== $league && [] !== $this->findBy(['league' => $league])) {
+            return $league;
+        }
+
+        return LeagueMatchWindow::FEDERATION_DEFAULT_LEAGUE;
+    }
+
+    /**
+     * The envelope a club inherits (windows of its effective league), ordered
+     * category → level → day → kickoff for stable display.
      *
      * @return list<LeagueMatchWindow>
      */
     public function findEnvelopeForLeague(?string $league): array
     {
-        $effective = null !== $league && [] !== $this->findBy(['league' => $league])
-            ? $league
-            : LeagueMatchWindow::FEDERATION_DEFAULT_LEAGUE;
-
         return $this->createQueryBuilder('w')
             ->andWhere('w.league = :league')
-            ->setParameter('league', $effective)
+            ->setParameter('league', $this->effectiveLeague($league))
             ->orderBy('w.category', 'ASC')
             ->addOrderBy('w.level', 'ASC')
             ->addOrderBy('w.dayOfWeek', 'ASC')

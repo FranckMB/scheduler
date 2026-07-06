@@ -39,9 +39,7 @@ final class LeagueMatchWindowsController extends AbstractController
         }
 
         $league = $this->clubRepository->find($clubId)?->getLeague();
-        $effectiveLeague = null !== $league && [] !== $this->windowRepository->findBy(['league' => $league])
-            ? $league
-            : LeagueMatchWindow::FEDERATION_DEFAULT_LEAGUE;
+        $effectiveLeague = $this->windowRepository->effectiveLeague($league);
 
         $items = array_map(
             static fn (LeagueMatchWindow $w): array => [

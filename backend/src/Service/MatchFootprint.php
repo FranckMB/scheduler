@@ -45,30 +45,42 @@ final class MatchFootprint
             return null;
         }
 
-        $isAway = FixtureHomeAway::AWAY === $fixture->getHomeAway();
-        // Half the round-trip is the outbound leg (before warm-up); the rest is
-        // the return leg (after shower + buffer). Home = no travel.
-        $travelOut = $isAway ? intdiv($roundTripTravelMinutes, 2) : 0;
-        $travelBack = $isAway ? $roundTripTravelMinutes - $travelOut : 0;
-
-        $before = $travelOut + self::WARMUP_MINUTES;
-        $after = self::MATCH_MINUTES + ($isAway ? self::AWAY_SHOWER_MINUTES + self::AWAY_BUFFER_MINUTES : 0) + $travelBack;
-
+        // Half the round-trip is the outbound leg (before warm-up), the rest the
+        // return leg (after shower + buffer). Home = no travel. See minutesBefore/After.
         return [
-            'start' => $kickoff->modify(\sprintf('-%d minutes', $before)),
-            'end' => $kickoff->modify(\sprintf('+%d minutes', $after)),
+            'start' => $kickoff->modify(\sprintf('-%d minutes', $this->minutesBefore($fixture, $roundTripTravelMinutes))),
+            'end' => $kickoff->modify(\sprintf('+%d minutes', $this->minutesAfter($fixture, $roundTripTravelMinutes))),
         ];
     }
 
-    /** Total occupied minutes (end − start), or null when the kickoff is unknown. */
+    /**
+     * Total NOMINAL occupied minutes (before + after the kickoff), or null when
+     * the kickoff is unknown. Computed from the fixed constants, NOT from a
+     * timestamp delta — a footprint spanning a DST transition must still report
+     * its wall-clock duration, not the ±60 min the offset shift would add.
+     */
     public function occupancyMinutes(Fixture $fixture, int $roundTripTravelMinutes = 0): ?int
     {
-        $window = $this->occupancy($fixture, $roundTripTravelMinutes);
-        if (null === $window) {
+        if (null === $this->kickoffMoment($fixture)) {
             return null;
         }
 
-        return (int) (($window['end']->getTimestamp() - $window['start']->getTimestamp()) / 60);
+        return $this->minutesBefore($fixture, $roundTripTravelMinutes) + $this->minutesAfter($fixture, $roundTripTravelMinutes);
+    }
+
+    private function minutesBefore(Fixture $fixture, int $roundTripTravelMinutes): int
+    {
+        $travelOut = FixtureHomeAway::AWAY === $fixture->getHomeAway() ? intdiv($roundTripTravelMinutes, 2) : 0;
+
+        return $travelOut + self::WARMUP_MINUTES;
+    }
+
+    private function minutesAfter(Fixture $fixture, int $roundTripTravelMinutes): int
+    {
+        $isAway = FixtureHomeAway::AWAY === $fixture->getHomeAway();
+        $travelBack = $isAway ? $roundTripTravelMinutes - intdiv($roundTripTravelMinutes, 2) : 0;
+
+        return self::MATCH_MINUTES + ($isAway ? self::AWAY_SHOWER_MINUTES + self::AWAY_BUFFER_MINUTES : 0) + $travelBack;
     }
 
     /** The kickoff as a full moment (match date + kickoff time), or null if not set. */

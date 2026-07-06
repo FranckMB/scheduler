@@ -99,6 +99,31 @@ final class FixtureApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
+    public function testRejectsNonUuidTeamId(): void
+    {
+        $this->client->request('POST', '/api/fixtures', [], [], $this->authHeaders() + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'teamId' => 'not-a-uuid',
+            'matchDate' => '2026-11-01',
+            'homeAway' => 'HOME',
+            'opponentLabel' => 'Bad id',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testRejectsCompetitionOutsideScope(): void
+    {
+        // A well-formed but out-of-scope competition id (tenant/season filter hides
+        // it → the processor cannot resolve it) must be rejected, not silently kept.
+        $this->client->request('POST', '/api/fixtures', [], [], $this->authHeaders() + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'teamId' => self::TEAM_ID,
+            'competitionId' => '33333333-3333-4333-8333-333333333333',
+            'matchDate' => '2026-11-01',
+            'homeAway' => 'HOME',
+            'opponentLabel' => 'Ghost competition',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
