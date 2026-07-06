@@ -8,9 +8,9 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry } from "./api";
-import { useCreateEvent, useCreateVenueClosure, useDeleteEntry } from "./queries";
+import { useCreateCutoff, useCreateEvent, useCreateVenueClosure, useDeleteEntry } from "./queries";
 
-type Mode = "list" | "event" | "closure";
+type Mode = "list" | "event" | "closure" | "cutoff";
 
 interface DayDialogProps {
   iso: string;
@@ -28,6 +28,7 @@ export function DayDialog({ iso, entries, onClose }: DayDialogProps) {
         {mode === "list" ? <DayList entries={entries} onCreate={setMode} onClose={onClose} /> : null}
         {mode === "event" ? <EventForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
         {mode === "closure" ? <ClosureForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
+        {mode === "cutoff" ? <CutoffForm iso={iso} onBack={() => setMode("list")} onDone={onClose} /> : null}
       </div>
     </Modal>
   );
@@ -89,6 +90,9 @@ function DayList({ entries, onCreate, onClose }: { entries: CalendarEntry[]; onC
         </Button>
         <Button variant="outline" onClick={() => onCreate("closure")}>
           Signaler une indisponibilité
+        </Button>
+        <Button variant="outline" onClick={() => onCreate("cutoff")}>
+          Coupure (pas d'entraînement)
         </Button>
         <Button variant="ghost" disabled title="Période générique (custom) — à venir. Utilise « Signaler une indisponibilité » ou le radar vacances.">
           Créer une période…
@@ -184,6 +188,36 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
         <input type="date" className={`${fieldClass} mt-1`} value={endDate} min={iso} onChange={(e) => setEndDate(e.target.value)} />
       </label>
       <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validEnd}>
+        Enregistrer
+      </Button>
+    </FormShell>
+  );
+}
+
+/** A cutoff is a bare period ("no training on the window") — no venue, no constraint, no overlay to generate. */
+function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState("");
+  const [endDate, setEndDate] = useState(iso);
+  const createCutoff = useCreateCutoff();
+
+  const validEnd = endDate >= iso;
+  const submit = () => {
+    if (!validEnd) return;
+    createCutoff.mutate(
+      { title: title.trim() === "" ? "Coupure" : title.trim(), startDate: iso, endDate },
+      { onSuccess: () => { toast.success("Coupure enregistrée"); onDone(); } },
+    );
+  };
+
+  return (
+    <FormShell onBack={onBack}>
+      <input className={fieldClass} placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <label className="block text-xs text-muted-foreground">
+        Jusqu'au
+        <input type="date" className={`${fieldClass} mt-1`} value={endDate} min={iso} onChange={(e) => setEndDate(e.target.value)} />
+      </label>
+      <p className="text-xs text-muted-foreground">Aucun entraînement sur la fenêtre — rien à générer.</p>
+      <Button className="w-full" onClick={submit} disabled={createCutoff.isPending || !validEnd}>
         Enregistrer
       </Button>
     </FormShell>

@@ -49,7 +49,10 @@ Validation de fenêtre (quand elle s'exécute — c.-à-d. toujours pour `public
 - **Alsace-Moselle** (Vendredi Saint / 26 décembre) : départements 57/67/68 en zone B sans zone fériés dédiée.
 - **Saint-Barthélemy / Saint-Martin** (977/978) : hors `SchoolZoneResolver::ZONES`.
 - **Fallback JSON offline pour les fériés** : non construit (parité avec le seed vacances non faite).
-- **Rendu cockpit des fériés** (pastille frontend) : à venir — voir roadmap §2.
+
+## Rendu cockpit (frontend)
+
+Les fériés sont affichés dans le cockpit (`usePublicHolidays`, fenêtre saison par défaut) : **pastille** rouge sur le jour exact du calendrier mensuel (`title` = « Férié — {label} ») et **rappel radar** sans CTA pour les fériés à ≤ 30 jours. Display-only, cohérent avec le principe ci-dessus : aucune action automatique, le pont reste une décision gestionnaire (`periodType=closure`).
 
 ## Gardes
 

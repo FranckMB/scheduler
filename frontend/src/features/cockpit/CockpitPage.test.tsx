@@ -20,6 +20,7 @@ vi.mock("@/features/planning/queries", () => ({
 vi.mock("./queries", () => ({
   useCalendarEntries: () => ({ data: [] }),
   useSchoolHolidays: () => ({ data: { zone: "A", items: [] } }),
+  usePublicHolidays: () => ({ data: { zone: "A", items: [] } }),
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), isPending: false }),
   useEntryConflicts: () => ({ data: undefined }),
 }));

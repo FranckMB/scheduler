@@ -33,6 +33,19 @@ export interface SchoolHolidaysResponse {
   items: SchoolHoliday[];
 }
 
+/** Single-day entry (unlike school holidays there is no start/end range). */
+export interface PublicHoliday {
+  id: number;
+  date: string;
+  label: string;
+  national: boolean;
+}
+
+export interface PublicHolidaysResponse {
+  zone: string | null;
+  items: PublicHoliday[];
+}
+
 export interface EntryConflict {
   slotTemplateId: string;
   teamId: string;
@@ -63,6 +76,12 @@ export interface CreateClosurePayload {
   venueId: string;
 }
 
+export interface CreateCutoffPayload {
+  title: string;
+  startDate: string;
+  endDate: string;
+}
+
 /** Calendar entries overlapping the [from, to] window. Paginated endpoint → page through it. */
 export const getCalendarEntries = (from: string, to: string): Promise<CalendarEntry[]> =>
   collectionAll<CalendarEntry>("calendar_entries", { from, to });
@@ -75,6 +94,9 @@ export const createCalendarEntry = (json: Record<string, unknown>): Promise<Cale
 export const deleteCalendarEntry = (id: string): Promise<unknown> => api.delete(`calendar_entries/${id}`).json();
 
 export const getSchoolHolidays = (): Promise<SchoolHolidaysResponse> => api.get("school-holidays").json();
+
+/** No from/to params → the backend defaults to the active season window. */
+export const getPublicHolidays = (): Promise<PublicHolidaysResponse> => api.get("public-holidays").json();
 
 export const getEntryConflicts = (entryId: string): Promise<EntryConflictsResponse> =>
   api.get(`calendar-entries/${entryId}/conflicts`).json();

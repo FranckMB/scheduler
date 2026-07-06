@@ -8,7 +8,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { BaselineBanner } from "./BaselineBanner";
 import { MonthCalendar } from "./MonthCalendar";
 import { RadarPanel } from "./RadarPanel";
-import { useCalendarEntries, useSchoolHolidays } from "./queries";
+import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
 import { addDays, monthWindow, todayISO } from "./lib/date";
 
 /** Home cockpit — unlocked once the season's baseline plan has been validated (sticky). Before that, the work-loop is home. */
@@ -23,6 +23,7 @@ export function CockpitPage() {
   const radarToday = todayISO();
   const { data: radarEntries = [] } = useCalendarEntries(radarToday, addDays(radarToday, 300));
   const { data: holidays, isLoading: holidaysLoading } = useSchoolHolidays();
+  const { data: publicHolidays } = usePublicHolidays();
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
 
   if (isLoading) {
@@ -40,8 +41,8 @@ export function CockpitPage() {
     <div className="space-y-4">
       <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} onPrev={prev} onNext={next} />
-        <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} zone={holidays?.zone ?? null} zoneLoading={holidaysLoading} />
+        <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
+        <RadarPanel entries={radarEntries} holidays={holidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} zone={holidays?.zone ?? null} zoneLoading={holidaysLoading} />
       </div>
     </div>
   );
