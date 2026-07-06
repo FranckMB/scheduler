@@ -87,9 +87,12 @@ Les matchs traversent des villes → le no-overlap devient **« pas de chevauche
 deux événements consécutifs »**. Ex. : U13 domicile 14h puis SM1 extérieur à 40 min de route → **infaisable**
 même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet** (§7).
 
-> ⚠ **À confirmer à l'implémentation** : le mécanisme exact de modélisation « coach qui joue » (l'app n'a
-> **pas** d'entité joueur — le lien coach↔équipe-jouée est à retrouver dans le modèle actuel du no-overlap).
-> Le **concept** est acquis et déjà en base ; le point de branchement est un détail d'implémentation.
+> ✅ **Point de branchement identifié** : l'entité **`CoachPlayerMembership`** (`backend/src/Entity/
+> CoachPlayerMembership.php` — `coachId` + `teamId` + `position`, tenant-owned) modélise déjà « cette
+> personne (coach) joue dans cette équipe ». Le no-overlap personne des matchs **branche dessus** : une
+> personne prise par un match de son équipe **coachée** (via `TeamCoach`) **ET** un match de son équipe
+> **jouée** (via `CoachPlayerMembership`) sur des créneaux qui se chevauchent (ou trajet infaisable) = conflit.
+> Le concept **et** le modèle sont déjà en base.
 
 **Autres conflits (non-personne), à couvrir aussi :**
 - **Gymnase** : deux matchs domicile sur le même terrain qui se chevauchent (le `VENUE_AT_MOST_ONE` existe).
@@ -103,6 +106,9 @@ même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet*
 
 1. **La LISTE des rencontres** (qui joue qui, quelle journée, domicile/extérieur, par équipe et par phase).
    Vient de la **ligue/FFBB**, jamais des autres clubs. Sans elle, on ne sait même pas qu'une équipe reçoit.
+   **Forme concrète (tranchée)** : un **export FBI par équipe** (fourni par le gestionnaire), **ajouté un à
+   un** — **même format** à chaque fois → un seul parseur, appelé par équipe. Pas d'export club global à
+   attendre. Dé-risque l'import (patron `FfbbExcelImporter` + format unique connu).
 2. **L'HEURE + la LOCALISATION des matchs extérieurs** (le « 15h30 » et « au gymnase du Clar »). Vient : (a)
    **de la plateforme** si l'adversaire est client et a saisi, (b) **estimée** par tendance sinon, (c) FFBB.
 
@@ -115,8 +121,9 @@ même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet*
 au gymnase du Clar → **l'app connaît la position du Clar** → quand un autre club joue contre le Clar, elle la
 donne **sans travail**. Trois enrichissements, **un seul annuaire** :
 
-1. **Localisation** adverse (pour le trajet) — grain **ville suffit** au départ (« < 15 min entre gymnase A
-   et B, on s'en fiche »), **s'affine** vers le gymnase précis à mesure que la data arrive.
+1. **Localisation** adverse (pour le trajet) — **on stocke directement le gymnase précis** (tranché : plus
+   simple à terme que ville-puis-affinage). Le trajet reste tolérant (« < 15 min entre gymnase A et B, on
+   s'en fiche »), mais la donnée de base est le lieu exact, pas une approximation ville à raffiner ensuite.
 2. **Tendances** horaires adverses (« le Clar joue le samedi soir »).
 3. **Heures extérieures précises** (si l'adversaire est client et a saisi sa rencontre).
 
@@ -148,9 +155,9 @@ rencontres reste à importer** quel que soit le réseau.
   matchs le **réintroduisent** — le module match a un **calendrier week-end-centrique** (samedi/dimanche au
   centre), distinct du canevas lun-sam de l'entraînement.
 - **Fenêtre-type de match par équipe** (« SM1 samedi soir », « U13 très tôt pour libérer le coach senior »)
-  = **préférence horaire par équipe** (≈ `PREFERRED TIME`). Sert **deux fois** : (a) suggérer/valider le
+  = **`PREFERRED TIME` par équipe, champ 1re classe** (tranché). Sert **deux fois** : (a) suggérer/valider le
   placement domicile, (b) **estimer l'heure d'un match extérieur** non contrôlé (pour le radar personne).
-  Cheap, haute valeur. → **candidat champ 1re classe par équipe** (à trancher §8).
+  Cheap, haute valeur.
 
 ---
 
@@ -161,7 +168,8 @@ que le module d'entraînement voulait déjà (FF#5, `venue_travel_times`) : elle
 (gym→gym) **ET** les matchs (siège→ville adverse). **Un seul investissement, deux features** → priorité
 relevée.
 
-Grain **grossier accepté** (ville, ± 15 min), **affiné dans le temps** par l'annuaire (§5bis).
+On stocke le **gymnase précis** de l'adversaire (tranché §5bis) ; le calcul de trajet reste tolérant (± 15 min
+sans importance), mais pas d'approximation ville à raffiner.
 
 ---
 
@@ -191,7 +199,7 @@ au bonus « repos après match » du solveur et sera **superseded** par ce modul
 |---|---|
 | **Competition / Phase** | équipe + nom + début + fin + type (championnat / coupe / brassage / amical). **N par équipe** (une équipe peut gérer 1 à 3 championnats + coupe, fenêtres distinctes) |
 | **Match / Fixture** | équipe + phase + date (journée) + **domicile\|extérieur** + adversaire + statut de placement + créneau (gym + heure, si domicile) |
-| **Adversaire** | entité **globale** légère (nom club + ville/coords, dérivable du code FFBB comme la zone scolaire) → trajet + tendances |
+| **Adversaire** | entité **globale** légère (nom club + **gymnase précis + coords**, enrichie par l'usage) → trajet + tendances |
 | **Amical** | un Match sans phase FFBB, date + créneau **100 % au choix** du gestionnaire → réserve le slot gym |
 | **Derogation** | match + créneau actuel + demande + motif + statut + deadline |
 
@@ -237,8 +245,7 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 - **Palier B — la dérogation + le trajet.** Workflow dérogation (brouillon + suivi + deadline + radar).
   Matrice trajet siège↔ville → conflits **spatiaux** (temps + trajet). Annuaire adverse global amorcé.
 - **Palier C — l'effet réseau.** Auto-remplissage des heures/positions extérieures par le cross-club
-  (annuaire enrichi par l'usage). Affinage ville → gymnase précis. (Option V2 : auto-placement CP-SAT d'un
-  week-end.)
+  (annuaire enrichi par l'usage). (Option V2 : auto-placement CP-SAT d'un week-end.)
 
 ---
 
@@ -246,12 +253,15 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 
 **Tranché :**
 - Cœur = **placement manuel + radar de conflits + dérogation**, **pas** un solveur (solveur = assist V2).
-- Conflit atomique = **dualité coach/joueur** (`COACH_(PLAYER_)NO_OVERLAP` réutilisés) ; officiels/bénévoles
-  **hors périmètre V1**.
+- Conflit atomique = **dualité coach/joueur** (`COACH_(PLAYER_)NO_OVERLAP` réutilisés), branché sur
+  **`CoachPlayerMembership`** (déjà en base) ; officiels/bénévoles **hors périmètre V1**.
 - Ajout vs entraînement = **dimension spatiale** (trajet entre événements consécutifs).
-- **Import FFBB dès V1** (réutilise le patron `FfbbExcelImporter`) **+ ajout manuel** (amicaux, manquants).
+- **Import FFBB dès V1** = **export FBI par équipe**, ajouté un à un, **même format** (patron
+  `FfbbExcelImporter`) **+ ajout manuel** (amicaux, manquants).
 - **Annuaire adverse = table GLOBALE hors tenant, publique-seulement**, enrichie par l'usage (patron
-  fériés/vacances) — **garde-fou sécu + test d'isolation dédié obligatoires**.
+  fériés/vacances) — **garde-fou sécu + test d'isolation dédié obligatoires**. On stocke le **gymnase
+  précis** de l'adversaire (pas d'approximation ville).
+- **Fenêtre-type de match par équipe = `PREFERRED TIME`, champ 1re classe** (placement + estimation extérieur).
 - Deux besoins de données distincts : **liste des rencontres** (FFBB) vs **heures/positions extérieures**
   (réseau/estimées) — ne pas confondre.
 - **Jour imposé par catégorie = HARD** (vocabulaire `Constraint`, appliqué au placement, pas au solveur).
@@ -261,11 +271,10 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 - Dérogation = **tracker + rédacteur**, **pas** un connecteur ligue (aucune soumission FFBB automatique).
 - Le **trajet** est une infra **partagée** avec l'entraînement (FF#5) — une pierre, deux coups.
 
-**Ouvert (à trancher à l'implémentation, non bloquant) :**
-- Mécanisme exact « coach qui joue » dans le modèle actuel (branchement du no-overlap sur les matchs).
-- **Fenêtre-type de match par équipe** : champ 1re classe (`PREFERRED TIME` par équipe) ou dérivé ?
-- Format exact de l'export calendrier FFBB (spike à faire — dé-risqué par `FfbbExcelImporter` existant).
-- Grain de l'annuaire adverse au lancement (ville d'emblée, gymnase plus tard).
+**Ouvert (non bloquant) :**
+- Plus rien de structurant. Reste un **spike format d'export FBI par équipe** (colonnes exactes) au moment
+  de coder l'import du palier A — dé-risqué (format unique, patron `FfbbExcelImporter` existant). Les détails
+  fins (libellés, statuts de dérogation exacts, forme du radar matchs) se tranchent à l'implémentation.
 
 ---
 
