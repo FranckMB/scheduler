@@ -5,24 +5,26 @@ import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
-import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
+import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useCreateHolidayPeriod, useEntryConflicts } from "./queries";
-import { daysUntil, todayISO } from "./lib/date";
+import { daysUntil, frDateShort, todayISO } from "./lib/date";
 
 /** Public holidays further out than this are noise, not a to-do. */
-const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
+export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
 
 interface RadarPanelProps {
   entries: CalendarEntry[];
   holidays: SchoolHoliday[];
   publicHolidays: PublicHoliday[];
+  /** Public-holidays query still in flight — don't flash the all-clear meanwhile. */
+  publicHolidaysLoading?: boolean;
   zone: string | null;
   /** Holidays query still in flight — don't flash "zone à renseigner" meanwhile. */
   zoneLoading?: boolean;
 }
 
 /** The manager's to-do, sorted by urgency. "Adapter" opens the wizard in period mode (palier B). */
-export function RadarPanel({ entries, holidays, publicHolidays, zone, zoneLoading = false }: RadarPanelProps) {
+export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLoading = false, zone, zoneLoading = false }: RadarPanelProps) {
   const today = todayISO();
   const navigate = useNavigate();
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
@@ -56,10 +58,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, zone, zoneLoadin
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const closures = active.filter((e) => e.kind === "period" && e.periodType === "closure" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const upcomingPeriods = (periodType: CalendarEntryPeriodType): CalendarEntry[] =>
+    active.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
+  const closures = upcomingPeriods("closure");
   // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
-  const cutoffs = active.filter((e) => e.kind === "period" && e.periodType === "cutoff" && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const cutoffs = upcomingPeriods("cutoff");
 
   const upcomingPublicHolidays = publicHolidays
     .filter((h) => h.date >= today && daysUntil(today, h.date) <= PUBLIC_HOLIDAY_HORIZON_DAYS)
@@ -72,7 +76,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, zone, zoneLoadin
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
-    !zoneLoading;
+    !zoneLoading &&
+    !publicHolidaysLoading;
 
   return (
     <aside className="space-y-3 rounded-lg border border-border bg-card p-4">
@@ -118,7 +123,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, zone, zoneLoadin
       })}
 
       {disruptiveEvents.map((e) => (
-        <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${e.startDate} · pas d'entraînement`} />
+        <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${frDateShort(e.startDate)} · pas d'entraînement`} />
       ))}
 
       {closures.map((e) => (
@@ -130,7 +135,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, zone, zoneLoadin
           key={e.id}
           icon={<OctagonX className="size-4 text-destructive" />}
           title={e.title}
-          detail={e.startDate === e.endDate ? `Le ${e.startDate} · aucun entraînement` : `Du ${e.startDate} au ${e.endDate} · aucun entraînement`}
+          detail={e.startDate === e.endDate ? `Le ${frDateShort(e.startDate)} · aucun entraînement` : `Du ${frDateShort(e.startDate)} au ${frDateShort(e.endDate)} · aucun entraînement`}
         />
       ))}
 

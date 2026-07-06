@@ -35,7 +35,7 @@ export interface SchoolHolidaysResponse {
 
 /** Single-day entry (unlike school holidays there is no start/end range). */
 export interface PublicHoliday {
-  id: number;
+  id: string;
   date: string;
   label: string;
   national: boolean;
@@ -95,8 +95,9 @@ export const deleteCalendarEntry = (id: string): Promise<unknown> => api.delete(
 
 export const getSchoolHolidays = (): Promise<SchoolHolidaysResponse> => api.get("school-holidays").json();
 
-/** No from/to params → the backend defaults to the active season window. */
-export const getPublicHolidays = (): Promise<PublicHolidaysResponse> => api.get("public-holidays").json();
+/** Explicit window: without from/to the backend needs an active season and 400s otherwise. */
+export const getPublicHolidays = (from: string, to: string): Promise<PublicHolidaysResponse> =>
+  api.get("public-holidays", { searchParams: { from, to } }).json();
 
 export const getEntryConflicts = (entryId: string): Promise<EntryConflictsResponse> =>
   api.get(`calendar-entries/${entryId}/conflicts`).json();

@@ -38,10 +38,10 @@ export function useSchoolHolidays() {
   });
 }
 
-export function usePublicHolidays() {
+export function usePublicHolidays(from: string, to: string) {
   return useQuery({
-    queryKey: ["public-holidays"],
-    queryFn: cockpitApi.getPublicHolidays,
+    queryKey: ["public-holidays", from, to],
+    queryFn: () => cockpitApi.getPublicHolidays(from, to),
     staleTime: 3_600_000,
   });
 }

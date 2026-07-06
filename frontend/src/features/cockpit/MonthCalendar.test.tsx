@@ -80,10 +80,11 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(markers[0]).toHaveTextContent("🛑");
   });
 
-  it("shows a public-holiday dot on its exact day", () => {
-    renderMay([], [], [{ id: 1, date: "2026-05-01", label: "Fête du Travail", national: true }]);
+  it("shows an accessible public-holiday dot on its exact day", () => {
+    renderMay([], [], [{ id: "ph1", date: "2026-05-01", label: "Fête du Travail", national: true }]);
 
-    expect(screen.getByTitle("Férié — Fête du Travail")).toBeInTheDocument();
+    // role/aria-label: the marker must be perceivable beyond the hover tooltip.
+    expect(screen.getByRole("img", { name: "Férié — Fête du Travail" })).toBeInTheDocument();
   });
 
   it("opens the day dialog on click with that day's entries", async () => {

@@ -112,8 +112,8 @@ describe("RadarPanel", () => {
     const today = todayISO();
     renderRadar({
       publicHolidays: [
-        { id: 1, date: addDays(today, 10), label: "Férié proche", national: true },
-        { id: 2, date: addDays(today, 60), label: "Férié lointain", national: true },
+        { id: "ph1", date: addDays(today, 10), label: "Férié proche", national: true },
+        { id: "ph2", date: addDays(today, 60), label: "Férié lointain", national: true },
       ],
     });
 
