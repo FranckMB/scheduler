@@ -1,6 +1,7 @@
 import ky, { HTTPError } from "ky";
 
 import { useAuthStore } from "@/shared/stores/authStore";
+import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 /**
  * Configured HTTP client. Relative `/api` prefix only (Vite proxy in dev, Nginx
@@ -16,6 +17,12 @@ export const api = ky.create({
         if (token) {
           state.request.headers.set("Authorization", `Bearer ${token}`);
         }
+        // Season the manager is working in — absent = server-derived current
+        // season (mono-season clubs never send it).
+        const seasonId = useSeasonStore.getState().selectedSeasonId;
+        if (seasonId) {
+          state.request.headers.set("X-Season-Id", seasonId);
+        }
       },
     ],
     afterResponse: [
@@ -27,6 +34,16 @@ export const api = ky.create({
           useAuthStore.getState().clear();
           if (typeof window !== "undefined") {
             window.location.assign("/login");
+          }
+        }
+        // Self-healing on a stale persisted season (e.g. purged server-side):
+        // the backend 403s EVERY request carrying the dead X-Season-Id,
+        // /api/me included — without this reset the app could never recover.
+        // Clearing drops the header, so a reload cannot loop.
+        if (state.response.status === 403 && state.request.headers.has("X-Season-Id")) {
+          useSeasonStore.getState().clear();
+          if (typeof window !== "undefined") {
+            window.location.reload();
           }
         }
       },

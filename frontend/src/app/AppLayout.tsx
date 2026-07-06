@@ -7,6 +7,8 @@ import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
+import { SeasonSelector } from "./SeasonSelector";
+
 function NavItem({ to, children }: { to: string; children: string }) {
   return (
     <NavLink
@@ -41,6 +43,7 @@ export function AppLayout() {
             <span className="text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
           </NavLink>
           <nav className="flex items-center gap-1">
+            <SeasonSelector />
             <NavItem to="/">Accueil</NavItem>
             <NavItem to="/planning">Planning</NavItem>
             <NavItem to="/wizard">Assistant</NavItem>

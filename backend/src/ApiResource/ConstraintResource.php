@@ -81,6 +81,10 @@ class ConstraintResource
     #[Groups(['read'])]
     public int $sortOrder = 0;
 
+    /** N→N+1 lineage: source constraint of the season-transition copy. */
+    #[Groups(['read'])]
+    public ?string $parentConstraintId = null;
+
     public static function fromEntity(Constraint $entity): self
     {
         $dto = new self;
@@ -101,6 +105,7 @@ class ConstraintResource
         $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->isActive = $entity->getIsActive();
         $dto->sortOrder = $entity->getSortOrder();
+        $dto->parentConstraintId = $entity->getParentConstraintId();
 
         return $dto;
     }

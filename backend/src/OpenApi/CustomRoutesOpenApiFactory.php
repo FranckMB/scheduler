@@ -151,6 +151,29 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        $paths->addPath('/api/seasons/{id}/transition', new PathItem(post: new Operation(
+            operationId: 'transitionSeason',
+            tags: ['Season'],
+            responses: [
+                '201' => $this->jsonResponse('N+1 draft season created from the source season entries (never the generated plan)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'seasonId' => ['type' => 'string'],
+                        'name' => ['type' => 'string'],
+                        'startDate' => ['type' => 'string', 'format' => 'date'],
+                        'endDate' => ['type' => 'string', 'format' => 'date'],
+                        'counts' => ['type' => 'object', 'additionalProperties' => ['type' => 'integer']],
+                    ],
+                ]),
+                '400' => new Response('No club in context'),
+                '403' => new Response('Management role required'),
+                '404' => new Response('Season not found (or another club\'s)'),
+                '409' => new Response('Source is not the current season, or a next season already exists (body carries existingSeasonId)'),
+            ],
+            summary: 'Copy the current season entries (venues/teams/coaches/links/permanent constraints) into a fresh N+1 draft',
+            parameters: [['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string'], 'description' => 'Source season id (must be the current season)']],
+        )));
+
         return $openApi;
     }
 

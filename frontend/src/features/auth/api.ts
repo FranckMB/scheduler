@@ -1,6 +1,15 @@
 import { api } from "@/shared/api/client";
 import type { MembershipStatus } from "@/shared/stores/authStore";
 
+export interface MeSeason {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  isReadonly: boolean;
+}
+
 export interface MeResponse {
   id: string;
   email: string;
@@ -17,10 +26,27 @@ export interface MeResponse {
     accentPalette: string[] | null;
     schoolZone: string | null;
   } | null;
+  /** Gates of the SELECTED season (X-Season-Id), else the current one. */
   baselineScheduleId: string | null;
-  /** Sticky cockpit-unlock milestone (ISO) — set once the baseline is validated, never cleared. */
+  /** Sticky cockpit-unlock milestone (ISO) of the selected season. */
   socleValidatedAt: string | null;
   hasGenerated: boolean;
+  /** All the club's seasons, startDate ASC. */
+  seasons: MeSeason[];
+  currentSeasonId: string | null;
+}
+
+export interface TransitionSeasonResponse {
+  seasonId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  counts: Record<string, number>;
+}
+
+/** Copy the current season's entries into a fresh N+1 draft (409 carries existingSeasonId). */
+export function transitionSeason(sourceSeasonId: string): Promise<TransitionSeasonResponse> {
+  return api.post(`seasons/${sourceSeasonId}/transition`).json();
 }
 
 export interface RegisterPayload {
