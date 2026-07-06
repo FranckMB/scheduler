@@ -1,0 +1,27 @@
+{
+  "_source": "specs/evolution/gestion-matchs-ffbb.md §6bis — seed AURA (Auvergne-Rhône-Alpes), fourni par le gestionnaire 2026-07-06. Base fédérale par défaut de TOUT club. dayOfWeek: 1=lundi..7=dimanche. kickoffMin/Max = plage de coup d'envoi.",
+  "windows": [
+    { "league": "AURA", "category": "U9",     "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "09:30", "kickoffMax": "17:00" },
+    { "league": "AURA", "category": "U11",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "09:30", "kickoffMax": "17:00" },
+    { "league": "AURA", "category": "U13",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:00" },
+    { "league": "AURA", "category": "U15",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:00" },
+    { "league": "AURA", "category": "U15",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "08:30", "kickoffMax": "16:00" },
+    { "league": "AURA", "category": "U18",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:30", "kickoffMax": "19:00" },
+    { "league": "AURA", "category": "U18",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "08:30", "kickoffMax": "16:30" },
+    { "league": "AURA", "category": "U21",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 5, "kickoffMin": "20:00", "kickoffMax": "20:30" },
+    { "league": "AURA", "category": "U21",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "20:30" },
+    { "league": "AURA", "category": "U21",    "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "08:30", "kickoffMax": "17:30" },
+    { "league": "AURA", "category": "SENIOR", "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 5, "kickoffMin": "20:00", "kickoffMax": "21:00" },
+    { "league": "AURA", "category": "SENIOR", "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "17:00", "kickoffMax": "21:00" },
+    { "league": "AURA", "category": "SENIOR", "level": "DEPARTEMENTAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "08:00", "kickoffMax": "17:30" },
+
+    { "league": "AURA", "category": "U13",    "level": "REGIONAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:00" },
+    { "league": "AURA", "category": "U15",    "level": "REGIONAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:30" },
+    { "league": "AURA", "category": "U15",    "level": "REGIONAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "10:00", "kickoffMax": "16:30" },
+    { "league": "AURA", "category": "U18",    "level": "REGIONAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "10:00", "kickoffMax": "16:30" },
+    { "league": "AURA", "category": "U18",    "level": "REGIONAL", "gender": "M",  "dayOfWeek": 7, "kickoffMin": "10:00", "kickoffMax": "17:30" },
+    { "league": "AURA", "category": "U21",    "level": "REGIONAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "10:00", "kickoffMax": "17:30" },
+    { "league": "AURA", "category": "SENIOR", "level": "REGIONAL", "gender": null, "dayOfWeek": 6, "kickoffMin": "17:30", "kickoffMax": "21:00" },
+    { "league": "AURA", "category": "SENIOR", "level": "REGIONAL", "gender": null, "dayOfWeek": 7, "kickoffMin": "10:00", "kickoffMax": "17:30" }
+  ]
+}

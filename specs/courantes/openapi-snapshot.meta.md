@@ -1,7 +1,12 @@
 Last verified @ docs/graduate-holidays-courantes 2026-07-06
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **53 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **59 paths.**
 Changements récents :
+- **Module matchs palier A PR-1 (2026-07-06)** : ressources `/api/competitions` + `/api/fixtures`
+  (API Platform, `CompetitionResource`/`FixtureResource`) et route custom `GET /api/league-match-windows`
+  (`LeagueMatchWindowsController`, ajoutée à `CustomRoutesOpenApiFactory`). Voir
+  [`module-matchs.md`](module-matchs.md).
+- **Transition de saison (PR #68/69/70)** : `POST /api/seasons/{id}/transition` (custom, factory).
 - **Calendriers (PR #53/#62/#63, rattrapage 2026-07-06)** : `GET /api/school-holidays` et
   `GET /api/public-holidays` (contrôleurs Symfony custom) ajoutés à
   `App\OpenApi\CustomRoutesOpenApiFactory` puis au snapshot — ils manquaient aux deux.

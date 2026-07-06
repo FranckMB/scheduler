@@ -39,7 +39,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 
 `{lint, phpstan} → blocking-tests → unit-tests · engine-tests (parallel) → build-docker`
 
-**blocking-tests** (must pass first, all `--group phase1`): `Security/TenantIsolationTest`, `Security/SeasonIsolationTest` (multi-season scoping + X-Season-Id validation), `Security/SeasonReadonlyTest` (archived-season writes → 409), `Security/TenantCacheIsolationTest`, `Queue/ConcurrentGenerationTest`, `CrossStack/ContractSchemaTest`, `Security/RlsIsolationTest` (RLS enforced at the DB), `Security/{ClubAccessTest,UserSelfOnlyTest,ImportAuthorizationTest}` (SEC-01/02/04 tenant-API lockdown), `Security/MercureHardeningTest` (SEC-05/06). Detail: `docs/testing/testing-strategy.md`.
+**blocking-tests** (must pass first, all `--group phase1`): `Security/TenantIsolationTest`, `Security/SeasonIsolationTest` (multi-season scoping + X-Season-Id validation), `Security/SeasonReadonlyTest` (archived-season writes → 409), `Security/MatchTenantIsolationTest` (match entities tenant+season scoped), `Security/TenantCacheIsolationTest`, `Queue/ConcurrentGenerationTest`, `CrossStack/ContractSchemaTest`, `Security/RlsIsolationTest` (RLS enforced at the DB), `Security/{ClubAccessTest,UserSelfOnlyTest,ImportAuthorizationTest}` (SEC-01/02/04 tenant-API lockdown), `Security/MercureHardeningTest` (SEC-05/06). Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (essentials)
 
