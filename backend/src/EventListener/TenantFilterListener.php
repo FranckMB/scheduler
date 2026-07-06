@@ -121,9 +121,13 @@ class TenantFilterListener implements EventSubscriberInterface
             // fallback (mirror of the spoofed X-Club-Id check above). RLS
             // already hides other clubs' seasons from the lookup.
             if (null === $season) {
+                // Distinct signal so the frontend self-heals a STALE selected
+                // season (drop the header, reload) without conflating it with a
+                // legitimate authorization 403 (role/voter denials).
                 $event->setResponse(new JsonResponse(
                     ['error' => 'You do not have access to this season'],
                     403,
+                    ['X-Season-Rejected' => '1'],
                 ));
 
                 return;

@@ -120,6 +120,8 @@ interface MenuItemBaseProps {
 
 interface MenuActionProps extends MenuItemBaseProps {
   onSelect?: () => void;
+  /** Non-interactive row (button only): dimmed, no onSelect, does not close the menu. */
+  disabled?: boolean;
   to?: undefined;
 }
 
@@ -149,11 +151,12 @@ export function MenuItem({ icon, children, className, ...rest }: MenuActionProps
     <button
       type="button"
       role="menuitem"
+      disabled={rest.disabled}
       onClick={() => {
         rest.onSelect?.();
         close();
       }}
-      className={cn(ITEM_CLASS, className)}
+      className={cn(ITEM_CLASS, "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent", className)}
     >
       {icon}
       {children}
