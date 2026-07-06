@@ -210,7 +210,12 @@ préféré. Le radar signale tout placement **hors envelope**.
   journée). Le grain exact (coup d'envoi vs « match tient dans la plage ») se tranche au schéma.
 - Le **genre** entre dans la clé pour certaines lignes (U18 Région Garçon). La clé du catalogue doit
   l'accepter (nullable = tous genres).
-- **AURA n'est qu'un seed** ; d'autres ligues auront d'autres tables. Le catalogue est **par ligue**.
+- **Le seed AURA est la base par défaut de TOUT club, pas seulement des clubs AURA.** Ces fenêtres sont
+  des règles fédérales dans l'esprit : un club de Strasbourg (Grand Est) part de **cette base**, corrige
+  les horaires si sa ligue diffère, puis ajoute **ses règles club**. **Jamais de page blanche.** Trois
+  couches : (1) base fédé seedée (référence, non éditée) → (2) correction ligue par le gestionnaire si
+  besoin → (3) règles propres au club (dont le `PREFERRED TIME` §6). Quand d'autres ligues seront
+  cataloguées, la couche 1 devient plus précise (par ligue) — le patron ne change pas.
 
 ---
 
@@ -322,8 +327,10 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 - Deux besoins de données distincts : **liste des rencontres** (FFBB) vs **heures/positions extérieures**
   (réseau/estimées) — ne pas confondre.
 - **Jour + fenêtre imposés par catégorie×niveau = HARD**, **pré-seedés via un catalogue-ligue** (patron
-  vacances/fériés) — le club **hérite et édite**, ne saisit jamais les règles. **Seed AURA capturé (§6bis).**
-  Ligue dérivée du `ffbbClubCode`. Genre dans la clé pour certaines lignes (U18 Région Garçon).
+  vacances/fériés) — le club **hérite et édite**, ne saisit jamais les règles. **Seed AURA capturé (§6bis)
+  = base par défaut de TOUT club** (règles fédérales dans l'esprit ; un club hors AURA corrige, jamais de
+  page blanche). 3 couches : base fédé → correction ligue → règles club. Ligue dérivée du `ffbbClubCode`.
+  Genre dans la clé pour certaines lignes (U18 Région Garçon).
 - Calendrier match = **week-end-centrique** (réintroduit le dimanche, distinct du canevas entraînement).
 - **Module autonome, gating découplé** de la validation du socle ; mais **réutilise la saisie structure**
   (un club matchs-only fait quand même les étapes équipes/coachs/gymnases).
