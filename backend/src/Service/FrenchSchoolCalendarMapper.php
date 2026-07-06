@@ -61,7 +61,9 @@ final class FrenchSchoolCalendarMapper
         $n = preg_replace('/^vacances\s+(de\s+la\s+|de\s+l\'|de\s+|d\'|des\s+|du\s+)?/', '', $n) ?? $n;
         $slug = preg_replace('/[^a-z0-9]+/', '_', $n) ?? $n;
 
-        return trim($slug, '_');
+        // Cap to the holiday_type column width (VARCHAR(40)) so an unusually long
+        // open label can never overflow on insert.
+        return mb_substr(trim($slug, '_'), 0, 40);
     }
 
     /**
@@ -125,6 +127,7 @@ final class FrenchSchoolCalendarMapper
     {
         $value = mb_strtolower(trim($value), 'UTF-8');
         $value = strtr($value, [
+            '’' => '\'', // typographic apostrophe (U+2019) → ASCII, so "d’Été" strips like "d'Été"
             'á' => 'a', 'à' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a',
             'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e',
             'í' => 'i', 'ì' => 'i', 'î' => 'i', 'ï' => 'i',

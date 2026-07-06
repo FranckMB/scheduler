@@ -132,6 +132,7 @@ final class ImportSchoolHolidaysCommand extends Command
     {
         $records = [];
         $offset = 0;
+        $total = null;
         do {
             $response = $this->httpClient->request('GET', $baseUrl . self::RECORDS_PATH, [
                 'query' => [
@@ -143,15 +144,18 @@ final class ImportSchoolHolidaysCommand extends Command
                 'timeout' => 30,
             ]);
 
-            /** @var array{results?: list<array<string, mixed>>} $data */
+            /** @var array{results?: list<array<string, mixed>>, total_count?: int} $data */
             $data = $response->toArray();
             $results = $data['results'] ?? [];
+            $total ??= (int) ($data['total_count'] ?? 0);
             foreach ($results as $result) {
                 $records[] = $result;
             }
 
             $offset += $pageSize;
-        } while (\count($results) === $pageSize && $offset < self::ODS_MAX_WINDOW);
+            // Stop as soon as we have paged past total_count — no extra empty
+            // request when the record count is an exact multiple of the page size.
+        } while ([] !== $results && $offset < min($total, self::ODS_MAX_WINDOW));
 
         return $records;
     }

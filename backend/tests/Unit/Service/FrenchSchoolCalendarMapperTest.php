@@ -22,13 +22,19 @@ final class FrenchSchoolCalendarMapperTest extends TestCase
     public static function zoneProvider(): iterable
     {
         yield 'zone A' => ['Zone A', 'A'];
+        yield 'zone B' => ['Zone B', 'B'];
         yield 'zone C' => ['Zone C', 'C'];
         yield 'corse' => ['Corse', 'CORSE'];
         yield 'guadeloupe' => ['Guadeloupe', 'GUADELOUPE'];
+        yield 'guyane' => ['Guyane', 'GUYANE'];
+        yield 'martinique' => ['Martinique', 'MARTINIQUE'];
+        yield 'mayotte' => ['Mayotte', 'MAYOTTE'];
         yield 'reunion accent' => ['Réunion', 'REUNION'];
+        yield 'polynesie' => ['Polynésie', 'POLYNESIE'];
         yield 'nouvelle caledonie space' => ['Nouvelle Calédonie', 'NOUVELLE_CALEDONIE'];
         yield 'nouvelle-caledonie hyphen' => ['Nouvelle-Calédonie', 'NOUVELLE_CALEDONIE'];
         yield 'saint pierre' => ['Saint Pierre et Miquelon', 'SAINT_PIERRE_MIQUELON'];
+        yield 'wallis et futuna' => ['Wallis et Futuna', 'WALLIS_FUTUNA'];
     }
 
     /**
@@ -41,6 +47,7 @@ final class FrenchSchoolCalendarMapperTest extends TestCase
         yield 'hiver' => ['Vacances d\'Hiver', 'hiver'];
         yield 'printemps' => ['Vacances de Printemps', 'printemps'];
         yield 'ete' => ['Vacances d\'Été', 'ete'];
+        yield 'ete curly apostrophe' => ['Vacances d’Été', 'ete']; // U+2019
         yield 'ete austral' => ['Vacances d\'Été austral', 'ete_austral'];
         yield 'hiver austral' => ['Vacances d\'Hiver austral', 'hiver_austral'];
         yield 'carnaval' => ['Vacances de Carnaval', 'carnaval'];
@@ -64,9 +71,20 @@ final class FrenchSchoolCalendarMapperTest extends TestCase
 
     public function testEveryMappedZoneIsInTheCanonicalCatalog(): void
     {
+        $mapped = [];
         foreach (self::zoneProvider() as [$apiZone, $expected]) {
-            self::assertContains($this->mapper->mapZone($apiZone), SchoolZoneResolver::ZONES);
+            $code = $this->mapper->mapZone($apiZone);
+            self::assertContains($code, SchoolZoneResolver::ZONES);
+            $mapped[$code] = true;
         }
+
+        // Completeness: the provider must exercise all 13 canonical codes, so a
+        // typo in any ZONE_LABEL_TO_CODE value (e.g. MARTINIQ) is caught here.
+        $covered = array_keys($mapped);
+        sort($covered);
+        $expected = SchoolZoneResolver::ZONES;
+        sort($expected);
+        self::assertSame($expected, $covered);
     }
 
     #[DataProvider('holidayTypeProvider')]

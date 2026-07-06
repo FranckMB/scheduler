@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Service\SchoolZoneResolver;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -31,7 +32,7 @@ class ClubInput
     #[Groups(['write'])]
     public ?int $generationCountSeason = null;
 
-    #[Assert\Choice(choices: ['A', 'B', 'C'], message: 'School zone must be A, B or C.')]
+    #[Assert\Choice(choices: SchoolZoneResolver::ZONES, message: 'School zone is not a valid zone code.')]
     #[Groups(['write'])]
     public ?string $schoolZone = null;
 
