@@ -278,7 +278,9 @@ final class TeamApiTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseIsSuccessful();
-        self::assertNull(json_decode((string) $client->getResponse()->getContent(), true)['level']);
+        // API Platform omits null-valued fields from the JSON-LD output, so the
+        // key is absent (not present-and-null) once level is cleared.
+        self::assertNull(json_decode((string) $client->getResponse()->getContent(), true)['level'] ?? null);
         $this->em->clear();
         self::assertNull($this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
     }
