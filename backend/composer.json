@@ -9,7 +9,7 @@
         "ext-iconv": "*",
         "api-platform/doctrine-orm": "^4.3",
         "api-platform/symfony": "^4.3",
-        "doctrine/doctrine-bundle": "^2.18",
+        "doctrine/doctrine-bundle": "^3.2",
         "doctrine/doctrine-migrations-bundle": "^3.7",
         "doctrine/orm": "^3.6",
         "lexik/jwt-authentication-bundle": "^3.2",
