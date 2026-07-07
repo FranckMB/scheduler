@@ -57,7 +57,7 @@ Console commands do **not** trigger `kernel.request`. Therefore:
 
 - The `tenant_filter` is **not** enabled automatically.
 - `SET LOCAL app.club_id` is **never** executed without an HTTP context.
-- CLI scripts that need tenant isolation must implement their own mechanism (e.g., explicit `--club-id` option) or run as `migration_user` (which bypasses RLS for maintenance tasks).
+- CLI scripts that need tenant isolation must implement their own mechanism (e.g., explicit `--club-id` option, or `TenantConnectionContext::setClubId()` per club like the reminder crons). Maintenance tasks that must SEE ALL tenants run on the **`admin` Doctrine connection (`clubscheduler`, superuser — the only RLS bypass)**. ⚠ `migration_user` does **NOT** bypass RLS: it is created `NOSUPERUSER` without `BYPASSRLS` and no policy targets it — under `FORCE ROW LEVEL SECURITY` it is default-deny on every tenant table. It exists in the init SQL but is not used by any configured connection.
 
 ## Registration
 
