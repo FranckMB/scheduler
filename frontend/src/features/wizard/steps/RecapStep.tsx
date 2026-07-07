@@ -1,11 +1,27 @@
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import type { ReactNode } from "react";
 
+import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
+import type { TeamLevel } from "../api";
+import { orderedTeams } from "../lib/ranking";
 import { useStepValidation } from "../lib/useStepValidation";
-import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeams, useWizardVenues } from "../queries";
+import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+
+// Manager-facing labels for the FFBB play levels (mirrors the teams step).
+const LEVEL_LABEL: Record<TeamLevel, string> = {
+  ELITE: "Élite",
+  NATIONAL: "National",
+  REGIONAL: "Régional",
+  PRE_REGION: "Pré-région",
+  DEPARTEMENTAL: "Départemental",
+  HONNEUR: "Honneur",
+  PROMOTION: "Promotion",
+  LOISIR_ADULTE: "Loisir adulte",
+  LOISIR_JEUNE: "Loisir jeune",
+};
 
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
@@ -19,22 +35,18 @@ function Counter({ label, value, sub }: { label: string; value: number; sub?: st
   );
 }
 
-function Section({ title, count, children }: { title: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+/** Section header: label + a count badge, fed to the shared AccordionSection. */
+function sectionTitle(label: string, count: number): ReactNode {
   return (
-    <div className="rounded-md border border-border">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
-        {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        <span className="flex-1 font-medium">{title}</span>
-        <span className="rounded-full bg-muted px-2 text-xs text-muted-foreground">{count}</span>
-      </button>
-      {open ? <div className="max-h-64 overflow-y-auto border-t border-border px-3 py-1">{children}</div> : null}
-    </div>
+    <span className="flex flex-1 items-center gap-2">
+      <span>{label}</span>
+      <span className="rounded-full bg-muted px-2 text-xs font-normal text-muted-foreground">{count}</span>
+    </span>
   );
 }
 
 /** One item per row — readable list, not a comma-joined blob. */
-function ItemRow({ label, meta }: { label: string; meta?: ReactNode }) {
+function ItemRow({ label, meta }: { label: ReactNode; meta?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border/60 py-1.5 text-sm last:border-0">
       <span className="text-foreground">{label}</span>
@@ -51,6 +63,7 @@ export function RecapStep() {
   const { data: slots = [] } = useVenueSlots();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
+  const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
@@ -65,6 +78,18 @@ export function RecapStep() {
     slotsByVenue.set(s.venueId, (slotsByVenue.get(s.venueId) ?? 0) + 1);
   }
 
+  const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  // A team's main coach (fallback: its first linked coach) — shown inline in italic.
+  const mainCoachName = (teamId: string): string | null => {
+    const links = teamCoaches.filter((tc) => tc.teamId === teamId);
+    const link = links.find((tc) => "MAIN" === tc.role) ?? links[0];
+    const coach = link ? coaches.find((c) => c.id === link.coachId) : undefined;
+    return coach ? `${coach.firstName} ${coach.lastName}`.trim() : null;
+  };
+  // Teams a coach handles, by name (for "Maxime (SM1)" / "Emerick (SF1, U15F1)").
+  const coachTeamNames = (coachId: string): string[] =>
+    teamCoaches.filter((tc) => tc.coachId === coachId).map((tc) => teamName.get(tc.teamId) ?? "").filter((n) => "" !== n);
+
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">Cartographie de votre club avant génération.</p>
@@ -77,28 +102,59 @@ export function RecapStep() {
       </div>
 
       <div className="mb-4 flex flex-col gap-1.5">
-        <Section title="Équipes" count={teams.length}>
+        <AccordionSection title={sectionTitle("Équipes", teams.length)}>
           {0 === teams.length
             ? empty
-            : teams.map((t) => <ItemRow key={t.id} label={t.name} meta={`${t.sessionsPerWeek} séance(s)/sem`} />)}
-        </Section>
-        <Section title="Gymnases" count={venues.length}>
-          {0 === venues.length ? empty : venues.map((v) => <ItemRow key={v.id} label={v.name} meta={`${slotsByVenue.get(v.id) ?? 0} créneau(x)`} />)}
-        </Section>
-        <Section title="Coachs" count={coaches.length}>
-          {0 === coaches.length
+            : orderedTeams(teams).map(({ team: t }) => {
+                const coach = mainCoachName(t.id);
+                return (
+                  <ItemRow
+                    key={t.id}
+                    label={
+                      <span className="flex flex-wrap items-baseline gap-x-2">
+                        <span>{t.name}</span>
+                        {coach ? <span className="text-xs italic text-muted-foreground">{coach}</span> : null}
+                        {t.level ? <span className="text-xs italic text-muted-foreground">· {LEVEL_LABEL[t.level]}</span> : null}
+                      </span>
+                    }
+                    meta={`${t.sessionsPerWeek} séance(s)/sem`}
+                  />
+                );
+              })}
+        </AccordionSection>
+        <AccordionSection title={sectionTitle("Gymnases", venues.length)}>
+          {0 === venues.length
             ? empty
-            : coaches.map((c) => (
+            : venues.map((v) => (
                 <ItemRow
-                  key={c.id}
-                  label={`${c.firstName} ${c.lastName}`.trim()}
-                  meta={[c.isEmployee ? "salarié" : null, coachPlayerIds.has(c.id) ? "coach-joueur" : null].filter(Boolean).join(" · ") || undefined}
+                  key={v.id}
+                  label={
+                    <span className="flex items-center gap-2">
+                      <span className="size-3 shrink-0 rounded-full border border-border" style={{ backgroundColor: v.color ?? "transparent" }} />
+                      {v.name}
+                    </span>
+                  }
+                  meta={`${slotsByVenue.get(v.id) ?? 0} créneau(x)`}
                 />
               ))}
-        </Section>
-        <Section title="Contraintes" count={constraints.length}>
+        </AccordionSection>
+        <AccordionSection title={sectionTitle("Coachs", coaches.length)}>
+          {0 === coaches.length
+            ? empty
+            : coaches.map((c) => {
+                const teamsOf = coachTeamNames(c.id);
+                return (
+                  <ItemRow
+                    key={c.id}
+                    label={`${c.firstName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
+                    meta={[c.isEmployee ? "salarié" : null, coachPlayerIds.has(c.id) ? "coach-joueur" : null].filter(Boolean).join(" · ") || undefined}
+                  />
+                );
+              })}
+        </AccordionSection>
+        <AccordionSection title={sectionTitle("Contraintes", constraints.length)}>
           {0 === constraints.length ? empty : constraints.map((c) => <ItemRow key={c.id} label={c.name} meta={c.ruleType} />)}
-        </Section>
+        </AccordionSection>
       </div>
 
       {blockers.length > 0 ? (

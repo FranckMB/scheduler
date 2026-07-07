@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { formatDuration } from "@/shared/lib/duration";
 
 import { useEntryConflicts } from "@/features/cockpit/queries";
 
@@ -73,33 +74,35 @@ function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canS
   };
 
   return (
-    <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-accent/40 bg-card p-3">
-      <span className="text-xs font-medium">Modifier le créneau</span>
-      <Select aria-label="Jour" className="h-8 w-24" value={day} onChange={(e) => setDay(Number(e.target.value))}>
-        {WEEK.map((d) => (
-          <option key={d.n} value={d.n}>
-            {d.label}
-          </option>
-        ))}
-      </Select>
-      <Input aria-label="Début" type="time" className="h-8 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
-      <Select aria-label="Durée" className="h-8 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
-        {DURATIONS.map((d) => (
-          <option key={d} value={d}>
-            {d} min
-          </option>
-        ))}
-      </Select>
-      <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="h-8 w-52" />
-      <Button size="icon" className="size-8" onClick={save} disabled={update.isPending} title="Enregistrer" aria-label="Enregistrer">
-        <Check className="size-4" />
-      </Button>
-      <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => (del.mutate(slot.id), onClose())} title="Supprimer" aria-label="Supprimer">
-        <Trash2 className="size-4" />
-      </Button>
-      <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" title="Fermer" onClick={onClose}>
-        <X className="size-4" />
-      </Button>
+    <div className="mt-3 rounded-lg border border-accent/40 bg-card p-3">
+      <div className="mb-2 text-xs font-medium">Modification du créneau</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Select aria-label="Jour" className="h-8 w-24" value={day} onChange={(e) => setDay(Number(e.target.value))}>
+          {WEEK.map((d) => (
+            <option key={d.n} value={d.n}>
+              {d.label}
+            </option>
+          ))}
+        </Select>
+        <Input aria-label="Début" type="time" className="h-8 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
+        <Select aria-label="Durée" className="h-8 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+          {DURATIONS.map((d) => (
+            <option key={d} value={d}>
+              {formatDuration(d)}
+            </option>
+          ))}
+        </Select>
+        <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="h-8 w-52" />
+        <Button size="icon" className="size-8" onClick={save} disabled={update.isPending} title="Enregistrer" aria-label="Enregistrer">
+          <Check className="size-4" />
+        </Button>
+        <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => (del.mutate(slot.id), onClose())} title="Supprimer" aria-label="Supprimer">
+          <Trash2 className="size-4" />
+        </Button>
+        <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" title="Fermer" onClick={onClose}>
+          <X className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -176,7 +179,11 @@ function VenuesEditor() {
         </Button>
       </form>
 
-      {emptyVenues.length > 0 ? <p className="mb-3 text-xs text-destructive">Sans créneau : {emptyVenues.map((v) => v.name).join(", ")}.</p> : null}
+      {emptyVenues.length > 0 ? (
+        <p role="alert" className="mb-3 text-sm text-destructive">
+          {emptyVenues.length > 1 ? "Ces gymnases doivent avoir au moins un créneau" : "Ce gymnase doit avoir au moins un créneau"} : {emptyVenues.map((v) => v.name).join(", ")}.
+        </p>
+      ) : null}
 
       {null === selected ? (
         <p className="text-sm text-muted-foreground">Aucun gymnase pour le moment.</p>
@@ -220,7 +227,7 @@ function VenuesEditor() {
             <Select aria-label="Durée à poser" className="h-9 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
               {DURATIONS.map((d) => (
                 <option key={d} value={d}>
-                  {d} min
+                  {formatDuration(d)}
                 </option>
               ))}
             </Select>

@@ -24,15 +24,17 @@ export function AuthGuard() {
   const location = useLocation();
 
   // First-time club: locked to the wizard until the first generation, but the
-  // account-menu routes (profile, club) stay reachable. Reaching the cockpit
-  // home explicitly (e.g. by URL) gets an ephemeral hint on the redirect.
+  // account-menu routes (profile, club) stay reachable. Landing on the cockpit
+  // home gets an ephemeral hint on the redirect — only for an ACTIVE member
+  // (pending users are sent to /waiting by the guard below, unrelated to this).
+  const membershipActive = "active" === data?.membershipStatus;
   const onboardingLocked = Boolean(data?.club && !data.club.onboardingCompleted);
-  const blockedFromCockpit = onboardingLocked && !ONBOARDING_ALLOWED.includes(location.pathname) && "/" === location.pathname;
+  const showCockpitHint = membershipActive && onboardingLocked && "/" === location.pathname;
   useEffect(() => {
-    if (blockedFromCockpit) {
+    if (showCockpitHint) {
       toast.info("Lancez votre première génération d'abord.");
     }
-  }, [blockedFromCockpit]);
+  }, [showCockpitHint]);
 
   if (null === token) {
     return <Navigate to="/login" replace />;

@@ -23,9 +23,11 @@ function renderAt(path: string) {
         <Route element={<AuthGuard />}>
           <Route path="/" element={<div>COCKPIT</div>} />
           <Route path="/profile" element={<div>PROFILE</div>} />
+          <Route path="/club" element={<div>CLUB</div>} />
           <Route path="/matchs" element={<div>MATCHS</div>} />
         </Route>
         <Route path="/wizard" element={<div>WIZARD</div>} />
+        <Route path="/waiting" element={<div>WAITING</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -37,10 +39,23 @@ describe("AuthGuard — onboarding lock", () => {
     useAuthStore.setState({ token: "jwt" });
   });
 
-  it("keeps the burger routes reachable while onboarding (profile)", () => {
+  it("keeps the burger routes reachable while onboarding (profile + club)", () => {
     meState.data = activeClub(false);
     renderAt("/profile");
     expect(screen.getByText("PROFILE")).toBeInTheDocument();
+  });
+
+  it("keeps /club reachable while onboarding", () => {
+    meState.data = activeClub(false);
+    renderAt("/club");
+    expect(screen.getByText("CLUB")).toBeInTheDocument();
+  });
+
+  it("does NOT fire the cockpit hint for a pending (not-yet-active) member", () => {
+    meState.data = { membershipStatus: "pending", club: { onboardingCompleted: false } };
+    renderAt("/");
+    expect(screen.getByText("WAITING")).toBeInTheDocument();
+    expect(info).not.toHaveBeenCalled();
   });
 
   it("redirects the cockpit home to the wizard with an ephemeral hint", () => {

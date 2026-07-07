@@ -1,3 +1,4 @@
+import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
@@ -73,7 +74,7 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
               key={slot.id}
               type="button"
               onClick={() => onSelect(slot)}
-              title={`${hhmm(slot.startTime)} · ${slot.durationMinutes}min · cap ${slot.capacity} — cliquer pour modifier`}
+              title={`${hhmm(slot.startTime)} · ${formatDuration(slot.durationMinutes)} · cap ${slot.capacity} — cliquer pour modifier`}
               className={cn(
                 "z-10 m-px flex items-start overflow-hidden rounded border-l-4 px-1 text-left text-[10px] leading-tight hover:ring-1 hover:ring-accent",
                 slot.id === selectedSlotId ? "ring-2 ring-accent" : "",

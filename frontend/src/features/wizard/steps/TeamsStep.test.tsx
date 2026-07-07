@@ -71,6 +71,17 @@ describe("TeamsStep", () => {
     team.level = "DEPARTEMENTAL"; // restore
   });
 
+  it("shows a required-name error (and does not create) when adding with an empty name", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+    await user.click(screen.getByRole("button", { name: "Ajouter l'équipe" }));
+    expect(screen.getByText(/nom de l'équipe est obligatoire/i)).toBeInTheDocument();
+    expect(createMut).not.toHaveBeenCalled();
+    // Typing clears the error.
+    await user.type(screen.getByLabelText("Nom de l'équipe"), "SF1");
+    expect(screen.queryByText(/nom de l'équipe est obligatoire/i)).toBeNull();
+  });
+
   it("sends the play level when changed on a row", async () => {
     const user = userEvent.setup();
     renderWithProviders(<TeamsStep />);

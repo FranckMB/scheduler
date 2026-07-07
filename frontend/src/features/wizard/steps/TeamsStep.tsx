@@ -220,6 +220,7 @@ function TeamsEditor() {
   const reorder = useReorderTeams();
 
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const [catId, setCatId] = useState("");
   const [tierId, setTierId] = useState(1);
@@ -240,8 +241,12 @@ function TeamsEditor() {
   const addTeam = (event: FormEvent) => {
     event.preventDefault();
     if ("" === name.trim()) {
+      // Silent no-op was frustrating: surface why + jump to the empty field.
+      setNameError(true);
+      nameRef.current?.focus();
       return;
     }
+    setNameError(false);
     create.mutate({
       name: name.trim(),
       sportCategoryId: effectiveCat || undefined,
@@ -448,7 +453,20 @@ function TeamsEditor() {
       ) : (
         <>
           <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 text-sm">
-            <Input ref={nameRef} aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-0 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              ref={nameRef}
+              aria-label="Nom de l'équipe"
+              aria-invalid={nameError}
+              placeholder="Nom de l'équipe"
+              className={cn("h-8 min-w-0 flex-1", nameError ? "border-destructive focus-visible:ring-destructive" : "")}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) {
+                  setNameError(false);
+                }
+              }}
+            />
             <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -482,6 +500,11 @@ function TeamsEditor() {
               <Plus className="size-4" />
             </Button>
           </form>
+          {nameError ? (
+            <p role="alert" className="-mt-4 mb-4 text-sm text-destructive">
+              Le nom de l'équipe est obligatoire.
+            </p>
+          ) : null}
 
           {0 === teams.length ? (
             <p className="text-sm text-muted-foreground">Aucune équipe pour le moment.</p>
