@@ -28,3 +28,24 @@ class TestAdaptiveTimeout:
 
     def test_cap_below_first_tier(self) -> None:
         assert _adaptive_timeout(5, 4, payload_cap=30) == 30
+
+
+class TestAdaptiveWorkers:
+    """The worker count mirrors the timeout tiers at the 200-complexity boundary
+    (1 worker = deterministic below, 8 = fast optimality proof above)."""
+
+    def test_small_problem_single_worker(self) -> None:
+        from app.main import _adaptive_workers
+
+        assert _adaptive_workers(5, 4) == 1  # complexity 20
+
+    def test_boundary_200_stays_single_worker(self) -> None:
+        from app.main import _adaptive_workers
+
+        assert _adaptive_workers(20, 10) == 1  # complexity exactly 200
+
+    def test_above_boundary_uses_portfolio(self) -> None:
+        from app.main import LARGE_PROBLEM_WORKERS, _adaptive_workers
+
+        assert _adaptive_workers(30, 10) == LARGE_PROBLEM_WORKERS  # complexity 300
+        assert _adaptive_workers(49, 9) == LARGE_PROBLEM_WORKERS  # BCCL, complexity 441

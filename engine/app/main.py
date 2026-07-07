@@ -201,6 +201,29 @@ def _adaptive_timeout(n_teams: int, n_venues: int, payload_cap: int) -> int:
     return min(adaptive, payload_cap)
 
 
+# The single default worker's objective bound stays hopelessly loose on dense,
+# soft-preference-rich problems (e.g. 49 teams with 55 soft venue preferences):
+# it FINDS the optimal placement in ~2 s but then fails to PROVE it, burning the
+# whole adaptive budget (measured: 612 s, gap never closes). CP-SAT's 8-worker
+# portfolio includes the bound-tightening worker that closes the proof in ~2 s
+# with an identical objective. Small problems keep 1 worker so their solve stays
+# bit-for-bit reproducible (the golden fixtures depend on it); only the top
+# complexity tier — where the stall lives and speed matters — pays the
+# multi-worker cost (the optimal *value* is stable run-to-run; the exact
+# equally-optimal assignment may differ, which is why the large golden fixtures
+# assert score + slot count, not exact placement).
+LARGE_PROBLEM_WORKERS = 8
+
+
+def _adaptive_workers(n_teams: int, n_venues: int) -> int:
+    """Number of CP-SAT search workers, scaled to problem size (see above).
+
+    Mirrors the ``_adaptive_timeout`` tiers: ≤200 complexity → 1 (deterministic,
+    already fast), else → 8 (fast optimality proof on the stall-prone tier).
+    """
+    return 1 if n_teams * n_venues <= 200 else LARGE_PROBLEM_WORKERS
+
+
 def _solve(
     data: dict[str, Any],
     input_data: ScheduleInputSchema,
@@ -376,12 +399,13 @@ def _solve(
     n_teams = len(data.get("teams") or [])
     n_venues = len(data.get("venues") or [])
     timeout_seconds = _adaptive_timeout(n_teams, n_venues, input_data.solver_timeout_seconds)
+    workers = _adaptive_workers(n_teams, n_venues)
 
     # --- Phase 1: solve for the optimal placement (fast, chaining excluded). ---
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout_seconds
     solver.parameters.random_seed = input_data.solver_seed
-    solver.parameters.num_search_workers = 1
+    solver.parameters.num_search_workers = workers
     status = solver.Solve(model)
 
     # --- Phase 2: lock the placement quality, then optimise the chaining bonus
@@ -401,7 +425,7 @@ def _solve(
         phase2_solver = cp_model.CpSolver()
         phase2_solver.parameters.max_time_in_seconds = min(timeout_seconds, CHAINING_PHASE_MAX_SECONDS)
         phase2_solver.parameters.random_seed = input_data.solver_seed
-        phase2_solver.parameters.num_search_workers = 1
+        phase2_solver.parameters.num_search_workers = workers
         phase2_status = phase2_solver.Solve(model)
         if phase2_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             solver, status = phase2_solver, phase2_status

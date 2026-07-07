@@ -157,8 +157,9 @@ jobs:
   engine-perf:
     name: Engine Perf Gate
     runs-on: ubuntu-latest
-    # Perf gate is main-only: it is slow (dense-club solve up to 180s) and would
-    # slow every PR. It guards the MVP "< 3 min" exit criterion on main (PERF-01).
+    # Perf gate is main-only. It guards the MVP "< 3 min" exit criterion and,
+    # since the multi-worker fix, ratchets the large tier (dense + BCCL) to a
+    # 60s budget so a regression to the single-worker prove-stall (612s) fails.
     if: github.ref == 'refs/heads/main'
     needs: engine-tests
     steps:
