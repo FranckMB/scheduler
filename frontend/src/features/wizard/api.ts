@@ -213,7 +213,12 @@ export async function validateConstraints(calendarEntryId?: string): Promise<Val
     return await api.post("constraints/validate", calendarEntryId ? { json: { calendarEntryId } } : undefined).json<ValidateResult>();
   } catch (error) {
     if (error instanceof HTTPError) {
-      return (await error.response.json()) as ValidateResult;
+      // ky 2.x parses the 422 body into error.data — re-reading the response
+      // throws "body stream already read".
+      const data = (error as { data?: unknown }).data;
+      if (null !== data && typeof data === "object") {
+        return data as ValidateResult;
+      }
     }
     throw error;
   }

@@ -1,4 +1,4 @@
-import ky, { HTTPError } from "ky";
+import ky from "ky";
 
 import { useAuthStore } from "@/shared/stores/authStore";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -18,9 +18,12 @@ export const api = ky.create({
           state.request.headers.set("Authorization", `Bearer ${token}`);
         }
         // Season the manager is working in — absent = server-derived current
-        // season (mono-season clubs never send it).
+        // season (mono-season clubs never send it). A request that already
+        // carries the header wins: one-shot cross-season calls (transition
+        // re-dating) target another season explicitly — the server validates
+        // the header either way, it is never trusted client-side.
         const seasonId = useSeasonStore.getState().selectedSeasonId;
-        if (seasonId) {
+        if (seasonId && !state.request.headers.has("X-Season-Id")) {
           state.request.headers.set("X-Season-Id", seasonId);
         }
       },
@@ -50,38 +53,10 @@ export const api = ky.create({
         }
       },
     ],
-    beforeError: [
-      // Read the server's error body HERE (still unconsumed) and stash a friendly
-      // message on the error; errorMessage() reads it. Reading the body post-hoc
-      // from the thrown HTTPError fails (stream already gone), which left toasts
-      // showing a generic status message instead of the real reason.
-      async (state) => {
-        const { error } = state;
-        if (error instanceof HTTPError) {
-          try {
-            const body = (await error.response.clone().json()) as {
-              error?: string;
-              message?: string;
-              detail?: string;
-              violations?: { message?: string }[];
-            };
-            const direct = body.error ?? body.message ?? body.detail;
-            let message = typeof direct === "string" ? direct.trim() : "";
-            if (message === "" && Array.isArray(body.violations)) {
-              message = body.violations
-                .map((v) => v.message)
-                .filter((m): m is string => typeof m === "string" && m.trim() !== "")
-                .join(" · ");
-            }
-            if (message !== "") {
-              (error as { serverMessage?: string }).serverMessage = message;
-            }
-          } catch {
-            // body not JSON → errorMessage falls back to a status-based sentence
-          }
-        }
-        return error;
-      },
-    ],
+    // No beforeError hook: ky 2.x consumes the error-response body itself and
+    // exposes the parsed result as `error.data` BEFORE any consumer runs —
+    // re-reading `error.response` throws "body stream already read". Every
+    // error-body reader (errorMessage(), structured catches) must read
+    // `error.data`, never the response.
   },
 });

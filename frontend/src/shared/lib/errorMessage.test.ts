@@ -9,7 +9,11 @@ function httpError(status: number, body?: unknown): HTTPError {
     headers: { "content-type": "application/json" },
   });
   const request = new Request("http://localhost/api/teams");
-  return new HTTPError(response, request, {} as never);
+  const error = new HTTPError(response, request, {} as never);
+  // ky 2.x consumes the response stream itself and exposes the parsed body as
+  // error.data before any consumer runs — mirror that contract.
+  (error as unknown as { data?: unknown }).data = body;
+  return error;
 }
 
 describe("errorMessage", () => {

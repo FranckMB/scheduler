@@ -171,7 +171,9 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
     return await api.post(`schedules/${id}/reopen`, opts?.confirmDeleteOverlays ? { json: { confirmDeleteOverlays: true } } : undefined).json();
   } catch (error) {
     if (error instanceof HTTPError && 409 === error.response.status) {
-      const body = (await error.response.json()) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      // ky 2.x parses the error body into error.data (re-reading the response
+      // throws "body stream already read").
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
       if ("overlays_exist" === body.code) {
         throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
       }
