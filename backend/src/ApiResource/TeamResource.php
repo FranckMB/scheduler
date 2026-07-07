@@ -13,12 +13,15 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
+use ApiPlatform\OpenApi\Model\Operation as OpenApiOperation;
+use ApiPlatform\OpenApi\Model\RequestBody as OpenApiRequestBody;
 use App\Dto\TeamInput;
 use App\Entity\Team;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
 use App\State\Processor\TeamStateProcessor;
 use App\State\Provider\TeamStateProvider;
+use ArrayObject;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
@@ -30,12 +33,25 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Delete,
     // FBI fixtures import (module matchs PR-4): multipart upload of one FBI
     // export for ONE team — same declaration pattern as clubs/{id}/import-teams.
+    // The openapi context overrides the generated doc, which would otherwise
+    // describe this as a plain "create Team" JSON operation.
     new Post(
         uriTemplate: '/teams/{id}/fixtures/import',
         controller: 'App\Controller\ImportFixturesController',
         read: false,
         deserialize: false,
         name: 'import_fixtures',
+        openapi: new OpenApiOperation(
+            summary: 'Import an FBI fixtures export (.xlsx) for this team',
+            description: 'Multipart upload (field "file"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team · 403 non-management member · 409 archived season or concurrent duplicate import · 400 missing/invalid file or columns.',
+            requestBody: new OpenApiRequestBody(
+                content: new ArrayObject([
+                    'multipart/form-data' => [
+                        'schema' => ['type' => 'object', 'properties' => ['file' => ['type' => 'string', 'format' => 'binary']], 'required' => ['file']],
+                    ],
+                ]),
+            ),
+        ),
     ),
 ], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
 // Honored by TeamStateProvider::applyRequestFilters (the custom provider bypasses

@@ -144,6 +144,49 @@ final class FbiFixtureImporterTest extends KernelTestCase
         self::assertStringContainsString('date de rencontre invalide', $result['errors'][0]);
     }
 
+    public function testUnpaddedDateAndTimeAreAccepted(): void
+    {
+        // An Excel d/m/yyyy cell format renders without zero padding.
+        $file = $this->xlsx([
+            ['D2', 'R7001', 'BC TESTVILLE - 1', 'AS Voisins', '3/10/2026', '9:30', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->team, $this->club);
+
+        self::assertSame(['created' => 1, 'skipped' => 0, 'errors' => []], $result);
+        $fixture = $this->em->getRepository(Fixture::class)->findOneBy(['externalRef' => 'R7001']);
+        self::assertSame('2026-10-03', $fixture?->getMatchDate()->format('Y-m-d'));
+        self::assertSame('09:30', $fixture?->getKickoffTime()?->format('H:i'));
+    }
+
+    public function testCalendarInvalidDateIsARowErrorNotARollover(): void
+    {
+        // 31/02 must NOT silently become March 3rd.
+        $file = $this->xlsx([
+            ['D2', 'R7002', 'BC TESTVILLE - 1', 'AS Voisins', '31/02/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->team, $this->club);
+
+        self::assertSame(0, $result['created']);
+        self::assertStringContainsString('date de rencontre invalide', $result['errors'][0]);
+    }
+
+    public function testClubNameAsPrefixOfOpponentIsNotADerby(): void
+    {
+        // Word-boundary match: "BC Testville" must not match "BC TESTVILLENORD".
+        $file = $this->xlsx([
+            ['D2', 'R7003', 'BC TESTVILLE - 1', 'AS BC TESTVILLENORD', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->team, $this->club);
+
+        self::assertSame(['created' => 1, 'skipped' => 0, 'errors' => []], $result);
+        $fixture = $this->em->getRepository(Fixture::class)->findOneBy(['externalRef' => 'R7003']);
+        self::assertSame(FixtureHomeAway::HOME, $fixture?->getHomeAway());
+        self::assertSame('AS BC TESTVILLENORD', $fixture?->getOpponentLabel());
+    }
+
     public function testOverlongMatchNumberIsARowError(): void
     {
         $file = $this->xlsx([

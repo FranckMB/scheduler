@@ -92,7 +92,9 @@ final class FbiFixtureImporter
             }
             $line = $rowIndex + 2; // header consumed, xlsx rows are 1-based
 
-            $division = $this->stringValue($row[$columnMap['division']] ?? null);
+            // Clamped to the competition.name column (VARCHAR(180)) BEFORE the
+            // lookup so find-or-create and the in-file cache share one key.
+            $division = mb_substr($this->stringValue($row[$columnMap['division']] ?? null), 0, 180);
             $numero = $this->stringValue($row[$columnMap['numero']] ?? null);
             $equipe1 = $this->stringValue($row[$columnMap['equipe 1']] ?? null);
             $equipe2 = $this->stringValue($row[$columnMap['equipe 2']] ?? null);
@@ -116,8 +118,10 @@ final class FbiFixtureImporter
                 continue;
             }
 
-            $matchesHome = str_contains($this->normalizeLabel($equipe1), $clubNeedle);
-            $matchesAway = str_contains($this->normalizeLabel($equipe2), $clubNeedle);
+            // Word-boundary containment (space-padded), NOT raw substring:
+            // club "BC Test" must not match opponent "BC Testville".
+            $matchesHome = $this->containsClub($equipe1, $clubNeedle);
+            $matchesAway = $this->containsClub($equipe2, $clubNeedle);
             if ($matchesHome === $matchesAway) {
                 $errors[] = $matchesHome
                     ? \sprintf('Ligne %d : les deux équipes correspondent au club « %s » (derby intra-club) — saisissez ce match manuellement.', $line, $club->getName())
@@ -189,7 +193,12 @@ final class FbiFixtureImporter
         return $competition;
     }
 
-    /** "03/10/2026" (or "03/10/2026 15:30") or an Excel serial → the match date. */
+    /**
+     * "03/10/2026" or "3/10/2026" (single digits tolerated — an Excel d/m/yyyy
+     * cell format renders unpadded), optionally followed by a time, or an Excel
+     * serial → the match date. Calendar-invalid dates (31/02) are rejected
+     * instead of silently rolling over.
+     */
     private function parseDate(mixed $value): ?DateTimeImmutable
     {
         if (is_numeric($value) && !\is_string($value)) {
@@ -197,16 +206,18 @@ final class FbiFixtureImporter
         }
 
         $text = $this->stringValue($value);
-        if (1 === preg_match('/^(\d{2})\/(\d{2})\/(\d{4})/', $text, $m)) {
-            $date = DateTimeImmutable::createFromFormat('!d/m/Y', \sprintf('%s/%s/%s', $m[1], $m[2], $m[3]));
-
-            return false === $date ? null : $date;
+        if (1 !== preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})/', $text, $m)) {
+            return null;
         }
+        if (!checkdate((int) $m[2], (int) $m[1], (int) $m[3])) {
+            return null;
+        }
+        $date = DateTimeImmutable::createFromFormat('!j/n/Y', \sprintf('%d/%d/%d', (int) $m[1], (int) $m[2], (int) $m[3]));
 
-        return null;
+        return false === $date ? null : $date;
     }
 
-    /** "15:30" or an Excel day-fraction → the kickoff time. */
+    /** "15:30" / "9:30" or an Excel day-fraction → the kickoff time. */
     private function parseTime(mixed $value): ?DateTimeImmutable
     {
         if (is_numeric($value) && !\is_string($value)) {
@@ -216,11 +227,21 @@ final class FbiFixtureImporter
         }
 
         $text = $this->stringValue($value);
-        if (1 === preg_match('/^([01]\d|2[0-3]):([0-5]\d)/', $text, $m)) {
+        if (1 === preg_match('/^(\d{1,2}):([0-5]\d)/', $text, $m) && (int) $m[1] <= 23) {
             return new DateTimeImmutable('1970-01-01')->setTime((int) $m[1], (int) $m[2]);
         }
 
         return null;
+    }
+
+    /**
+     * Whole-word containment of the club needle in a team label: both sides are
+     * normalized and space-padded so "bc test" matches "bc test 1" but never
+     * "bc testville" (word boundary, not substring).
+     */
+    private function containsClub(string $label, string $clubNeedle): bool
+    {
+        return str_contains(' ' . $this->normalizeLabel($label) . ' ', ' ' . $clubNeedle . ' ');
     }
 
     /**

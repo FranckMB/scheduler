@@ -8138,8 +8138,8 @@
                         "links": {}
                     }
                 },
-                "summary": "Creates a Team resource.",
-                "description": "Creates a Team resource.",
+                "summary": "Import an FBI fixtures export (.xlsx) for this team",
+                "description": "Multipart upload (field \"file\"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team \u00b7 403 non-management member \u00b7 409 archived season or concurrent duplicate import \u00b7 400 missing/invalid file or columns.",
                 "parameters": [
                     {
                         "name": "id",
@@ -8157,23 +8157,22 @@
                 "requestBody": {
                     "description": "The new Team resource",
                     "content": {
-                        "application/ld+json": {
+                        "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Team.TeamInput"
-                            }
-                        },
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Team.TeamInput"
-                            }
-                        },
-                        "text/html": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Team.TeamInput"
+                                "type": "object",
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ]
                             }
                         }
                     },
-                    "required": true
+                    "required": false
                 }
             }
         },

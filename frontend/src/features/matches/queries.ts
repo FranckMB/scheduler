@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CreateFixtureInput, Fixture, PlaceFixtureInput } from "./api";
@@ -71,6 +72,8 @@ export function useImportFbiFixtures() {
       // The import may find-or-create competitions.
       void queryClient.invalidateQueries({ queryKey: ["competitions"] });
     },
-    onError: () => toast.error("Import FBI impossible"),
+    // Surface the backend's actionable message (missing columns, bad format…),
+    // not a fixed label — same pattern as cockpit/queries.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
