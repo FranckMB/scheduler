@@ -48,6 +48,17 @@ final class ScheduleConstraintBuilder
     /** @var array<string, array<VenueTrainingSlot>> */
     private array $currentAvailabilitiesByVenue = [];
 
+    /**
+     * BCK-04 (assumed by design): the four enrichment deps are nullable ON
+     * PURPOSE, not by omission. In production the container always autowires
+     * them (no runtime null risk). Nullability enables the **light, DB-free
+     * mode**: passing only the logger lets a caller build a payload purely from
+     * the entities handed to `buildPayload(...)`, skipping cache / tag-sync /
+     * sport-category / venue-slot enrichment via the `instanceof` guards below.
+     * The blocking `CrossStack/ContractSchemaTest` relies on this to assert the
+     * backend↔engine payload SHAPE without a database. Forcing them non-nullable
+     * would only push mocks into that critical test for zero prod benefit.
+     */
     public function __construct(
         private readonly LoggerInterface $logger,
         private readonly ?EntityManagerInterface $entityManager = null,
