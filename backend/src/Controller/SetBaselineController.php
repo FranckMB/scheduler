@@ -27,11 +27,14 @@ final class SetBaselineController extends AbstractController implements SeasonSc
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
+        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/schedules/{id}/set-baseline', name: 'api_schedule_set_baseline', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
         try {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
         } catch (Throwable) {
