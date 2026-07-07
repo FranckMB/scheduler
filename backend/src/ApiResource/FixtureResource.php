@@ -68,6 +68,10 @@ class FixtureResource
     #[Groups(['read'])]
     public ?string $kickoffTime = null;
 
+    /** FBI match number (import idempotence key) — null for manual entries. */
+    #[Groups(['read'])]
+    public ?string $externalRef = null;
+
     public static function fromEntity(Fixture $entity): self
     {
         $dto = new self;
@@ -84,6 +88,7 @@ class FixtureResource
         $dto->status = $entity->getStatus()->value;
         $dto->venueId = $entity->getVenueId();
         $dto->kickoffTime = $entity->getKickoffTime()?->format('H:i');
+        $dto->externalRef = $entity->getExternalRef();
 
         return $dto;
     }

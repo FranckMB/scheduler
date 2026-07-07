@@ -133,6 +133,11 @@ même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet*
    **Forme concrète (tranchée)** : un **export FBI par équipe** (fourni par le gestionnaire), **ajouté un à
    un** — **même format** à chaque fois → un seul parseur, appelé par équipe. Pas d'export club global à
    attendre. Dé-risque l'import (patron `FfbbExcelImporter` + format unique connu).
+   > ✅ **Livré palier A PR-4 (2026-07-07) — sur FORMAT SUPPOSÉ** (aucun export réel disponible ; colonnes
+   > actées : Division/Numéro/Équipe 1/Équipe 2/Date de rencontre/Heure/Salle — **à valider contre un vrai
+   > fichier avant fiabilisation**). `FbiFixtureImporter` + `POST /api/teams/{id}/fixtures/import` + dialog
+   > d'upload, équipe choisie à l'upload. Gradué dans
+   > [`../courantes/module-matchs.md`](../courantes/module-matchs.md).
 2. **L'HEURE + la LOCALISATION des matchs extérieurs** (le « 15h30 » et « au gymnase du Clar »). Vient : (a)
    **de la plateforme** si l'adversaire est client et a saisi, (b) **estimée** par tendance sinon, (c) FFBB.
 

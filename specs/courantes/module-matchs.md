@@ -85,6 +85,33 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   (.test.tsx) ; e2e Playwright `tests/e2e/matches.spec.ts` (login → créer → placer / garde hors-fenêtre).
   ⚠ L'API omet les props null → `getFixtures` re-normalise `venueId`/`kickoffTime`/`competitionId` en `null`.
 
+## Palier A — PR-4 (import FBI des rencontres, 2026-07-07)
+
+> ⚠ **FORMAT SUPPOSÉ — aucun export FBI réel n'était disponible.** Colonnes actées avec l'utilisateur :
+> `Division · Numéro · Équipe 1 (recevant) · Équipe 2 (visiteur) · Date de rencontre · Heure · Salle`.
+> **À valider contre un vrai export** (en-têtes, format date/heure, forme des libellés d'équipe, présence du
+> code club) avant fiabilisation — le parseur devra peut-être être ajusté.
+
+- **`FbiFixtureImporter`** (patron `FfbbExcelImporter`) : un export FBI **par équipe** (spec §5), l'équipe est
+  **choisie à l'upload** (jamais devinée). Rapport **par ligne** `{created, skipped, errors[]}` — les lignes
+  valides s'importent même si d'autres échouent.
+  - **HOME/AWAY** : le nom du club (normalisé casse/accents) doit apparaître dans exactement UN des deux
+    libellés ; aucun ou les deux (derby intra-club) → erreur de ligne explicite, jamais de devinette.
+    Limitation connue : le derby se saisit manuellement.
+  - **Idempotence** : `Numéro` → `Fixture.externalRef` + index unique partiel `(club, season, team,
+    external_ref)`. Re-upload = skip (pas d'update de re-programmation en PR-4). Saisies manuelles :
+    `externalRef` null (hors index).
+  - **Division** → `Competition` find-or-create (CHAMPIONSHIP) avec cache intra-fichier.
+  - **Statut toujours `UNPLACED`** : placer exige un gymnase DU CLUB + action explicite (PlacementPanel) ;
+    l'Heure FBI préremplit seulement `kickoffTime` (proposition à domicile, nourrit le radar à l'extérieur).
+  - **Salle : lue mais non stockée** (gymnases adverses = annuaire palier B).
+  - Dates/heures : `jj/mm/aaaa` + `HH:MM` **et** serials Excel ; invalide = erreur de ligne.
+- **Endpoint** `POST /api/teams/{id}/fixtures/import` (multipart, opération API Platform sur `TeamResource`,
+  contrôleur `ImportFixturesController`) — séquence SEC-04 : équipe d'un autre club/saison invisible → 404,
+  membre non-management → 403, saison archivée → 409, non-xlsx → 400.
+- **UI** : bouton « Importer FBI » dans `/matchs` → `ImportFbiDialog` (équipe + fichier, reste ouvert pour
+  afficher le rapport créés/ignorés/erreurs). Invalidation `fixtures` + `competitions`.
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
@@ -94,13 +121,18 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 - PR-2 : `FixtureConflictsApiTest` (phase1) — structure du radar **+ isolation club** (un club ne voit jamais
   les conflits d'un autre). `MatchConflictDetectorTest` (unit) — match↔match, match↔entraînement, projection
   jour de semaine, overlay > base, demi-ouvert, away-sans-kickoff ignoré.
+- PR-4 : `ImportFixturesAuthorizationTest` (phase1, §7.1 tenant) — équipe étrangère 404, non-management 403,
+  saison archivée 409. `FbiFixtureImporterTest` (xlsx générés à la volée — nominal, idempotence, derby,
+  club absent, date invalide, colonnes manquantes, find-or-create). `ImportFixturesApiTest` (multipart HTTP
+  bout-en-bout + re-upload skip). `ImportFbiDialog.test.tsx` (upload + rapport).
 - Unit : `MatchFootprintTest`, `LeagueResolverTest`. Command : `SeedLeagueWindowsCommandTest`. Api :
   `FixtureApiTest`.
 - Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).
 
 ## Reste palier A (à venir)
 
-`Team.preferredMatchWindow` (backend) · **PR-4 import FBI** (la liste des rencontres). **Joueurs** dans le
-moteur de conflits (nécessite un modèle de rattachement joueur→équipes) + paliers B (dérogation + trajet +
-annuaire adverse global) / C (effet réseau) plus tard. ⚠ Envelope strictement HARD & fiable = nécessiterait
-une clé de jointure normalisée équipe↔fenêtre côté backend (aujourd'hui : dégradation indicative en UI).
+`Team.preferredMatchWindow` (backend). **Joueurs** dans le moteur de conflits (nécessite un modèle de
+rattachement joueur→équipes) + paliers B (dérogation + trajet + annuaire adverse global) / C (effet réseau)
+plus tard. ⚠ Envelope strictement HARD & fiable = nécessiterait une clé de jointure normalisée
+équipe↔fenêtre côté backend (aujourd'hui : dégradation indicative en UI). ⚠ Import FBI : format à valider
+contre un vrai export (cf. encadré PR-4) ; update de re-programmation au re-import = évolution.

@@ -24,6 +24,9 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_fixture_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_fixture_team', columns: ['team_id'])]
 #[ORM\Index(name: 'idx_fixture_date', columns: ['match_date'])]
+// Partial-unique: FBI import idempotence — one fixture per FBI number per team
+// (team-scoped so an intra-club derby can exist once per team's export).
+#[ORM\UniqueConstraint(name: 'uniq_fixture_external_ref', columns: ['club_id', 'season_id', 'team_id', 'external_ref'], options: ['where' => '(external_ref IS NOT NULL)'])]
 #[ORM\HasLifecycleCallbacks]
 class Fixture implements TenantOwnedInterface
 {
@@ -73,6 +76,13 @@ class Fixture implements TenantOwnedInterface
     /** Home: the placed kickoff. Away: the estimated kickoff (or null). */
     #[ORM\Column(type: 'time_immutable', nullable: true)]
     private ?DateTimeImmutable $kickoffTime = null;
+
+    /**
+     * FBI match number (import idempotence key) — null for manually entered
+     * fixtures. Unique per (club, season, team) via a partial index.
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $externalRef = null;
 
     public function __construct()
     {
@@ -240,6 +250,18 @@ class Fixture implements TenantOwnedInterface
     public function getKickoffTime(): ?DateTimeImmutable
     {
         return $this->kickoffTime;
+    }
+
+    public function getExternalRef(): ?string
+    {
+        return $this->externalRef;
+    }
+
+    public function setExternalRef(?string $externalRef): self
+    {
+        $this->externalRef = $externalRef;
+
+        return $this;
     }
 
     public function setKickoffTime(?DateTimeImmutable $kickoffTime): self

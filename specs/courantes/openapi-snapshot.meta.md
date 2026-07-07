@@ -1,7 +1,10 @@
-Last verified @ feat/matchs-palier-a-pr2 2026-07-07
+Last verified @ feat/matchs-palier-a-pr4 2026-07-07
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **60 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **61 paths.**
 Changements récents :
+- **Module matchs palier A PR-4 (2026-07-07)** : `POST /api/teams/{id}/fixtures/import` (opération API
+  Platform custom sur `TeamResource`, patron `clubs/{id}/import-teams`) — import FBI des rencontres,
+  multipart. `FixtureResource.externalRef` exposé en lecture. Voir [`module-matchs.md`](module-matchs.md).
 - **Module matchs palier A PR-2 (2026-07-07)** : route custom `GET /api/fixtures/conflicts`
   (`FixtureConflictsController`, ajoutée à `CustomRoutesOpenApiFactory`) — radar de conflits coach à la volée.
   Voir [`module-matchs.md`](module-matchs.md).

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CreateFixtureInput, Fixture, PlaceFixtureInput } from "./api";
@@ -59,5 +60,20 @@ export function usePlaceFixture() {
     mutationFn: ({ fixture, input }: { fixture: Fixture; input: PlaceFixtureInput }) => matchesApi.placeFixture(fixture, input),
     onSuccess: () => invalidateFixtures(queryClient),
     onError: () => toast.error("Placement impossible"),
+  });
+}
+
+export function useImportFbiFixtures() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, file }: { teamId: string; file: File }) => matchesApi.importFbiFixtures(teamId, file),
+    onSuccess: () => {
+      invalidateFixtures(queryClient);
+      // The import may find-or-create competitions.
+      void queryClient.invalidateQueries({ queryKey: ["competitions"] });
+    },
+    // Surface the backend's actionable message (missing columns, bad format…),
+    // not a fixed label — same pattern as cockpit/queries.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
