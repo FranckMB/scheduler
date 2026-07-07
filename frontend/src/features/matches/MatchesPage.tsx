@@ -12,7 +12,7 @@ import { ImportFbiDialog } from "./ImportFbiDialog";
 import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
 import { PlacementPanel } from "./PlacementPanel";
-import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, useTeams, useVenues } from "./queries";
+import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeams, useVenues } from "./queries";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
@@ -27,6 +27,7 @@ export function MatchesPage() {
   const leagueWindows = useLeagueWindows();
   const conflicts = useConflicts();
   const teams = useTeams();
+  const priorityTiers = usePriorityTiers();
   const venues = useVenues();
   const categories = useCategories();
   const coaches = useCoaches();
@@ -151,8 +152,8 @@ export function MatchesPage() {
         </div>
       </div>
 
-      {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
-      {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
+      {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
+      {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
     </div>
   );
 }

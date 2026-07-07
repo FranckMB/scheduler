@@ -4,8 +4,9 @@ import { type FormEvent, useRef, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { TeamSelect } from "@/shared/components/ui/team-select";
 
-import type { Coach, CoachPlayerMembership, Team, TeamCoach, TeamCoachRole } from "../api";
+import type { Coach, CoachPlayerMembership, PriorityTier, Team, TeamCoach, TeamCoachRole } from "../api";
 import {
   useCreateCoach,
   useCreateCoachPlayer,
@@ -13,6 +14,7 @@ import {
   useDeleteCoach,
   useDeleteCoachPlayer,
   useDeleteTeamCoach,
+  usePriorityTiers,
   useUpdateCoach,
   useWizardCoachPlayers,
   useWizardCoaches,
@@ -29,12 +31,13 @@ function payload(coach: Coach, patch: Partial<Coach>) {
 interface CardProps {
   coach: Coach;
   teams: Team[];
+  tiers: PriorityTier[];
   teamName: Map<string, string>;
   coachLinks: TeamCoach[];
   playerLinks: CoachPlayerMembership[];
 }
 
-function CoachCard({ coach, teams, teamName, coachLinks, playerLinks }: CardProps) {
+function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: CardProps) {
   const update = useUpdateCoach();
   const del = useDeleteCoach();
   const addTeamCoach = useCreateTeamCoach();
@@ -106,13 +109,7 @@ function CoachCard({ coach, teams, teamName, coachLinks, playerLinks }: CardProp
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Select aria-label="Équipe" className="h-8 w-40" value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)}>
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <TeamSelect aria-label="Équipe" className="h-8 w-40" teams={teams} tiers={tiers} value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)} />
         <Select aria-label="Rôle" className="h-8 w-28" value={linkRole} onChange={(e) => setLinkRole(e.target.value as TeamCoachRole | "PLAYER")}>
           <option value="MAIN">Coach</option>
           <option value="ASSISTANT">Adjoint</option>
@@ -139,6 +136,7 @@ export function CoachesStep() {
 function CoachesEditor() {
   const { data: coaches = [] } = useWizardCoaches();
   const { data: teams = [] } = useWizardTeams();
+  const { data: tiers = [] } = usePriorityTiers();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const create = useCreateCoach();
@@ -188,6 +186,7 @@ function CoachesEditor() {
               key={coach.id}
               coach={coach}
               teams={teams}
+              tiers={tiers}
               teamName={teamName}
               coachLinks={teamCoaches.filter((l) => l.coachId === coach.id)}
               playerLinks={coachPlayers.filter((l) => l.coachId === coach.id)}

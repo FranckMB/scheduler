@@ -2,23 +2,23 @@ import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
+import { TeamSelect } from "@/shared/components/ui/team-select";
 
-import type { ImportFbiResult, Team } from "./api";
+import type { ImportFbiResult, PriorityTier, Team } from "./api";
 import { useImportFbiFixtures } from "./queries";
 
 interface ImportFbiDialogProps {
   teams: Team[];
+  tiers: PriorityTier[];
   onClose: () => void;
 }
-
-const fieldClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
 
 /**
  * Upload one FBI export (.xlsx) for ONE team — the team is chosen here, never
  * guessed from the file. Stays open after the import to show the per-row report
  * (created / skipped / errors), which is the point of the feedback.
  */
-export function ImportFbiDialog({ teams, onClose }: ImportFbiDialogProps) {
+export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps) {
   const importFbi = useImportFbiFixtures();
   const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -42,13 +42,7 @@ export function ImportFbiDialog({ teams, onClose }: ImportFbiDialogProps) {
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted-foreground">Équipe</span>
-          <select aria-label="Équipe" className={fieldClass} value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <TeamSelect aria-label="Équipe" teams={teams} tiers={tiers} value={teamId} onChange={(e) => setTeamId(e.target.value)} />
         </label>
 
         <label className="flex flex-col gap-1 text-sm">

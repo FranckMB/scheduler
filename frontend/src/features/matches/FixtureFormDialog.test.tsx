@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { Competition, Team } from "./api";
+import type { Competition, PriorityTier, Team } from "./api";
 import { FixtureFormDialog } from "./FixtureFormDialog";
 
 const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
@@ -14,8 +14,12 @@ vi.mock("./queries", () => ({
 }));
 
 const teams: Team[] = [
-  { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null },
-  { id: "team-2", name: "Seniors", sportCategoryId: "cat2", level: null, gender: null },
+  { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null, priorityTierId: 3, tierOrder: 0 },
+  { id: "team-2", name: "Seniors", sportCategoryId: "cat2", level: null, gender: null, priorityTierId: 1, tierOrder: 0 },
+];
+const tiers: PriorityTier[] = [
+  { id: 1, label: "S", name: "Fanion", color: null },
+  { id: 3, label: "B", name: "Moyenne", color: null },
 ];
 const competitions: Competition[] = [{ id: "comp-1", teamId: "team-1", name: "Championnat U13", competitionType: "CHAMPIONSHIP" }];
 
@@ -24,7 +28,7 @@ beforeEach(() => mutate.mockClear());
 describe("FixtureFormDialog", () => {
   it("creates a friendly (no competition → competitionId null)", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<FixtureFormDialog teams={teams} competitions={[]} onClose={vi.fn()} />);
+    renderWithProviders(<FixtureFormDialog teams={teams} tiers={tiers} competitions={[]} onClose={vi.fn()} />);
 
     await user.type(screen.getByLabelText("Date"), "2026-11-01");
     await user.type(screen.getByLabelText("Adversaire"), "Amis");
@@ -36,7 +40,7 @@ describe("FixtureFormDialog", () => {
 
   it("keeps Créer disabled until the required fields are filled", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<FixtureFormDialog teams={teams} competitions={[]} onClose={vi.fn()} />);
+    renderWithProviders(<FixtureFormDialog teams={teams} tiers={tiers} competitions={[]} onClose={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Créer" })).toBeDisabled();
     await user.type(screen.getByLabelText("Date"), "2026-11-01");
@@ -46,7 +50,7 @@ describe("FixtureFormDialog", () => {
 
   it("drops the previous team's competition when the team changes", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<FixtureFormDialog teams={teams} competitions={competitions} onClose={vi.fn()} />);
+    renderWithProviders(<FixtureFormDialog teams={teams} tiers={tiers} competitions={competitions} onClose={vi.fn()} />);
 
     // team-1 is selected by default → pick its competition, then switch to team-2.
     await user.selectOptions(screen.getByLabelText("Compétition"), "comp-1");

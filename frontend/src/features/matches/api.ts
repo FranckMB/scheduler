@@ -1,5 +1,5 @@
 import { api } from "@/shared/api/client";
-import { collectionAll } from "@/shared/api/collection";
+import { collection, collectionAll } from "@/shared/api/collection";
 
 /**
  * Matches read/write API (module matchs, palier A PR-3). Tenant (club) + active
@@ -100,6 +100,17 @@ export interface Team {
   sportCategoryId: string;
   level: string | null;
   gender: string | null;
+  // Priority tier (S/A/B/C/D) — used to group teams in selectors, same
+  // découpage as the wizard's teams step.
+  priorityTierId: number;
+  tierOrder: number;
+}
+
+export interface PriorityTier {
+  id: number;
+  label: string;
+  name: string;
+  color: string | null;
 }
 
 export interface Venue {
@@ -148,6 +159,9 @@ function normalizeFixture(raw: Fixture): Fixture {
 export const getFixtures = async (): Promise<Fixture[]> => (await collectionAll<Fixture>("fixtures")).map(normalizeFixture);
 export const getCompetitions = (): Promise<Competition[]> => collectionAll<Competition>("competitions");
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
+// Tiers are a tiny fixed set (S/A/B/C/D) and their id is numeric, so use the
+// unpaginated `collection` (collectionAll constrains T to a string id).
+export const getPriorityTiers = (): Promise<PriorityTier[]> => collection<PriorityTier>("priority_tiers");
 export const getVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
 export const getCategories = (): Promise<Category[]> => collectionAll<Category>("sport_categories");
 export const getCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");

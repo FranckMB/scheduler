@@ -5,11 +5,13 @@ import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { TeamSelect } from "@/shared/components/ui/team-select";
+import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
-import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, Team, Venue } from "../api";
+import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, PriorityTier, Team, Venue } from "../api";
 import { DAYS, dayLabel, hhmm } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
 const FAMILIES: { key: ConstraintFamily; label: string }[] = [
@@ -50,7 +52,7 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
 }
 
 /** Reserve an existing availability slot for a team (applied as a HARD lock at generation). */
-function ReservationPanel({ teams, venues }: { teams: Team[]; venues: Venue[] }) {
+function ReservationPanel({ teams, tiers, venues }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[] }) {
   const { data: slots = [] } = useVenueSlots();
   const { reservations, addReservation, removeReservation } = useWizardStore();
   const [teamId, setTeamId] = useState("");
@@ -73,13 +75,7 @@ function ReservationPanel({ teams, venues }: { teams: Team[]; venues: Venue[] })
     <div>
       <p className="mb-3 text-xs text-muted-foreground">Fixez une équipe sur un créneau précis : le solveur devra l'y placer (verrou). Appliqué au lancement de la génération.</p>
       <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Select aria-label="Équipe" className="h-8 w-44" value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)}>
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <TeamSelect aria-label="Équipe" className="h-8 w-44" teams={teams} tiers={tiers} value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)} />
         <span className="text-xs text-muted-foreground">sur</span>
         <Select aria-label="Créneau" className="h-8 w-64" value={slotId} onChange={(e) => setSlotId(e.target.value)}>
           <option value="">— créneau —</option>
@@ -120,6 +116,7 @@ export function ConstraintsStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
+  const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: venues = [] } = useWizardVenues();
@@ -222,13 +219,15 @@ export function ConstraintsStep() {
           ))}
         </optgroup>
       ) : null}
-      <optgroup label="Équipes">
-        {teams.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </optgroup>
+      {groupTeamsByTier(teams, tiers).map((group) => (
+        <optgroup key={group.tier?.id ?? "orphan"} label={tierGroupLabel(group.tier)}>
+          {group.teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
     </Select>
   );
 
@@ -274,7 +273,7 @@ export function ConstraintsStep() {
       </div>
 
       {"reserve" === mode ? (
-        <ReservationPanel teams={teams} venues={venues} />
+        <ReservationPanel teams={teams} tiers={tiers} venues={venues} />
       ) : (
         <>
           {/* Per-family add form */}

@@ -19,8 +19,14 @@ vi.mock("./api", () => ({
   getCompetitions: vi.fn(() => Promise.resolve([])),
   getTeams: vi.fn(() =>
     Promise.resolve([
-      { id: "team-1", name: "U13", sportCategoryId: "cat-1", level: null, gender: null },
-      { id: "team-2", name: "Seniors", sportCategoryId: "cat-2", level: null, gender: null },
+      { id: "team-1", name: "U13", sportCategoryId: "cat-1", level: null, gender: null, priorityTierId: 3, tierOrder: 0 },
+      { id: "team-2", name: "Seniors", sportCategoryId: "cat-2", level: null, gender: null, priorityTierId: 1, tierOrder: 0 },
+    ]),
+  ),
+  getPriorityTiers: vi.fn(() =>
+    Promise.resolve([
+      { id: 1, label: "S", name: "Fanion", color: null },
+      { id: 3, label: "B", name: "Moyenne", color: null },
     ]),
   ),
   getVenues: vi.fn(() => Promise.resolve([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }])),

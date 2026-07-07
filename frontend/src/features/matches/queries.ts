@@ -28,6 +28,10 @@ export function useTeams() {
   return useQuery({ queryKey: ["teams"], queryFn: matchesApi.getTeams, staleTime: 300_000 });
 }
 
+export function usePriorityTiers() {
+  return useQuery({ queryKey: ["priority_tiers"], queryFn: matchesApi.getPriorityTiers, staleTime: 300_000 });
+}
+
 export function useVenues() {
   return useQuery({ queryKey: ["venues"], queryFn: matchesApi.getVenues, staleTime: 300_000 });
 }

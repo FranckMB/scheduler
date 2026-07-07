@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { Team } from "./api";
+import type { PriorityTier, Team } from "./api";
 import { ImportFbiDialog } from "./ImportFbiDialog";
 
 const { importFbiFixtures } = vi.hoisted(() => ({
@@ -16,21 +16,25 @@ const { importFbiFixtures } = vi.hoisted(() => ({
 vi.mock("./api", () => ({ importFbiFixtures }));
 
 const teams: Team[] = [
-  { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null },
-  { id: "team-2", name: "Seniors", sportCategoryId: "cat2", level: null, gender: null },
+  { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null, priorityTierId: 3, tierOrder: 0 },
+  { id: "team-2", name: "Seniors", sportCategoryId: "cat2", level: null, gender: null, priorityTierId: 1, tierOrder: 0 },
+];
+const tiers: PriorityTier[] = [
+  { id: 1, label: "S", name: "Fanion", color: null },
+  { id: 3, label: "B", name: "Moyenne", color: null },
 ];
 
 beforeEach(() => importFbiFixtures.mockClear());
 
 describe("ImportFbiDialog", () => {
   it("disables Importer until a file is picked", () => {
-    renderWithProviders(<ImportFbiDialog teams={teams} onClose={vi.fn()} />);
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Importer" })).toBeDisabled();
   });
 
   it("uploads for the selected team and shows the per-row report", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<ImportFbiDialog teams={teams} onClose={vi.fn()} />);
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
 
     await user.selectOptions(screen.getByLabelText("Équipe"), "team-2");
     const file = new File(["xlsx"], "fbi.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
