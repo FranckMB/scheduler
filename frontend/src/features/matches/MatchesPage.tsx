@@ -87,7 +87,7 @@ export function MatchesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Matchs</h1>
+        <h1 className="border-l-[3px] border-accent pl-3 text-lg font-semibold">Matchs</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
             <Upload className="size-4" />

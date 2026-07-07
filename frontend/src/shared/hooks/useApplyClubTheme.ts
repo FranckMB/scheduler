@@ -13,18 +13,25 @@ import { accentForMode, readableForeground } from "@/shared/lib/color";
 export function useApplyClubTheme(): void {
   const { data: me } = useMe();
   const mode = useThemeStore((s) => s.mode);
-  const accent = me?.club?.accentColor ?? null;
+  const accentLight = me?.club?.accentColor ?? null;
+  const accentDark = me?.club?.accentColorDark ?? null;
   const palette = me?.club?.accentPalette ?? null;
 
   useEffect(() => {
     const root = document.documentElement;
-    if (null === accent) {
+    // Dark mode uses the club's explicit dark accent when set; otherwise it
+    // falls back to deriving a dark-legible tone from the light accent (the
+    // previous single-colour behaviour). Light mode always uses accentLight.
+    const explicitDark = "dark" === mode && null !== accentDark;
+    const base = "dark" === mode ? (accentDark ?? accentLight) : accentLight;
+    if (null === base) {
       root.style.removeProperty("--accent");
       root.style.removeProperty("--accent-foreground");
       root.style.removeProperty("--accent-2");
       return;
     }
-    const c = accentForMode(accent, mode);
+    // An explicit per-mode colour is honoured as chosen; a derived one is adjusted.
+    const c = explicitDark ? base : accentForMode(base, mode);
     root.style.setProperty("--accent", c);
     root.style.setProperty("--accent-foreground", readableForeground(c));
     // Secondary tint (from the logo palette) for signature surfaces later.
@@ -34,5 +41,5 @@ export function useApplyClubTheme(): void {
     } else {
       root.style.removeProperty("--accent-2");
     }
-  }, [accent, palette, mode]);
+  }, [accentLight, accentDark, palette, mode]);
 }

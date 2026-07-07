@@ -125,7 +125,7 @@ export function ProfilePage() {
   return (
     <div className="mx-auto max-w-lg space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Profil</h1>
+        <h1 className="border-l-[3px] border-accent pl-3 text-xl font-semibold">Profil</h1>
         <p className="text-sm text-muted-foreground">
           {data.club?.name ?? "—"} · {data.role ?? "—"}
         </p>

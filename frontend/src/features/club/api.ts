@@ -2,11 +2,13 @@ import { api } from "@/shared/api/client";
 
 export interface AppearancePayload {
   accentColor?: string | null;
+  accentColorDark?: string | null;
   accentPalette?: string[] | null;
 }
 
 export interface AppearanceResult {
   accentColor: string | null;
+  accentColorDark: string | null;
   accentPalette: string[] | null;
 }
 
