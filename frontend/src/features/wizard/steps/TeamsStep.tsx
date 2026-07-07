@@ -7,7 +7,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { TIER_MEANING } from "@/shared/lib/teamTiers";
+import { TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
@@ -41,9 +41,6 @@ const LEVELS: { value: TeamLevel | ""; label: string }[] = [
 /** A team is "competitive" unless it plays at a loisir level (or has none set). */
 const isCompetitive = (level: TeamLevel | null): boolean =>
   null !== level && "LOISIR_ADULTE" !== level && "LOISIR_JEUNE" !== level;
-
-/** Full label for a tier select: "S · Fanion" rather than the bare letter. */
-const tierLabel = (t: PriorityTier): string => `${t.label} · ${TIER_MEANING[t.label] ?? t.name}`;
 
 /** The "Bonus" tier is identified by its label ("D"), not a fixture row id. */
 const isBonusTier = (tiers: PriorityTier[], tierId: number): boolean =>
@@ -184,7 +181,7 @@ function TierZone({ tier, teamIds, teamById, onArrow }: TierZoneProps) {
   return (
     <section>
       <h3 className="mb-1 text-sm font-semibold">
-        {tier.label} · {TIER_MEANING[tier.label] ?? tier.name}
+        {tierGroupLabel(tier)}
       </h3>
       <SortableContext items={teamIds} strategy={verticalListSortingStrategy}>
         <div ref={setNodeRef} className={cn("flex min-h-14 flex-col gap-1.5 rounded-lg border-2 border-dashed p-2 transition-colors", isOver ? "border-accent bg-accent/5" : "border-border")}>
@@ -477,7 +474,7 @@ function TeamsEditor() {
             <Select aria-label="Rang" className="h-8 w-32" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
               {tiers.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {tierLabel(t)}
+                  {tierGroupLabel(t)}
                 </option>
               ))}
             </Select>
@@ -497,7 +494,6 @@ function TeamsEditor() {
                 <span className="w-20">Genre</span>
                 <span className="w-32">Niveau de jeu</span>
                 <span className="w-16">Séances</span>
-                <span className="w-32">Rang</span>
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {tierGroups.map((tier) => {
@@ -505,7 +501,7 @@ function TeamsEditor() {
                 return (
                   <section key={tier.id}>
                     <h3 className="mb-1 text-sm font-semibold">
-                      {tier.label} · {TIER_MEANING[tier.label] ?? tier.name}
+                      {tierGroupLabel(tier)}
                     </h3>
                     <div className="rounded-lg border border-border bg-card px-2">
                       {group.map((team) => (

@@ -17,13 +17,17 @@ interface TeamSelectProps<T extends TeamLike> extends Omit<SelectHTMLAttributes<
  * ranking. Falls back to a flat list when the tiers are not loaded yet.
  */
 export function TeamSelect<T extends TeamLike>({ teams, tiers, placeholder, ...props }: TeamSelectProps<T>) {
-  const groups = tiers.length > 0 ? groupTeamsByTier(teams, tiers) : [];
+  const groups = groupTeamsByTier(teams, tiers);
+  // Group only once real tiers are loaded; until then (or if none match) show a
+  // flat list rather than a single "Autres" optgroup. Either way NO team is
+  // dropped — groupTeamsByTier keeps orphans in a trailing bucket.
+  const grouped = groups.some((group) => null !== group.tier);
   return (
     <Select {...props}>
       {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
-      {groups.length > 0
+      {grouped
         ? groups.map((group) => (
-            <optgroup key={group.tier.id} label={tierGroupLabel(group.tier)}>
+            <optgroup key={group.tier?.id ?? "orphan"} label={tierGroupLabel(group.tier)}>
               {group.teams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}

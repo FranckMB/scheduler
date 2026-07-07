@@ -220,7 +220,7 @@ export function ConstraintsStep() {
         </optgroup>
       ) : null}
       {groupTeamsByTier(teams, tiers).map((group) => (
-        <optgroup key={group.tier.id} label={tierGroupLabel(group.tier)}>
+        <optgroup key={group.tier?.id ?? "orphan"} label={tierGroupLabel(group.tier)}>
           {group.teams.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}

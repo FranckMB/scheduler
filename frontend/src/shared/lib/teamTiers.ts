@@ -27,27 +27,39 @@ export interface TeamLike {
 }
 
 export interface TeamTierGroup<T extends TeamLike> {
-  tier: TierLike;
+  /** null = the trailing "Autres" bucket: teams whose tier is not in the loaded
+   *  set (data drift, or the tiers query not resolved yet). */
+  tier: TierLike | null;
   teams: T[];
 }
 
+/** Label of an "unranked" bucket, used when a team's tier is not loaded/known. */
+export const ORPHAN_TIER_LABEL = "Autres";
+
 /** "S · Fanion" — the label of a tier group (optgroup / zone header). */
-export const tierGroupLabel = (tier: TierLike): string => `${tier.label} · ${TIER_MEANING[tier.label] ?? tier.name}`;
+export const tierGroupLabel = (tier: TierLike | null): string =>
+  null === tier ? ORPHAN_TIER_LABEL : `${tier.label} · ${TIER_MEANING[tier.label] ?? tier.name}`;
 
 /**
  * Teams grouped by the tiers actually used, tiers ordered by importance (id
  * asc), teams within a tier by manual tierOrder then name. Empty tiers are
- * dropped so a selector shows only groups that contain teams.
+ * dropped. **No team is ever lost**: any team whose priorityTierId is absent
+ * from `tiers` (data drift, or `tiers` not loaded yet) lands in a trailing
+ * `tier: null` bucket — a selector must render it or the team would silently
+ * disappear and become unselectable.
  */
 export function groupTeamsByTier<T extends TeamLike>(teams: T[], tiers: TierLike[]): TeamTierGroup<T>[] {
-  const present = new Set(teams.map((t) => t.priorityTierId));
-  return tiers
-    .filter((tier) => present.has(tier.id))
+  const known = new Set(tiers.map((t) => t.id));
+  const byOrderThenName = (a: T, b: T) => a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr");
+
+  const groups: TeamTierGroup<T>[] = tiers
+    .filter((tier) => teams.some((t) => t.priorityTierId === tier.id))
     .sort((a, b) => a.id - b.id)
-    .map((tier) => ({
-      tier,
-      teams: teams
-        .filter((t) => t.priorityTierId === tier.id)
-        .sort((a, b) => a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr")),
-    }));
+    .map((tier) => ({ tier, teams: teams.filter((t) => t.priorityTierId === tier.id).sort(byOrderThenName) }));
+
+  const orphans = teams.filter((t) => !known.has(t.priorityTierId)).sort(byOrderThenName);
+  if (orphans.length > 0) {
+    groups.push({ tier: null, teams: orphans });
+  }
+  return groups;
 }

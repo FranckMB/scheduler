@@ -29,6 +29,14 @@ describe("TeamSelect", () => {
     expect(screen.getByLabelText("Équipe").querySelectorAll("option")).toHaveLength(2);
   });
 
+  it("renders an orphan team (unknown tier) under 'Autres' — never dropped", () => {
+    const withOrphan: TeamLike[] = [...teams, { id: "x", name: "Mystère", priorityTierId: 99, tierOrder: 0 }];
+    render(<TeamSelect aria-label="Équipe" teams={withOrphan} tiers={tiers} value="s1" onChange={() => {}} />);
+    const groups = screen.getByLabelText("Équipe").querySelectorAll("optgroup");
+    expect([...groups].map((g) => g.label)).toEqual(["S · Fanion", "B · Moyenne", "Autres"]);
+    expect(screen.getByRole("option", { name: "Mystère" })).toBeInTheDocument();
+  });
+
   it("renders a leading placeholder option when provided", () => {
     render(<TeamSelect aria-label="Équipe" teams={teams} tiers={tiers} placeholder="—" value="" onChange={() => {}} />);
     const options = screen.getByLabelText("Équipe").querySelectorAll("option");
