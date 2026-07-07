@@ -19,7 +19,10 @@ const FAMILIES: { key: ConstraintFamily; label: string }[] = [
   { key: "COACH_AVAILABILITY", label: "Dispo coach" },
 ];
 
-const RULES: ConstraintRuleType[] = ["PREFERRED", "HARD", "BONUS", "LOCK"];
+// BONUS removed from the offer (audit ENG-12): it never had a distinct
+// semantic anywhere (no weight, no engine branch) — legacy rows are honored as
+// PREFERRED by the engine. RULE_LABEL keeps it for displaying existing rows.
+const RULES: ConstraintRuleType[] = ["PREFERRED", "HARD", "LOCK"];
 
 /** Libellés gestionnaire (jamais l'enum brut à l'écran). */
 const RULE_LABEL: Record<ConstraintRuleType, string> = {
@@ -189,7 +192,8 @@ export function ConstraintsStep() {
       scope: "COACH",
       scopeTargetId: coachId,
       family,
-      ruleType,
+      // Always hard: the engine enforces coach availability unconditionally.
+      ruleType: "HARD",
       config: { coachId, unavailableDays: [...days] },
     };
   }
@@ -329,13 +333,20 @@ export function ConstraintsStep() {
           </>
         )}
 
-        <Select aria-label="Règle" className="h-8 w-28" value={ruleType} onChange={(e) => setRuleType(e.target.value as ConstraintRuleType)}>
-          {RULES.map((r) => (
-            <option key={r} value={r}>
-              {RULE_LABEL[r]}
-            </option>
-          ))}
-        </Select>
+        {"COACH_AVAILABILITY" === family ? (
+          // A coach availability is ALWAYS enforced hard by the solver (a person
+          // cannot be in two places) — offering a rule selector here was a lie
+          // (audit ENG-10..13 review); the payload pins HARD below.
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Obligatoire</span>
+        ) : (
+          <Select aria-label="Règle" className="h-8 w-28" value={ruleType} onChange={(e) => setRuleType(e.target.value as ConstraintRuleType)}>
+            {RULES.map((r) => (
+              <option key={r} value={r}>
+                {RULE_LABEL[r]}
+              </option>
+            ))}
+          </Select>
+        )}
         <Button size="icon" className="ml-auto size-8" onClick={add} disabled={create.isPending} title="Ajouter la contrainte" aria-label="Ajouter la contrainte">
           <Plus className="size-4" />
         </Button>

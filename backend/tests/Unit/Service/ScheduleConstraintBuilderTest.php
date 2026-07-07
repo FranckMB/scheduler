@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Service;
 
+use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Team;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Service\ScheduleConstraintBuilder;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -128,6 +133,74 @@ final class ScheduleConstraintBuilderTest extends TestCase
         self::assertSame(2, $result[0]['metadata']['defaultMinSessions']);
     }
 
+    public function testClubWideConstraintExpandsToEveryTeam(): void
+    {
+        // Audit P0.1 (dead "Toutes les équipes" cell): a CLUB-scope TIME/DAY/
+        // FACILITY rule must reach the engine as one TEAM constraint per team —
+        // the engine only applies these families to a team target.
+        $constraint = (new Constraint)
+            ->setId('c-club')
+            ->setName('Toutes les équipes · pas mercredi')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::DAY)
+            ->setRuleType(ConstraintRuleType::PREFERRED)
+            ->setConfig(['forbiddenDays' => [3]])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+        $teams = [$this->team('team-a'), $this->team('team-b')];
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', $teams);
+
+        self::assertCount(2, $serialized);
+        self::assertSame(['team-a', 'team-b'], array_column($serialized, 'scopeTargetId'));
+        foreach ($serialized as $row) {
+            self::assertSame('TEAM', $row['scope']);
+            self::assertSame('DAY', $row['family']);
+            self::assertSame('PREFERRED', $row['ruleType']);
+            self::assertSame(['forbiddenDays' => [3]], $row['config']);
+        }
+    }
+
+    public function testEmptyTagResolutionIsANoOpNeverAClubWideBan(): void
+    {
+        // Review NR: a HARD "prefer venue" on a tag resolving to ZERO teams used
+        // to skip the positive constraints but still run the "forbidden outside
+        // the tag" loop — banning the venue for EVERY team of the club.
+        $this->teamTagRepository->method('findOneBy')->willReturn(null);
+
+        $constraint = (new Constraint)
+            ->setId('c-tag')
+            ->setName('Groupe fantôme · préfère Gymnase A')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['targetTag' => 'FANTOME', 'preferredVenueId' => 'v-1'])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', [$this->team('team-a'), $this->team('team-b')]);
+
+        self::assertSame([], $serialized, 'an unresolvable tag must emit NOTHING (no club-wide forbiddenVenueId)');
+    }
+
+    public function testCoachAvailabilityIsNeverClubExpanded(): void
+    {
+        $constraint = (new Constraint)
+            ->setId('c-coach')
+            ->setName('coach indispo')
+            ->setScope(ConstraintScope::COACH)
+            ->setFamily(ConstraintFamily::COACH_AVAILABILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['coachId' => 'co-1', 'unavailableDays' => [1]])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', [$this->team('team-a')]);
+
+        self::assertCount(1, $serialized);
+        self::assertSame('COACH', $serialized[0]['scope']);
+    }
+
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
@@ -141,6 +214,32 @@ final class ScheduleConstraintBuilderTest extends TestCase
         ]);
 
         $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager);
+    }
+
+    private function team(string $id): Team
+    {
+        $team = new Team;
+        $team->setId($id);
+        $team->setName($id);
+
+        return $team;
+    }
+
+    /**
+     * @param list<Constraint> $constraints
+     * @param list<Team>       $teams
+     *
+     * @return array<array<string, mixed>>
+     */
+    private function invokeSerializeUnified(array $constraints, string $seasonId, string $clubId, array $teams): array
+    {
+        $method = new ReflectionMethod($this->builder, 'serializeUnifiedConstraints');
+        $method->setAccessible(true);
+
+        /** @var array<array<string, mixed>> $result */
+        $result = $method->invoke($this->builder, $constraints, $seasonId, $clubId, $teams);
+
+        return $result;
     }
 
     /** @return list<string> */

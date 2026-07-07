@@ -606,21 +606,24 @@ final class ScheduleConstraintBuilder
             if (ConstraintScope::CLUB === $scope && null !== $targetTag && '' !== $targetTag) {
                 $teamIds = $this->resolveTagToTeamIds($targetTag, $seasonId, $clubId);
 
+                // An empty resolution (typo, tags not re-applied after a season
+                // rollover) must be a NO-OP: running the "forbidden outside the
+                // tag" loop below with zero tagged teams would ban the venue
+                // for EVERY team of the club (audit review).
+                if ([] === $teamIds) {
+                    $this->logger->warning('Tag "{tag}" resolves to no team — constraint {id} skipped.', [
+                        'tag' => $targetTag,
+                        'id' => $constraint->getId(),
+                    ]);
+
+                    continue;
+                }
+
                 foreach ($teamIds as $teamId) {
                     $resolvedConfig = $config;
                     unset($resolvedConfig['targetTag']);
 
-                    $result[] = [
-                        'id' => $constraint->getId() . ':' . $teamId,
-                        'scope' => ConstraintScope::TEAM->value,
-                        'scopeTargetId' => $teamId,
-                        'family' => $constraint->getFamily()->value,
-                        'ruleType' => $constraint->getRuleType()->value,
-                        'name' => $constraint->getName(),
-                        'config' => $resolvedConfig,
-                        'sortOrder' => $constraint->getSortOrder(),
-                        'isActive' => $constraint->getIsActive(),
-                    ];
+                    $result[] = $this->serializeConstraintRow($constraint, $constraint->getId() . ':' . $teamId, $teamId, $resolvedConfig);
                 }
 
                 // When HARD + preferredVenueId: also forbid the venue for all teams NOT in the tag
@@ -630,24 +633,36 @@ final class ScheduleConstraintBuilder
                         if (isset($tagTeamIdSet[$team->getId()])) {
                             continue;
                         }
-                        $result[] = [
-                            'id' => $constraint->getId() . ':forbidden:' . $team->getId(),
-                            'scope' => ConstraintScope::TEAM->value,
-                            'scopeTargetId' => $team->getId(),
-                            'family' => $constraint->getFamily()->value,
-                            'ruleType' => ConstraintRuleType::HARD->value,
-                            'name' => $constraint->getName() . ' (interdit hors tag)',
-                            'config' => ['forbiddenVenueId' => $config['preferredVenueId']],
-                            'sortOrder' => $constraint->getSortOrder(),
-                            'isActive' => $constraint->getIsActive(),
-                        ];
+                        $result[] = $this->serializeConstraintRow(
+                            $constraint,
+                            $constraint->getId() . ':forbidden:' . $team->getId(),
+                            $team->getId(),
+                            ['forbiddenVenueId' => $config['preferredVenueId']],
+                            name: $constraint->getName() . ' (interdit hors tag)',
+                            ruleType: ConstraintRuleType::HARD->value,
+                        );
                     }
                 }
 
                 continue;
             }
 
-            // Pass through as-is (TEAM, COACH, FACILITY, or CLUB without targetTag)
+            // Resolve a club-wide TIME/DAY/FACILITY rule ("Toutes les équipes")
+            // into one TEAM constraint per team: the engine only applies these
+            // families to a team target — a CLUB-scope one was a silent no-op
+            // (audit P0.1, dead "all teams" cell). Same expansion pattern as
+            // CLUB+targetTag above. COACH_AVAILABILITY is coach-scoped and
+            // FACILITY_CAPACITY venue-keyed → both pass through untouched.
+            $expandableFamilies = [ConstraintFamily::TIME, ConstraintFamily::DAY, ConstraintFamily::FACILITY];
+            if (ConstraintScope::CLUB === $scope && \in_array($constraint->getFamily(), $expandableFamilies, true)) {
+                foreach ($teams as $team) {
+                    $result[] = $this->serializeConstraintRow($constraint, $constraint->getId() . ':' . $team->getId(), $team->getId(), $config);
+                }
+
+                continue;
+            }
+
+            // Pass through as-is (TEAM, COACH, or CLUB variants handled above)
             $result[] = [
                 'id' => $constraint->getId(),
                 'scope' => $scope->value,
@@ -662,6 +677,29 @@ final class ScheduleConstraintBuilder
         }
 
         return $result;
+    }
+
+    /**
+     * One serialized TEAM-scope constraint row (the shared shape of the three
+     * expansion paths — tag, forbidden-outside-tag, club-wide).
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return array<string, mixed>
+     */
+    private function serializeConstraintRow(Constraint $constraint, string $id, string $teamId, array $config, ?string $name = null, ?string $ruleType = null): array
+    {
+        return [
+            'id' => $id,
+            'scope' => ConstraintScope::TEAM->value,
+            'scopeTargetId' => $teamId,
+            'family' => $constraint->getFamily()->value,
+            'ruleType' => $ruleType ?? $constraint->getRuleType()->value,
+            'name' => $name ?? $constraint->getName(),
+            'config' => $config,
+            'sortOrder' => $constraint->getSortOrder(),
+            'isActive' => $constraint->getIsActive(),
+        ];
     }
 
     /**

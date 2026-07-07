@@ -17,7 +17,7 @@ from .model import _time_to_minutes
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V6"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -26,6 +26,10 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "B": 100,
         "session_count": 20,
         "preferred": 60,
+        # Soft "avoid this venue" (ENG-11): a true malus on the avoided slot —
+        # a complement bonus would hand the team a flat objective advantage at
+        # every other venue and bias cross-team allocation.
+        "avoided_venue": -60,
         "preferred_day": 30,
         "preferred_time": 30,
         "C": 10,
@@ -81,6 +85,7 @@ CHAINING_TIER_WEIGHTS = MappingProxyType(
 TIER_WEIGHT_NAMES = ("S", "A", "B", "C", "D")
 BONUS_WEIGHT_NAMES = (
     "preferred",
+    "avoided_venue",
     "preferred_day",
     "preferred_time",
     "rest",
@@ -348,22 +353,83 @@ def add_preferred_day_bonus(
     time_windows: Iterable[Any],
     weights: Mapping[str, int],
 ) -> list[tuple[BoolVarLike, str]]:
-    """Return soft objective terms for preferred-day windows."""
+    """Return soft objective terms for preferred-day windows.
+
+    Two config shapes are honored (ENG-10 — the wizard only ever emits
+    ``forbiddenDays`` whatever the ruleType, so a PREFERRED day rule used to be
+    a silent placebo when only ``preferredDays`` was read):
+    - ``preferredDays``: bonus on those days;
+    - ``forbiddenDays`` on a PREFERRED rule: bonus on every day OUTSIDE the set
+      — the positive complement of "avoid these days" (equivalent malus, keeps
+      all objective coefficients positive). ``preferredDays`` wins when both
+      are present.
+    """
     del model
 
-    def criterion(config: Mapping[str, Any]) -> set[int] | None:
+    def day_set(config: Mapping[str, Any], key: str, snake: str) -> set[int]:
         days: set[int] = set()
-        for value in config.get("preferredDays") or config.get("preferred_days") or ():
+        for value in config.get(key) or config.get(snake) or ():
             try:
                 days.add(int(_scalar_id(value)))
             except (TypeError, ValueError):
                 continue
-        return days or None
+        return days
+
+    # AGGREGATE the PREFERRED DAY windows per team FIRST: two independent
+    # "avoid Monday" + "avoid Wednesday" complements would otherwise cancel
+    # each other through the shared per-slot dedup (each window bonusing the
+    # other's avoided day → flat objective, both preferences ignored). One
+    # synthetic window per team, avoided = union, preferred = union.
+    preferred_by_team: dict[str, set[int]] = {}
+    avoided_by_team: dict[str, set[int]] = {}
+    for time_window in time_windows:
+        if _get(time_window, "ruleType", "rule_type", default=None) != "PREFERRED":
+            continue
+        if _get(time_window, "family", default=None) != "DAY":
+            continue
+        team_id = _scalar_id(
+            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
+        )
+        if team_id is None:
+            continue
+        config = _get(time_window, "config", default={}) or {}
+        preferred_by_team.setdefault(str(team_id), set()).update(day_set(config, "preferredDays", "preferred_days"))
+        avoided_by_team.setdefault(str(team_id), set()).update(day_set(config, "forbiddenDays", "forbidden_days"))
+
+    synthetic_windows: list[dict[str, Any]] = []
+    for team_id in preferred_by_team.keys() | avoided_by_team.keys():
+        preferred = preferred_by_team.get(team_id) or set()
+        avoided = avoided_by_team.get(team_id) or set()
+        if not preferred and not avoided:
+            continue
+        synthetic_windows.append({
+            "ruleType": "PREFERRED",
+            "family": "DAY",
+            "scope_target_id": team_id,
+            "config": {"preferredDays": sorted(preferred), "forbiddenDays": sorted(avoided)},
+        })
+
+    def criterion(config: Mapping[str, Any]) -> tuple[set[int], set[int]] | None:
+        preferred = day_set(config, "preferredDays", "preferred_days")
+        avoided = day_set(config, "forbiddenDays", "forbidden_days")
+        if not preferred and not avoided:
+            return None
+        return (preferred, avoided)
+
+    def matches(day: int | None, _start: Any, crit: tuple[set[int], set[int]]) -> bool:
+        if day is None:
+            return False
+        preferred, avoided = crit
+        if preferred:
+            # Explicit preferred days win; a day both preferred and avoided is
+            # contradictory — preferred keeps it.
+            return day in preferred
+        return day not in avoided
 
     return _add_preferred_bonus(
-        x, time_windows, weights, family="DAY", weight_name="preferred_day",
+        x, synthetic_windows, weights, family="DAY", weight_name="preferred_day",
         criterion=criterion,
-        matches=lambda day, _start, days: day is not None and day in days,
+        matches=matches,
     )
 
 

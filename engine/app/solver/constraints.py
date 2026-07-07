@@ -38,11 +38,13 @@ class ParsedConstraints(TypedDict):
     coach_unavailability: dict[str, set[int]]
     forced_venues: dict[str, str]
     preferred_venues: dict[str, str]
+    avoided_venues: list[dict[str, str]]
     venue_capacity_caps: dict[str, int]
     time_windows: list[dict[str, Any]]
     priority_tiers: dict[int, int]
     team_coach_map: dict[str, list[str]]
     team_player_map: dict[str, list[str]]
+    parse_warnings: list[dict[str, Any]]
 
 # Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
 # Used to warn ONLY on genuine contract drift, not on recognised families whose
@@ -1545,6 +1547,45 @@ def _day_int_set(values: Any) -> set[int]:
     return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
 
 
+def _set_venue_rule(
+    rules: dict[str, str],
+    team_id: str,
+    venue_id: str,
+    constraint: dict[str, Any],
+    warnings: list[dict[str, Any]],
+) -> None:
+    """Single-venue-per-team rule maps are last-wins by structure — surface a
+    conflicting overwrite instead of silently dropping the earlier rule (the
+    same silent-overwrite class as ENG-13)."""
+    existing = rules.get(team_id)
+    if existing is not None and existing != venue_id:
+        warnings.append(_not_honored_warning(
+            constraint, "INFO",
+            "Plusieurs règles de gymnase pour la même équipe — la dernière remplace la précédente.",
+        ))
+    rules[team_id] = venue_id
+
+
+def _not_honored_warning(constraint: dict[str, Any], severity: str, message: str) -> dict[str, Any]:
+    """A diagnostics entry for a constraint the solver cannot (fully) honor —
+    same shape as the hard-conflict diagnostics merged by main.py."""
+    constraint_id = constraint.get("id")
+
+    # Shape must match DiagnosticSchema (no extra keys) — the source constraint
+    # id rides in the diagnostic id; the manager-facing message uses the
+    # constraint's human name when available.
+    label = constraint.get("name") or constraint_id
+    return {
+        "id": f"constraint_not_honored-{constraint_id}",
+        "type": "constraint_not_honored",
+        "severity": severity,
+        "teamId": None,
+        "message": f"{message} (contrainte « {label} »)",
+        "suggestions": [],
+        "createdAt": datetime.now(UTC).isoformat(),
+    }
+
+
 def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints:
     """Parse v2 constraints[] array into typed, solver-ready rule collections."""
 
@@ -1554,12 +1595,19 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
         "coach_unavailability": {},
         "forced_venues": {},
         "preferred_venues": {},
+        "avoided_venues": [],
         "venue_capacity_caps": {},
         "time_windows": [],
         "priority_tiers": {},
         "team_coach_map": {},
         "team_player_map": {},
+        "parse_warnings": [],
     }
+
+    # Per-coach availability accumulators (merged after the loop — see the
+    # COACH_AVAILABILITY branch for the union/intersection algebra).
+    coach_blacklists: dict[str, set[int]] = {}
+    coach_whitelists: dict[str, set[int]] = {}
 
     for c in constraints:
         if not c.get("isActive", True):
@@ -1571,6 +1619,13 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
         scope_target_id = c.get("scopeTargetId") or c.get("scope_target_id")
         config = c.get("config") or {}
         metadata = c.get("metadata") or {}
+
+        # BONUS never had a distinct semantic anywhere (no weight, no branch) —
+        # the UI no longer offers it; legacy rows are honored as PREFERRED
+        # (soft), which is more honest than silently dropping them (ENG-12).
+        if rule_type == "BONUS":
+            rule_type = "PREFERRED"
+            c = {**c, "ruleType": "PREFERRED"}
 
         if rule_type == "LOCK" and family in ("TIME", "DAY"):
             # A LOCK on a time/day rule means "keep this window fixed" — same
@@ -1622,29 +1677,48 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # complement. An empty/absent availableDays adds no restriction (an
             # empty whitelist is treated as "unconfigured", never "blocked every
             # day" — which would force the team to zero sessions).
+            # Combine multiple constraints on one coach with the right algebra
+            # (ENG-13 — assignment was last-wins): blacklists UNION ("unavailable
+            # Monday" + "unavailable Wednesday" = both blocked); whitelists
+            # INTERSECT ("available Monday" + "available Tuesday" must not union
+            # complements into "unavailable every day"). Merged after the loop.
+            coach_key = str(scope_target_id)
             unavailable = _day_int_set(config.get("unavailableDays"))
+            coach_blacklists.setdefault(coach_key, set()).update(unavailable)
             available_set = _day_int_set(config.get("availableDays"))
             if available_set:
-                unavailable |= {d for d in range(0, 8) if d not in available_set}
-            result["coach_unavailability"][str(scope_target_id)] = unavailable
+                if coach_key in coach_whitelists:
+                    coach_whitelists[coach_key] &= available_set
+                else:
+                    coach_whitelists[coach_key] = set(available_set)
+            # Coach availability is always enforced HARD (a person cannot be in
+            # two places); the UI now forces HARD — surface legacy soft rows.
+            if rule_type not in (None, "HARD", "LOCK"):
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "INFO",
+                    "Une disponibilité de coach est toujours appliquée comme obligatoire "
+                    f"(ruleType {rule_type} reçu).",
+                ))
 
         elif (
             family == "FACILITY"
             and config.get("preferredVenueId")
-            and rule_type == "HARD"
+            # LOCK on a venue rule = "keep this venue fixed" — dur, like
+            # LOCK TIME/DAY (was dead end-to-end, ENG-12).
+            and rule_type in ("HARD", "LOCK")
             and scope == "TEAM"
             and scope_target_id
         ):
-            result["forced_venues"][scope_target_id] = config["preferredVenueId"]
+            _set_venue_rule(result["forced_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"])
 
         elif (
             family == "FACILITY"
             and config.get("forcedVenueId")
-            and rule_type == "HARD"
+            and rule_type in ("HARD", "LOCK")
             and scope == "TEAM"
             and scope_target_id
         ):
-            result["forced_venues"][scope_target_id] = config["forcedVenueId"]
+            _set_venue_rule(result["forced_venues"], scope_target_id, config["forcedVenueId"], c, result["parse_warnings"])
 
         elif (
             family == "FACILITY"
@@ -1653,12 +1727,29 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope == "TEAM"
             and scope_target_id
         ):
-            result["preferred_venues"][scope_target_id] = config["preferredVenueId"]
+            _set_venue_rule(result["preferred_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"])
 
         elif family == "FACILITY" and config.get("forbiddenVenueId"):
-            result["forbidden_assignments"].append(
-                {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
-            )
+            # rule_type decides HOW hard "avoid this venue" is (ENG-11 — this
+            # branch used to escalate every ruleType into a hard interdiction,
+            # making INFEASIBLE possible on a mere preference).
+            if rule_type in ("HARD", "LOCK", None):
+                result["forbidden_assignments"].append(
+                    {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
+                )
+            elif scope_target_id:
+                # PREFERRED (incl. normalized BONUS): soft "avoid" — an
+                # objective malus, never a feasibility constraint.
+                result["avoided_venues"].append(
+                    {"scope_target_id": str(scope_target_id), "venue_id": str(config["forbiddenVenueId"])}
+                )
+            else:
+                # Soft avoid without a target cannot be applied — say so (the
+                # sibling hard/target-less variants warn too, never a silent drop).
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "WARNING",
+                    "Contrainte de gymnase sans équipe cible — non appliquée.",
+                ))
 
         elif family == "FACILITY_CAPACITY" and config.get("venueId"):
             # Max teams allowed simultaneously per slot of this venue. Applied in
@@ -1678,7 +1769,31 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                 result["priority_tiers"][int(tier_id)] = int(default_min)
 
         elif family in ("TIME", "DAY"):
-            result["time_windows"].append(c)
+            if scope_target_id is None:
+                # The backend expands club-wide constraints into per-team ones;
+                # a target-less window reaching the engine would be silently
+                # skipped downstream (add_time_window_constraints requires a
+                # team) — surface it instead of a silent no-op.
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "WARNING",
+                    "Contrainte sans équipe cible — non appliquée (le backend doit "
+                    "l'étendre par équipe).",
+                ))
+            else:
+                result["time_windows"].append(c)
+
+        elif family == "FACILITY" and (
+            config.get("preferredVenueId") or config.get("forcedVenueId")
+        ):
+            # A wizard-emitted venue rule that matched no branch (target-less
+            # scope) — an explicit warning, never a silent drop. Other FACILITY
+            # variants (e.g. the cockpit venue_closed marker, enforced via the
+            # backend expandClosedVenues expansion) are deliberate no-ops here
+            # and must NOT raise a false "not applied" alarm.
+            result["parse_warnings"].append(_not_honored_warning(
+                c, "WARNING",
+                "Contrainte de gymnase sans équipe cible — non appliquée.",
+            ))
 
         elif family not in _KNOWN_FAMILIES and c_type not in _KNOWN_TYPES and rule_type != "LOCK":
             # Only warn when neither the family NOR the type is recognised — a
@@ -1689,6 +1804,15 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                 "unrecognised constraint dropped: id=%s type=%s family=%s ruleType=%s",
                 c.get("id"), c_type, family, rule_type,
             )
+
+    # Merge the coach-availability algebra: blocked = union(blacklists) ∪
+    # complement(intersection(whitelists)).
+    for coach_key in coach_blacklists.keys() | coach_whitelists.keys():
+        blocked = set(coach_blacklists.get(coach_key, set()))
+        whitelist = coach_whitelists.get(coach_key)
+        if whitelist is not None:
+            blocked |= {d for d in range(0, 8) if d not in whitelist}
+        result["coach_unavailability"][coach_key] = blocked
 
     return result
 
