@@ -44,8 +44,10 @@ All services share the Docker network `clubscheduler_network`.
 - **User** (global) + **ClubUser** (membership junction: `clubId`, `userId`, `role`, `isActive`; unique `(clubId,userId)`) — access control pivot.
 - **Season** — per-club: dates, `status`, `transitionData`.
 - **Team** — per-club-season: `sportCategoryId`, `priorityTierId`, `level`, `gender`, `size`, `sessionsPerWeek`, `allowMultipleSessionsPerDay`, `forcedVenueId`, `parentTeamId`.
-- **Schedule** — per-club-season run: `status` (`PENDING|GENERATING|COMPLETED|FAILED`), `score`, snapshot data/hash, solver metrics.
-- **Coach**, **Venue**, **Constraint**, **ScheduleSlotTemplate**, **ScheduleDiagnostic**, …
+- **Schedule** — per-club-season run: `status` (`DRAFT|PENDING|GENERATING|COMPLETED|FAILED|VALIDATED`), `score`, snapshot data/hash, solver metrics, `calendarEntryId` (non-null ⇒ this schedule is a **period overlay**, not a season plan). `VALIDATED` lifecycle is a structuring axis (§7.1).
+- **Coach**, **Venue**, **Constraint**, **ScheduleSlotTemplate**, **ScheduleDiagnostic**, **TeamCoach** / **CoachPlayerMembership** (coach↔team / player↔team links), …
+- **Cockpit temporel** (paliers A/B/C): **CalendarEntry** — per-club-season dated entries, `kind` (`PERIOD` closure/holiday/… `| EVENT` club events), `startDate`/`endDate`, `status`, `overlayScheduleId` (a period's bounded secondary plan). Reference tables **global, no `club_id`, no RLS** (pattern `public_holiday`): **SchoolHolidayPeriod** (13 academic zones) + **PublicHoliday** (national + territory), seeded from the official APIs. Reminder ledgers (global): **PeriodReminderLog**, **TransitionReminderLog**.
+- **Module matchs** (palier A): **Competition** + **Fixture** (per-club-season, `externalRef` = FBI import key), **LeagueMatchWindow** (global catalog, league × category × level → allowed kickoff windows).
 
 ### 2.3 API layer
 - **Auto CRUD (API Platform):** `/api/{schedules,clubs,teams,coaches,venues,constraints,seasons,sport-categories,…}` — ~20 resources, default pagination 30/page (custom providers return a paginator so `hydra:totalItems` is the real count — BCK-05). OpenAPI at `/api/docs`. `Team` collection honors `?seasonId=` / `?isActive=` (wired in `TeamStateProvider::applyRequestFilters`).
@@ -61,9 +63,14 @@ All services share the Docker network `clubscheduler_network`.
   | `MembershipController` | membership approval endpoints | pending-member workflow |
   | `ClubLogoController` / `ClubAppearanceController` | club logo upload / accent colors | club visual identity |
   | `ResetSeasonController` | `DELETE /api/reset-season` | batch-delete season data |
+  | `SeasonTransitionController` | `POST /api/seasons/{id}/transition` | copy N→N+1 draft (transition P1) |
+  | `CalendarEntryConflictsController` | `GET /api/calendar-entries/{id}/conflicts` | cockpit "séances à replacer" radar |
+  | `SchoolHolidaysController` / `PublicHolidaysController` | `GET /api/{school,public}-holidays` | holiday display feeds (club zone) |
+  | `LeagueMatchWindowsController` / `FixtureConflictsController` | `GET /api/league-match-windows`, `GET /api/fixtures/conflicts` | match envelope + same-coach conflict radar |
+  | `ImportFixturesController` | `POST /api/teams/{id}/fixtures/import` | FBI fixtures import (per team) |
   | `AuthController` / `PasswordController` | `POST /api/register`, `GET /api/me`, password reset | auth (JWT) |
   | `HealthController` | `GET /api/health` | `{"status":"ok"}` |
-- These plain `#[Route]` controllers are excluded from API Platform's auto OpenAPI; `App\OpenApi\CustomRoutesOpenApiFactory` re-adds `/api/register`, `/api/me` and the 3 `manual-edit` routes to the schema (G4/G5). Regenerate the snapshot on any API change: `php bin/console api:openapi:export > specs/courantes/openapi-snapshot.json`.
+- Some plain `#[Route]` controllers are excluded from API Platform's auto OpenAPI; `App\OpenApi\CustomRoutesOpenApiFactory` re-adds them to the schema (register/me/password, manual-edit, holidays, season transition, league-match-windows, fixtures/conflicts). Others (import, fixtures import) are declared as API Platform operations on their resource and appear automatically. Regenerate the snapshot on any API change: `php bin/console api:openapi:export > specs/courantes/openapi-snapshot.json`.
 
 ### 2.4 Async / messaging
 - **Transport:** Redis (`redis://redis:6379/messages`), `sync://` under test. Worker: `messenger-worker` container. Bounded `retry_strategy` (3 retries) + `failure_transport: failed` (`MESSENGER_FAILURE_TRANSPORT_DSN`, boot-safe default) — exhausted messages are preserved, never silently dropped.

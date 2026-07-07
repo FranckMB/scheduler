@@ -39,14 +39,15 @@ L'**engine** est un microservice Python qui reçoit un contexte complet (clubs, 
 | `/` | GET | Health check + version du contrat |
 | `/health` | GET | Health check simple |
 | `/generate` | POST | **Principal** — résout un planning et retourne les créneaux |
+| `/implicit-constraints` | POST | Sync règles implicites backend↔engine (200 synchronized / 409 desynchronized) |
 
 ### `POST /generate`
 
-**Request** : `ScheduleInputSchema`
+**Request** : `ScheduleInputSchema` (contract `"2.0"`)
 
 ```json
 {
-  "version": "1.0",
+  "version": "2.0",
   "clubId": "uuid",
   "seasonId": "uuid",
   "scheduleName": "Saison 2026-2027",
@@ -119,12 +120,13 @@ engine/
 │   │   └── output_schema.py # ScheduleOutputSchema
 │   └── solver/
 │       ├── model.py         # Construction du modèle CP-SAT
-│       ├── constraints.py   # 11 contraintes hard (Level 1)
+│       ├── constraints.py   # Contraintes hard Level-1 + parse_v2_constraints
 │       ├── objective.py     # Fonction objectif (Level 2)
 │       └── result_builder.py # Transformation solution → output
 ├── tests/
-│   ├── fixtures/            # 5 jeux de données "golden"
-│   └── test_golden.py       # Tests de validation
+│   ├── fixtures/            # Jeux de données "golden" (liste : ls tests/fixtures/)
+│   ├── golden/ invariants/ perf/ semantic/  # suites (semantic = matrice contrainte P0.1)
+│   └── ...
 ├── Dockerfile
 └── Makefile
 ```
@@ -134,25 +136,14 @@ engine/
 ```
 1. Reçoit POST /generate avec ScheduleInputSchema
 2. model.py          Crée variables booléennes x[team, venue, day, slot]
-3. constraints.py    Applique 11 contraintes hard (Level 1)
-                      - Room at-most-one
-                      - Coach at-most-one
-                      - Coach-player non-overlap
-                      - Fixed slots
-                      - Forbidden assignments
-                      - Coach unavailability
-                      - Venue closures
-                      - Min sessions
-                      - Forced venues
-                      - ...
-4. objective.py      Maximise le score pondéré (Level 2)
-                      - Tier S: 10000, A: 1000, B: 100, C: 10, D: 1
-                      - Soft constraints: 800
-                      - Preferred slots: 60
-                      - Grouping: 50
-                      - Max days: 8
-                      - Rest: 3
-5. OR-Tools CP-SAT   Solve(max_time = solver_timeout_seconds, défaut 650s ; seed = solver_seed, défaut 42)
+3. constraints.py    Applique les contraintes hard Level-1 (liste : constraints.py / engine-inventory §4.4)
+4. objective.py      Maximise le score pondéré (Level 2) — poids réels dans LEVEL_2_OBJECTIVE_WEIGHTS :
+                      - Tiers S: 10000, A: 1000, B: 100, C: 10, D: 1
+                      - preferred: 60 · avoided_venue: -60 · preferred_day/time: 30
+                      - session_count: 20 · rest: 3
+                      (source de vérité = objective.py ; ne pas figer d'autres valeurs)
+5. OR-Tools CP-SAT   Solve en 2 phases (placement puis chaînage borné 10s), warm-start.
+                      timeout adaptatif plafonné par solver_timeout_seconds (défaut 650s) ; seed = solver_seed (42)
 6. result_builder.py   Transforme solution → ScheduleOutputSchema
                        + génère diagnostics (unplaced, soft_lock_moved, coach_overload, conflict)
 ```
@@ -161,24 +152,13 @@ engine/
 
 ## Contraintes CP-SAT
 
+> Liste exhaustive et à jour : `constraints.py` (`add_level_1_hard_constraints` / `add_time_window_constraints`) et **`specs/courantes/engine-inventory.md` §4** (la seule vue maintenue — pas de décompte figé ici, il périmerait).
+
 ### Hard (Level 1) — Impératives
-1. **Room at-most-one** : Une salle accueille max 1 équipe par créneau
-2. **Coach at-most-one** : Un entraîneur encadre max 1 équipe par créneau
-3. **Coach-player non-overlap** : Un entraîneur-joueur ne peut pas être aux deux endroits
-4. **Fixed slots** : Les locks HARD sont forcés
-5. **Forbidden assignments** : Les créneaux interdits sont exclus
-6. **Coach unavailability** : Les indisponibilités entraîneurs sont respectées
-7. **Venue closures** : Les fermetures de salles sont respectées
-8. **Min sessions** : Chaque équipe a ≥ son minimum de sessions
-9. **Forced venues** : Si une salle est forcée, les autres sont exclus
+Salle at-most-one (capacité), coach at-most-one, coach-joueur non-overlap, repos coach / distribution salariés / max consécutifs, fixed slots (LOCK), forbidden assignments, indispo coach, fermetures salle, min sessions, forced venues, une session/jour, âge croissant. Détail : engine-inventory §4.4.
 
 ### Soft (Level 2) — Optimisées
-- **Priority tiers** : S (10000) > A (1000) > B (100) > C (10) > D (1)
-- **Soft constraints** : Respect des préférences (800)
-- **Preferred slots** : Créneaux préférés (60)
-- **Grouping** : Regroupement d'équipes (50)
-- **Max days** : Respect du max de jours par entraîneur (8)
-- **Rest** : Temps de repos (3)
+Tiers S>A>B>C>D, `preferred`, `avoided_venue` (malus), `preferred_day`, `preferred_time`, `session_count`, `rest`. Poids réels : `objective.py` (`LEVEL_2_OBJECTIVE_WEIGHTS`).
 
 ## Pour aller plus loin (docs structurantes)
 

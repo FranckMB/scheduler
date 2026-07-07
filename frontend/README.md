@@ -33,7 +33,10 @@ npx playwright test    # parcours bout-en-bout (frontend/tests/e2e, config playw
   - **`auth`** — login / register (club ARA, statut pending/active) / `/me`. Token dans un store Zustand ; `AuthGuard` redirige (pas de token → `/login`, onboarding non terminé → `/wizard`).
   - **`planning`** — **boucle de travail** : `WeekGrid` (grille semaine par gymnase / coach / équipe), `PlanningToolbar` (sélecteur de planning + régénérer + vues), `ResourceFilter`, `SlotDetail` (lock/déplacer un créneau), `DiagnosticsPanel`.
   - **`wizard`** — **saisie en 6 étapes** (`lib/steps.ts`) : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → **Génération**. Sauvegarde **au fil de l'eau, par entité** (POST/PUT/DELETE immédiats, mutations TanStack) — **pas** de draft-blob.
-  - **`club`** — écran **Gestion du club** (`/club`) : **identité visuelle** — couleur d'accent + logo (upload avec **cropper** cercle zoom/cadrage, extraction de 3 couleurs). L'accent est appliqué globalement (`--accent`, contraste AA) par `shared/hooks/useApplyClubTheme` depuis `/me`.
+  - **`club`** — écran **Gestion du club** (`/club`) : **identité visuelle** (couleur d'accent + logo, cropper cercle zoom/cadrage, extraction 3 couleurs, `--accent` global AA via `shared/hooks/useApplyClubTheme`) **+ section « Demandes »** (approbation des adhésions `pending`, admin).
+  - **`cockpit`** — **accueil temporel** (`/`) : bandeau planning socle (ouvrir/modifier/tous les plannings), calendrier mensuel des exceptions, radar d'overlays période/événement. Débloqué (sticky) dès `me.socleValidatedAt`.
+  - **`matches`** — **module matchs** (`/matchs`) : grille week-end de placement des rencontres domicile, radar de conflits coach/joueur, import FBI (`ImportFbiDialog`, .xlsx par équipe).
+  - **`season-transition`** — sélecteur de saison + bandeau d'anticipation de bascule (pivot 15 juillet), `transitionUiStore`.
 - **Partagé** : `src/shared/api/client.ts` (client **ky**, injecte le Bearer, **aucun** header tenant, 401 → logout), `shared/api/collection.ts` (unwrap JSON-LD `{member:[…]}` + pagination), `shared/components/ui/` (primitives).
 - **Stack serveur-état/état-client** : TanStack Query 5 (serveur) + Zustand 5 (client). Statut de génération : **poll** du schedule (+ Mercure SSE côté backend).
 
