@@ -1,8 +1,14 @@
+import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { useAuthStore } from "@/shared/stores/authStore";
+import { toast } from "@/shared/stores/toastStore";
+
+// During onboarding (before the first generation) the app is locked to the
+// wizard — except the account-menu (burger) destinations, which stay reachable.
+const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club"];
 
 /**
  * Gate for authenticated routes:
@@ -17,6 +23,19 @@ export function AuthGuard() {
   const { data, isLoading, isError } = useMe();
   const location = useLocation();
 
+  // First-time club: locked to the wizard until the first generation, but the
+  // account-menu routes (profile, club) stay reachable. Landing on the cockpit
+  // home gets an ephemeral hint on the redirect — only for an ACTIVE member
+  // (pending users are sent to /waiting by the guard below, unrelated to this).
+  const membershipActive = "active" === data?.membershipStatus;
+  const onboardingLocked = Boolean(data?.club && !data.club.onboardingCompleted);
+  const showCockpitHint = membershipActive && onboardingLocked && "/" === location.pathname;
+  useEffect(() => {
+    if (showCockpitHint) {
+      toast.info("Lancez votre première génération d'abord.");
+    }
+  }, [showCockpitHint]);
+
   if (null === token) {
     return <Navigate to="/login" replace />;
   }
@@ -29,8 +48,7 @@ export function AuthGuard() {
   if (data.membershipStatus !== "active") {
     return <Navigate to="/waiting" replace />;
   }
-  // First-time club: guide through the wizard until the first generation.
-  if (data.club && !data.club.onboardingCompleted && location.pathname !== "/wizard") {
+  if (onboardingLocked && !ONBOARDING_ALLOWED.includes(location.pathname)) {
     return <Navigate to="/wizard" replace />;
   }
 
