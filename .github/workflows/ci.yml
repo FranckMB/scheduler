@@ -238,8 +238,13 @@ jobs:
 
       # matches.spec logs in as the BasketballInit-seeded club — append-load the
       # dev fixtures (idempotent, existing rows are reused, never purged).
+      # BasketballInit REFUSES the app_user connection (RLS silently breaks the
+      # purge — see the guard in BasketballInit::load): inject the admin URL from
+      # backend/.env, exactly like `make fixtures`, so the loader runs as the
+      # superuser. Kept --append (never purge the seeded club) instead of calling
+      # `make fixtures`, which reloads from scratch.
       - name: Load dev fixtures
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:fixtures:load --append --no-interaction'
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && DATABASE_URL=$(grep -E "^DATABASE_ADMIN_URL=" .env | head -1 | cut -d= -f2- | tr -d "\"") php bin/console doctrine:fixtures:load --append --no-interaction'
 
       - name: Start messenger worker
         run: docker compose up -d --wait messenger-worker
