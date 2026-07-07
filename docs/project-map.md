@@ -132,7 +132,7 @@ ruff (line 120, py312, double quotes, LF) · mypy `strict` + `pydantic.mypy` (`o
 
 ## 5. Knowledge graph & the auto-update hook (pre-existing automation)
 
-`code-review-graph` is installed (`uv tool`) and a graph is built for **backend + engine only** (`.code-review-graphignore` excludes `frontend/` and non-code dirs). It backs the `explore-codebase`, `review-changes`, `refactor-safely`, `debug-issue` skills.
+`code-review-graph` is installed (`uv tool`) and a graph is built over **all code zones** — backend (PHP), engine (Python) and frontend (TS/TSX). `.code-review-graphignore` excludes only build artifacts (`frontend/dist|node_modules|storybook-static`) and non-code dirs (`docs/`, `specs/`, `docker/`, `.github/`, `.claude/`). Its MCP tools back graph-aware exploration and review across the repo.
 
 Two hooks in `.claude/settings.json` (paths corrected to this checkout):
 - **`SessionStart`** → `code-review-graph status` (read-only).
@@ -140,7 +140,7 @@ Two hooks in `.claude/settings.json` (paths corrected to this checkout):
 
 The MCP server (`.mcp.json`: `uvx code-review-graph serve`) loads at session start; its tools (`semantic_search_nodes`, `query_graph`, `get_impact_radius`, `detect_changes`, …) are the preferred way to explore before Grep/Read. Semantic search additionally needs `code-review-graph embed` (not run — pulls a heavy local model).
 
-Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`uvx … serena start-mcp-server`, LSP-based symbol navigation for PHP + Python; `.serena/project.yml` excludes `frontend/`) and **Context7** (`@upstash/context7-mcp`, up-to-date external-library docs). Separately, the **Caveman** plugin is installed user-scope (opt-in compressed communication mode). All are dev-time tooling — no application-code impact.
+Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`uvx … serena start-mcp-server`, LSP-based symbol navigation for PHP + Python + TS; `.serena/project.yml` excludes only frontend build artifacts `dist|node_modules|storybook-static`) and **Context7** (`@upstash/context7-mcp`, up-to-date external-library docs). Separately, the **Caveman** plugin is installed user-scope (opt-in compressed communication mode). All are dev-time tooling — no application-code impact.
 
 ---
 
