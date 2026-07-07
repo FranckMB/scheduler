@@ -94,7 +94,7 @@ final class UserSelfOnlyTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => $suffix . '@test.fr', 'password' => 'password123',
+            'email' => $suffix . '@test.fr', 'password' => 'Password123!',
             'firstName' => 'U', 'lastName' => 'Self', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 

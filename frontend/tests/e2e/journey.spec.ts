@@ -18,7 +18,7 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await page.getByLabel("Prénom").fill("Flo");
   await page.getByLabel("Nom", { exact: true }).fill("Journey");
   await page.getByLabel("Email", { exact: true }).fill(`journey-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("password123");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByLabel(/nom du club/i).fill("E2E Journey Club");
   await page.getByRole("button", { name: /créer le compte/i }).click();

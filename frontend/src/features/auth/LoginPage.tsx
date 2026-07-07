@@ -5,6 +5,7 @@ import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { PasswordInput } from "@/shared/components/ui/password-input";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import { AuthLayout } from "./AuthLayout";
@@ -51,7 +52,7 @@ export function LoginPage() {
               Oublié ?
             </Link>
           </div>
-          <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" disabled={login.isPending}>

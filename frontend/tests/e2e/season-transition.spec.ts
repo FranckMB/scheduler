@@ -8,7 +8,7 @@ async function registerClub(page: import("@playwright/test").Page): Promise<void
   await page.getByLabel("Prénom").fill("Sonia");
   await page.getByLabel("Nom", { exact: true }).fill("Saison");
   await page.getByLabel("Email", { exact: true }).fill(`season-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("password123");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByLabel(/nom du club/i).fill("E2E Saison Club");
   await page.getByRole("button", { name: /créer le compte/i }).click();

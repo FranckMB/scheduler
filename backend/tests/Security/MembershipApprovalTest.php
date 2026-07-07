@@ -113,7 +113,7 @@ final class MembershipApprovalTest extends WebTestCase
     private function owner(string $ara): string
     {
         return $this->register([
-            'email' => "owner-{$ara}@club.fr", 'password' => 'password123',
+            'email' => "owner-{$ara}@club.fr", 'password' => 'Password123!',
             'firstName' => 'Owner', 'lastName' => 'Admin', 'ara' => $ara, 'club_name' => "Club {$ara}",
         ])['token'];
     }
@@ -121,7 +121,7 @@ final class MembershipApprovalTest extends WebTestCase
     private function joiner(string $ara, string $email): string
     {
         return $this->register([
-            'email' => $email, 'password' => 'password123',
+            'email' => $email, 'password' => 'Password123!',
             'firstName' => 'Join', 'lastName' => 'Er', 'ara' => $ara, 'club_name' => 'x',
         ])['token'];
     }

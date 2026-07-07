@@ -5,7 +5,9 @@ import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { PasswordInput } from "@/shared/components/ui/password-input";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { PASSWORD_REQUIREMENT, validatePassword } from "@/shared/lib/passwordPolicy";
 
 import { AuthLayout } from "./AuthLayout";
 import { useRegister } from "./queries";
@@ -22,6 +24,11 @@ export function RegisterPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const passwordError = validatePassword(form.password);
+    if (null !== passwordError) {
+      setError(passwordError);
+      return;
+    }
     try {
       const result = await register.mutateAsync({ ...form, ara: form.ara.toUpperCase() });
       navigate(result.membershipStatus === "pending" ? "/waiting" : "/", { replace: true });
@@ -57,7 +64,8 @@ export function RegisterPage() {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="password">Mot de passe</Label>
-          <Input id="password" type="password" autoComplete="new-password" required minLength={8} value={form.password} onChange={set("password")} />
+          <PasswordInput id="password" autoComplete="new-password" required minLength={12} value={form.password} onChange={set("password")} />
+          <p className="text-xs text-muted-foreground">{PASSWORD_REQUIREMENT}</p>
           <p className="text-xs text-muted-foreground">8 caractères minimum.</p>
         </div>
         <div className="flex flex-col gap-1.5">

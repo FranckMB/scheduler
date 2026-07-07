@@ -14,6 +14,7 @@ use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
 use App\Service\LeagueResolver;
+use App\Service\PasswordPolicy;
 use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -44,6 +45,7 @@ final class AuthController extends AbstractController
         private readonly SchoolZoneResolver $schoolZoneResolver,
         private readonly LeagueResolver $leagueResolver,
         private readonly SeasonResolver $seasonResolver,
+        private readonly PasswordPolicy $passwordPolicy,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -69,8 +71,8 @@ final class AuthController extends AbstractController
         if ('' === $email || !filter_var($email, \FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'A valid email is required'], 400);
         }
-        if (\strlen($password) < 8) {
-            return $this->json(['error' => 'Password must be at least 8 characters'], 400);
+        if (null !== ($passwordError = $this->passwordPolicy->validate($password))) {
+            return $this->json(['error' => $passwordError], 400);
         }
         if ('' === $firstName || '' === $lastName) {
             return $this->json(['error' => 'First name and last name are required'], 400);
@@ -285,8 +287,8 @@ final class AuthController extends AbstractController
         if (!$this->passwordHasher->isPasswordValid($user, $current)) {
             return $this->json(['error' => 'Mot de passe actuel incorrect.'], 400);
         }
-        if (\strlen($new) < 8) {
-            return $this->json(['error' => 'Le nouveau mot de passe doit faire au moins 8 caractères.'], 400);
+        if (null !== ($passwordError = $this->passwordPolicy->validate($new))) {
+            return $this->json(['error' => $passwordError], 400);
         }
 
         $user->setPasswordHash($this->passwordHasher->hashPassword($user, $new));

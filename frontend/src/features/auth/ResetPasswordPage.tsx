@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { PasswordInput } from "@/shared/components/ui/password-input";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { PASSWORD_REQUIREMENT, validatePassword } from "@/shared/lib/passwordPolicy";
 
 import { AuthLayout } from "./AuthLayout";
 import { useResetPassword } from "./queries";
@@ -15,11 +16,21 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const reset = useResetPassword();
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const passwordError = validatePassword(password);
+    if (null !== passwordError) {
+      setError(passwordError);
+      return;
+    }
+    if (password !== confirm) {
+      setError("Les deux mots de passe ne sont pas identiques.");
+      return;
+    }
     try {
       await reset.mutateAsync({ token, password });
       navigate("/login", { replace: true });
@@ -37,8 +48,12 @@ export function ResetPasswordPage() {
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="password">Nouveau mot de passe</Label>
-          <Input id="password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <p className="text-xs text-muted-foreground">8 caractères minimum.</p>
+          <PasswordInput id="password" autoComplete="new-password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <p className="text-xs text-muted-foreground">{PASSWORD_REQUIREMENT}</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="confirm">Confirmer le mot de passe</Label>
+          <PasswordInput id="confirm" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" disabled={reset.isPending}>

@@ -8,7 +8,7 @@ test("register a new club lands on the dashboard", async ({ page }) => {
   await page.getByLabel("Prénom").fill("Jean");
   await page.getByLabel("Nom", { exact: true }).fill("Dupont");
   await page.getByLabel("Email", { exact: true }).fill(`new-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("password123");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByLabel(/nom du club/i).fill("E2E Club");
   await page.getByRole("button", { name: /créer le compte/i }).click();
@@ -27,7 +27,7 @@ test("joining an existing club shows the waiting-for-approval screen", async ({ 
   await page.getByLabel("Prénom").fill("Owner");
   await page.getByLabel("Nom", { exact: true }).fill("Admin");
   await page.getByLabel("Email", { exact: true }).fill(`owner-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("password123");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByLabel(/nom du club/i).fill("E2E Existing");
   await page.getByRole("button", { name: /créer le compte/i }).click();
@@ -38,7 +38,7 @@ test("joining an existing club shows the waiting-for-approval screen", async ({ 
   await page.getByLabel("Prénom").fill("Joiner");
   await page.getByLabel("Nom", { exact: true }).fill("Two");
   await page.getByLabel("Email", { exact: true }).fill(`joiner-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("password123");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByRole("button", { name: /créer le compte/i }).click();
 
