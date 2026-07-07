@@ -238,8 +238,21 @@ jobs:
 
       # matches.spec logs in as the BasketballInit-seeded club — append-load the
       # dev fixtures (idempotent, existing rows are reused, never purged).
+      # BasketballInit REFUSES the app_user connection (RLS silently breaks the
+      # purge — see the guard in BasketballInit::load): inject the admin URL, like
+      # `make fixtures` (reads .env then .env.local, last wins), so the loader runs
+      # as the superuser. Kept --append (never purge the seeded club) instead of
+      # calling `make fixtures`, which reloads from scratch. Fail fast if the key
+      # is missing — an empty DATABASE_URL suppresses the Dotenv fallback and would
+      # abort with an opaque DSN error deep in the loader instead.
       - name: Load dev fixtures
-        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:fixtures:load --append --no-interaction'
+        run: |
+          docker compose exec -T php-fpm sh -c '
+            cd /app/backend
+            DBU=$(cat .env .env.local 2>/dev/null | sed -n "s/^DATABASE_ADMIN_URL=//p" | tail -n1 | tr -d "\"")
+            [ -n "$DBU" ] || { echo "DATABASE_ADMIN_URL introuvable dans backend/.env — fixtures ne peuvent pas tourner sur la connexion admin"; exit 1; }
+            DATABASE_URL="$DBU" php bin/console doctrine:fixtures:load --append --no-interaction
+          '
 
       - name: Start messenger worker
         run: docker compose up -d --wait messenger-worker
