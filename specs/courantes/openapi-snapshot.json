@@ -8067,6 +8067,116 @@
                 ]
             }
         },
+        "/api/teams/{id}/fixtures/import": {
+            "post": {
+                "operationId": "import_fixtures",
+                "tags": [
+                    "Team"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Team resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Team.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Team"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Team.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a Team resource.",
+                "description": "Creates a Team resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Team identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The new Team resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Team.TeamInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Team.TeamInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Team.TeamInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
         "/api/team_coaches": {
             "get": {
                 "operationId": "api_team_coaches_get_collection",
@@ -11378,6 +11488,12 @@
                             "null"
                         ]
                     },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "isActive": {
                         "default": false,
                         "type": "boolean"
@@ -11385,6 +11501,13 @@
                     "sortOrder": {
                         "default": 0,
                         "type": "integer"
+                    },
+                    "parentConstraintId": {
+                        "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -11482,6 +11605,13 @@
                             "null"
                         ]
                     },
+                    "calendarEntryId": {
+                        "description": "Set to attach this constraint to a CalendarEntry (period) \u2014 excludes it from base generation.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "isActive": {
                         "type": [
                             "boolean",
@@ -11570,6 +11700,12 @@
                             "null"
                         ]
                     },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "isActive": {
                         "default": false,
                         "type": "boolean"
@@ -11577,6 +11713,13 @@
                     "sortOrder": {
                         "default": 0,
                         "type": "integer"
+                    },
+                    "parentConstraintId": {
+                        "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -11659,6 +11802,12 @@
                                     "null"
                                 ]
                             },
+                            "calendarEntryId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
                             "isActive": {
                                 "default": false,
                                 "type": "boolean"
@@ -11666,6 +11815,13 @@
                             "sortOrder": {
                                 "default": 0,
                                 "type": "integer"
+                            },
+                            "parentConstraintId": {
+                                "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         }
                     }
@@ -11976,6 +12132,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "externalRef": {
+                        "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -12057,7 +12220,7 @@
                     },
                     "kickoffTime": {
                         "pattern": "^(.*(^([01]\\d|2[0-3]):[0-5]\\d$).*)$",
-                        "description": "HH:MM kickoff.",
+                        "description": "HH:MM kickoff (24h, strict range).",
                         "type": [
                             "string",
                             "null"
@@ -12121,6 +12284,13 @@
                         ]
                     },
                     "kickoffTime": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "externalRef": {
+                        "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
                         "type": [
                             "string",
                             "null"
@@ -12189,6 +12359,13 @@
                                 ]
                             },
                             "kickoffTime": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "externalRef": {
+                                "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
                                 "type": [
                                     "string",
                                     "null"
@@ -12764,6 +12941,13 @@
                             "VALIDATED"
                         ]
                     },
+                    "calendarEntryId": {
+                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "score": {
                         "type": [
                             "integer",
@@ -12880,6 +13064,13 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "calendarEntryId": {
+                        "description": "Set at POST to create this schedule as a period overlay (palier B); ignored on PUT.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -12915,6 +13106,13 @@
                             "COMPLETED",
                             "FAILED",
                             "VALIDATED"
+                        ]
+                    },
+                    "calendarEntryId": {
+                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                        "type": [
+                            "string",
+                            "null"
                         ]
                     },
                     "score": {
@@ -13038,6 +13236,13 @@
                                     "COMPLETED",
                                     "FAILED",
                                     "VALIDATED"
+                                ]
+                            },
+                            "calendarEntryId": {
+                                "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                                "type": [
+                                    "string",
+                                    "null"
                                 ]
                             },
                             "score": {

@@ -23,6 +23,8 @@ export interface Fixture {
   venueId: string | null;
   /** HH:MM, null until placed/estimated */
   kickoffTime: string | null;
+  /** FBI match number (import idempotence key) — null for manual entries. */
+  externalRef: string | null;
 }
 
 export interface Competition {
@@ -134,7 +136,13 @@ export interface PlaceFixtureInput {
 /** The API omits null props from JSON → coerce the optionals back to null so
  * `null !==` guards and the grid/envelope logic never see `undefined`. */
 function normalizeFixture(raw: Fixture): Fixture {
-  return { ...raw, competitionId: raw.competitionId ?? null, venueId: raw.venueId ?? null, kickoffTime: raw.kickoffTime ?? null };
+  return {
+    ...raw,
+    competitionId: raw.competitionId ?? null,
+    venueId: raw.venueId ?? null,
+    kickoffTime: raw.kickoffTime ?? null,
+    externalRef: raw.externalRef ?? null,
+  };
 }
 
 export const getFixtures = async (): Promise<Fixture[]> => (await collectionAll<Fixture>("fixtures")).map(normalizeFixture);
@@ -150,6 +158,20 @@ export const getLeagueWindows = (): Promise<LeagueWindowsResponse> =>
 
 /** Same-coach conflict radar, recomputed server-side on every call. */
 export const getConflicts = (): Promise<ConflictsResponse> => api.get("fixtures/conflicts").json<ConflictsResponse>();
+
+export interface ImportFbiResult {
+  message: string;
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
+/** Upload one FBI export (.xlsx) for ONE team (multipart) → per-row report. */
+export const importFbiFixtures = (teamId: string, file: File): Promise<ImportFbiResult> => {
+  const form = new FormData();
+  form.append("file", file);
+  return api.post(`teams/${teamId}/fixtures/import`, { body: form }).json<ImportFbiResult>();
+};
 
 export const createFixture = (input: CreateFixtureInput): Promise<Fixture> =>
   api.post("fixtures", { json: { competitionId: null, ...input } }).json<Fixture>();

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Upload } from "lucide-react";
 import { useMemo } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -8,6 +8,7 @@ import { Spinner } from "@/shared/components/ui/spinner";
 import type { Category, Coach, Fixture, Team, Venue } from "./api";
 import { ConflictRadar } from "./ConflictRadar";
 import { FixtureFormDialog } from "./FixtureFormDialog";
+import { ImportFbiDialog } from "./ImportFbiDialog";
 import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
 import { PlacementPanel } from "./PlacementPanel";
@@ -31,7 +32,8 @@ export function MatchesPage() {
   const coaches = useCoaches();
   const placeFixture = usePlaceFixture();
 
-  const { selectedWeekend, selectedFixtureId, fixtureFormOpen, setSelectedWeekend, setSelectedFixtureId, setFixtureFormOpen } = useMatchesStore();
+  const { selectedWeekend, selectedFixtureId, fixtureFormOpen, importDialogOpen, setSelectedWeekend, setSelectedFixtureId, setFixtureFormOpen, setImportDialogOpen } =
+    useMatchesStore();
 
   const teamsMap = useMemo<Map<string, Team>>(() => byId(teams.data), [teams.data]);
   const venuesMap = useMemo<Map<string, Venue>>(() => byId(venues.data), [venues.data]);
@@ -85,10 +87,16 @@ export function MatchesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">Matchs</h1>
-        <Button size="sm" onClick={() => setFixtureFormOpen(true)}>
-          <Plus className="size-4" />
-          Nouveau match
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="size-4" />
+            Importer FBI
+          </Button>
+          <Button size="sm" onClick={() => setFixtureFormOpen(true)}>
+            <Plus className="size-4" />
+            Nouveau match
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
@@ -144,6 +152,7 @@ export function MatchesPage() {
       </div>
 
       {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
+      {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
     </div>
   );
 }

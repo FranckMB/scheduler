@@ -28,6 +28,15 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post(validationContext: ['groups' => ['Default', 'create']]),
     new Put,
     new Delete,
+    // FBI fixtures import (module matchs PR-4): multipart upload of one FBI
+    // export for ONE team — same declaration pattern as clubs/{id}/import-teams.
+    new Post(
+        uriTemplate: '/teams/{id}/fixtures/import',
+        controller: 'App\Controller\ImportFixturesController',
+        read: false,
+        deserialize: false,
+        name: 'import_fixtures',
+    ),
 ], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
 // Honored by TeamStateProvider::applyRequestFilters (the custom provider bypasses
 // API Platform's built-in Doctrine filters) — documented AND functional (BCK-05).

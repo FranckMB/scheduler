@@ -61,3 +61,16 @@ export function usePlaceFixture() {
     onError: () => toast.error("Placement impossible"),
   });
 }
+
+export function useImportFbiFixtures() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, file }: { teamId: string; file: File }) => matchesApi.importFbiFixtures(teamId, file),
+    onSuccess: () => {
+      invalidateFixtures(queryClient);
+      // The import may find-or-create competitions.
+      void queryClient.invalidateQueries({ queryKey: ["competitions"] });
+    },
+    onError: () => toast.error("Import FBI impossible"),
+  });
+}

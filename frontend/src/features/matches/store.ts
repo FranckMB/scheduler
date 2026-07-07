@@ -7,9 +7,12 @@ interface MatchesState {
   selectedFixtureId: string | null;
   /** Manual fixture-entry dialog open. */
   fixtureFormOpen: boolean;
+  /** FBI import dialog open. */
+  importDialogOpen: boolean;
   setSelectedWeekend: (key: string | null) => void;
   setSelectedFixtureId: (id: string | null) => void;
   setFixtureFormOpen: (open: boolean) => void;
+  setImportDialogOpen: (open: boolean) => void;
 }
 
 /** Per-session UI state — nothing worth persisting (selections are ephemeral). */
@@ -17,7 +20,9 @@ export const useMatchesStore = create<MatchesState>((set) => ({
   selectedWeekend: null,
   selectedFixtureId: null,
   fixtureFormOpen: false,
+  importDialogOpen: false,
   setSelectedWeekend: (selectedWeekend) => set({ selectedWeekend }),
   setSelectedFixtureId: (selectedFixtureId) => set({ selectedFixtureId }),
   setFixtureFormOpen: (fixtureFormOpen) => set({ fixtureFormOpen }),
+  setImportDialogOpen: (importDialogOpen) => set({ importDialogOpen }),
 }));
