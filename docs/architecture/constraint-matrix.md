@@ -48,4 +48,9 @@ d'ENG-10) · `forcedVenueId` (émis par l'expansion fermeture de salle du backen
 | Expansion CLUB→équipes | `backend/tests/Unit/Service/ScheduleConstraintBuilderTest.php` |
 
 Contrat backend↔engine **inchangé** (config = dict opaque, warnings via `diagnostics` existants) —
-pas de bump `CONTRACT_VERSION`, pas de bump `SCORE_FORMULA_VERSION` (poids existants réutilisés).
+pas de bump `CONTRACT_VERSION`. `SCORE_FORMULA_VERSION` **bumpé V5→V6** : nouveau poids
+`avoided_venue = −60` (vrai malus sur le créneau du gymnase évité — un bonus-complément sur les
+autres gymnases biaisait l'arbitrage inter-équipes). Sémantiques d'agrégation : indispos coach =
+**union des blacklists ∩ des whitelists** ; plusieurs « éviter tel jour » soft = **union par équipe**
+(deux compléments indépendants s'annulaient) ; double règle de gymnase sur une équipe → diagnostic
+INFO (last-wins signalé).

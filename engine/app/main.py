@@ -338,9 +338,10 @@ def _solve(
 
     # Add objective function.
     preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
-    # Soft "avoid this venue" rules (ENG-11): reward every OTHER venue of the
-    # team — the positive complement of a malus, same "preferred" weight, so a
-    # preference can never make the instance INFEASIBLE.
+    # Soft "avoid this venue" rules (ENG-11): a TRUE MALUS on the avoided slot
+    # ("avoided_venue" < 0) — a complement bonus on every other venue would give
+    # the team a flat per-session advantage and bias cross-team allocation.
+    # Still soft: feasibility is never affected.
     avoided_by_team: dict[str, set[str]] = {}
     for avoided in parsed.get("avoided_venues", []):
         avoided_by_team.setdefault(avoided["scope_target_id"], set()).add(avoided["venue_id"])
@@ -352,8 +353,8 @@ def _solve(
         if preferred_venue_id is not None and venue_id == preferred_venue_id:
             soft_terms.append((var, "preferred"))
         avoided_set = avoided_by_team.get(team_id)
-        if avoided_set is not None and venue_id not in avoided_set:
-            soft_terms.append((var, "preferred"))
+        if avoided_set is not None and venue_id in avoided_set:
+            soft_terms.append((var, "avoided_venue"))
 
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
     soft_terms.extend(add_preferred_time_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))

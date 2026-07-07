@@ -161,6 +161,28 @@ final class ScheduleConstraintBuilderTest extends TestCase
         }
     }
 
+    public function testEmptyTagResolutionIsANoOpNeverAClubWideBan(): void
+    {
+        // Review NR: a HARD "prefer venue" on a tag resolving to ZERO teams used
+        // to skip the positive constraints but still run the "forbidden outside
+        // the tag" loop — banning the venue for EVERY team of the club.
+        $this->teamTagRepository->method('findOneBy')->willReturn(null);
+
+        $constraint = (new Constraint)
+            ->setId('c-tag')
+            ->setName('Groupe fantôme · préfère Gymnase A')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['targetTag' => 'FANTOME', 'preferredVenueId' => 'v-1'])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', [$this->team('team-a'), $this->team('team-b')]);
+
+        self::assertSame([], $serialized, 'an unresolvable tag must emit NOTHING (no club-wide forbiddenVenueId)');
+    }
+
     public function testCoachAvailabilityIsNeverClubExpanded(): void
     {
         $constraint = (new Constraint)

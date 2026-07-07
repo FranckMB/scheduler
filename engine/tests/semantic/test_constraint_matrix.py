@@ -106,16 +106,19 @@ def _slots(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
-    """Does a placed slot violate the cell's rule?"""
+    """Does a placed slot violate the cell's rule? Thresholds are DERIVED from
+    the cell's own config so editing a matrix cell can never desynchronize the
+    predicate from the scenario."""
     key = cell.config_key
+    config = _fill(cell.config)
     if key == "minStartTime":
-        return str(slot["startTime"])[:5] < "19:00"
-    if key == "forbiddenDays" or key == "unavailableDays":
-        return int(slot["dayOfWeek"]) == BAD_DAY
+        return str(slot["startTime"])[:5] < str(config["minStartTime"])
+    if key in ("forbiddenDays", "unavailableDays"):
+        return int(slot["dayOfWeek"]) in set(config[key])
     if key == "preferredVenueId":
-        return slot["venueId"] != GOOD_VENUE
+        return slot["venueId"] != config["preferredVenueId"]
     if key == "forbiddenVenueId":
-        return slot["venueId"] == BAD_VENUE
+        return slot["venueId"] == config["forbiddenVenueId"]
     raise AssertionError(f"no violation predicate for {key}")
 
 
@@ -217,3 +220,93 @@ def test_legacy_bonus_facility_behaves_as_preferred() -> None:
     assert result["status"] == "completed"
     placed = _slots(result)
     assert placed and all(s["venueId"] == GOOD_VENUE for s in placed)
+
+
+# --- Review NR: two soft avoid-day rules must BOTH steer (no mutual cancel) ----
+
+def test_two_soft_avoid_day_rules_union_not_cancel() -> None:
+    venues = [make_venue("v", [(1, "18:00"), (3, "18:00"), (5, "18:00")])]
+    constraints = [
+        {
+            "id": "ad-1", "scope": "TEAM", "scopeTargetId": "t",
+            "family": "DAY", "ruleType": "PREFERRED", "name": "éviter lundi",
+            "config": {"forbiddenDays": [1]}, "sortOrder": 0, "isActive": True,
+        },
+        {
+            "id": "ad-2", "scope": "TEAM", "scopeTargetId": "t",
+            "family": "DAY", "ruleType": "PREFERRED", "name": "éviter mercredi",
+            "config": {"forbiddenDays": [3]}, "sortOrder": 0, "isActive": True,
+        },
+    ]
+    result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
+
+    assert result["status"] == "completed"
+    days = {int(s["dayOfWeek"]) for s in _slots(result)}
+    assert days == {5}, f"both avoided days must steer away, got {days}"
+
+
+# --- Review NR: two availableDays whitelists INTERSECT (never block every day) -
+
+def test_two_available_days_whitelists_intersect_not_block_everything() -> None:
+    venues = [make_venue("v", [(1, "18:00"), (2, "18:00"), (5, "18:00")])]
+    constraints = [
+        team_coach("tc", "t", "coach-1"),
+        {
+            "id": "av-1", "scope": "COACH", "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "dispo lun+mar",
+            "config": {"coachId": "coach-1", "availableDays": [1, 2]}, "sortOrder": 0, "isActive": True,
+        },
+        {
+            "id": "av-2", "scope": "COACH", "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "dispo mar+ven",
+            "config": {"coachId": "coach-1", "availableDays": [2, 5]}, "sortOrder": 0, "isActive": True,
+        },
+    ]
+    result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
+
+    # Intersection = Tuesday only; the union-of-complements bug blocked EVERY
+    # day (INFEASIBLE for a schedulable club).
+    assert result["status"] == "completed"
+    days = {int(s["dayOfWeek"]) for s in _slots(result)}
+    assert days == {2}, f"whitelists must intersect to Tuesday, got {days}"
+
+
+# --- Review NR: cockpit venue_closed rows never raise a false warning ---------
+
+def test_cockpit_venue_closed_marker_raises_no_false_warning() -> None:
+    venues = [make_venue("v", [(1, "18:00")])]
+    constraints = [{
+        "id": "vc-1", "scope": "FACILITY", "scopeTargetId": "v",
+        "family": "FACILITY", "ruleType": "HARD", "name": "Gymnase fermé",
+        "config": {"type": "venue_closed"}, "sortOrder": 0, "isActive": True,
+    }]
+    result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
+
+    assert result["status"] == "completed"
+    warnings = [d for d in result.get("diagnostics", []) if d.get("type") == "constraint_not_honored"]
+    assert warnings == [], "the closure marker is enforced via the backend expansion — no false alarm"
+
+
+# --- Review NR: a soft avoid-venue must not displace another team's preference -
+
+def test_soft_avoid_venue_does_not_outbid_an_explicit_preference() -> None:
+    # One contested slot at venue Y: team B explicitly prefers Y, team A merely
+    # avoids X. The complement-bonus bug tied both at the same weight.
+    venues = [make_venue("venue-y", [(1, "18:00")]), make_venue("venue-x", [(3, "18:00")])]
+    constraints = [
+        {
+            "id": "avoid-x", "scope": "TEAM", "scopeTargetId": "a",
+            "family": "FACILITY", "ruleType": "PREFERRED", "name": "A évite X",
+            "config": {"forbiddenVenueId": "venue-x"}, "sortOrder": 0, "isActive": True,
+        },
+        {
+            "id": "prefer-y", "scope": "TEAM", "scopeTargetId": "b",
+            "family": "FACILITY", "ruleType": "PREFERRED", "name": "B préfère Y",
+            "config": {"preferredVenueId": "venue-y"}, "sortOrder": 0, "isActive": True,
+        },
+    ]
+    result = solve_payload(make_payload(teams=[_team("a"), _team("b")], venues=venues, constraints=constraints))
+
+    assert result["status"] == "completed"
+    y_teams = {s["teamId"] for s in result["slots"] if s["venueId"] == "venue-y"}
+    assert "b" in y_teams, "the explicit preference must win the contested slot"
