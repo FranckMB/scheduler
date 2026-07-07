@@ -41,31 +41,45 @@ describe("SeasonTransitionBanner", () => {
   });
 
   it("shows inside the window when no successor exists", () => {
-    meData = { seasons: [season({})] };
+    meData = { role: "admin", seasons: [season({})] };
     render(<SeasonTransitionBanner today={day("2026-05-20")} />);
     expect(screen.getByRole("status")).toHaveTextContent("préparez la saison suivante");
   });
 
   it("hides before May 15", () => {
-    meData = { seasons: [season({})] };
+    meData = { role: "admin", seasons: [season({})] };
     render(<SeasonTransitionBanner today={day("2026-05-14")} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("hides on the pivot day (July 15) and after", () => {
-    meData = { seasons: [season({})] };
+    meData = { role: "admin", seasons: [season({})] };
     render(<SeasonTransitionBanner today={day("2026-07-15")} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("hides when the next season is already prepared", () => {
-    meData = { seasons: [season({}), season({ id: "sD", name: "2026-2027", startDate: "2026-08-01", isCurrent: false })] };
+    meData = { role: "admin", seasons: [season({}), season({ id: "sD", name: "2026-2027", startDate: "2026-08-01", isCurrent: false })] };
     render(<SeasonTransitionBanner today={day("2026-06-20")} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("hides for non-management members (the endpoint would 403 their CTA)", () => {
+    meData = { role: "editor", seasons: [season({})] };
+    render(<SeasonTransitionBanner today={day("2026-06-20")} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("nudges a dormant club before EVERY upcoming pivot (anchored on today)", () => {
+    // Current season is 2025-2026, never transitioned; in June 2027 the window
+    // of the NEXT pivot (2027-07-15) must still show the banner.
+    meData = { role: "admin", seasons: [season({})] };
+    render(<SeasonTransitionBanner today={day("2027-06-20")} />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
   it("CTA opens the shared transition confirm", async () => {
-    meData = { seasons: [season({})] };
+    meData = { role: "admin", seasons: [season({})] };
     const user = userEvent.setup();
     render(<SeasonTransitionBanner today={day("2026-06-20")} />);
 

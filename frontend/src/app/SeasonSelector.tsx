@@ -32,6 +32,12 @@ export function SeasonSelector() {
   const openConfirm = useTransitionUiStore((s) => s.openConfirm);
   const closeConfirm = useTransitionUiStore((s) => s.closeConfirm);
   const [transitionPending, setTransitionPending] = useState(false);
+
+  // Fresh mount (login, club switch) = dialog closed: the global store would
+  // otherwise leak a confirm left open across logout/re-login in the same tab.
+  useEffect(() => {
+    closeConfirm();
+  }, [closeConfirm]);
   // Re-dating step (P2-PR1): opens after the switch to N+1, listing N's events.
   const [redateContext, setRedateContext] = useState<{ sourceSeasonId: string; targetSeasonId: string; targetSeasonName: string } | null>(null);
 

@@ -33,20 +33,26 @@ export function SeasonTransitionBanner({ today = new Date() }: { today?: Date })
 
   const seasons = me?.seasons ?? [];
   const current = seasons.find((s) => s.isCurrent);
-  if (undefined === current) {
+  // Preparing a season is a management action (the endpoint 403s otherwise) —
+  // never nag members who cannot act on the nudge.
+  const isManagement = "owner" === me?.role || "admin" === me?.role;
+  if (undefined === current || !isManagement) {
     return null;
   }
 
-  const currentYear = seasonYearOf(current.startDate);
-  const successorExists = seasons.some((s) => seasonYearOf(s.startDate) > currentYear);
+  // Anchor on TODAY's season-year, never the current season's: a dormant club
+  // whose latest season is years old must still be nudged before EVERY
+  // upcoming pivot (mirrors TransitionReminderCommand).
+  const todayIso = localIso(today);
+  const anchorYear = seasonYearOf(todayIso);
+  const successorExists = seasons.some((s) => seasonYearOf(s.startDate) > anchorYear);
   if (successorExists) {
     return null;
   }
 
-  // Window [May 15, July 15[ of the pivot year — the pivot day itself is out
-  // (the season has switched; N+1 resolution takes over).
-  const pivotYear = currentYear + 1;
-  const todayIso = localIso(today);
+  // Window [May 15, July 15[ before the next pivot — the pivot day itself is
+  // out (the season has switched; N+1 resolution takes over).
+  const pivotYear = anchorYear + 1;
   if (todayIso < `${pivotYear}-05-15` || todayIso >= `${pivotYear}-07-15`) {
     return null;
   }

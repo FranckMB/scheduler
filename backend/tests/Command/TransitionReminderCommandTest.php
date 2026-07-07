@@ -166,6 +166,36 @@ final class TransitionReminderCommandTest extends KernelTestCase
         self::assertSame([$admin], $this->sentTo);
     }
 
+    public function testDormantClubIsStillRemindedYearsLater(): void
+    {
+        // Current season 2025-2026 never transitioned; in May 2027 the pivot
+        // must anchor on TODAY (next pivot 2027-07-15), not on the stale season
+        // (2026-07-15, in the past → silence forever).
+        [, , $admin] = $this->seedClub('DORM');
+
+        $this->runCommand('2027-05-20');
+
+        self::assertContains($admin, $this->sentTo, 'a dormant club must be nudged before EVERY upcoming pivot');
+    }
+
+    public function testPartialMailerFailureRetriesTheWholeMilestone(): void
+    {
+        [$club, , $admin] = $this->seedClub('PART');
+        $this->addMember($club, 'second-mgr@club.fr', 'admin', true);
+
+        // One of the two managers fails → milestone NOT marked; next run
+        // retries both (at-least-once, no manager silently dropped).
+        $this->throwForRecipient = $admin;
+        $tester = $this->runCommand(self::IN_BUCKET_61, expectSuccess: false);
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertSame(['second-mgr@club.fr'], $this->sentTo);
+
+        $this->reset();
+        $this->throwForRecipient = '';
+        $this->runCommand(self::IN_BUCKET_61);
+        self::assertContains($admin, $this->sentTo, 'the failed manager must be retried');
+    }
+
     public function testInvalidDateExitsFailureWithoutSending(): void
     {
         $this->seedClub('BADDATE');

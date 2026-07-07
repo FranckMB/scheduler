@@ -14,6 +14,7 @@ use App\Service\TenantConnectionContext;
 use App\Service\TransitionReminderMailBuilder;
 use DateTimeImmutable;
 use DateTimeZone;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -78,6 +79,17 @@ final class TransitionReminderCommand extends Command
             return Command::FAILURE;
         }
 
+        // Coarse month gate: no bucket can match outside May–July whatever the
+        // club timezone (buckets live in [May 15, July 15[; ±1 day of TZ drift
+        // never leaves the May–July span) — skip the whole club walk off-season.
+        $gateDay = $forcedToday ?? new DateTimeImmutable;
+        $month = (int) $gateDay->format('n');
+        if ($month < 5 || $month > 7) {
+            $io->success('Outside the anticipation window (May–July) — nothing to do.');
+
+            return Command::SUCCESS;
+        }
+
         // Detached after clear(), but only id/name/timezone getters are read —
         // no per-club re-SELECT inside the loop.
         $clubs = $this->entityManager->getRepository(Club::class)->findAll();
@@ -121,16 +133,21 @@ final class TransitionReminderCommand extends Command
             return 0;
         }
 
-        // Already prepared: any season binned AFTER the current one silences
-        // the reminder (mail and banner alike).
-        $currentYear = SeasonResolver::seasonYear($current->getStartDate());
+        // Anchor on TODAY's season-year, never the current season's: a dormant
+        // club whose latest season is years old must still be nudged before
+        // EVERY upcoming pivot, not only the one following its stale season.
+        $anchorYear = SeasonResolver::seasonYear($today);
+
+        // Already prepared: any season binned AFTER today's bin will take over
+        // at the next pivot → silence (mail and banner alike).
         foreach ($seasons as $season) {
-            if (SeasonResolver::seasonYear($season->getStartDate()) > $currentYear) {
+            if (SeasonResolver::seasonYear($season->getStartDate()) > $anchorYear) {
                 return 0;
             }
         }
 
-        $pivot = new DateTimeImmutable(\sprintf('%d-07-15', $currentYear + 1));
+        // The NEXT pivot relative to today (today's bin ends on July 15 of anchor+1).
+        $pivot = new DateTimeImmutable(\sprintf('%d-07-15', $anchorYear + 1));
         $days = (int) $today->diff($pivot)->format('%r%a');
         $threshold = $this->bucket($days);
         if (null === $threshold || $this->reminderLogRepository->alreadySent($current->getId(), $threshold)) {
@@ -156,9 +173,10 @@ final class TransitionReminderCommand extends Command
             }
         }
 
-        // Mark the milestone sent only if it actually reached someone, so a
-        // failed run retries it next time instead of losing it.
-        if ($sentForSeason > 0) {
+        // Mark the milestone sent only when EVERY manager got it: a partial
+        // failure retries the whole milestone next run (at-least-once — a rare
+        // duplicate for the delivered ones beats silently dropping a manager).
+        if ($sentForSeason === \count($emails) && $sentForSeason > 0) {
             $this->markSent($current, $threshold);
         }
 
@@ -167,10 +185,15 @@ final class TransitionReminderCommand extends Command
 
     private function markSent(Season $season, int $threshold): void
     {
-        $this->entityManager->persist(
-            (new TransitionReminderLog)->setSeasonId($season->getId())->setThreshold($threshold),
-        );
-        $this->entityManager->flush();
+        try {
+            $this->entityManager->persist(
+                (new TransitionReminderLog)->setSeasonId($season->getId())->setThreshold($threshold),
+            );
+            $this->entityManager->flush();
+        } catch (UniqueConstraintViolationException) {
+            // Two cron instances raced past alreadySent(): the other one owns
+            // the ledger row — the duplicate send already happened, nothing to do.
+        }
     }
 
     /**
