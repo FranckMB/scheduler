@@ -16,8 +16,8 @@ use App\Enum\CalendarEntryStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
-use App\Repository\SeasonRepository;
 use App\Service\PeriodReminderMailBuilder;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -244,7 +244,7 @@ final class PeriodReminderCommandTest extends KernelTestCase
             $mailer,
             $container->get(CalendarEntryRepository::class),
             $container->get(ClubUserRepository::class),
-            $container->get(SeasonRepository::class),
+            $container->get(SeasonResolver::class),
             $container->get(PeriodReminderLogRepository::class),
             new PeriodReminderMailBuilder('http://localhost:5173'),
         );

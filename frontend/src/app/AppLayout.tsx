@@ -9,6 +9,7 @@ import { useThemeStore } from "@/shared/stores/themeStore";
 
 import { ReadonlySeasonBanner } from "./ReadonlySeasonBanner";
 import { SeasonSelector } from "./SeasonSelector";
+import { SeasonTransitionBanner } from "./SeasonTransitionBanner";
 
 function NavItem({ to, children }: { to: string; children: string }) {
   return (
@@ -68,6 +69,7 @@ export function AppLayout() {
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8">
         <ReadonlySeasonBanner />
+        <SeasonTransitionBanner />
         <Outlet />
       </main>
     </div>

@@ -155,9 +155,11 @@ services:
     networks:
       - clubscheduler_network
 
-  # Hourly maintenance loop. Both commands are idempotent so hourly is safe:
-  # periods:remind dedupes per (entry, threshold) via period_reminder_log, and
-  # reconcile-stuck only touches GENERATING schedules older than --older-than.
+  # Hourly maintenance loop. All three commands are idempotent so hourly is
+  # safe: periods:remind dedupes per (entry, threshold) via period_reminder_log,
+  # seasons:remind-transition dedupes per (season, threshold) via
+  # transition_reminder_log, and reconcile-stuck only touches GENERATING
+  # schedules older than --older-than.
   cron-runner:
     build:
       context: .
@@ -176,6 +178,7 @@ services:
       sh -lc 'while true; do
         if [ -f bin/console ]; then
           php bin/console app:periods:remind --no-interaction || true;
+          php bin/console app:seasons:remind-transition --no-interaction || true;
           php bin/console app:schedules:reconcile-stuck --older-than=60 --no-interaction || true;
         fi;
         sleep 3600;

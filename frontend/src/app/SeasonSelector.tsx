@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { toast } from "@/shared/stores/toastStore";
+import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 
 /**
  * Header season switcher (transition-de-saison P1). Shows the season the
@@ -25,8 +26,18 @@ export function SeasonSelector() {
   const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);
   const setSelectedSeasonId = useSeasonStore((s) => s.setSelectedSeasonId);
   const exitPeriodMode = useWizardStore((s) => s.exitPeriodMode);
-  const [confirmTransition, setConfirmTransition] = useState(false);
+  // Confirm dialog state lives in a shared store so the anticipation banner
+  // can open the SAME dialog (single home of the transition logic).
+  const confirmTransition = useTransitionUiStore((s) => s.confirmOpen);
+  const openConfirm = useTransitionUiStore((s) => s.openConfirm);
+  const closeConfirm = useTransitionUiStore((s) => s.closeConfirm);
   const [transitionPending, setTransitionPending] = useState(false);
+
+  // Fresh mount (login, club switch) = dialog closed: the global store would
+  // otherwise leak a confirm left open across logout/re-login in the same tab.
+  useEffect(() => {
+    closeConfirm();
+  }, [closeConfirm]);
   // Re-dating step (P2-PR1): opens after the switch to N+1, listing N's events.
   const [redateContext, setRedateContext] = useState<{ sourceSeasonId: string; targetSeasonId: string; targetSeasonName: string } | null>(null);
 
@@ -86,7 +97,7 @@ export function SeasonSelector() {
       toast.error("La préparation de la saison suivante a échoué.");
     } finally {
       setTransitionPending(false);
-      setConfirmTransition(false);
+      closeConfirm();
     }
   };
 
@@ -123,7 +134,7 @@ export function SeasonSelector() {
             </MenuItem>
           );
         })}
-        <MenuItem icon={<CalendarPlus />} onSelect={() => setConfirmTransition(true)}>
+        <MenuItem icon={<CalendarPlus />} onSelect={openConfirm}>
           Préparer la saison suivante…
         </MenuItem>
       </Menu>
@@ -134,7 +145,7 @@ export function SeasonSelector() {
         description="La structure de la saison en cours (gymnases, équipes, coachs, contraintes permanentes) sera copiée dans une nouvelle saison brouillon, librement modifiable. Le planning généré n'est pas copié."
         confirmLabel={transitionPending ? "Préparation…" : "Préparer"}
         onConfirm={launchTransition}
-        onCancel={() => setConfirmTransition(false)}
+        onCancel={closeConfirm}
       />
 
       {null !== redateContext ? (
