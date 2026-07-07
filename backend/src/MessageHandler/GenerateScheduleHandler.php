@@ -286,12 +286,21 @@ final class GenerateScheduleHandler
     }
 
     /**
-     * The first successful schedule of a season becomes its baseline (the "main"
-     * plan) automatically. Later generations do not steal it (re-designation is
-     * an explicit user action via POST /api/schedules/{id}/validate).
+     * The first successful **season plan** of a season becomes its baseline (the
+     * "main" plan) automatically. Later generations do not steal it (re-designation
+     * is an explicit user action via POST /api/schedules/{id}/validate).
+     *
+     * UX-02: a period **overlay** (`calendarEntryId` non-null) must NEVER become
+     * the baseline — the baseline is the full season plan, an overlay is a bounded
+     * exception plan. The call site already skips overlays; this internal guard is
+     * belt-and-suspenders so the method stays safe if ever called from elsewhere.
      */
     private function assignBaselineIfFirst(Schedule $schedule): void
     {
+        if (null !== $schedule->getCalendarEntryId()) {
+            return; // overlay generation — never the season baseline
+        }
+
         $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
         if ($season instanceof Season && null === $season->getBaselineScheduleId()) {
             $season->setBaselineScheduleId($schedule->getId());

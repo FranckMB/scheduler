@@ -8,6 +8,7 @@
 - **`VALIDATED`** = planning **fini + verrouillé (lecture seule)**. **Plusieurs** plannings peuvent être VALIDATED (c'est bon signe).
 - **Rouvrir** un planning validé → il **redevient éditable** (repasse `COMPLETED`), puis re-validable.
 - **« Planning principal de la saison »** (main planning / baseline, `season.baselineScheduleId`) = le planning **général de référence** de la saison, auto-assigné au **1er** succès de génération. **Badge distinct** du statut VALIDATED. Les autres = **plannings secondaires**.
+- **Invariant (UX-02)** : un **overlay de période** (`calendarEntryId` non-null, plan d'exception borné du cockpit) n'est **jamais** le baseline — l'auto-assignation le saute (call-site + garde interne `assignBaselineIfFirst`) et `set-baseline` le refuse (409). Côté front, la sélection d'atterrissage (`pickLandingScheduleId`) ignore un baseline overlay/en-vol → jamais d'ouverture sur un « ★ · période » vide.
 - Le gestionnaire consulte **tous** les plannings de l'année ; il édite ceux qui ne sont pas verrouillés.
 
 ### Hors scope (reporté, raison technique)
