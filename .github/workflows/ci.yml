@@ -182,9 +182,11 @@ jobs:
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
       # The journey drives the real stack: nginx (/api), engine (solve),
-      # messenger-worker (generation), mercure, redis, postgres.
-      - name: Start full stack
-        run: docker compose up -d --wait php-fpm nginx engine messenger-worker mercure redis postgres
+      # mercure, redis, postgres. messenger-worker starts AFTER composer
+      # install — its `bin/console messenger:consume` command dies without
+      # vendor/ on a fresh checkout and `--wait` would fail the job.
+      - name: Start services
+        run: docker compose up -d --wait php-fpm nginx engine mercure redis postgres
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
@@ -194,6 +196,14 @@ jobs:
 
       - name: Migrate dev database
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:migrations:migrate --no-interaction'
+
+      # matches.spec logs in as the BasketballInit-seeded club — append-load the
+      # dev fixtures (idempotent, existing rows are reused, never purged).
+      - name: Load dev fixtures
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:fixtures:load --append --no-interaction'
+
+      - name: Start messenger worker
+        run: docker compose up -d --wait messenger-worker
 
       - uses: actions/setup-node@v4
         with:

@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-/** Unique ARA per run — the dev DB is not rolled back between e2e runs. */
-function uniqueAra(prefix: string): string {
-  const rand = Math.floor(Math.random() * 1_000_000).toString(36);
-  return (prefix + Date.now().toString(36) + rand).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
-}
+import { uniqueAra } from "./support";
 
 /**
  * THE end-to-end journey (audit P0.2, FRT-05): a fresh club walks the whole
@@ -67,13 +63,19 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   // The embedded planning replaces the launcher once a schedule is COMPLETED.
   await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 180_000 });
 
-  // --- Validate the completed planning (→ VALIDATED baseline, unlocks the cockpit).
+  // --- Validate from the REAL planning page (validating inside the embedded
+  // wizard view flips it back to the launcher: VALIDATED is not COMPLETED).
+  await page.goto("/planning");
+  await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Valider" }).click();
-  const confirm = page.getByRole("button", { name: /^Valider$/ }).last();
-  if (await confirm.isVisible().catch(() => false)) {
-    await confirm.click(); // confirm dialog, if any
-  }
-  await expect(page.getByText("Validé")).toBeVisible({ timeout: 15_000 });
+  // The confirm dialog (role=dialog "Valider le planning") always opens — wait
+  // for it, confirm, then assert the toolbar flipped to the VALIDATED state
+  // ("Rouvrir" replaces "Valider"); never a substring match on "Validé", which
+  // the dialog's own description contains.
+  const dialog = page.getByRole("dialog", { name: "Valider le planning" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Valider", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Rouvrir" })).toBeVisible({ timeout: 15_000 });
 
   // --- The home now opens on the temporal cockpit (month calendar), not the
   // work-loop gate: the month navigation is the cockpit's stable marker.
