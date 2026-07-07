@@ -91,6 +91,50 @@ final class SeasonTransitionApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(404);
     }
 
+    /**
+     * Contract the P2 re-dating step relies on (100% frontend, no new backend):
+     * events of the SOURCE season are readable with an explicit X-Season-Id, a
+     * kept event POSTed with the DRAFT's X-Season-Id is stamped into the draft,
+     * and neither season sees the other's events.
+     */
+    public function testRedatingContractCrossSeasonReadAndDraftWrite(): void
+    {
+        [$user, , $season] = $this->createClubUserSeason('admin');
+        $auth = $this->authHeaders($user);
+
+        // An event in N (created via the API on the current season).
+        $this->client->request('POST', '/api/calendar_entries', [], [], [...$auth, 'CONTENT_TYPE' => 'application/ld+json'], json_encode([
+            'kind' => 'event', 'title' => 'AG du club', 'startDate' => '2026-05-12', 'endDate' => '2026-05-12', 'isDisruptive' => true, 'status' => 'active',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        // Prepare N+1.
+        $this->client->request('POST', '/api/seasons/' . $season->getId() . '/transition', [], [], $auth);
+        self::assertResponseStatusCodeSame(201);
+        $draftId = $this->responseData()['seasonId'];
+
+        // Read N's events with an explicit X-Season-Id (the re-dating source list).
+        $this->client->request('GET', '/api/calendar_entries?kind=event', [], [], [...$auth, 'HTTP_X-Season-Id' => $season->getId()]);
+        self::assertResponseStatusCodeSame(200);
+        $titles = array_map(static fn (array $m): string => $m['title'], $this->responseData()['member'] ?? []);
+        self::assertSame(['AG du club'], $titles);
+
+        // POST the kept event with the draft's X-Season-Id → stamped into N+1.
+        $this->client->request('POST', '/api/calendar_entries', [], [], [...$auth, 'HTTP_X-Season-Id' => $draftId, 'CONTENT_TYPE' => 'application/ld+json'], json_encode([
+            'kind' => 'event', 'title' => 'AG du club', 'startDate' => '2027-05-11', 'endDate' => '2027-05-11', 'isDisruptive' => true, 'status' => 'active',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        // The draft sees exactly its own event; N still sees only its own.
+        $this->client->request('GET', '/api/calendar_entries?kind=event', [], [], [...$auth, 'HTTP_X-Season-Id' => $draftId]);
+        $draftMembers = $this->responseData()['member'] ?? [];
+        self::assertCount(1, $draftMembers);
+        self::assertSame('2027-05-11', substr((string) $draftMembers[0]['startDate'], 0, 10));
+
+        $this->client->request('GET', '/api/calendar_entries?kind=event', [], [], [...$auth, 'HTTP_X-Season-Id' => $season->getId()]);
+        self::assertCount(1, $this->responseData()['member'] ?? []);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

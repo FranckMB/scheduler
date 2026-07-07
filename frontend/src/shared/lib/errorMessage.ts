@@ -28,11 +28,11 @@ export async function errorMessage(error: unknown): Promise<string> {
     const status = error.response.status;
 
     try {
-      // Read the error body directly (nothing else consumes it). Going through
-      // text()+parse rather than clone().json() avoids a locked-stream case that
-      // left the specific server message unread in the browser.
-      const raw = await error.response.text();
-      const body = (raw.trim() === "" ? {} : JSON.parse(raw)) as ApiErrorBody;
+      // ky 2.x consumes the error-response stream itself and exposes the parsed
+      // body as `error.data` — re-reading the response here throws "body stream
+      // already read". Read the stashed parse instead (fallback when the client
+      // hook did not derive a serverMessage from it).
+      const body = ((error as { data?: unknown }).data ?? {}) as ApiErrorBody;
       const direct = body.error ?? body.message ?? body.detail;
       if (typeof direct === "string" && direct.trim() !== "") {
         return direct;

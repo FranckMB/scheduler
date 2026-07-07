@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { transitionSeason } from "@/features/auth/api";
 import { useMe } from "@/features/auth/queries";
+import { RedateEventsDialog } from "@/features/season-transition/RedateEventsDialog";
 import { useWizardStore } from "@/features/wizard/store";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
@@ -26,6 +27,8 @@ export function SeasonSelector() {
   const exitPeriodMode = useWizardStore((s) => s.exitPeriodMode);
   const [confirmTransition, setConfirmTransition] = useState(false);
   const [transitionPending, setTransitionPending] = useState(false);
+  // Re-dating step (P2-PR1): opens after the switch to N+1, listing N's events.
+  const [redateContext, setRedateContext] = useState<{ sourceSeasonId: string; targetSeasonId: string; targetSeasonName: string } | null>(null);
 
   const seasons = me?.seasons ?? [];
   const currentSeasonId = me?.currentSeasonId ?? null;
@@ -56,17 +59,28 @@ export function SeasonSelector() {
     // would race the backend successor check (mitigated by an advisory lock,
     // but no reason to fire it).
     if (null === currentSeasonId || transitionPending) return;
+    // Capture N BEFORE switching (switchTo clears the query cache; the dialog
+    // must not depend on /api/me refetch timing).
+    const sourceSeasonId = currentSeasonId;
     setTransitionPending(true);
     try {
-      const created = await transitionSeason(currentSeasonId);
+      const created = await transitionSeason(sourceSeasonId);
       toast.success(`Saison ${created.name} préparée — structure copiée.`);
       switchTo(created.seasonId);
+      setRedateContext({ sourceSeasonId, targetSeasonId: created.seasonId, targetSeasonName: created.name });
     } catch (error) {
       if (error instanceof HTTPError && 409 === error.response.status) {
-        const body = (await error.response.json().catch(() => null)) as { existingSeasonId?: string } | null;
+        // The response stream is consumed by the client's beforeError hook —
+        // structured fields are read from the stashed serverBody, never from
+        // response.json() (which throws "body stream already read").
+        const body = ((error as { serverBody?: unknown }).serverBody ?? null) as { existingSeasonId?: string } | null;
         if (body?.existingSeasonId) {
           toast.success("La saison suivante existe déjà — bascule dessus.");
           switchTo(body.existingSeasonId);
+          // Re-opening path: the step re-triggers as long as the draft has no
+          // event (the dialog auto-skips otherwise).
+          const existingName = seasons.find((s) => s.id === body.existingSeasonId)?.name ?? "la saison suivante";
+          setRedateContext({ sourceSeasonId, targetSeasonId: body.existingSeasonId, targetSeasonName: existingName });
           return;
         }
       }
@@ -123,6 +137,15 @@ export function SeasonSelector() {
         onConfirm={launchTransition}
         onCancel={() => setConfirmTransition(false)}
       />
+
+      {null !== redateContext ? (
+        <RedateEventsDialog
+          sourceSeasonId={redateContext.sourceSeasonId}
+          targetSeasonId={redateContext.targetSeasonId}
+          targetSeasonName={redateContext.targetSeasonName}
+          onClose={() => setRedateContext(null)}
+        />
+      ) : null}
     </>
   );
 }

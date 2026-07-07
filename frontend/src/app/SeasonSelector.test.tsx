@@ -17,6 +17,12 @@ vi.mock("@/features/auth/queries", () => ({
 vi.mock("@/features/auth/api", () => ({
   transitionSeason: (id: string) => transitionMock(id),
 }));
+// The re-dating step has its own tests; here we only assert WHEN it opens.
+vi.mock("@/features/season-transition/RedateEventsDialog", () => ({
+  RedateEventsDialog: ({ sourceSeasonId, targetSeasonId }: { sourceSeasonId: string; targetSeasonId: string }) => (
+    <div data-testid="redate-dialog">{`${sourceSeasonId}->${targetSeasonId}`}</div>
+  ),
+}));
 
 const season = (overrides: Partial<MeSeason>): MeSeason => ({
   id: "sN",
@@ -131,6 +137,27 @@ describe("SeasonSelector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Préparer" }));
     expect(transitionMock).toHaveBeenCalledWith("sN");
     await waitFor(() => expect(useSeasonStore.getState().selectedSeasonId).toBe("sD"));
+    // The re-dating step opens right after the switch, sourced from N.
+    expect(screen.getByTestId("redate-dialog")).toHaveTextContent("sN->sD");
+  });
+
+  it("re-opens the re-dating step on the existing-successor path (409)", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({}), season({ id: "sD", name: "2026-2027", isCurrent: false })] };
+    const { HTTPError } = await import("ky");
+    const response = new Response(JSON.stringify({ existingSeasonId: "sD" }), { status: 409 });
+    const httpError = new HTTPError(response, new Request("http://t/api/seasons/sN/transition"), {} as never);
+    // The ky beforeError hook stashes the parsed body (the stream itself is
+    // consumed by then) — mirror that contract here.
+    (httpError as unknown as { serverBody: unknown }).serverBody = { existingSeasonId: "sD" };
+    transitionMock.mockRejectedValue(httpError);
+    renderSelector();
+
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    await userEvent.click(screen.getByText("Préparer la saison suivante…"));
+    await userEvent.click(screen.getByRole("button", { name: "Préparer" }));
+
+    await waitFor(() => expect(useSeasonStore.getState().selectedSeasonId).toBe("sD"));
+    expect(screen.getByTestId("redate-dialog")).toHaveTextContent("sN->sD");
   });
 
   it("ignores a double-click on the confirm button (single transition request)", async () => {
