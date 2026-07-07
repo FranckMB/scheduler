@@ -111,3 +111,52 @@ def test_purge_keeps_lock_with_pending_waiter() -> None:
         return same
 
     assert asyncio.run(scenario()), "a lock with a pending waiter must survive the purge"
+
+
+def _input_with_version(version: str) -> ScheduleInputSchema:
+    return ScheduleInputSchema.model_validate(
+        {
+            "clubId": "c", "seasonId": "s", "version": version,
+            "venues": [], "teams": [], "coaches": [], "slotTemplates": [],
+            "constraints": [], "priorityTiers": [],
+        }
+    )
+
+
+def test_generate_rejects_incompatible_contract_major() -> None:
+    # ENG-14 (backend↔engine contract axis): a payload whose contract MAJOR the
+    # engine does not speak must be rejected up front, not solved against a
+    # schema it may misread. Engine CONTRACT_VERSION is 2.x → major 1 is refused.
+    from fastapi import HTTPException
+
+    try:
+        asyncio.run(main.generate_schedule(_input_with_version("1.0")))
+    except HTTPException as exc:
+        assert exc.status_code == 422
+        assert "contract version" in exc.detail.lower()
+    else:
+        raise AssertionError("an incompatible contract major must be rejected (422)")
+
+
+def test_generate_accepts_matching_contract_major() -> None:
+    # A payload on the engine's own major (2.x) passes the guard and reaches the
+    # solver (empty club → trivially completed).
+    result = asyncio.run(main.generate_schedule(_input_with_version("2.0")))
+    assert result.status == "completed"
+
+
+def test_unhandled_exception_returns_clean_500(caplog: Any) -> None:
+    # ENG-06: an unexpected error is logged with its traceback and returns a
+    # clean JSON 500 — no internal detail leaks to the client.
+    import json
+    import types
+
+    request = types.SimpleNamespace(method="POST", url=types.SimpleNamespace(path="/generate"))
+    with caplog.at_level(logging.ERROR, logger="engine"):
+        response = asyncio.run(main._unhandled_exception_handler(request, RuntimeError("boom: secret internal detail")))
+
+    assert response.status_code == 500
+    body = json.loads(response.body)
+    assert body == {"status": "error", "detail": "Internal solver error."}
+    assert "boom: secret internal detail" not in response.body.decode()
+    assert "boom: secret internal detail" in caplog.text  # logged server-side

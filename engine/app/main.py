@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from ortools.sat.python import cp_model
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -40,6 +40,22 @@ logging.basicConfig(
 logger = logging.getLogger("engine")
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """ENG-06: last-resort handler so an unexpected solver/runtime error is
+    logged with its traceback server-side and returns a clean JSON 500 instead
+    of leaking internals. HTTPException and request-validation errors keep their
+    own dedicated handlers (this only catches the truly unhandled)."""
+    # Log the exception we were handed (exc_info=exc), not the ambient
+    # sys.exc_info() — robust whether called in an except context or directly.
+    logger.error("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"status": "error", "detail": "Internal solver error."},
+    )
 
 _club_locks: dict[str, asyncio.Lock] = {}
 _club_locks_guard = asyncio.Lock()
@@ -440,6 +456,17 @@ async def health() -> dict[str, str]:
 
 @app.post("/generate", response_model=ScheduleOutputSchema)
 async def generate_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchema:
+    # ENG-14: reject a payload whose contract MAJOR the engine does not speak,
+    # instead of silently solving against a schema it may misread. The contract
+    # is manually synced (no codegen), so a major bump on one side must fail
+    # loud rather than produce a subtly wrong plan.
+    contract_version = read_contract_version()
+    if input_data.version.split(".")[0] != contract_version.split(".")[0]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unsupported contract version {input_data.version!r}; engine speaks {contract_version}.",
+        )
+
     lock = await get_club_lock(input_data.club_id)
     async with lock:
         return await build_schedule(input_data)
