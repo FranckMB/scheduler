@@ -9,6 +9,15 @@ framework:
             policy: 'sliding_window'
             limit: 5
             interval: '15 minutes'
+        # SEC-11: global throttle on the authenticated API, keyed PER USER (JWT),
+        # applied by ApiRateLimitSubscriber on ^/api. 300/min = 5 req/s — well
+        # above legitimate use (the frontend polls a schedule every few seconds)
+        # but a real bound on a runaway/abusive client. Public endpoints keep
+        # their own per-IP limiters above (this one needs an authenticated user).
+        api:
+            policy: 'sliding_window'
+            limit: 300
+            interval: '1 minute'
 
 # Dev/e2e: the Playwright suite registers ~8 clubs in one minute from one IP —
 # the strict anti-brute-force sizing (5/15min) is a production concern. 100 is
@@ -22,3 +31,14 @@ when@dev:
                 policy: 'sliding_window'
                 limit: 100
                 interval: '15 minutes'
+
+# Test: a small API bound so ApiRateLimitTest can trip the 429 in a handful of
+# requests. Keyed per user, so it never leaks across the other functional tests
+# (each registers its own user, none makes 30 authed requests as one user).
+when@test:
+    framework:
+        rate_limiter:
+            api:
+                policy: 'sliding_window'
+                limit: 30
+                interval: '1 minute'

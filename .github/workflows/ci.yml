@@ -101,6 +101,9 @@ jobs:
       - name: ManagementRoleTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ManagementRoleTest.php --group phase1'
 
+      - name: ApiRateLimitTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ApiRateLimitTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
