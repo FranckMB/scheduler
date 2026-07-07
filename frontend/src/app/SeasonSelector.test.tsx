@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MeResponse, MeSeason } from "@/features/auth/api";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
+import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 import { useWizardStore } from "@/features/wizard/store";
 import { SeasonSelector } from "./SeasonSelector";
 
@@ -50,6 +51,7 @@ describe("SeasonSelector", () => {
     meData = undefined;
     transitionMock.mockReset();
     useSeasonStore.getState().clear();
+    useTransitionUiStore.setState({ confirmOpen: false });
   });
 
   it("renders nothing without seasons", () => {
@@ -158,6 +160,16 @@ describe("SeasonSelector", () => {
 
     await waitFor(() => expect(useSeasonStore.getState().selectedSeasonId).toBe("sD"));
     expect(screen.getByTestId("redate-dialog")).toHaveTextContent("sN->sD");
+  });
+
+  it("shows the confirm when opened externally via the shared store (banner CTA)", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({})] };
+    renderSelector();
+
+    expect(screen.queryByText("Préparer la saison suivante ?")).not.toBeInTheDocument();
+    // The anticipation banner opens the SAME dialog through the store.
+    act(() => useTransitionUiStore.getState().openConfirm());
+    expect(await screen.findByText("Préparer la saison suivante ?")).toBeInTheDocument();
   });
 
   it("ignores a double-click on the confirm button (single transition request)", async () => {
