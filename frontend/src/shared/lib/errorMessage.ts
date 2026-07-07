@@ -18,21 +18,15 @@ export async function errorMessage(error: unknown): Promise<string> {
   }
 
   if (error instanceof HTTPError) {
-    // The ky client's beforeError hook already read the body and stashed the
-    // server's message (readable there, not post-hoc — see client.ts).
-    const attached = (error as { serverMessage?: string }).serverMessage;
-    if (typeof attached === "string" && attached.trim() !== "") {
-      return attached;
-    }
-
     const status = error.response.status;
 
-    try {
-      // ky 2.x consumes the error-response stream itself and exposes the parsed
-      // body as `error.data` — re-reading the response here throws "body stream
-      // already read". Read the stashed parse instead (fallback when the client
-      // hook did not derive a serverMessage from it).
-      const body = ((error as { data?: unknown }).data ?? {}) as ApiErrorBody;
+    // ky 2.x consumes the error-response stream itself and exposes the parsed
+    // body as `error.data` — re-reading the response would throw "body stream
+    // already read". A non-JSON body leaves data as a string/undefined → the
+    // object guard falls through to the status-based sentence.
+    const data = (error as { data?: unknown }).data;
+    if (null !== data && typeof data === "object") {
+      const body = data as ApiErrorBody;
       const direct = body.error ?? body.message ?? body.detail;
       if (typeof direct === "string" && direct.trim() !== "") {
         return direct;
@@ -46,8 +40,6 @@ export async function errorMessage(error: unknown): Promise<string> {
           return joined;
         }
       }
-    } catch {
-      // body was not JSON — fall through to the status-based message
     }
 
     if (status === 400) return "Requête invalide.";

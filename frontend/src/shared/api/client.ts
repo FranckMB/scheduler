@@ -1,4 +1,4 @@
-import ky, { HTTPError } from "ky";
+import ky from "ky";
 
 import { useAuthStore } from "@/shared/stores/authStore";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -53,35 +53,10 @@ export const api = ky.create({
         }
       },
     ],
-    beforeError: [
-      // ky 2.x consumes the error-response body itself and parses it into
-      // `error.data` BEFORE this hook runs (cloning/re-reading the response
-      // here throws "body is already used"). Normalize that parsed body into
-      // `serverMessage` (read by errorMessage()) and `serverBody` (structured
-      // fields for application catches, e.g. existingSeasonId on the
-      // transition 409).
-      (state) => {
-        const { error } = state;
-        if (error instanceof HTTPError) {
-          const body = (error as { data?: unknown }).data;
-          if (null !== body && typeof body === "object") {
-            const typed = body as { error?: string; message?: string; detail?: string; violations?: { message?: string }[] };
-            const direct = typed.error ?? typed.message ?? typed.detail;
-            let message = typeof direct === "string" ? direct.trim() : "";
-            if (message === "" && Array.isArray(typed.violations)) {
-              message = typed.violations
-                .map((v) => v.message)
-                .filter((m): m is string => typeof m === "string" && m.trim() !== "")
-                .join(" · ");
-            }
-            if (message !== "") {
-              (error as { serverMessage?: string }).serverMessage = message;
-            }
-            (error as { serverBody?: unknown }).serverBody = body;
-          }
-        }
-        return error;
-      },
-    ],
+    // No beforeError hook: ky 2.x consumes the error-response body itself and
+    // exposes the parsed result as `error.data` BEFORE any consumer runs —
+    // re-reading `error.response` throws "body stream already read". Every
+    // error-body reader (errorMessage(), structured catches) must read
+    // `error.data`, never the response.
   },
 });

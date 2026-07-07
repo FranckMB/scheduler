@@ -70,10 +70,9 @@ export function SeasonSelector() {
       setRedateContext({ sourceSeasonId, targetSeasonId: created.seasonId, targetSeasonName: created.name });
     } catch (error) {
       if (error instanceof HTTPError && 409 === error.response.status) {
-        // The response stream is consumed by the client's beforeError hook —
-        // structured fields are read from the stashed serverBody, never from
-        // response.json() (which throws "body stream already read").
-        const body = ((error as { serverBody?: unknown }).serverBody ?? null) as { existingSeasonId?: string } | null;
+        // ky 2.x parses the error body into error.data (the stream itself is
+        // consumed — response.json() would throw "body stream already read").
+        const body = ((error as { data?: unknown }).data ?? null) as { existingSeasonId?: string } | null;
         if (body?.existingSeasonId) {
           toast.success("La saison suivante existe déjà — bascule dessus.");
           switchTo(body.existingSeasonId);

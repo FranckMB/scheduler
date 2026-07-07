@@ -106,4 +106,50 @@ describe("RedateEventsDialog", () => {
     await waitFor(() => expect(screen.getByText(/Problème de connexion/)).toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("stays open on a PARTIAL failure even though the target now has events", async () => {
+    // Two kept events: A succeeds (the draft now has an event → a refetch of the
+    // target query must NOT auto-close the dialog), B fails and must stay
+    // visible with its error. The open/skip decision is frozen at first settle.
+    const eventB = { ...EVENT, id: "ev-2", title: "Tournoi" };
+    getSeasonEvents.mockImplementation((seasonId: string) => Promise.resolve("season-n" === seasonId ? [EVENT, eventB] : []));
+    // First call (A) succeeds, second (B) fails.
+    redateEvent.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("invalide"));
+    const user = userEvent.setup();
+    const onClose = renderDialog();
+
+    await screen.findByText("AG du club"); // decision "show" frozen here
+    // From now on the target query returns the freshly created event — the
+    // post-submit invalidation refetch must NOT re-decide and auto-close.
+    getSeasonEvents.mockImplementation((seasonId: string) =>
+      Promise.resolve("season-n" === seasonId ? [EVENT, eventB] : [{ ...EVENT, id: "created-in-target" }]),
+    );
+    await user.click(screen.getByRole("button", { name: /Reconduire 2 événements/ }));
+
+    await waitFor(() => expect(screen.getByText(/Problème de connexion/)).toBeInTheDocument());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("shows an error state (not a silent skip) when the source query fails", async () => {
+    getSeasonEvents.mockImplementation((seasonId: string) =>
+      "season-n" === seasonId ? Promise.reject(new Error("500")) : Promise.resolve([]),
+    );
+    const onClose = renderDialog();
+
+    await waitFor(() => expect(screen.getByText(/Impossible de charger les événements/)).toBeInTheDocument());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(redateEvent).not.toHaveBeenCalled();
+  });
+
+  it("disables the submit when a kept date is emptied", async () => {
+    getSeasonEvents.mockImplementation((seasonId: string) => Promise.resolve("season-n" === seasonId ? [EVENT] : []));
+    const user = userEvent.setup();
+    renderDialog();
+
+    await screen.findByText("AG du club");
+    await user.clear(screen.getByLabelText("Nouvelle date de début de AG du club"));
+
+    expect(screen.getByText(/Renseignez les deux dates/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Reconduire 1 événement/ })).toBeDisabled();
+  });
 });

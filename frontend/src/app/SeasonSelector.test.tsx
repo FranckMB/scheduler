@@ -146,9 +146,9 @@ describe("SeasonSelector", () => {
     const { HTTPError } = await import("ky");
     const response = new Response(JSON.stringify({ existingSeasonId: "sD" }), { status: 409 });
     const httpError = new HTTPError(response, new Request("http://t/api/seasons/sN/transition"), {} as never);
-    // The ky beforeError hook stashes the parsed body (the stream itself is
-    // consumed by then) — mirror that contract here.
-    (httpError as unknown as { serverBody: unknown }).serverBody = { existingSeasonId: "sD" };
+    // ky 2.x consumes the response stream and exposes the parsed body as
+    // error.data — mirror that contract here.
+    (httpError as unknown as { data: unknown }).data = { existingSeasonId: "sD" };
     transitionMock.mockRejectedValue(httpError);
     renderSelector();
 
