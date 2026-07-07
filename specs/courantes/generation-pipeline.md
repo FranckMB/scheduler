@@ -76,8 +76,10 @@ de saison ? ») échoue alors silencieusement : `pickLandingScheduleId` renvoie 
 le planning s'ouvre sur rien après une génération réussie.
 
 - **Conduite normalisée** : normaliser à la **frontière**. `listSchedules`
-  (`features/planning/api.ts`) mappe `calendarEntryId: s.calendarEntryId ?? null`
-  → le type `string | null` redevient honnête, les 7 consommateurs voient un vrai `null`.
+  (`features/planning/api.ts`) mappe les champs nullable (`calendarEntryId`, `score`)
+  en `?? null` → le type redevient honnête, **tous** les consommateurs voient un vrai
+  `null`. Même piège pour `score` : un plan sans score (DRAFT/en vol) affichait sinon
+  le littéral « score undefined » (`PlanningToolbar`, `BaselineBanner`, `SeasonSchedulesModal`).
 - **Règle générale** : tout champ nullable consommé côté frontend via une comparaison
   `=== null` doit être normalisé à la frontière de son endpoint, ou testé avec un
   check *nullish* (`!x` / `== null`), jamais `=== null` seul.

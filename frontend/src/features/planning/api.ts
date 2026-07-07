@@ -189,13 +189,16 @@ export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();
 
-// API Platform 4 OMITS null fields from JSON, so a season plan's null
-// calendarEntryId arrives ABSENT (undefined), not null — and every
+// API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
+// arrive ABSENT (undefined), not null. calendarEntryId → every
 // `null === calendarEntryId` overlay check silently fails (UX-02 journey
-// regression). Normalise at the boundary so the type is honest and all
-// consumers see a real null.
+// regression); score → a null-score plan (DRAFT/in-flight) renders the literal
+// "score undefined". Normalise BOTH at the boundary so the type is honest and
+// every consumer sees a real null.
 export const listSchedules = (): Promise<Schedule[]> =>
-  collectionAll<Schedule>("schedules").then((rows) => rows.map((s) => ({ ...s, calendarEntryId: s.calendarEntryId ?? null })));
+  collectionAll<Schedule>("schedules").then((rows) =>
+    rows.map((s) => ({ ...s, calendarEntryId: s.calendarEntryId ?? null, score: s.score ?? null })),
+  );
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");

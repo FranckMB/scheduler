@@ -28,4 +28,11 @@ describe("listSchedules — null normalisation (UX-02)", () => {
     const [overlay] = await listSchedules();
     expect(overlay.calendarEntryId).toBe("entry-9");
   });
+
+  it("normalises an ABSENT score (DRAFT/in-flight plan) to null", async () => {
+    // A null score is omitted too → would render the literal "score undefined".
+    respondOnce([{ id: "s3", name: "Draft", status: "DRAFT", createdAt: "x", updatedAt: "y" }]);
+    const [draft] = await listSchedules();
+    expect(draft.score).toBeNull();
+  });
 });
