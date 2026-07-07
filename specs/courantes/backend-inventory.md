@@ -269,6 +269,9 @@ Détail : [`vacances-scolaires-jours-feries.md`] et roadmap. Bascule de saison a
 Seule la première règle correspondante s'applique. Tout le reste de `/api/*` requiert un JWT valide.
 Le firewall `login` applique en plus `login_throttling` (`max_attempts: 5`) ; `/api/register` et
 `/api/password/forgot` sont rate-limités par IP (`config/packages/rate_limiter.yaml`, sliding window 5/15 min).
+**SEC-11** : tout `^/api` **authentifié** est en plus limité **par utilisateur** (limiteur `api`,
+sliding window 300/min) via `ApiRateLimitSubscriber` (priorité 6, après firewall + tenant) → 429
+au-delà ; les endpoints publics (sans `User`) gardent leur limiteur par IP.
 
 ### Résolution du tenant (`TenantFilterListener`)
 
