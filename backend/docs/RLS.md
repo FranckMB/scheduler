@@ -1,6 +1,6 @@
 # ClubScheduler — PostgreSQL Row-Level Security (RLS)
 
-> ✅ **STATUS: ACTIVE** since migration `Version20260703120000` (SEC-03 fixed). The migration — not the initdb scripts — is the source of truth for policies and grants: 14 `club_id` tables under `FORCE ROW LEVEL SECURITY` with `tenant_isolation` policies `TO app_user`, `club_user` with an open-SELECT bootstrap policy. Runtime connects as `app_user`; the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped). Effective architecture: `docs/security/rls.md` (repo root). The `01/02/03-*.sql` initdb scripts remain for fresh volumes only.
+> ✅ **STATUS: ACTIVE** since migration `Version20260703120000` (SEC-03 fixed). The migration — not the initdb scripts — is the source of truth for policies and grants: **every table carrying a `club_id` column** is under `FORCE ROW LEVEL SECURITY` with a `tenant_isolation` policy `TO app_user` (no hard count here — new tenant tables inherit the pattern via the migration helper; the count would rot). `club_user` carries the special open-SELECT bootstrap policy. Runtime connects as `app_user`; the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped). **This file = operator how-to (env, roles, troubleshooting); the effective architecture (who sets the GUC, the superadmin door) is the canonical `docs/security/rls.md` — keep the two in sync, don't duplicate.** The `01/02/03-*.sql` initdb scripts remain for fresh volumes only.
 
 ## Overview
 

@@ -69,7 +69,7 @@ All custom agents/skills are **manual / user-triggered**. No hidden automation, 
 2. `/plan` injecting boundaries §2, conventions §5, scope checklist §9 (the built-in `Plan`/`Explore` subagents do **not** read `CLAUDE.md`). Optional `contrarian-review` on the plan. User validates the plan.
 3. Implement **strictly in scope** (no opportunistic refactor).
 4. **Non-regression (mandatory if a structuring axis §7.1 is touched):** add/extend a test guarding the axis in the same PR (`--group phase1`, engine invariant/golden, or e2e).
-5. **Tests green locally before proposing merge** (blocking tests + the new NR tests + zone suite). CI is a double-check and does NOT block the merge.
+5. **Tests green locally before proposing merge** — run `/validation-runner` (selects the changed zone's targeted suite + cross-zone contract test + the mandatory smoke-solver when engine/backend is touched, and justifies any suite it could not run); it must be green on blocking tests + the new NR tests + zone suite. CI is a double-check and does NOT block the merge.
 6. Change summary + **doc check (mandatory):** either run `documentation-update`, or state explicitly "no doc impacted because …". Never skip silently.
 7. **`/code-review` on every PR** (+ `/security-review` if the change touches auth/data/external integrations).
 8. PR → **user's explicit go** → merge.

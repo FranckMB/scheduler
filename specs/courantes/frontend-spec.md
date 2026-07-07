@@ -54,10 +54,12 @@ layouts (`src/app/router.tsx`).
 | `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
 | `/` | **Cockpit temporel** (`CockpitPage`) : bandeau planning principal (Ouvrir/**Modifier** = reopen · Tous les plannings) · calendrier mensuel des exceptions · radar (à traiter). **Débloqué (sticky) dès `me.socleValidatedAt` non null** ; sinon redirige vers `/planning`. **Palier B** : CTAs radar « Adapter » actifs (→ wizard mode période) ; « Voir le plan » (overlay généré → consultation) ; « Modifier » le socle avec overlays → **confirmation proportionnée** (409 `overlays_exist` → dialog « supprimera N secondaires »). Overlays exclus du sélecteur de plannings (badge « Période ») | Required | `AppLayout` |
 | `/planning` | **Boucle de travail planning** (`PlanningPage`, ex-`/`) : grille `WeekGrid`, toolbar (sélecteur, régénérer, valider/rouvrir, planning principal ★, renommer), diagnostics, détail créneau | Required | `AppLayout` |
+| `/matchs` | **Module matchs** (`MatchesPage`) : placement des rencontres domicile (grille week-end), radar de conflits coach/joueur, import FBI (`ImportFbiDialog`) | Required | `AppLayout` |
 | `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `onboardingCompleted === false`) | Required | `AppLayout` |
-| `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression) et couleur d'accent (+ palette) appliquée à toute l'UI | Required | `AppLayout` |
+| `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
-| `/pending-members` | Approbation des demandes d'adhésion (`PendingMembersPage`) — visible admin uniquement | Required (admin) | `AppLayout` |
+
+> Toute URL authentifiée inconnue (dont l'ancienne `/pending-members`) redirige vers `/` (catch-all `router.tsx`).
 
 ### Guards et redirects (`src/app/AuthGuard.tsx`)
 
@@ -504,11 +506,14 @@ frontend/src/
 ├── main.tsx                    # Entry point
 ├── index.css                   # Tailwind 4 (@theme) + variables d'accent
 ├── app/                        # AppLayout, AuthGuard, providers, router
-├── features/                   # Logique métier par domaine
-│   ├── auth/                   # Login/Register/ForgotPassword/ResetPassword/WaitingApproval/PendingMembers + api/queries
-│   ├── club/                   # ClubPage (logo + accent), LogoCropper
+├── features/                   # Logique métier par domaine (liste : ls src/features/)
+│   ├── auth/                   # Login/Register/ForgotPassword/ResetPassword/WaitingApproval + api/queries
+│   ├── club/                   # ClubPage (logo + accent + section Demandes/approbation), LogoCropper
+│   ├── cockpit/                # CockpitPage : bandeau planning socle, calendrier mensuel, radar overlays
+│   ├── matches/                # MatchesPage : grille week-end, radar conflits, ImportFbiDialog
 │   ├── planning/               # PlanningPage, PlanningToolbar, WeekGrid, SlotDetail, DiagnosticsPanel, ResourceFilter, GenerationWaiting, store, lib/grid
 │   ├── profile/                # ProfilePage
+│   ├── season-transition/      # SeasonSelector, SeasonTransitionBanner, transitionUiStore
 │   └── wizard/                 # WizardLayout, steps/ (Teams, Venues, Coaches, Constraints, Recap, Generate), lib/, store
 ├── shared/
 │   ├── api/                    # client ky, collection (hydra), errors, types.gen.ts

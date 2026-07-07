@@ -1,5 +1,5 @@
 ---
-name: Documentation Update
+name: documentation-update
 description: After a feature, selectively refresh the docs so a human dev and an agent both understand the current state and how it evolved — general + per-subproject READMEs, CLAUDE.md index, per-zone docs/, ADRs, and specs/ reconciliation. Verifies claims against code (no drift), bans volatile counts, enforces evolution→courantes graduation. No filler. Invoke manually.
 ---
 

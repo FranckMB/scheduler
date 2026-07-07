@@ -1,5 +1,5 @@
 ---
-name: Validation Runner
+name: validation-runner
 description: After an implementation, runs the targeted tests for the changed zone PLUS the cross-zone integration/contract tests, and explicitly justifies any test that could not be run. Its value over a plain `make test` is choosing the right targeted + cross-zone tests and reporting non-runnable ones. Invoke manually.
 ---
 

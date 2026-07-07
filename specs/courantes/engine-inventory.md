@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ c7d93c8 2026-07-03
+Last verified @ 2026-07-07 (matrice contrainte audit P0.1)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -112,6 +112,7 @@ Sous-schemas clés :
 - **ScheduleSlotSchema** : `id`, `teamId`, `venueId`, `coachId`, `dayOfWeek`, `startTime` (time), `durationMinutes`, `lockLevel` (default `"NONE"`), `temporaryLock`, `temporaryLockFor`, `temporaryMinSessionsOverride`, `pendingConstraintSuggestion`.
 - **DiagnosticSchema** : `id`, `type`, `severity`, `teamId`, `coachId`, `venueId`, `dayOfWeek`, `startTime`, `durationMinutes`, `message`, `suggestions: list[str]`, `createdAt`.
   - Types valides (commentaire code) : `unplaced`, `soft_lock_moved`, `coach_overload`, `session_below_effective_min`, `conflict`, `unused_slot`, `coach_no_rest_day`, `day_constraint_conflict`.
+  - **Canal séparé — `parse_warnings`** (pas des `DiagnosticSchema`) : `parse_v2_constraints` émet des warnings `type == "constraint_not_honored"` (`_not_honored_warning`, `constraints.py`) quand une contrainte saisie ne peut pas être traduite en terme solver (audit P0.1 — traçabilité UI↔engine). Cf. `docs/architecture/constraint-matrix.md`.
 
 ---
 
@@ -123,8 +124,9 @@ Sous-schemas clés :
 |--------|-----------|-------------------|
 | `HARD` | Impératif — faisabilité | Contrainte CP-SAT (`model.Add(...)`) |
 | `PREFERRED` | Souhait — optimisation | Bonus objectif Level-2 (pas de contrainte hard) |
-| `BONUS` | Bonus — optimisation | Bonus objectif Level-2 |
 | `LOCK` | Slot pré-placé fixé | `fixed_slots` → variable forcée à 1 |
+
+> `BONUS` **n'existe plus** (audit P0.1 ENG-12) : l'UI ne le propose plus ; les lignes legacy `BONUS` sont normalisées en `PREFERRED` à l'entrée de `parse_v2_constraints` (`constraints.py` — plus honnête que de les dropper en silence).
 
 ### 4.2 Family & Scope
 
@@ -145,6 +147,7 @@ Sous-schemas clés :
 | `family == "FACILITY"` + `forcedVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `forcedVenueId` |
 | `family == "FACILITY"` + `preferredVenueId` + `PREFERRED` + `scope=TEAM` | `preferred_venues[scopeTargetId]` = `preferredVenueId` |
 | `family == "FACILITY"` + `forbiddenVenueId` | `forbidden_assignments` → `[{scope_target_id, venue_id}]` |
+| `family == "FACILITY"` + `avoidedVenueId` (soft) | `avoided_venues` → `[{scope_target_id, venue_id}]` (malus objectif, poids `avoided_venue`) |
 | `type == "PRIORITY_TIER"` (legacy) | `priority_tiers[tierId]` = `defaultMinSessions` |
 | `family in ("TIME","DAY")` | `time_windows` (traité par `add_time_window_constraints`) |
 
@@ -176,7 +179,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 
 - `family == "TIME"` + `ruleType == "HARD"` : force `var == 0` si `startTime` hors `[minStartTime, maxStartTime]`.
 - `family == "DAY"` + `ruleType == "HARD"` : `forcedDays` (≥ 1 session sur ces jours), `forbiddenDays` (vars à 0).
-- `family == "TIME"` + `ruleType == "PREFERRED"` : **non implémenté** (TODO dans le code, `continue`).
+- `family == "TIME"`/`"DAY"` + `ruleType == "PREFERRED"` : **bonus soft dans l'objectif** (`add_preferred_time_bonus` / `add_preferred_day_bonus`, poids `preferred_time`/`preferred_day` = 30) — pas de contrainte hard. Cf. commentaire `constraints.py` « PREFERRED TIME is a soft bonus handled in the objective ».
 - Conflit `forcedDays ∩ forbiddenDays` → diagnostic `day_constraint_conflict` (severity ERROR), toutes vars team à 0.
 
 ---
@@ -190,7 +193,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 - **Timeout solver** : adaptatif (`_adaptive_timeout`, voir §2) — `n_teams × n_venues` ≤50 : 60 s · ≤200 : 180 s · sinon 600 s, plafonné par `solver_timeout_seconds` du payload (default **650 s** dans `ScheduleInputSchema`). Phase 2 (chaînage) plafonnée en plus par `CHAINING_PHASE_MAX_SECONDS = 10`.
 - **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42) — les deux phases.
 - **Workers** : `solver.parameters.num_search_workers = 1` — les deux phases.
-- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py) :
+- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V6"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
 
 | Critère | Poids |
 |---------|-------|
@@ -199,6 +202,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 | Tier B | 100 |
 | `session_count` | 20 |
 | `preferred` | 60 |
+| `avoided_venue` | −60 (malus soft, audit P0.1 ENG-11) |
 | `preferred_day` | 30 |
 | `preferred_time` | 30 |
 | Tier C | 10 |
@@ -233,5 +237,5 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 ## 7. Tests & Fixtures
 
 - **Fixtures golden** (`engine/tests/fixtures/`) : scénarios JSON (liste : `ls engine/tests/fixtures/`) — dont `simple_club`, `medium_club`, `dense_club`, `bccl_regression`, `impossible`, `age_order_club`, `consecutive_emerick`, `no_rest_enzo`, `overlap_anna`, `overlap_nicolas`, `score_hard_only_teams`, `vacation_week`.
-- **Suites** : `tests/golden/`, `tests/invariants/`, `tests/test_result_builder.py`, plus tests spécialisés (`test_age_order`, `test_chaining_bonus`, `test_coach_rest_day`, `test_salarie_distribution`, `test_max_consecutive_sessions`, `test_time_constraints`, `test_constraints`, `test_objective`, `test_generate_contract`, etc.).
+- **Suites** (emplacements — liste vivante via `ls engine/tests/`) : `tests/golden/`, `tests/invariants/`, `tests/perf/`, **`tests/semantic/`** (matrice de contraintes audit P0.1 — `constraint_matrix.py` = source unique UI↔engine, `test_constraint_matrix.py`, `test_diagnostics.py`, `test_features.py`, `test_semantic_smoke.py`), `tests/test_result_builder.py`, plus tests spécialisés (age order, chaining bonus, coach rest day, salarié distribution, max consecutive sessions, adaptive timeout, capacity slots, time/day constraints, objective, generate contract…).
 - **Toolchain tests** : `pytest` + `pytest-timeout` + `hypothesis`.

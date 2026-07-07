@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ c7d93c8 2026-07-03
+Last verified @ 2026-07-07 (cockpit A/B/C · module matchs palier A · transition P1/P2 · calendriers globaux)
 
 ---
 
@@ -40,6 +40,7 @@ backend/
 │   ├── Enum/                 # ScheduleStatus, LockLevel, ...
 │   ├── Dto/                  # Input DTOs (ClubInput, ScheduleInput, ...)
 │   ├── Repository/           # Repositories Doctrine
+│   ├── Command/              # Commandes CLI (imports holidays, seed league windows, purge/rappels saison) — liste : ls backend/src/Command/
 │   ├── Storage/              # LogoStorage (interface) + LocalLogoStorage
 │   └── DataFixtures/         # Jeux de données de test
 ├── config/
@@ -93,6 +94,11 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | 18 | TeamTag | `/api/team-tags` | Étiquettes d'équipe | |
 | 19 | TeamTagAssignment | `/api/team-tag-assignments` | Assignations d'étiquettes | |
 | 20 | VenueTrainingSlot | `/api/venue-training-slots` | Créneaux d'entraînement de salle | |
+| — | CalendarEntry | `/api/calendar-entries` | Cockpit temporel : périodes/événements (kind PERIOD/EVENT ; overlay planning via `overlayScheduleId`) | Opération custom conflits (§3) |
+| — | Competition | `/api/competitions` | Compétitions FFBB (championnat/coupe/brassage) — module matchs palier A | season-scoped |
+| — | Fixture | `/api/fixtures` | Rencontres (HOME/AWAY, placement domicile, `externalRef` = n° FBI) | Ops custom conflits + import FBI (§3) |
+
+> La numérotation n'est **pas** un décompte — liste exhaustive et à jour : `ls backend/src/ApiResource/`. Les tables globales de référence (`PublicHoliday`, `SchoolHolidayPeriod`, `LeagueMatchWindow`) sont exposées en **lecture seule via contrôleurs invokables** (§3), pas comme ressources CRUD.
 
 Chaque ressource déclare `paginationEnabled: true` et `paginationItemsPerPage: 30` au niveau
 de l'attribut `#[ApiResource]`. Les réponses collections suivent le format JSON-LD
@@ -204,6 +210,32 @@ Champs `Club` : `accentColor` (hex), `accentPalette` (json ≤3 hex), `logoUrl` 
 | `/api/club/logo` | POST · DELETE | `ClubLogoController` | Upload (multipart `file`, raster PNG/JPEG/WebP ≤ 500 Ko) / suppression du logo du club courant. Octets stockés via l'abstraction `App\Storage\LogoStorage` (`LocalLogoStorage` en dev ; alias `services.yaml` swappable pour du stockage objet en prod). |
 | `/api/clubs/{clubId}/logo` | GET | `ClubLogoController` | Sert le logo (public, stream + mime via finfo). |
 
+### Cockpit temporel (overlays période/événement)
+
+Détail : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md). `CalendarEntry` (kind PERIOD/EVENT) porte des overlays de planning (`overlayScheduleId`) au-dessus du planning socle de la saison.
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/calendar-entries/{id}/conflicts` | GET | `CalendarEntryConflictsController` | Conflits d'un overlay période vs le planning socle (créneaux impactés). |
+
+### Module matchs (palier A — FFBB)
+
+Détail : [`module-matchs.md`](module-matchs.md). Placement des rencontres domicile + radar de conflits coach/joueur ; catalogue-ligue global `LeagueMatchWindow` (hors tenant).
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/league-match-windows` | GET | `LeagueMatchWindowsController` | Fenêtres de match héritées de la ligue du club (`Club.league`, fallback fédé AURA). Catalogue global partagé. |
+| `/api/fixtures/conflicts` | GET | `FixtureConflictsController` | Radar : conflits d'empreinte-temps coach/joueur entre rencontres et entraînements. |
+| `/api/teams/{id}/fixtures/import` | POST | `ImportFixturesController` | Import FBI (.xlsx **par équipe**, choisie à l'upload). Idempotent par `Fixture.externalRef` (n° FBI). Rapport `created`/`skipped`/`errors`. |
+
+### Transition de saison (P1/P2)
+
+Détail : [`vacances-scolaires-jours-feries.md`] et roadmap. Bascule de saison au pivot 15 juillet (`SeasonResolver`), re-datation des événements, purge et rappels.
+
+| Route | Méthode | Contrôleur | Description |
+|-------|---------|------------|-------------|
+| `/api/seasons/{id}/transition` | POST | `SeasonTransitionController` | Déclenche la bascule vers une nouvelle saison (recap + re-datation, `SeasonTransitionService`). |
+
 ### Health check
 
 | Route | Méthode | Contrôleur | Description |
@@ -247,8 +279,12 @@ l'isolation multi-tenant au niveau de chaque requête :
 1. **Résolution du clubId** : attribut de requête `_club_id`, sinon header `X-Club-Id`,
    sinon **la membership `ClubUser` active de l'utilisateur JWT** (le frontend n'envoie
    aucun header tenant — c'est le chemin nominal).
-2. **Résolution du seasonId** : attribut `_season_id`, sinon header `X-Season-Id`, sinon
-   la saison `active` du club résolu.
+2. **Résolution du seasonId** : attribut `_season_id`, sinon header `X-Season-Id` (validé →
+   403 si étranger/inconnu), sinon la **saison courante dérivée du calendrier** via
+   `SeasonResolver::currentAmong` (pivot 15 juillet — remplace l'ancien lookup unique
+   `status='active'`). Le listener pose aussi `_season_readonly` (saison archivée →
+   écriture 409, cf. `SeasonReadonlyTest`) et active le filtre Doctrine **`season_filter`**
+   (frontière de correction intra-club, en plus du `TenantFilter` club_id).
 3. **Validation d'appartenance** : si un `clubId` est résolu et un utilisateur est authentifié,
    le listener vérifie qu'un `ClubUser` **actif** existe pour `(userId, clubId)`. Sinon → 403
    (bloque un header `X-Club-Id` spoofé ; une membership `pending` n'a accès à rien).

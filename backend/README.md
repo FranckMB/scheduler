@@ -71,6 +71,14 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 | `TeamCoach` | `/api/team_coaches` | Assignations entraîneur-équipe (MAIN/ASSISTANT) |
 | `CoachPlayerMembership` | `/api/coach_player_memberships` | Entraîneurs aussi joueurs |
 
+### Ressources cockpit temporel & matchs
+
+| Ressource | Endpoint | Description |
+|-----------|----------|-------------|
+| `CalendarEntry` | `/api/calendar_entries` | Périodes/événements du cockpit (kind PERIOD/EVENT ; overlay planning via `overlayScheduleId`) |
+| `Competition` | `/api/competitions` | Compétitions FFBB (championnat/coupe/brassage) — module matchs palier A |
+| `Fixture` | `/api/fixtures` | Rencontres (HOME/AWAY, placement domicile, `externalRef` = n° FBI) |
+
 ### Opérations custom (au-delà du CRUD)
 
 | Route | Méthode | Description |
@@ -86,6 +94,19 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 | `/api/health` | GET | Health check (nginx → php-fpm) |
 | `/api/schedules/{id}/generate` | POST | Lancer la génération de planning (async) |
 | `/api/schedules/{id}/export-pdf` | POST | Exporter le planning en PDF (async) |
+
+### Opérations cockpit / matchs / transition / calendriers (invokables)
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/calendar-entries/conflicts` | GET | Conflits d'un overlay période vs planning socle (cockpit) |
+| `/api/league-match-windows` | GET | Fenêtres de match héritées de la ligue du club (catalogue global, fallback AURA) |
+| `/api/fixtures/conflicts` | GET | Radar conflits coach/joueur des rencontres (module matchs) |
+| `/api/teams/{id}/fixtures/import` | POST | Import FBI des rencontres (.xlsx par équipe) |
+| `/api/season-transition` | GET/POST | Recap + bascule de saison (P1/P2) |
+| `/api/school-holidays`, `/api/public-holidays` | GET | Vacances scolaires / jours fériés (tables globales) |
+
+> Source de vérité exhaustive = OpenAPI (`/api/docs`) + snapshot `specs/courantes/openapi-snapshot.json`. Le tableau reste indicatif (pas de décompte figé).
 
 ### Documentation OpenAPI
 - `http://localhost:8080/api/docs` — Swagger UI
@@ -119,9 +140,9 @@ php bin/console doctrine:migrations:migrate   # applique les migrations
 ```
 backend/
 ├── src/
-│   ├── ApiResource/          # 20 ressources API Platform
-│   ├── Entity/               # 20 entités Doctrine
-│   ├── Controller/           # Contrôleurs custom
+│   ├── ApiResource/          # ressources API Platform (liste : ls src/ApiResource/)
+│   ├── Entity/               # entités Doctrine (liste : ls src/Entity/)
+│   ├── Controller/           # Contrôleurs custom (liste : ls src/Controller/)
 │   │   ├── HealthController.php
 │   │   ├── GenerateScheduleController.php   # POST /api/schedules/{id}/generate
 │   │   └── ExportPdfController.php         # POST /api/schedules/{id}/export-pdf

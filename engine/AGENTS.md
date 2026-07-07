@@ -17,7 +17,7 @@
 
 1. **All commands run in the engine container** — `engine/Makefile` wraps `docker compose exec`. Host `pytest`/`ruff` fail without a local venv.
 2. **Output `status` literals** are `"queued" | "generating" | "completed" | "failed"` (`app/schemas/output_schema.py` — `Literal`, source of truth).
-3. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V5"` (`app/solver/objective.py`). Changing any level-2 weight requires bumping it. Weights table lives in the root spec / `objective.py`, not here.
+3. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V6"` (`app/solver/objective.py`). Changing any level-2 weight requires bumping it. Weights table lives in the root spec / `objective.py`, not here.
 4. **Two-phase solve** — phase 1 optimal placement (locked), phase 2 bounded 10 s chaining bonus with warm-start. Both phases get the payload seed. See `app/main.py`.
 5. **Timeout is payload-driven** — `solver_timeout_seconds` (default 650 s) bounds the adaptive timeout computed in `main.py`.
 6. **Per-club `asyncio.Lock`** (`_club_locks` in `main.py`) serialises requests per club. ⚠ Known limit: the solve itself currently runs on the event loop (audit ENG-03), so one solve blocks all clubs until fixed.
