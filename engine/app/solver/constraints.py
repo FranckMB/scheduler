@@ -52,7 +52,11 @@ class ParsedConstraints(TypedDict):
 _KNOWN_FAMILIES = frozenset({"TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"})
 _KNOWN_TYPES = frozenset({"TEAM_COACH", "COACH_PLAYER_UNAVAILABILITY", "PRIORITY_TIER"})
 
-AssignmentLike = Any
+# Intentional aliases (ENG-05 Scope A leaves these as-is, out of scope):
+#   BoolVarLike     — a CP-SAT BoolVar/literal; ortools exposes no stable public
+#                     type to annotate against, so `Any` is deliberate.
+#   RuleCollection  — a loosely-shaped rule container (mapping/sequence) whose
+#                     concrete shape varies per caller; kept `Any` on purpose.
 BoolVarLike = Any
 RuleCollection = Any
 
@@ -82,6 +86,14 @@ class AssignmentVariable:
     coach_unavailable: bool = False
     forced_venue_id: str | None = None
     id: str | None = None
+
+
+# Loose input accepted by the public constraint entry points: already-typed
+# AssignmentVariable objects, or plain mappings (production sends list[dict]).
+# _normalise_assignments converts every element to AssignmentVariable so the
+# internal builder operates on a single, real type (ENG-05: kills the
+# AssignmentLike=Any duck-typing that let a mistyped field silently return None).
+AssignmentInput = AssignmentVariable | Mapping[str, Any]
 
 
 @dataclass
@@ -131,7 +143,7 @@ class HardConstraintStats:
 
 def add_level_1_hard_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None = None,
+    assignments: Iterable[AssignmentInput] | Mapping[Any, BoolVarLike] | None = None,
     *,
     teams: Iterable[Any] = (),
     coaches: Iterable[Any] = (),
@@ -254,17 +266,17 @@ def add_level_1_hard_constraints(
     return stats
 
 
-def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+def add_room_at_most_one(model: Any, assignments: Sequence[AssignmentVariable]) -> int:
     """Constraint 1: one room/venue can host at most capacity teams per time slot."""
 
     slot_capacities: dict[Any, int] = getattr(model, "slot_capacities", {})
     groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
-        venue_id = _venue_id(assignment)
-        time_key = _time_key(assignment)
+        venue_id = assignment.venue_id
+        time_key = _assignment_time_key(assignment)
         if venue_id is None or time_key is None:
             continue
-        groups[(venue_id, time_key)].append(_var(assignment))
+        groups[(venue_id, time_key)].append(assignment.var)
 
     added = 0
     for (venue_id, time_key), variables in groups.items():
@@ -281,14 +293,14 @@ def add_room_at_most_one(model: Any, assignments: Iterable[AssignmentLike]) -> i
     return added
 
 
-def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, team_coach_map: dict[str, list[str]] | None = None) -> int:
+def add_coach_at_most_one(model: Any, assignments: Sequence[AssignmentVariable], *, team_coach_map: dict[str, list[str]] | None = None) -> int:
     """Constraint 2: one coach can coach at most one team per time slot.
 
     When ``team_coach_map`` is provided and the assignment's team is in the map,
     all coaches for that team are looked up from the map. Otherwise, falls back
     to the assignment's ``coach_id`` attribute for backward compatibility.
 
-    Overlap detection uses both ``_time_key`` grouping (same slot start) and
+    Overlap detection uses both ``_assignment_time_key`` grouping (same slot start) and
     ``_intervals_overlap`` (interval intersection) so that coaching assignments
     with different start times but overlapping intervals are also prevented.
     """
@@ -297,11 +309,11 @@ def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, 
     person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
 
     for assignment in assignments:
-        time_key = _time_key(assignment)
+        time_key = _assignment_time_key(assignment)
         if time_key is None:
             continue
 
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
         # Look up coaches from team_coach_map
@@ -310,11 +322,11 @@ def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, 
             coach_ids = list(team_coach_map[team_id_str])
         else:
             # Fall back to assignment's coach_id attribute
-            coach_id = _coach_id(assignment)
+            coach_id = assignment.coach_id
             if coach_id is not None:
                 coach_ids = [coach_id]
 
-        var = _var(assignment)
+        var = assignment.var
         for coach_id in coach_ids:
             groups[(coach_id, time_key)].append(var)
 
@@ -328,14 +340,14 @@ def add_coach_at_most_one(model: Any, assignments: Iterable[AssignmentLike], *, 
     return time_key_added + interval_added
 
 
-def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLike], *, team_coach_map: dict[str, list[str]] | None = None, team_player_map: dict[str, list[str]] | None = None) -> int:
+def add_coach_player_non_overlap(model: Any, assignments: Sequence[AssignmentVariable], *, team_coach_map: dict[str, list[str]] | None = None, team_player_map: dict[str, list[str]] | None = None) -> int:
     """Constraint 3: a coach-player cannot be in two roles at the same time.
 
     When ``team_coach_map`` / ``team_player_map`` are provided and the
     assignment's team is found, coaches and players are looked up from the
     maps. Otherwise, falls back to the assignment's own attributes.
 
-    Overlap detection uses both ``_time_key`` grouping (same slot start) and
+    Overlap detection uses both ``_assignment_time_key`` grouping (same slot start) and
     ``_intervals_overlap`` (interval intersection) so that assignments with
     different start times but overlapping intervals are also prevented. The
     interval check covers ALL role combinations for the same person
@@ -347,35 +359,35 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
     person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
 
     for assignment in assignments:
-        time_key = _time_key(assignment)
+        time_key = _assignment_time_key(assignment)
         if time_key is None:
             continue
 
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
         all_person_ids: set[str] = set()
 
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
             for coach_id in team_coach_map[team_id_str]:
-                coach_groups[(coach_id, time_key)].append(_var(assignment))
+                coach_groups[(coach_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(coach_id))
         else:
-            coach_id = _coach_id(assignment)
-            if coach_id is not None:
-                coach_groups[(coach_id, time_key)].append(_var(assignment))
-                all_person_ids.add(str(coach_id))
+            single_coach = assignment.coach_id
+            if single_coach is not None:
+                coach_groups[(single_coach, time_key)].append(assignment.var)
+                all_person_ids.add(str(single_coach))
 
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for player_id in team_player_map[team_id_str]:
-                player_groups[(player_id, time_key)].append(_var(assignment))
+                player_groups[(player_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(player_id))
         else:
-            for player_id in _player_ids(assignment):
-                player_groups[(player_id, time_key)].append(_var(assignment))
+            for player_id in assignment.player_ids:
+                player_groups[(player_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(player_id))
 
-        var = _var(assignment)
+        var = assignment.var
         start, end, day = _extract_interval(assignment)
         if start is not None and end is not None and day is not None:
             for person_id in all_person_ids:
@@ -392,7 +404,7 @@ def add_coach_player_non_overlap(model: Any, assignments: Iterable[AssignmentLik
 
 def add_coach_rest_day_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
@@ -429,7 +441,7 @@ def add_coach_rest_day_constraints(
     person_day_vars: dict[tuple[str, int], list[BoolVarLike]] = defaultdict(list)
 
     for assignment in assignments:
-        slot_id = _slot_id(assignment)
+        slot_id = assignment.slot_id
         if slot_id is None:
             continue
         day_str = str(slot_id).split(":")[0]
@@ -440,31 +452,31 @@ def add_coach_rest_day_constraints(
         if day < 1 or day > 5:
             continue
 
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
         # Coaching assignments — look up from team_coach_map
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
             for coach_id in team_coach_map[team_id_str]:
                 if coach_id in coach_max_days:
-                    person_day_vars[(coach_id, day)].append(_var(assignment))
+                    person_day_vars[(coach_id, day)].append(assignment.var)
         else:
-            coach_id = _coach_id(assignment)
+            coach_id = assignment.coach_id
             if coach_id is not None:
                 coach_id_str = str(coach_id)
                 if coach_id_str in coach_max_days:
-                    person_day_vars[(coach_id_str, day)].append(_var(assignment))
+                    person_day_vars[(coach_id_str, day)].append(assignment.var)
 
         # Playing assignments (coach as player) — look up from team_player_map
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for player_id in team_player_map[team_id_str]:
                 if player_id in coach_max_days:
-                    person_day_vars[(player_id, day)].append(_var(assignment))
+                    person_day_vars[(player_id, day)].append(assignment.var)
         else:
-            for player_id in _player_ids(assignment):
+            for player_id in assignment.player_ids:
                 player_id_str = str(player_id)
                 if player_id_str in coach_max_days:
-                    person_day_vars[(player_id_str, day)].append(_var(assignment))
+                    person_day_vars[(player_id_str, day)].append(assignment.var)
 
     added = 0
     for coach_id_str, max_days in coach_max_days.items():
@@ -496,7 +508,7 @@ def add_coach_rest_day_constraints(
 
 def add_salarie_distribution_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
@@ -528,7 +540,7 @@ def add_salarie_distribution_constraints(
     day_vars: dict[int, list[BoolVarLike]] = defaultdict(list)
 
     for assignment in assignments:
-        slot_id = _slot_id(assignment)
+        slot_id = assignment.slot_id
         if slot_id is None:
             continue
         day_str = str(slot_id).split(":")[0]
@@ -539,26 +551,26 @@ def add_salarie_distribution_constraints(
         if day < 1 or day > 5:
             continue
 
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
             for coach_id in team_coach_map[team_id_str]:
                 if coach_id in salarie_ids:
-                    day_vars[day].append(_var(assignment))
+                    day_vars[day].append(assignment.var)
         else:
-            coach_id = _coach_id(assignment)
+            coach_id = assignment.coach_id
             if coach_id is not None and str(coach_id) in salarie_ids:
-                day_vars[day].append(_var(assignment))
+                day_vars[day].append(assignment.var)
 
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for player_id in team_player_map[team_id_str]:
                 if player_id in salarie_ids:
-                    day_vars[day].append(_var(assignment))
+                    day_vars[day].append(assignment.var)
         else:
-            for player_id in _player_ids(assignment):
+            for player_id in assignment.player_ids:
                 if str(player_id) in salarie_ids:
-                    day_vars[day].append(_var(assignment))
+                    day_vars[day].append(assignment.var)
 
     added = 0
     for day in range(1, 6):
@@ -580,7 +592,7 @@ def add_salarie_distribution_constraints(
 
 def add_max_consecutive_sessions_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
@@ -618,10 +630,10 @@ def add_max_consecutive_sessions_constraints(
 
     # Deduplicate by variable so a person who is both coach and player on the
     # same team does not get duplicate entries that could mask real triples.
-    person_day_entries: dict[tuple[str, str], dict[int, tuple[int, int, AssignmentLike]]] = defaultdict(dict)
+    person_day_entries: dict[tuple[str, str], dict[int, tuple[int, int, AssignmentVariable]]] = defaultdict(dict)
 
     for assignment in assignments:
-        slot_id = _slot_id(assignment)
+        slot_id = assignment.slot_id
         if slot_id is None:
             continue
 
@@ -631,15 +643,15 @@ def add_max_consecutive_sessions_constraints(
             continue
         day = parts[0]
 
-        start = _get(assignment, "start", "start_minute", "start_time", "starts_at", default=None)
-        end = _get(assignment, "end", "end_minute", "end_time", "ends_at", default=None)
+        start = assignment.start
+        end = assignment.end
         if start is None or end is None:
             continue
 
         start_minutes = int(start) if not isinstance(start, int) else start
         end_minutes = int(end) if not isinstance(end, int) else end
 
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
         person_ids: set[str] = set()
@@ -648,20 +660,20 @@ def add_max_consecutive_sessions_constraints(
                 if cid in coach_ids:
                     person_ids.add(cid)
         else:
-            cid = _coach_id(assignment)
-            if cid is not None and str(cid) in coach_ids:
-                person_ids.add(str(cid))
+            single_cid = assignment.coach_id
+            if single_cid is not None and str(single_cid) in coach_ids:
+                person_ids.add(str(single_cid))
 
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for pid in team_player_map[team_id_str]:
                 if pid in coach_ids:
                     person_ids.add(pid)
         else:
-            for pid in _player_ids(assignment):
+            for pid in assignment.player_ids:
                 if str(pid) in coach_ids:
                     person_ids.add(str(pid))
 
-        var = _var(assignment)
+        var = assignment.var
         var_key = var.Index() if hasattr(var, "Index") else id(var)
         for person_id in person_ids:
             person_day_entries[(person_id, day)][var_key] = (start_minutes, end_minutes, assignment)
@@ -672,7 +684,7 @@ def add_max_consecutive_sessions_constraints(
     for entries_dict in person_day_entries.values():
         slot_entries = list(entries_dict.values())
         for a, b, c in _find_consecutive_triples(slot_entries):
-            deduped = _dedupe_variables([_var(a[2]), _var(b[2]), _var(c[2])])
+            deduped = _dedupe_variables([a[2].var, b[2].var, c[2].var])
             if len(deduped) >= 3:
                 cast(Any, model).Add(sum(deduped) <= 2)
                 added += 1
@@ -680,38 +692,38 @@ def add_max_consecutive_sessions_constraints(
     return added
 
 
-def add_team_no_overlap(model: Any, assignments: Iterable[AssignmentLike]) -> int:
+def add_team_no_overlap(model: Any, assignments: Sequence[AssignmentVariable]) -> int:
     """A team cannot have two sessions at the same time slot."""
 
     groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
-        team_id = _team_id(assignment)
-        time_key = _time_key(assignment)
+        team_id = assignment.team_id
+        time_key = _assignment_time_key(assignment)
         if team_id is None or time_key is None:
             continue
-        groups[(team_id, time_key)].append(_var(assignment))
+        groups[(team_id, time_key)].append(assignment.var)
     return _add_at_most_one_groups(model, groups.values())
 
 
 def add_fixed_slots(
-    model: Any, assignments: Iterable[AssignmentLike], fixed_assignments: Iterable[Any] = ()
+    model: Any, assignments: Sequence[AssignmentVariable], fixed_assignments: Iterable[Any] = ()
 ) -> int:
     """Constraint 5: pre-placed slots are fixed to 1."""
 
     fixed_ids = set(fixed_assignments or ())
     added = 0
     for assignment in assignments:
-        assignment_id = _assignment_id(assignment)
-        if _bool_field(assignment, "fixed", "is_fixed", "pre_placed", "preplaced", "is_pre_placed") or (
+        assignment_id = assignment.id
+        if assignment.fixed or (
             assignment_id is not None and assignment_id in fixed_ids
         ):
-            model.Add(_var(assignment) == 1)
+            model.Add(assignment.var == 1)
             added += 1
     return added
 
 
 def add_forbidden_assignments(
-    model: Any, assignments: Iterable[AssignmentLike], forbidden_assignments: Iterable[Any] = ()
+    model: Any, assignments: Sequence[AssignmentVariable], forbidden_assignments: Iterable[Any] = ()
 ) -> int:
     """Constraint 6: forbidden assignment variables are fixed to 0.
 
@@ -735,22 +747,22 @@ def add_forbidden_assignments(
 
     added = 0
     for assignment in assignments:
-        assignment_id = _assignment_id(assignment)
-        team_id = _team_id(assignment)
-        venue_id = _venue_id(assignment)
+        assignment_id = assignment.id
+        team_id = assignment.team_id
+        venue_id = assignment.venue_id
         if (
-            _bool_field(assignment, "forbidden", "is_forbidden")
+            assignment.forbidden
             or (assignment_id is not None and assignment_id in forbidden_ids)
             or (team_id is not None and venue_id is not None and (str(team_id), str(venue_id)) in forbidden_pairs)
         ):
-            model.Add(_var(assignment) == 0)
+            model.Add(assignment.var == 0)
             added += 1
     return added
 
 
-def _assignment_day(assignment: AssignmentLike) -> int | None:
+def _assignment_day(assignment: AssignmentVariable) -> int | None:
     """Weekday number of an assignment, from its slot_id ("3:18:00" → 3)."""
-    slot_id = _time_key(assignment)
+    slot_id = _assignment_time_key(assignment)
     if isinstance(slot_id, str) and ":" in slot_id:
         head = slot_id.split(":", 1)[0]
         try:
@@ -762,7 +774,7 @@ def _assignment_day(assignment: AssignmentLike) -> int | None:
 
 def add_coach_unavailability_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     coach_unavailability: RuleCollection = (),
     *,
     team_coach_map: dict[str, list[str]] | None = None,
@@ -783,17 +795,17 @@ def add_coach_unavailability_constraints(
     coach_map = team_coach_map or {}
     added = 0
     for assignment in assignments:
-        blocked = _bool_field(assignment, "coach_unavailable", "is_coach_unavailable")
+        blocked = assignment.coach_unavailable
         if not blocked and rules:
-            coach_ids = coach_map.get(str(_team_id(assignment)))
+            coach_ids = coach_map.get(str(assignment.team_id))
             if not coach_ids:
-                single = _coach_id(assignment)
+                single = assignment.coach_id
                 coach_ids = [str(single)] if single is not None else []
             day = _assignment_day(assignment)
             if day is not None:
                 blocked = any(day in (rules.get(str(cid)) or ()) for cid in coach_ids)
         if blocked:
-            model.Add(_var(assignment) == 0)
+            model.Add(assignment.var == 0)
             added += 1
     return added
 
@@ -928,7 +940,7 @@ def add_time_window_constraints(
 
 def add_min_sessions_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     teams: Iterable[Any] = (),
     min_sessions_by_team: Mapping[Any, int] | None = None,
@@ -948,10 +960,10 @@ def add_min_sessions_constraints(
 
     assignments_by_team: dict[Any, list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
-        team_id = _team_id(assignment)
+        team_id = assignment.team_id
         if team_id is None:
             continue
-        assignments_by_team[team_id].append(_var(assignment))
+        assignments_by_team[team_id].append(assignment.var)
 
     added = 0
     for team_id, minimum in minimums.items():
@@ -965,7 +977,7 @@ def add_min_sessions_constraints(
 
 def add_forced_venue_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     forced_venues: Mapping[Any, Any] | None = None,
 ) -> int:
@@ -973,23 +985,95 @@ def add_forced_venue_constraints(
 
     added = 0
     for assignment in assignments:
-        venue_id = _venue_id(assignment)
+        venue_id = assignment.venue_id
         target_venue_id = _forced_venue_id(assignment, forced_venues)
         if target_venue_id is None or venue_id is None or venue_id == target_venue_id:
             continue
-        model.Add(_var(assignment) == 0)
+        model.Add(assignment.var == 0)
         added += 1
     return added
 
 
 def _normalise_assignments(
-    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike] | None
-) -> list[AssignmentLike]:
+    assignments: Iterable[AssignmentInput] | Mapping[Any, BoolVarLike] | None
+) -> list[AssignmentVariable]:
+    """Convert any accepted input into a homogeneous ``list[AssignmentVariable]``.
+
+    Three input shapes are supported:
+      * a Mapping of ``key -> BoolVar`` (the T22 ``model.x``) — built via
+        ``_assignment_from_mapping_item``;
+      * an iterable of mappings/dicts (production sends ``list[dict]``);
+      * an iterable of objects already exposing the assignment attributes
+        (including ``AssignmentVariable`` itself, returned unchanged).
+
+    After this call every downstream constraint builder reads real, typed
+    attributes instead of duck-typing over ``Any`` (ENG-05).
+    """
     if assignments is None:
         return []
     if isinstance(assignments, Mapping):
         return [_assignment_from_mapping_item(key, value) for key, value in assignments.items()]
-    return list(assignments)
+    return [_as_assignment_variable(item) for item in assignments]
+
+
+def _coerce_id(value: Any) -> str | None:
+    """Reproduce the old accessor id-normalisation: ``scalar_id`` (unwrap nested
+    id/uuid/name) then ``str`` so grouping keys are byte-identical to before.
+
+    All real inputs already hold strings, so this is a no-op on them; the
+    ``str`` mirrors the ``_assignment_from_mapping_item`` convention (which also
+    stringifies ids) and keeps dict-grouping keys consistent across both paths.
+    """
+    scalar = scalar_id(value)
+    return None if scalar is None else str(scalar)
+
+
+def _as_assignment_variable(obj: AssignmentInput) -> AssignmentVariable:
+    """Convert a single mapping/object element to an ``AssignmentVariable``.
+
+    Already-typed ``AssignmentVariable`` instances are returned unchanged. For
+    mappings and generic objects the canonical fields are read through the same
+    alias lists the removed ``_``-accessors used, so behaviour is identical.
+    """
+    if isinstance(obj, AssignmentVariable):
+        return obj
+    return AssignmentVariable(
+        var=assignment_var(obj, skip_none=False),
+        team_id=_coerce_id(assignment_team_id(obj, skip_none=False)),
+        slot_id=_coerce_id(get_field(obj, "slot_id", "time_slot_id", "timeslot_id", "slot", "time_slot", default=None)),
+        venue_id=_coerce_id(get_field(obj, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None)),
+        coach_id=_coerce_id(get_field(obj, "coach_id", "trainer_id", "coach", "trainer", default=None)),
+        session_id=_coerce_id(get_field(obj, "session_id", "lesson_id", "event_id", "session", "lesson", "event", default=None)),
+        player_ids=_raw_player_ids(obj),
+        start=get_field(obj, "start", "start_minute", "start_time", "starts_at", default=None),
+        end=get_field(obj, "end", "end_minute", "end_time", "ends_at", default=None),
+        fixed=_bool_field(obj, "fixed", "is_fixed", "pre_placed", "preplaced", "is_pre_placed"),
+        forbidden=_bool_field(obj, "forbidden", "is_forbidden"),
+        coach_unavailable=_bool_field(obj, "coach_unavailable", "is_coach_unavailable"),
+        forced_venue_id=_coerce_id(get_field(obj, "forced_venue_id", "forced_room_id", "forced_venue", "forced_room", default=None)),
+        id=_coerce_id(get_field(obj, "id", "assignment_id", "key", default=None)),
+    )
+
+
+def _raw_player_ids(obj: AssignmentInput) -> Sequence[str]:
+    """Read the player-id sequence off a raw mapping/object during conversion,
+    honouring the historical alias list. Element coercion happens later in
+    ``_player_ids`` (kept identical to the old read-time behaviour)."""
+    players = get_field(
+        obj,
+        "player_ids",
+        "participant_ids",
+        "athlete_ids",
+        "players",
+        "participants",
+        "athletes",
+        default=(),
+    )
+    if players is None:
+        return ()
+    if isinstance(players, (str, bytes)):
+        return [scalar_id(players)]
+    return [scalar_id(player) for player in players]
 
 
 def _assignment_from_mapping_item(key: Any, var: BoolVarLike) -> AssignmentVariable:
@@ -1072,56 +1156,27 @@ def _dedupe_variables(variables: Iterable[BoolVarLike]) -> list[BoolVarLike]:
     return unique
 
 
-def _get(assignment: AssignmentLike, *names: str, default: Any = None) -> Any:
-    return get_field(assignment, *names, default=default, skip_none=False)
+def _get(source: Any, *names: str, default: Any = None) -> Any:
+    return get_field(source, *names, default=default, skip_none=False)
 
 
 def _scalar_id(value: Any) -> Any:
     return scalar_id(value)
 
 
-def _var(assignment: AssignmentLike) -> BoolVarLike:
-    return assignment_var(assignment, skip_none=False)
+def _assignment_time_key(assignment: AssignmentVariable) -> Any:
+    """Grouping key for "same time" collision detection.
 
-
-def _assignment_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "id", "assignment_id", "key", default=None))
-
-
-def _team_id(assignment: AssignmentLike) -> Any:
-    return assignment_team_id(assignment, skip_none=False)
-
-
-def _slot_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "slot_id", "time_slot_id", "timeslot_id", "slot", "time_slot", default=None))
-
-
-def _venue_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None))
-
-
-def _coach_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "coach_id", "trainer_id", "coach", "trainer", default=None))
-
-
-def _session_id(assignment: AssignmentLike) -> Any:
-    return _scalar_id(_get(assignment, "session_id", "lesson_id", "event_id", "session", "lesson", "event", default=None))
-
-
-def _time_key(assignment: AssignmentLike) -> Any:
-    slot_id = _slot_id(assignment)
-    if slot_id is not None:
-        return slot_id
-
-    explicit = _scalar_id(_get(assignment, "time_key", "time", default=None))
-    if explicit is not None:
-        return explicit
-
-    start = _get(assignment, "start", "starts_at", "start_minute", "start_time", default=None)
-    end = _get(assignment, "end", "ends_at", "end_minute", "end_time", default=None)
-    if start is not None and end is not None:
-        return (start, end)
-
+    ``slot_id`` when present (a ``"day:HH:MM"`` string), else the
+    ``(start, end)`` minute pair when both are present, else ``None``. This
+    reproduces the old ``_time_key`` accessor exactly; the legacy
+    ``time_key``/``time`` alias branch is dropped because the dataclass has no
+    such field and no input ever supplied one.
+    """
+    if assignment.slot_id is not None:
+        return assignment.slot_id
+    if assignment.start is not None and assignment.end is not None:
+        return (assignment.start, assignment.end)
     return None
 
 
@@ -1133,21 +1188,21 @@ def _interval_key(person_id: Any, day: Any, pair_index: Any) -> str:
     return f"{person_id}:{day}:{pair_index}"
 
 
-def _extract_interval(assignment: AssignmentLike) -> tuple[int | None, int | None, str | None]:
+def _extract_interval(assignment: AssignmentVariable) -> tuple[int | None, int | None, str | None]:
     """Extract (start_minutes, end_minutes, day) from an assignment.
 
     Returns (None, None, None) when start/end or slot_id are missing so callers
-    can fall back to ``_time_key`` grouping.
+    can fall back to ``_assignment_time_key`` grouping.
     """
-    start = _get(assignment, "start", "start_minute", "start_time", "starts_at", default=None)
-    end = _get(assignment, "end", "end_minute", "end_time", "ends_at", default=None)
+    start = assignment.start
+    end = assignment.end
     if start is None or end is None:
         return None, None, None
 
     start_minutes = int(start) if not isinstance(start, int) else start
     end_minutes = int(end) if not isinstance(end, int) else end
 
-    slot_id = _slot_id(assignment)
+    slot_id = assignment.slot_id
     if slot_id is None:
         return start_minutes, end_minutes, None
     day = str(slot_id).split(":")[0]
@@ -1186,22 +1241,22 @@ def _add_interval_at_most_one(
 
 
 def _find_consecutive_triples(
-    entries: list[tuple[int, int, AssignmentLike]],
-) -> list[tuple[tuple[int, int, AssignmentLike], tuple[int, int, AssignmentLike], tuple[int, int, AssignmentLike]]]:
+    entries: list[tuple[int, int, AssignmentVariable]],
+) -> list[tuple[tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable]]]:
     """Find consecutive triples A->B->C where A.end == B.start and B.end == C.start.
 
     Uses a start-time index so that multiple entries sharing the same start
     (e.g. the same slot at different venues) are all considered as candidates.
     """
-    by_start: dict[int, list[tuple[int, int, AssignmentLike]]] = defaultdict(list)
+    by_start: dict[int, list[tuple[int, int, AssignmentVariable]]] = defaultdict(list)
     for entry in entries:
         by_start[entry[0]].append(entry)
 
     triples: list[
         tuple[
-            tuple[int, int, AssignmentLike],
-            tuple[int, int, AssignmentLike],
-            tuple[int, int, AssignmentLike],
+            tuple[int, int, AssignmentVariable],
+            tuple[int, int, AssignmentVariable],
+            tuple[int, int, AssignmentVariable],
         ]
     ] = []
     for a in entries:
@@ -1215,26 +1270,10 @@ def _find_consecutive_triples(
     return triples
 
 
-def _player_ids(assignment: AssignmentLike) -> list[Any]:
-    players = _get(
-        assignment,
-        "player_ids",
-        "participant_ids",
-        "athlete_ids",
-        "players",
-        "participants",
-        "athletes",
-        default=(),
-    )
-    if players is None:
-        return []
-    if isinstance(players, (str, bytes)):
-        return [_scalar_id(players)]
-    return [_scalar_id(player) for player in players]
-
-
-def _bool_field(assignment: AssignmentLike, *names: str) -> bool:
-    return any(bool(_get(assignment, name, default=False)) for name in names)
+def _bool_field(obj: AssignmentInput, *names: str) -> bool:
+    """Read a boolean flag off a raw mapping/object at conversion time, honouring
+    the historical alias list (e.g. ``fixed`` / ``is_fixed``)."""
+    return any(bool(_get(obj, name, default=False)) for name in names)
 
 
 def _compute_effective_min_sessions(
@@ -1296,7 +1335,7 @@ def _effective_min_sessions_by_team(
 
 
 def _forced_venue_id(
-    assignment: AssignmentLike, forced_venues: Mapping[Any, Any] | None
+    assignment: AssignmentVariable, forced_venues: Mapping[Any, Any] | None
 ) -> Any:
     explicit = _scalar_id(
         _get(
@@ -1314,8 +1353,8 @@ def _forced_venue_id(
     if not forced_venues:
         return None
 
-    team_id = _team_id(assignment)
-    session_id = _session_id(assignment)
+    team_id = assignment.team_id
+    session_id = assignment.session_id
     candidate_keys = (
         (team_id, session_id),
         f"{team_id}:{session_id}" if team_id is not None and session_id is not None else None,
@@ -1330,7 +1369,7 @@ def _forced_venue_id(
 
 def add_one_session_per_day_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     teams: Iterable[Any] = (),
 ) -> int:
@@ -1352,12 +1391,12 @@ def add_one_session_per_day_constraints(
 
     groups: dict[tuple[str, str], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
-        team_id = _team_id(assignment)
-        slot_id = _slot_id(assignment)
+        team_id = assignment.team_id
+        slot_id = assignment.slot_id
         if team_id is None or slot_id is None:
             continue
         day = str(slot_id).split(":")[0]
-        groups[(str(team_id), day)].append(_var(assignment))
+        groups[(str(team_id), day)].append(assignment.var)
 
     sessions_per_week: dict[str, int] = {}
     for team in teams:
@@ -1399,7 +1438,7 @@ def add_one_session_per_day_constraints(
 
 def add_age_ascending_constraints(
     model: Any,
-    assignments: Iterable[AssignmentLike],
+    assignments: Sequence[AssignmentVariable],
     *,
     teams: Iterable[Any] = (),
 ) -> int:
@@ -1441,9 +1480,9 @@ def add_age_ascending_constraints(
 
     groups: dict[tuple[str, str], list[tuple[str, int, BoolVarLike]]] = defaultdict(list)
     for assignment in assignments:
-        team_id = _team_id(assignment)
-        venue_id = _venue_id(assignment)
-        slot_id = _slot_id(assignment)
+        team_id = assignment.team_id
+        venue_id = assignment.venue_id
+        slot_id = assignment.slot_id
         if team_id is None or venue_id is None or slot_id is None:
             continue
         team_id_str = str(team_id)
@@ -1455,7 +1494,7 @@ def add_age_ascending_constraints(
             continue
         day = parts[0]
         start_minutes = _time_to_minutes(parts[1])
-        groups[(str(venue_id), day)].append((team_id_str, start_minutes, _var(assignment)))
+        groups[(str(venue_id), day)].append((team_id_str, start_minutes, assignment.var))
 
     added = 0
     for _entries in groups.values():
