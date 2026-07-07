@@ -10,6 +10,7 @@ import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
+import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { LogoCropper } from "./LogoCropper";
@@ -17,6 +18,33 @@ import { useDeleteLogo, useResetClub, useUpdateAppearance, useUploadLogo } from 
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
+
+/** One accent picker (swatch + hex input + filled preview) for a given theme. */
+function AccentField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
+  const valid = HEX.test(value);
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs text-muted-foreground">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          aria-label={`Couleur d'accent (${label})`}
+          type="color"
+          className="size-9 shrink-0 rounded border border-input bg-background"
+          value={valid ? value : DEFAULT_ACCENT}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Input aria-label={`Couleur ${label} (hexadécimal)`} className="h-9 w-28 font-mono text-xs" value={value} placeholder="#3b82f6" onChange={(e) => onChange(e.target.value)} />
+        {/* Filled swatch → the accent stays legible whatever its lightness. */}
+        <div className="rounded-md px-3 py-2 text-sm font-medium" style={valid ? { backgroundColor: value, color: readableForeground(value) } : undefined}>
+          Aa
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function IdentitySection({
   accentColor,
@@ -157,44 +185,8 @@ function IdentitySection({
         <div>
           <p className="mb-2 text-xs text-muted-foreground">Couleur d'accent — une pour le thème clair, une pour le sombre. Elle habille boutons, liens et éléments actifs de toute l'interface.</p>
           <div className="flex flex-wrap gap-4">
-            <div>
-              <label htmlFor="accent-light" className="mb-1 block text-xs text-muted-foreground">
-                Thème clair
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="accent-light"
-                  aria-label="Couleur d'accent (thème clair)"
-                  type="color"
-                  className="size-9 shrink-0 rounded border border-input bg-background"
-                  value={HEX.test(color) ? color : DEFAULT_ACCENT}
-                  onChange={(e) => setColor(e.target.value)}
-                />
-                <Input aria-label="Couleur claire (hexadécimal)" className="h-9 w-28 font-mono text-xs" value={color} placeholder="#3b82f6" onChange={(e) => setColor(e.target.value)} />
-                <div className="rounded-md border border-border bg-white px-3 py-2 text-sm font-medium" style={HEX.test(color) ? { color } : undefined}>
-                  Aa
-                </div>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="accent-dark" className="mb-1 block text-xs text-muted-foreground">
-                Thème sombre
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="accent-dark"
-                  aria-label="Couleur d'accent (thème sombre)"
-                  type="color"
-                  className="size-9 shrink-0 rounded border border-input bg-background"
-                  value={HEX.test(colorDark) ? colorDark : DEFAULT_ACCENT}
-                  onChange={(e) => setColorDark(e.target.value)}
-                />
-                <Input aria-label="Couleur sombre (hexadécimal)" className="h-9 w-28 font-mono text-xs" value={colorDark} placeholder="#3b82f6" onChange={(e) => setColorDark(e.target.value)} />
-                <div className="rounded-md border border-border bg-neutral-900 px-3 py-2 text-sm font-medium" style={HEX.test(colorDark) ? { color: colorDark } : undefined}>
-                  Aa
-                </div>
-              </div>
-            </div>
+            <AccentField id="accent-light" label="Thème clair" value={color} onChange={setColor} />
+            <AccentField id="accent-dark" label="Thème sombre" value={colorDark} onChange={setColorDark} />
           </div>
         </div>
 
@@ -204,7 +196,17 @@ function IdentitySection({
             Enregistrer
           </Button>
           {(null !== accentColor || null !== accentColorDark) ? (
-            <Button variant="ghost" onClick={() => updateAppearance.mutate({ accentColor: null, accentColorDark: null })} disabled={busy}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                // Reset the server AND the local pickers, else a subsequent Save
+                // re-persists the old colours the fields still show.
+                setColor(DEFAULT_ACCENT);
+                setColorDark(DEFAULT_ACCENT);
+                updateAppearance.mutate({ accentColor: null, accentColorDark: null });
+              }}
+              disabled={busy}
+            >
               Réinitialiser les couleurs
             </Button>
           ) : null}

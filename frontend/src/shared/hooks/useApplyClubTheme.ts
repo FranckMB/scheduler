@@ -19,19 +19,20 @@ export function useApplyClubTheme(): void {
 
   useEffect(() => {
     const root = document.documentElement;
-    // Dark mode uses the club's explicit dark accent when set; otherwise it
-    // falls back to deriving a dark-legible tone from the light accent (the
-    // previous single-colour behaviour). Light mode always uses accentLight.
-    const explicitDark = "dark" === mode && null !== accentDark;
-    const base = "dark" === mode ? (accentDark ?? accentLight) : accentLight;
+    // Per-mode base colour: dark mode prefers the dark accent, light mode the
+    // light one, each falling back to the other so a club that set only one
+    // still gets an accent in both modes. accentForMode ALWAYS runs — it lifts a
+    // too-dark colour for legibility on dark surfaces — so a raw, near-invisible
+    // accent can never reach the UI (a raw bypass here made dark mode adopt the
+    // light colour untouched, reading as a theme switch).
+    const base = "dark" === mode ? (accentDark ?? accentLight) : (accentLight ?? accentDark);
     if (null === base) {
       root.style.removeProperty("--accent");
       root.style.removeProperty("--accent-foreground");
       root.style.removeProperty("--accent-2");
       return;
     }
-    // An explicit per-mode colour is honoured as chosen; a derived one is adjusted.
-    const c = explicitDark ? base : accentForMode(base, mode);
+    const c = accentForMode(base, mode);
     root.style.setProperty("--accent", c);
     root.style.setProperty("--accent-foreground", readableForeground(c));
     // Secondary tint (from the logo palette) for signature surfaces later.
