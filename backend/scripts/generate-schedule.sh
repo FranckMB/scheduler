@@ -268,28 +268,30 @@ else:
   # Once the worker has picked the message up, PENDING is behind us — from here
   # only the (legitimately slow) solver governs, under the hard TIMEOUT cap.
   case "$current_status" in
-    GENERATING|COMPLETED|FAILED)
+    GENERATING)
       saw_progress=1
       ;;
-  esac
-
-  case "$current_status" in
     COMPLETED|FAILED)
+      saw_progress=1
       break
       ;;
   esac
 
-  # Watchdog: still PENDING and never progressed → the queue is not being
-  # consumed. Fail fast and loud with the fix, instead of hanging to TIMEOUT.
+  # Watchdog: still PENDING and never progressed after PENDING_TIMEOUT_SECONDS.
+  # Two very different causes — DIAGNOSE before acting (review finding: a blind
+  # stream wipe would destroy legitimately queued generations):
+  #   (a) worker busy solving ANOTHER schedule (single worker, solves can take
+  #       minutes) → just wait / raise PENDING_TIMEOUT_SECONDS;
+  #   (b) worker dead or crash-looping (NOGROUP after a Redis wipe) → restart.
   if [[ "$saw_progress" -eq 0 && "$SECONDS" -ge "$pending_deadline" ]]; then
     die "Génération jamais démarrée : statut toujours '$current_status' après ${PENDING_TIMEOUT_SECONDS}s (jamais passé à GENERATING).
-  → Le messenger-worker ne consomme probablement pas la file async.
-  Vérifier :  docker compose ps messenger-worker
-              docker compose logs --tail=50 messenger-worker   (chercher 'NOGROUP' / crash-loop)
-  Cause fréquente : groupe consumer Redis détruit (FLUSHALL / wipe). Reset :
-              docker compose stop messenger-worker
-              docker compose exec -T redis redis-cli DEL messages messages__queue
-              docker compose start messenger-worker"
+  DIAGNOSTIC (dans l'ordre — ne rien supprimer à l'aveugle) :
+  1. Worker occupé par un autre solve ?   docker compose exec -T redis redis-cli XPENDING messages symfony
+     → 'pending: 1' + logs engine actifs = solve en cours : ATTENDRE ou relancer avec PENDING_TIMEOUT_SECONDS plus grand.
+  2. Worker mort / crash-loop ?           docker compose logs --tail=50 messenger-worker   (chercher 'NOGROUP')
+     → redémarrer :  docker compose restart messenger-worker
+  3. DERNIER RECOURS (détruit les générations en file — schedules resteront PENDING) :
+     docker compose stop messenger-worker && docker compose exec -T redis redis-cli DEL messages messages__queue && docker compose start messenger-worker"
   fi
 
   if [[ "$SECONDS" -ge "$deadline" ]]; then

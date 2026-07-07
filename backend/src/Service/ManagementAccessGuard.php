@@ -26,6 +26,13 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  *
  * 403 (not 404): membership existence is guaranteed by the listener, so the
  * only failure here is a member whose role is not management.
+ *
+ * Known, accepted ordering quirk (review finding): on the custom controllers,
+ * the archived-season 409 (kernel listener) fires before this in-controller
+ * 403, so a non-manager probing an archived season sees 409 first. Not an info
+ * leak — any active member can already read the season's archived state — and
+ * inverting it would mean moving this guard into the kernel layer for no
+ * security gain. In AbstractStateProcessor the order IS 403-before-409.
  */
 final class ManagementAccessGuard
 {

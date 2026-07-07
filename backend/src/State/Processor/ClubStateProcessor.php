@@ -27,10 +27,11 @@ class ClubStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
+        \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly Security $security,
         private readonly ClubUserRepository $clubUserRepository,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
 
     protected function getEntityClass(): string

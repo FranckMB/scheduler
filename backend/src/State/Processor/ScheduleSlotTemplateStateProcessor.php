@@ -16,6 +16,17 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  */
 class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
 {
+    /**
+     * SEC-07: raw slot CRUD mutates the same fields the guarded manual-edit
+     * routes protect (lockLevel, temporaryLock, move/create/delete a slot) —
+     * without this, the guard on ManualEditController is a door next to an
+     * open wall.
+     */
+    protected function requiresManagementRole(): bool
+    {
+        return true;
+    }
+
     protected function getEntityClass(): string
     {
         return ScheduleSlotTemplate::class;

@@ -93,7 +93,9 @@ final class MembershipController extends AbstractController
         }
 
         $membership = $this->clubUserRepository->findOneBy(['userId' => $user->getId(), 'isActive' => true]);
-        if (null === $membership || 'admin' !== $membership->getRole()) {
+        // isManagementRole (owner|admin), not a hardcoded 'admin' — an owner
+        // must be able to approve members too (review note, PR SEC-07).
+        if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
             return $this->json(['error' => 'Forbidden'], 403);
         }
 

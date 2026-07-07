@@ -98,6 +98,9 @@ jobs:
       - name: MercureHardeningTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/MercureHardeningTest.php --group phase1'
 
+      - name: ManagementRoleTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ManagementRoleTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

@@ -143,6 +143,14 @@ final class ManualEditController extends AbstractController implements SeasonSco
         try {
             $this->manualEditService->applyOneTimeUpdate($slot, $data);
         } catch (InvalidArgumentException $e) {
+            // Doctrine's ORMInvalidArgumentException extends InvalidArgumentException:
+            // only the service's own domain messages may reach the client (SEC-08).
+            if ($e instanceof \Doctrine\ORM\ORMInvalidArgumentException) {
+                $this->logger->error('Manual edit failed.', ['exception' => $e]);
+
+                return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
+            }
+
             return $this->json(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
         } catch (Throwable $e) {
             // SEC-08: log the internal detail, never surface getMessage() to the client.

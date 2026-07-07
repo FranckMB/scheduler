@@ -44,8 +44,78 @@ final class ManagementRoleTest extends WebTestCase
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/generate'],
             ['POST', '/api/teams/reorder'],
             ['PATCH', '/api/club/appearance'],
+            // Each manual-edit action carries its own guard call — pin all three.
             ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/constraint'],
+            ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/lock'],
+            ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/one-time'],
+            // Club branding writes (same surface as /club/appearance).
+            ['POST', '/api/club/logo'],
+            ['DELETE', '/api/club/logo'],
         ];
+    }
+
+    /**
+     * The generic API Platform write lane (review finding: the guard on the
+     * custom controllers is a door next to an open wall without this). POST
+     * bodies are minimal-valid so the request reaches the processor, where the
+     * requiresManagementRole() hook must 403 a non-management member.
+     *
+     * @return list<array{0: string, 1: string, 2: string}>
+     */
+    public static function apiPlatformWriteEndpoints(): array
+    {
+        return [
+            ['POST', '/api/schedules', '{"name":"t","status":"DRAFT"}'],
+            ['POST', '/api/schedule_slot_templates', '{"scheduleId":"' . self::DUMMY_ID . '","teamId":"' . self::DUMMY_ID . '","venueId":"' . self::DUMMY_ID . '","dayOfWeek":1,"startTime":"18:00"}'],
+        ];
+    }
+
+    public function testNonManagementMemberCannotDeleteSchedule(): void
+    {
+        // DELETE resolves the item through the provider before the processor
+        // runs, so a real schedule (same club) is needed to reach the guard.
+        [$adminToken, , $clubA] = $this->register('MGE');
+        $this->client->request('POST', '/api/schedules', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"name":"todelete","status":"DRAFT"}');
+        self::assertResponseStatusCodeSame(201);
+        $scheduleId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'] ?? '';
+        self::assertNotSame('', $scheduleId);
+
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+        $this->client->request('DELETE', '/api/schedules/' . $scheduleId, [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
+        ]);
+        self::assertResponseStatusCodeSame(403, 'schedule DELETE must be management-only');
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('apiPlatformWriteEndpoints')]
+    public function testNonManagementMemberIsForbiddenOnApiPlatformWrites(string $method, string $url, string $body): void
+    {
+        [, , $clubA] = $this->register('MGC');
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+
+        $this->client->request($method, $url, [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], $body);
+
+        self::assertResponseStatusCodeSame(403, \sprintf('%s %s must be management-only', $method, $url));
+    }
+
+    public function testScheduleCannotBeCreatedWithNonDraftStatus(): void
+    {
+        // Review finding: POST accepted any status — fabricating a VALIDATED
+        // plan without generation. Even a manager gets 409 for non-DRAFT.
+        [$adminToken] = $this->register('MGD');
+
+        $this->client->request('POST', '/api/schedules', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"name":"forged","status":"VALIDATED"}');
+
+        self::assertResponseStatusCodeSame(409, 'a schedule must be created as DRAFT only');
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('managementEndpoints')]
