@@ -145,7 +145,7 @@ def add_level_1_hard_constraints(
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
 ) -> HardConstraintStats:
-    """Add the 5 implicit + 5 derived + 1 new level-1 hard constraints to a CP-SAT model.
+    """Add the implicit + derived + new-implicit level-1 hard constraints to a CP-SAT model.
 
     Implicit (always applied):
       1. VENUE_AT_MOST_ONE  — one venue hosts at most capacity teams per time slot
@@ -161,8 +161,8 @@ def add_level_1_hard_constraints(
       9. forced_venues        — forced venue excludes alternatives
 
     New implicit rule:
-     11. one_session_per_day  — at most one session per day per team
-     12. age_ascending        — younger teams train earlier than older teams (same venue+day)
+     10. one_session_per_day  — at most one session per day per team
+     11. age_ascending        — younger teams train earlier than older teams (same venue+day)
 
     When ``skip_rest_day_and_distribution`` is True, constraints 3b (coach_rest_day)
     and 3c (salarie_distribution) are skipped. This is used in the two-pass fallback:
