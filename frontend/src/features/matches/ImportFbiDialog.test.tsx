@@ -38,7 +38,7 @@ describe("ImportFbiDialog", () => {
     await user.click(screen.getByRole("button", { name: "Importer" }));
 
     expect(importFbiFixtures).toHaveBeenCalledOnce();
-    expect(importFbiFixtures.mock.calls[0][0]).toBe("team-2");
+    expect(importFbiFixtures).toHaveBeenCalledWith("team-2", expect.any(File));
 
     // The dialog stays open and surfaces created/skipped + row errors.
     await waitFor(() => expect(screen.getByText(/2 créés · 1 ignoré/)).toBeInTheDocument());

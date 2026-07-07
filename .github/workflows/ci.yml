@@ -24,6 +24,38 @@ jobs:
       - name: Lint Makefile
         run: make -n help
 
+  # Frontend gate: until now the frontend had NO CI coverage — only the e2e job
+  # touched it via `npm run dev` (Vite, no typecheck). A broken production build
+  # (`tsc -b`) and failing Vitest units both slipped through. This job closes
+  # that gap: typecheck + production build + unit tests on every PR.
+  frontend:
+    name: Frontend (build + unit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build (tsc -b + vite)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Unit tests (Vitest)
+        working-directory: frontend
+        run: npx vitest run
+
   phpstan:
     name: PHPStan
     runs-on: ubuntu-latest

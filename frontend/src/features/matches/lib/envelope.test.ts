@@ -16,6 +16,7 @@ const fixture = (over: Partial<Fixture> = {}): Fixture => ({
   status: "UNPLACED",
   venueId: null,
   kickoffTime: null,
+  externalRef: null,
   ...over,
 });
 const window = (over: Partial<LeagueWindow> = {}): LeagueWindow => ({

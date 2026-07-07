@@ -14,6 +14,7 @@ const fixture = (over: Partial<Fixture> = {}): Fixture => ({
   status: "PLACED",
   venueId: "venue-1",
   kickoffTime: "16:00",
+  externalRef: null,
   ...over,
 });
 

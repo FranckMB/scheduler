@@ -17,6 +17,7 @@ const fixture: Fixture = {
   status: "UNPLACED",
   venueId: null,
   kickoffTime: null,
+  externalRef: null,
 };
 const venues: Venue[] = [{ id: "venue-1", name: "Gymnase Alpha", color: null }];
 
