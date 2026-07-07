@@ -54,6 +54,11 @@ final class SetBaselineController extends AbstractController implements SeasonSc
             return $this->json(['error' => 'Only a finished schedule can be the season main plan.'], Response::HTTP_CONFLICT);
         }
 
+        // UX-02: an overlay (period exception plan) can never be the season baseline.
+        if (null !== $schedule->getCalendarEntryId()) {
+            return $this->json(['error' => 'A period overlay cannot be the season main plan.'], Response::HTTP_CONFLICT);
+        }
+
         $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
         if (!$season instanceof Season) {
             return $this->json(['error' => 'Season not found.'], Response::HTTP_NOT_FOUND);

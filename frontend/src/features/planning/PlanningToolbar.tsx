@@ -124,7 +124,7 @@ export function PlanningToolbar({
           Rouvrir
         </Button>
       ) : null}
-      {isFinished && !isBaseline ? (
+      {isFinished && !isBaseline && null === selected?.calendarEntryId ? (
         <Button size="sm" variant="ghost" className="h-8" disabled={actionBusy} onClick={onSetBaseline}>
           <Star className="size-4" />
           Définir principal

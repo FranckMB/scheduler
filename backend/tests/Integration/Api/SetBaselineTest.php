@@ -90,6 +90,24 @@ final class SetBaselineTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    public function testOverlayScheduleCannotBeMainPlan(): void
+    {
+        // UX-02: a period overlay (calendarEntryId non-null) is a bounded
+        // exception plan, never the season baseline — even when COMPLETED.
+        [$user, , $season] = $this->seed('BASE7');
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $overlay->setCalendarEntryId('11111111-1111-4111-8111-111111111111');
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$overlay->getId()}/set-baseline");
+
+        self::assertResponseStatusCodeSame(409);
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
+        self::assertNull($reloaded?->getBaselineScheduleId(), 'an overlay must never be set as baseline');
+    }
+
     public function testForeignScheduleIsNotAccessible(): void
     {
         [$user] = $this->seed('BASE4');

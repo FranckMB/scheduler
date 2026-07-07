@@ -24,13 +24,25 @@ const IN_FLIGHT = ["PENDING", "GENERATING"];
 /** Latest finished SEASON schedule (VALIDATED or COMPLETED), else the most recent one, else null.
  *  Period overlays (calendarEntryId set) are never auto-selected — they are reached explicitly
  *  from the cockpit "Voir le plan". */
-function pickDefaultSchedule(schedules: { id: string; status: string; createdAt: string; calendarEntryId: string | null }[]): string | null {
+type LandingSchedule = { id: string; status: string; createdAt: string; calendarEntryId: string | null };
+
+export function pickDefaultSchedule(schedules: LandingSchedule[]): string | null {
   const seasonPlans = schedules.filter((s) => null === s.calendarEntryId);
   if (0 === seasonPlans.length) {
     return null;
   }
   const byRecent = [...seasonPlans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (byRecent.find((s) => "VALIDATED" === s.status || "COMPLETED" === s.status) ?? byRecent[0]).id;
+}
+
+/** UX-02: which schedule the planning page opens on. Prefer the season baseline —
+ *  but ONLY if it is a finished SEASON plan (never a period overlay, never mid-flight),
+ *  else fall back to the latest finished season plan. A stale/overlay baseline must
+ *  never land the user on an empty "★ · période". */
+export function pickLandingScheduleId(schedules: LandingSchedule[], baselineScheduleId: string | null): string | null {
+  const base = schedules.find((s) => s.id === baselineScheduleId && null === s.calendarEntryId);
+
+  return base && !IN_FLIGHT.includes(base.status) ? base.id : pickDefaultSchedule(schedules);
 }
 
 function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: boolean; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
@@ -89,10 +101,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
-      const base = schedules.find((s) => s.id === baselineScheduleId);
-      // Prefer a READY (finished) plan on arrival, so landing on « Accueil » never
-      // shows the "Génération en cours" screen when the baseline is mid-regeneration.
-      setSelectedScheduleId(base && !IN_FLIGHT.includes(base.status) ? base.id : pickDefaultSchedule(schedules));
+      setSelectedScheduleId(pickLandingScheduleId(schedules, baselineScheduleId));
     }
   }, [validScheduleId, schedules, baselineScheduleId, setSelectedScheduleId]);
 
