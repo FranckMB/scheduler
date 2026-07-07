@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-/** Unique ARA per run — the dev DB is not rolled back between e2e runs. */
-function uniqueAra(prefix: string): string {
-  const rand = Math.floor(Math.random() * 1_000_000).toString(36);
-  return (prefix + Date.now().toString(36) + rand).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
-}
+import { uniqueAra } from "./support";
 
 async function registerClub(page: import("@playwright/test").Page): Promise<void> {
   const ara = uniqueAra("E2ES");
