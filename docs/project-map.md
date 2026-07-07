@@ -142,6 +142,8 @@ The MCP server (`.mcp.json`: `uvx code-review-graph serve`) loads at session sta
 
 Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`uvx … serena start-mcp-server`, LSP-based symbol navigation for PHP + Python + TS; `.serena/project.yml` excludes only frontend build artifacts `dist|node_modules|storybook-static`) and **Context7** (`@upstash/context7-mcp`, up-to-date external-library docs). Separately, the **Caveman** plugin is installed user-scope (opt-in compressed communication mode). All are dev-time tooling — no application-code impact.
 
+**Dependabot** (`.github/dependabot.yml`, audit supply-chain) scans the four dependency ecosystems weekly — **pip** (`/engine`), **npm** (`/frontend`), **composer** (`/backend`), **github-actions** (`/`) — opening grouped version-bump PRs (labelled `dependencies` + zone). Security PRs from GHSA alerts require Dependabot security-updates enabled at the repo (Settings → Code security). This is GitHub-side CI automation (not a local hook, not agent automation), so it is orthogonal to the "no hidden agent automation" rule (§7 CLAUDE.md).
+
 ---
 
 ## 6. Cross-references
