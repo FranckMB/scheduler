@@ -1,0 +1,53 @@
+# Dependabot — scan automatisé des dépendances (audit supply-chain, le -10).
+# Couvre les 4 écosystèmes du monorepo. MAJ hebdomadaires, groupées par
+# écosystème pour limiter le bruit de PRs ; les alertes de sécurité (GHSA)
+# ouvrent des PRs même hors fenêtre grâce à Dependabot security-updates
+# (activé au niveau du repo : Settings → Code security → Dependabot).
+version: 2
+updates:
+  # Engine — Python (pip, lit engine/pyproject.toml [project] + [dev])
+  - package-ecosystem: "pip"
+    directory: "/engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      engine-python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "engine"]
+
+  # Frontend — npm (lit frontend/package-lock.json)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      frontend-npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "frontend"]
+
+  # Backend — Composer (lit backend/composer.lock)
+  - package-ecosystem: "composer"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      backend-composer:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    labels: ["dependencies", "backend"]
+
+  # CI — GitHub Actions (lit .github/workflows/*.yml)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels: ["dependencies", "ci"]
