@@ -169,6 +169,68 @@ jobs:
       - name: Run perf gate
         run: docker compose run --rm engine pytest -m perf
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: blocking-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # The journey drives the real stack: nginx (/api), engine (solve),
+      # messenger-worker (generation), mercure, redis, postgres.
+      - name: Start full stack
+        run: docker compose up -d --wait php-fpm nginx engine messenger-worker mercure redis postgres
+
+      - name: Install PHP deps
+        run: docker compose exec -T php-fpm composer install --no-interaction
+
+      - name: Generate JWT keys
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
+
+      - name: Migrate dev database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:migrations:migrate --no-interaction'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Start Vite dev server
+        working-directory: frontend
+        run: |
+          npm run dev &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:5173 >/dev/null && exit 0
+            sleep 1
+          done
+          echo "Vite dev server did not come up" && exit 1
+
+      - name: Run Playwright suite
+        working-directory: frontend
+        run: E2E_BASE_URL=http://localhost:5173 npx playwright test
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: frontend/test-results/
+          retention-days: 7
+
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest

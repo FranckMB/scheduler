@@ -17,7 +17,10 @@ test("register a new club lands on the dashboard", async ({ page }) => {
   await page.getByLabel(/nom du club/i).fill("E2E Club");
   await page.getByRole("button", { name: /créer le compte/i }).click();
 
-  await expect(page.getByText(/bonjour/i)).toBeVisible();
+  // A fresh club is routed to the onboarding wizard (AuthGuard) with the
+  // season selector mounted in the header — the app shell is alive.
+  await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Saison de travail" })).toBeVisible();
 });
 
 test("joining an existing club shows the waiting-for-approval screen", async ({ page }) => {
@@ -32,7 +35,7 @@ test("joining an existing club shows the waiting-for-approval screen", async ({ 
   await page.getByLabel(/code ara/i).fill(ara);
   await page.getByLabel(/nom du club/i).fill("E2E Existing");
   await page.getByRole("button", { name: /créer le compte/i }).click();
-  await expect(page.getByText(/bonjour/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
 
   // A second person on the same ARA -> pending -> waiting screen.
   await page.goto("/register");
