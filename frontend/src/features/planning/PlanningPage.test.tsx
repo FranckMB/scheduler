@@ -35,15 +35,32 @@ vi.mock("./api", () => ({
   STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec", VALIDATED: "Validé" },
 }));
 
+const { meState } = vi.hoisted(() => ({ meState: { socleValidatedAt: null as string | null } }));
+
 vi.mock("@/features/auth/queries", () => ({
-  useMe: () => ({ data: { id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" }, baselineScheduleId: SID } }),
+  useMe: () => ({ data: { id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" }, baselineScheduleId: SID, socleValidatedAt: meState.socleValidatedAt } }),
 }));
 
 beforeEach(() => {
+  meState.socleValidatedAt = null;
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
 });
 
 describe("PlanningPage (integration)", () => {
+  it("shows the 'validate to unlock the cockpit' hint while the socle is not validated", async () => {
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+    expect(screen.getByText(/débloquer le/i)).toBeInTheDocument();
+    expect(screen.getByText(/tableau de bord/i)).toBeInTheDocument();
+  });
+
+  it("hides the hint once the socle is validated (cockpit is reachable)", async () => {
+    meState.socleValidatedAt = "2026-07-01T00:00:00Z";
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+    expect(screen.queryByText(/débloquer le tableau de bord/i)).toBeNull();
+  });
+
   it("renders the base planning grid: team + coach on the slot, main-plan badge", async () => {
     renderWithProviders(<PlanningPage />);
 
