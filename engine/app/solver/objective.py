@@ -348,22 +348,47 @@ def add_preferred_day_bonus(
     time_windows: Iterable[Any],
     weights: Mapping[str, int],
 ) -> list[tuple[BoolVarLike, str]]:
-    """Return soft objective terms for preferred-day windows."""
+    """Return soft objective terms for preferred-day windows.
+
+    Two config shapes are honored (ENG-10 — the wizard only ever emits
+    ``forbiddenDays`` whatever the ruleType, so a PREFERRED day rule used to be
+    a silent placebo when only ``preferredDays`` was read):
+    - ``preferredDays``: bonus on those days;
+    - ``forbiddenDays`` on a PREFERRED rule: bonus on every day OUTSIDE the set
+      — the positive complement of "avoid these days" (equivalent malus, keeps
+      all objective coefficients positive). ``preferredDays`` wins when both
+      are present.
+    """
     del model
 
-    def criterion(config: Mapping[str, Any]) -> set[int] | None:
-        days: set[int] = set()
-        for value in config.get("preferredDays") or config.get("preferred_days") or ():
-            try:
-                days.add(int(_scalar_id(value)))
-            except (TypeError, ValueError):
-                continue
-        return days or None
+    def criterion(config: Mapping[str, Any]) -> tuple[bool, set[int]] | None:
+        def day_set(key: str, snake: str) -> set[int]:
+            days: set[int] = set()
+            for value in config.get(key) or config.get(snake) or ():
+                try:
+                    days.add(int(_scalar_id(value)))
+                except (TypeError, ValueError):
+                    continue
+            return days
+
+        preferred = day_set("preferredDays", "preferred_days")
+        if preferred:
+            return (True, preferred)
+        avoided = day_set("forbiddenDays", "forbidden_days")
+        if avoided:
+            return (False, avoided)
+        return None
+
+    def matches(day: int | None, _start: Any, crit: tuple[bool, set[int]]) -> bool:
+        if day is None:
+            return False
+        positive, days = crit
+        return day in days if positive else day not in days
 
     return _add_preferred_bonus(
         x, time_windows, weights, family="DAY", weight_name="preferred_day",
         criterion=criterion,
-        matches=lambda day, _start, days: day is not None and day in days,
+        matches=matches,
     )
 
 

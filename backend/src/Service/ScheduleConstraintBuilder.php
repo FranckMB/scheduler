@@ -647,7 +647,32 @@ final class ScheduleConstraintBuilder
                 continue;
             }
 
-            // Pass through as-is (TEAM, COACH, FACILITY, or CLUB without targetTag)
+            // Resolve a club-wide TIME/DAY/FACILITY rule ("Toutes les équipes")
+            // into one TEAM constraint per team: the engine only applies these
+            // families to a team target — a CLUB-scope one was a silent no-op
+            // (audit P0.1, dead "all teams" cell). Same expansion pattern as
+            // CLUB+targetTag above. COACH_AVAILABILITY is coach-scoped and
+            // FACILITY_CAPACITY venue-keyed → both pass through untouched.
+            $expandableFamilies = [ConstraintFamily::TIME, ConstraintFamily::DAY, ConstraintFamily::FACILITY];
+            if (ConstraintScope::CLUB === $scope && \in_array($constraint->getFamily(), $expandableFamilies, true)) {
+                foreach ($teams as $team) {
+                    $result[] = [
+                        'id' => $constraint->getId() . ':' . $team->getId(),
+                        'scope' => ConstraintScope::TEAM->value,
+                        'scopeTargetId' => $team->getId(),
+                        'family' => $constraint->getFamily()->value,
+                        'ruleType' => $constraint->getRuleType()->value,
+                        'name' => $constraint->getName(),
+                        'config' => $config,
+                        'sortOrder' => $constraint->getSortOrder(),
+                        'isActive' => $constraint->getIsActive(),
+                    ];
+                }
+
+                continue;
+            }
+
+            // Pass through as-is (TEAM, COACH, or CLUB variants handled above)
             $result[] = [
                 'id' => $constraint->getId(),
                 'scope' => $scope->value,

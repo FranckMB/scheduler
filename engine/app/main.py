@@ -318,6 +318,9 @@ def _solve(
     )
 
     _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])
+    # Parse-time "constraint not honored" warnings (target-less scope, coach
+    # ruleType coerced…) ride the same diagnostics channel as hard conflicts.
+    conflicts = [*conflicts, *parsed.get("parse_warnings", [])]
 
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
@@ -335,12 +338,21 @@ def _solve(
 
     # Add objective function.
     preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
+    # Soft "avoid this venue" rules (ENG-11): reward every OTHER venue of the
+    # team — the positive complement of a malus, same "preferred" weight, so a
+    # preference can never make the instance INFEASIBLE.
+    avoided_by_team: dict[str, set[str]] = {}
+    for avoided in parsed.get("avoided_venues", []):
+        avoided_by_team.setdefault(avoided["scope_target_id"], set()).add(avoided["venue_id"])
     soft_terms = []
     for slot_key, var in model.x.items():
         team_id = str(slot_key[0])
         venue_id = str(slot_key[1])
         preferred_venue_id = preferred_venues.get(team_id)
         if preferred_venue_id is not None and venue_id == preferred_venue_id:
+            soft_terms.append((var, "preferred"))
+        avoided_set = avoided_by_team.get(team_id)
+        if avoided_set is not None and venue_id not in avoided_set:
             soft_terms.append((var, "preferred"))
 
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
