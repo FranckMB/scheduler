@@ -11,7 +11,7 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 | User | Purpose | DDL Rights | RLS Bypass |
 |------|---------|------------|------------|
 | `app_user` | Symfony runtime (API requests) | **None** | **No** — policies apply |
-| `migration_user` | legacy (created by init SQL, **not used by any configured connection**) | `CREATE`, `ALTER`, `DROP` grants | **No** — `NOSUPERUSER`, no `BYPASSRLS`, no policy targets it → default-deny on tenant tables under `FORCE` |
+| `migration_user` | legacy (created by init SQL, **not used by any configured connection**) | `GRANT ALL` on schema/tables/sequences (DML + `CREATE` on schema) — **no `ALTER`/`DROP` on existing tables** (not grantable in PostgreSQL; requires ownership, held by `clubscheduler`) | **No** — `NOSUPERUSER`, no `BYPASSRLS`, no policy targets it → default-deny on tenant tables under `FORCE` |
 | `clubscheduler` | **migrations / ops / superadmin door** (Doctrine `admin` connection, `DATABASE_ADMIN_URL`) | all (owner/superuser) | **Yes** — superuser bypasses every policy (see CLAUDE.md §6) |
 
 > **Security rule:** `app_user` is **not** a `SUPERUSER` and does **not** hold `CREATEDB` or `CREATEROLE`.

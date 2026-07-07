@@ -23,7 +23,7 @@ exercise the relaxed path.
 Keep a **single solve pass with all HARD constraints active**. If the solver returns
 INFEASIBLE, `build_result` produces `status="failed"` with conflict diagnostics —
 the engine never silently drops rest-day or distribution constraints to force a
-result. The full `solver_timeout_seconds` (default 650s) applies to that single pass.
+result. The phase-1 budget is **adaptive** (60/180/600 s tiers by `n_teams×n_venues`), with the payload `solver_timeout_seconds` (default 650 s) acting as a ceiling only; the chaining phase adds at most `CHAINING_PHASE_MAX_SECONDS` (10 s). *(Wording corrected 2026-07-07 — the original claimed the full payload budget applied.)*
 
 The fallback parameters (`skip_rest_day_and_distribution`, `fallback_used`) are kept
 in the signatures as a documented, tested extension point, but remain dormant.
@@ -47,10 +47,13 @@ in the signatures as a documented, tested extension point, but remain dormant.
 ## Amendment (2026-07-07) — "single pass" ≠ "single solver call"
 
 Production now runs a **two-phase lexicographic optimisation** (`main.py`,
-"Phase 1/Phase 2" comments): phase 1 solves for the optimal PLACEMENT objective
-(chaining terms built but excluded); phase 2 locks that placement optimum as a
-hard bound (`placement_expression >= optimum`), warm-starts from the phase-1
-solution and maximises the chaining bonus under a hard time cap.
+"Phase 1/Phase 2" comments): phase 1 solves the PLACEMENT objective (chaining
+terms built but excluded); phase 2 locks the phase-1 objective value as a hard
+bound (`placement_expression >= value`), warm-starts from the phase-1 solution
+and maximises the chaining bonus under a hard time cap (10 s). Phase 2 runs on
+OPTIMAL **or FEASIBLE** phase-1 outcomes: after a phase-1 timeout the locked
+bound is the best-FOUND placement value, not a proven optimum — chaining can
+then only improve on that incumbent, never degrade it.
 
 This does **not** contradict the decision of this ADR — and the ADR's title must
 be read accordingly:
@@ -60,9 +63,10 @@ be read accordingly:
   HARD constraint; INFEASIBLE still fails loudly with diagnostics
   (`status="failed"`). The dormant `skip_rest_day_and_distribution` extension
   point remains dormant.
-- The two phases are an **objective-layering technique** (placement optimality
-  proof kept fast and exact; chaining best-effort on top), not a second chance
-  at feasibility. Phase 2 can only improve chaining, never degrade placement.
+- The two phases are an **objective-layering technique** (placement solved
+  first — proven optimal when phase 1 completes, best-found on timeout;
+  chaining best-effort on top), not a second chance at feasibility. Phase 2
+  can only improve chaining, never degrade the locked placement value.
 
 Any future change that relaxes constraints between attempts remains a separate,
 explicit ADR as decided above.
