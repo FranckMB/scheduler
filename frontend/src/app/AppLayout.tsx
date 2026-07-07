@@ -36,7 +36,9 @@ export function AppLayout() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
-          <NavLink to="/" aria-label="Accueil" className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80">
+          {/* The club title IS the home link — everything else (planning,
+              assistant) is reached from the cockpit, not the top bar. */}
+          <NavLink to="/" aria-label="Accueil" title="Retour à l'accueil (tableau de bord)" className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80">
             {data?.club?.logoUrl ? (
               <img src={data.club.logoUrl} alt="" className="size-6 rounded-full object-cover" />
             ) : (
@@ -46,10 +48,7 @@ export function AppLayout() {
           </NavLink>
           <nav className="flex items-center gap-1">
             <SeasonSelector />
-            <NavItem to="/">Accueil</NavItem>
-            <NavItem to="/planning">Planning</NavItem>
             <NavItem to="/matchs">Matchs</NavItem>
-            <NavItem to="/wizard">Assistant</NavItem>
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
               <MenuItem to="/club" icon={<Settings />}>
                 Club
