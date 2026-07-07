@@ -51,7 +51,10 @@ final class FbiFixtureImporter
      */
     public function import(string $filePath, Team $team, Club $club): array
     {
-        $spreadsheet = IOFactory::load($filePath);
+        // Reader pinned to Xlsx (no auto-detection): the upload check only
+        // gates on name/mime, so an arbitrary payload must never reach the
+        // Html/Csv/Xml readers (defense-in-depth, security-review PR-4).
+        $spreadsheet = IOFactory::load($filePath, 0, [IOFactory::READER_XLSX]);
         $rows = $spreadsheet->getActiveSheet()->toArray();
 
         if ([] === $rows || $this->isEmptyRow($rows[0] ?? [])) {
@@ -101,6 +104,13 @@ final class FbiFixtureImporter
                 continue;
             }
 
+            // Column is VARCHAR(64): an over-length number must be a row error,
+            // not a DBAL exception aborting the whole import (security-review PR-4).
+            if (mb_strlen($numero) > 64) {
+                $errors[] = \sprintf('Ligne %d : numéro de rencontre trop long (max 64 caractères).', $line);
+                continue;
+            }
+
             if (isset($existingRefs[$numero])) {
                 ++$skipped;
                 continue;
@@ -140,7 +150,9 @@ final class FbiFixtureImporter
             $fixture->setCompetitionId($competition->getId());
             $fixture->setMatchDate($matchDate);
             $fixture->setHomeAway($matchesHome ? FixtureHomeAway::HOME : FixtureHomeAway::AWAY);
-            $fixture->setOpponentLabel($matchesHome ? $equipe2 : $equipe1);
+            // Column is VARCHAR(180) — clamp instead of failing the row on an
+            // absurdly long label.
+            $fixture->setOpponentLabel(mb_substr($matchesHome ? $equipe2 : $equipe1, 0, 180));
             $fixture->setKickoffTime($kickoffTime);
             $fixture->setExternalRef($numero);
             $this->entityManager->persist($fixture);

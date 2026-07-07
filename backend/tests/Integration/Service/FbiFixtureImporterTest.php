@@ -21,6 +21,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Throwable;
 
 /**
  * FBI fixtures parser (spec gestion-matchs §5, ASSUMED format — validate against
@@ -141,6 +142,30 @@ final class FbiFixtureImporterTest extends KernelTestCase
 
         self::assertSame(0, $result['created']);
         self::assertStringContainsString('date de rencontre invalide', $result['errors'][0]);
+    }
+
+    public function testOverlongMatchNumberIsARowError(): void
+    {
+        $file = $this->xlsx([
+            ['D2', str_repeat('X', 65), 'BC TESTVILLE - 1', 'AS Voisins', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->team, $this->club);
+
+        self::assertSame(0, $result['created']);
+        self::assertStringContainsString('numéro de rencontre trop long', $result['errors'][0]);
+    }
+
+    public function testNonXlsxContentIsRejectedByThePinnedReader(): void
+    {
+        // Arbitrary text renamed .xlsx must never fall back to the Csv/Html
+        // readers (reader pinned to Xlsx — security-review PR-4).
+        $path = tempnam(sys_get_temp_dir(), 'fbi') . '.xlsx';
+        file_put_contents($path, "Division;Numéro\nD2;R1");
+        $this->tempFiles[] = $path;
+
+        $this->expectException(Throwable::class);
+        $this->importer->import($path, $this->team, $this->club);
     }
 
     public function testMissingRequiredColumnsRejectTheFile(): void
