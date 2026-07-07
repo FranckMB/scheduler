@@ -359,7 +359,6 @@ class TestSalarieDistribution:
                 + stats.fixed_slots
                 + stats.forbidden_assignments
                 + stats.coach_unavailability
-                + stats.venue_closures
                 + stats.required_bridge_stub
                 + stats.min_sessions
                 + stats.forced_venues

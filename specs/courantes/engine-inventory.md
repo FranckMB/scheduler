@@ -42,7 +42,7 @@ Quatre endpoints exposés par `app/main.py` :
 
 ### POST /generate
 
-- **Handler** : `generate_schedule(input_data: ScheduleInputSchema)`.
+- **Handler** : `generate_schedule(input_data: ScheduleInputSchema)`. **ENG-14** : rejette (422) un payload dont le **MAJOR de contrat** diffère de `read_contract_version()` (ex. `version` "1.x" alors que l'engine parle "2.x") — garde-fou du contrat manuel backend↔engine avant tout solve. **ENG-06** : un handler d'exception global (`_unhandled_exception_handler`) logge toute erreur non gérée (traceback serveur) et renvoie un 500 JSON propre sans fuite.
 - **Isolation** : acquiert un `asyncio.Lock` par `club_id` (voir §5) avant de lancer `build_schedule`.
 - **Pipeline** (`build_schedule` → `_solve`) :
   1. `input_data.model_dump(by_alias=True)` → dict.
@@ -142,7 +142,6 @@ Sous-schemas clés :
 | `type == "TEAM_COACH"` (legacy) | `team_coach_map[teamId]` → coachIds |
 | `type == "COACH_PLAYER_UNAVAILABILITY"` (legacy) | `team_player_map[teamId]` → coachIds |
 | `family == "COACH_AVAILABILITY"` | `coach_unavailability[scopeTargetId]` → `unavailableDays` |
-| `family == "FACILITY"` + `dateStart` | `venue_closures[scopeTargetId]` → config |
 | `family == "FACILITY"` + `preferredVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `preferredVenueId` |
 | `family == "FACILITY"` + `forcedVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `forcedVenueId` |
 | `family == "FACILITY"` + `preferredVenueId` + `PREFERRED` + `scope=TEAM` | `preferred_venues[scopeTargetId]` = `preferredVenueId` |
@@ -167,11 +166,10 @@ Familles de contraintes comptées dans `HardConstraintStats` (liste exhaustive :
 | 5 | `fixed_slots` | Slots pré-placés (LOCK) forcés à 1 |
 | 6 | `forbidden_assignments` | Variables interdites forcées à 0 (ID ou pair team+venue) |
 | 7 | `coach_unavailability` | Slots coach indisponible forcés à 0 |
-| 8 | `venue_closures` | Slots salle fermée forcés à 0 |
-| 9 | `min_sessions` | Chaque équipe a ≥ son minimum effectif de sessions |
-| 10 | `forced_venues` | Si salle forcée, autres salles exclues (forcées à 0) |
-| 11 | `one_session_per_day` | ≤ 1 session/jour/équipe sauf `allowMultipleSessionsPerDay=True` |
-| 12 | `age_ascending` | Teams plus jeunes entraînées plus tôt (même venue+jour) — exempt si `ageMin=None` ou HARD-locked |
+| 8 | `min_sessions` | Chaque équipe a ≥ son minimum effectif de sessions |
+| 9 | `forced_venues` | Si salle forcée, autres salles exclues (forcées à 0) |
+| 10 | `one_session_per_day` | ≤ 1 session/jour/équipe sauf `allowMultipleSessionsPerDay=True` |
+| 11 | `age_ascending` | Teams plus jeunes entraînées plus tôt (même venue+jour) — exempt si `ageMin=None` ou HARD-locked |
 
 Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bridge`.
 

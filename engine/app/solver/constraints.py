@@ -80,7 +80,6 @@ class AssignmentVariable:
     fixed: bool = False
     forbidden: bool = False
     coach_unavailable: bool = False
-    venue_closed: bool = False
     forced_venue_id: str | None = None
     id: str | None = None
 
@@ -97,7 +96,6 @@ class HardConstraintStats:
     fixed_slots: int = 0
     forbidden_assignments: int = 0
     coach_unavailability: int = 0
-    venue_closures: int = 0
     required_bridge_stub: int = 0
     min_sessions: int = 0
     forced_venues: int = 0
@@ -120,7 +118,6 @@ class HardConstraintStats:
             + self.fixed_slots
             + self.forbidden_assignments
             + self.coach_unavailability
-            + self.venue_closures
             + self.required_bridge_stub
             + self.min_sessions
             + self.forced_venues
@@ -142,7 +139,6 @@ def add_level_1_hard_constraints(
     fixed_assignments: Iterable[Any] = (),
     forbidden_assignments: Iterable[Any] = (),
     coach_unavailability: RuleCollection = (),
-    venue_closures: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
     skip_rest_day_and_distribution: bool = False,
@@ -162,8 +158,7 @@ def add_level_1_hard_constraints(
       6. fixed_slots          — pre-placed slots forced to 1
       7. forbidden_assignments — forbidden variables forced to 0
       8. coach_unavailability — unavailable coach slots forced to 0
-      9. venue_closures       — closed venue slots forced to 0
-     10. forced_venues        — forced venue excludes alternatives
+      9. forced_venues        — forced venue excludes alternatives
 
     New implicit rule:
      11. one_session_per_day  — at most one session per day per team
@@ -230,12 +225,9 @@ def add_level_1_hard_constraints(
         model, assignment_list, coach_unavailability, team_coach_map=team_coach_map
     )
 
-    # 8. Closed venue variables are forced to 0.
-    stats.venue_closures = add_venue_closure_constraints(
-        model, assignment_list, venue_closures
-    )
-
-    # 9. Effective minimum sessions are guaranteed by a hard linear bound.
+    # 8. Effective minimum sessions are guaranteed by a hard linear bound.
+    # (Venue closures are honored upstream: the backend expands them to FACILITY
+    # forbiddenVenueId → forbidden_assignments, ENG-02. No dead engine path.)
     stats.min_sessions = add_min_sessions_constraints(
         model,
         assignment_list,
@@ -806,23 +798,6 @@ def add_coach_unavailability_constraints(
     return added
 
 
-def add_venue_closure_constraints(
-    model: Any, assignments: Iterable[AssignmentLike], venue_closures: RuleCollection = ()
-) -> int:
-    """Constraint 8: closed-room assignment variables are fixed to 0."""
-
-    added = 0
-    for assignment in assignments:
-        venue_id = _venue_id(assignment)
-        time_key = _time_key(assignment)
-        if _bool_field(assignment, "venue_closed", "is_venue_closed", "room_closed", "is_room_closed") or _rule_matches(
-            venue_closures, venue_id, time_key
-        ):
-            model.Add(_var(assignment) == 0)
-            added += 1
-    return added
-
-
 def add_time_window_constraints(
     model: Any,
     x: Mapping[Any, BoolVarLike],
@@ -1260,34 +1235,6 @@ def _player_ids(assignment: AssignmentLike) -> list[Any]:
 
 def _bool_field(assignment: AssignmentLike, *names: str) -> bool:
     return any(bool(_get(assignment, name, default=False)) for name in names)
-
-
-def _rule_matches(rules: RuleCollection, resource_id: Any, time_key: Any) -> bool:
-    if not rules or resource_id is None:
-        return False
-
-    if isinstance(rules, Mapping):
-        if (resource_id, time_key) in rules:
-            return bool(rules[(resource_id, time_key)])
-        if resource_id not in rules:
-            return False
-        values = rules[resource_id]
-        if values is True:
-            return True
-        return _contains(values, time_key)
-
-    return _contains(rules, (resource_id, time_key)) or _contains(rules, resource_id)
-
-
-def _contains(values: Any, candidate: Any) -> bool:
-    if values is None:
-        return False
-    if isinstance(values, (str, bytes)):
-        return bool(values == candidate)
-    try:
-        return candidate in values
-    except TypeError:
-        return False
 
 
 def _compute_effective_min_sessions(
@@ -1836,6 +1783,5 @@ __all__ = [
     "add_salarie_distribution_constraints",
     "add_team_no_overlap",
     "add_time_window_constraints",
-    "add_venue_closure_constraints",
     "parse_v2_constraints",
 ]

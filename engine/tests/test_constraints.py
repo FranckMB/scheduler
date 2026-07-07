@@ -170,15 +170,9 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
         self.assertEqual(stats.coach_unavailability, 1)
         self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
 
-    def test_closed_venue_assignment_is_forced_to_zero(self):
-        model = cp_model.CpModel()
-        closed = self.assignment(model, "closed", venue_closed=True)
-
-        stats = add_level_1_hard_constraints(model, [closed])
-        model.Add(closed.var == 1)
-
-        self.assertEqual(stats.venue_closures, 1)
-        self.assertEqual(cp_model.INFEASIBLE, self.solve(model))
+    # (ENG-15) The dead `add_venue_closure_constraints` path was removed: venue
+    # closures are honored upstream (backend expands them to FACILITY
+    # forbiddenVenueId → forbidden_assignments), covered by the forbidden tests.
 
     def test_min_sessions_effectif_is_guaranteed(self):
         model = cp_model.CpModel()
