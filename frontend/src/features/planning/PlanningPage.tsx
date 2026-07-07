@@ -217,7 +217,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {/* The home ("/") cockpit stays locked until the season's socle is validated
           — explain HOW to unlock it, otherwise the redirect to /planning is opaque. */}
       {!embedded && !me?.socleValidatedAt && schedules.length > 0 ? (
-        <div className="mb-4 flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm">
+        <div className="mb-4 flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
           <Lock className="mt-0.5 size-4 shrink-0 text-accent" />
           <span className="text-muted-foreground">
             Validez un planning pour débloquer le <strong className="text-foreground">tableau de bord</strong> — l'accueil ouvrira alors le calendrier de la saison.
