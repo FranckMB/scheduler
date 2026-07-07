@@ -1016,16 +1016,18 @@ def _normalise_assignments(
     return [_as_assignment_variable(item) for item in assignments]
 
 
-def _coerce_id(value: Any) -> str | None:
-    """Reproduce the old accessor id-normalisation: ``scalar_id`` (unwrap nested
-    id/uuid/name) then ``str`` so grouping keys are byte-identical to before.
+def _coerce_id(value: Any) -> Any:
+    """Reproduce the removed accessors' id-normalisation EXACTLY: ``scalar_id``
+    (unwrap a nested id/uuid/name), and nothing more.
 
-    All real inputs already hold strings, so this is a no-op on them; the
-    ``str`` mirrors the ``_assignment_from_mapping_item`` convention (which also
-    stringifies ids) and keeps dict-grouping keys consistent across both paths.
+    Deliberately NOT wrapped in ``str()``: the old ``_team_id``/``_venue_id``/…
+    accessors returned the bare ``scalar_id`` result, so this keeps the object
+    path byte-identical to before on every input — including hypothetical
+    non-string ids, where an added ``str()`` would have desynced the group keys
+    here from the un-stringified ``min_sessions``/``forced_venues`` lookup keys.
+    All real inputs are strings, so this is a no-op on them.
     """
-    scalar = scalar_id(value)
-    return None if scalar is None else str(scalar)
+    return scalar_id(value)
 
 
 def _as_assignment_variable(obj: AssignmentInput) -> AssignmentVariable:
