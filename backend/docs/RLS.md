@@ -11,7 +11,8 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 | User | Purpose | DDL Rights | RLS Bypass |
 |------|---------|------------|------------|
 | `app_user` | Symfony runtime (API requests) | **None** | **No** — policies apply |
-| `migration_user` | Doctrine migrations / deploy | `CREATE`, `ALTER`, `DROP` | **Yes** — `BYPASSRLS` is **not** granted, but migrations run before RLS is enabled on new tables |
+| `migration_user` | legacy (created by init SQL, **not used by any configured connection**) | `GRANT ALL` on schema/tables/sequences (DML + `CREATE` on schema) — **no `ALTER`/`DROP` on existing tables** (not grantable in PostgreSQL; requires ownership, held by `clubscheduler`) | **No** — `NOSUPERUSER`, no `BYPASSRLS`, no policy targets it → default-deny on tenant tables under `FORCE` |
+| `clubscheduler` | **migrations / ops / superadmin door** (Doctrine `admin` connection, `DATABASE_ADMIN_URL`) | all (owner/superuser) | **Yes** — superuser bypasses every policy (see CLAUDE.md §6) |
 
 > **Security rule:** `app_user` is **not** a `SUPERUSER` and does **not** hold `CREATEDB` or `CREATEROLE`.
 
@@ -74,12 +75,14 @@ Use `app_user` for the runtime `DATABASE_URL`:
 DATABASE_URL="postgresql://app_user:app_user_password@postgres:5432/clubscheduler?serverVersion=16&charset=utf8"
 ```
 
-Use `migration_user` only during migrations:
+Migrations and ops run on the **`admin` Doctrine connection** (`clubscheduler`, superuser — the only RLS bypass):
 
 ```env
-# .env.migration (deploy only)
-DATABASE_URL="postgresql://migration_user:migration_user_password@postgres:5432/clubscheduler?serverVersion=16&charset=utf8"
+# .env (migrations/ops — doctrine.yaml `admin` connection)
+DATABASE_ADMIN_URL="postgresql://clubscheduler:...@postgres:5432/clubscheduler?serverVersion=16&charset=utf8"
 ```
+
+⚠ Do **not** use `migration_user` for migrations: it has no RLS bypass (default-deny under `FORCE`) and is not wired to any connection — it is a legacy artifact of the init SQL.
 
 ### 2. Setting the Tenant Context
 
@@ -126,4 +129,4 @@ SELECT * FROM public.event;
 | `0 rows returned` for a table that has data | `app.club_id` not set | Call `app_security.set_club_id(...)` before querying |
 | `permission denied for table` | `app_user` lacks `GRANT` | Re-run `02-users.sql` or check `GRANT` statements |
 | Policy not enforced for table owner | `FORCE ROW LEVEL SECURITY` missing | Run `ALTER TABLE ... FORCE ROW LEVEL SECURITY` |
-| Migration fails with RLS error | Migration runs as `app_user` | Use `migration_user` for Doctrine migrations |
+| Migration fails with RLS error | Migration runs as `app_user` (or `migration_user` — no bypass either) | Run migrations on the `admin` connection (`clubscheduler`, superuser) |

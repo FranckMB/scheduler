@@ -52,7 +52,7 @@ cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-know
 - **Concurrency**: backend `ClubGenerationLock` (Redis `SETEX NX` + release token); engine per-club `asyncio.Lock`. Guarded by `ConcurrentGenerationTest`.
 - **Async generation**: `GenerateScheduleController` → `GenerateScheduleMessage` → `GenerateScheduleHandler` (frozen snapshot → POST engine → import results → Mercure publish). Symfony Messenger over Redis, `messenger-worker` container.
 - **Backend↔engine contract**: engine Pydantic schemas ⇄ backend payload; version in `engine/CONTRACT_VERSION`. **No codegen — synced manually.** Guarded by `ContractSchemaTest`.
-- **Solver**: CP-SAT, single pass, default **timeout 650 s** + seed 42, both from the input payload (`solver_timeout_seconds` / `solver_seed`). No silent fallback — INFEASIBLE → `status="failed"` + diagnostics (see `docs/architecture/adr-0001-single-pass-solve.md`).
+- **Solver**: CP-SAT, **no relaxation fallback** (all HARD constraints in every attempt; the objective is optimised in two lexicographic phases — placement then chaining, phase 2 capped at 10 s). Phase-1 budget = **adaptive tiers 60/180/600 s** by problem size (`n_teams×n_venues` ≤50/≤200/else), with the payload `solver_timeout_seconds` (default 650) as a **ceiling only** — never the actual budget. Seed from `solver_seed`. INFEASIBLE → `status="failed"` + diagnostics (see `docs/architecture/adr-0001-single-pass-solve.md`, amended 2026-07-07).
 
 ## 7. Workflow rules (orchestrator)
 

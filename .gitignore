@@ -12,6 +12,8 @@ Thumbs.db
 /.opencode/
 /.serena/
 /doc/
+# dossier business perso (stratégie, pricing, pilote) — local only, jamais poussé
+/business/
 
 # --- PHP / Symfony ---
 /vendor/
