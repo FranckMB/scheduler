@@ -19,18 +19,59 @@ import { useDeleteLogo, useResetClub, useUpdateAppearance, useUploadLogo } from 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
 
-function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { accentColor: string | null; accentPalette: string[] | null; logoUrl: string | null; clubName: string }) {
+/** One accent picker (swatch + hex input + filled preview) for a given theme. */
+function AccentField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
+  const valid = HEX.test(value);
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs text-muted-foreground">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={id}
+          aria-label={`Couleur d'accent (${label})`}
+          type="color"
+          className="size-9 shrink-0 rounded border border-input bg-background"
+          value={valid ? value : DEFAULT_ACCENT}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Input aria-label={`Couleur ${label} (hexadécimal)`} className="h-9 w-28 font-mono text-xs" value={value} placeholder="#3b82f6" onChange={(e) => onChange(e.target.value)} />
+        {/* Filled swatch → the accent stays legible whatever its lightness. */}
+        <div className="rounded-md px-3 py-2 text-sm font-medium" style={valid ? { backgroundColor: value, color: readableForeground(value) } : undefined}>
+          Aa
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IdentitySection({
+  accentColor,
+  accentColorDark,
+  accentPalette,
+  logoUrl,
+  clubName,
+}: {
+  accentColor: string | null;
+  accentColorDark: string | null;
+  accentPalette: string[] | null;
+  logoUrl: string | null;
+  clubName: string;
+}) {
   const updateAppearance = useUpdateAppearance();
   const uploadLogo = useUploadLogo();
   const deleteLogo = useDeleteLogo();
 
   const [color, setColor] = useState(accentColor ?? DEFAULT_ACCENT);
+  // Dark-theme accent defaults to the light one until the manager picks a distinct one.
+  const [colorDark, setColorDark] = useState(accentColorDark ?? accentColor ?? DEFAULT_ACCENT);
   const [palette, setPalette] = useState<string[]>(accentPalette ?? []);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(logoUrl);
   const [cropFile, setCropFile] = useState<File | null>(null);
 
-  const valid = HEX.test(color);
+  const valid = HEX.test(color) && HEX.test(colorDark);
   const busy = uploadLogo.isPending || updateAppearance.isPending || deleteLogo.isPending;
 
   const onCropped = async (blob: Blob) => {
@@ -51,7 +92,7 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
       await uploadLogo.mutateAsync(file);
       setFile(null);
     }
-    await updateAppearance.mutateAsync({ accentColor: color, ...(palette.length > 0 ? { accentPalette: palette } : {}) });
+    await updateAppearance.mutateAsync({ accentColor: color, accentColorDark: colorDark, ...(palette.length > 0 ? { accentPalette: palette } : {}) });
   };
 
   const removeLogo = () => {
@@ -140,26 +181,12 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
           </div>
         ) : null}
 
-        {/* Accent */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label htmlFor="accent" className="mb-1 block text-xs text-muted-foreground">
-              Couleur d'accent
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="accent"
-                aria-label="Couleur d'accent"
-                type="color"
-                className="size-9 shrink-0 rounded border border-input bg-background"
-                value={valid ? color : DEFAULT_ACCENT}
-                onChange={(e) => setColor(e.target.value)}
-              />
-              <Input aria-label="Couleur (hexadécimal)" className="h-9 w-28 font-mono text-xs" value={color} placeholder="#3b82f6" onChange={(e) => setColor(e.target.value)} />
-            </div>
-          </div>
-          <div className="rounded-md px-3 py-2 text-sm font-medium" style={valid ? { backgroundColor: color, color: readableForeground(color) } : undefined}>
-            Aperçu
+        {/* Accent — one colour per theme (light + dark), applied by useApplyClubTheme. */}
+        <div>
+          <p className="mb-2 text-xs text-muted-foreground">Couleur d'accent — une pour le thème clair, une pour le sombre. Elle habille boutons, liens et éléments actifs de toute l'interface.</p>
+          <div className="flex flex-wrap gap-4">
+            <AccentField id="accent-light" label="Thème clair" value={color} onChange={setColor} />
+            <AccentField id="accent-dark" label="Thème sombre" value={colorDark} onChange={setColorDark} />
           </div>
         </div>
 
@@ -168,9 +195,19 @@ function IdentitySection({ accentColor, accentPalette, logoUrl, clubName }: { ac
             {busy ? <Spinner className="size-4" /> : null}
             Enregistrer
           </Button>
-          {null !== accentColor ? (
-            <Button variant="ghost" onClick={() => updateAppearance.mutate({ accentColor: null })} disabled={busy}>
-              Réinitialiser la couleur
+          {(null !== accentColor || null !== accentColorDark) ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                // Reset the server AND the local pickers, else a subsequent Save
+                // re-persists the old colours the fields still show.
+                setColor(DEFAULT_ACCENT);
+                setColorDark(DEFAULT_ACCENT);
+                updateAppearance.mutate({ accentColor: null, accentColorDark: null });
+              }}
+              disabled={busy}
+            >
+              Réinitialiser les couleurs
             </Button>
           ) : null}
         </div>
@@ -213,7 +250,7 @@ function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-1 text-xl font-semibold">Gestion du club</h1>
+      <h1 className="mb-1 border-l-[3px] border-accent pl-3 text-xl font-semibold">Gestion du club</h1>
       <p className="mb-4 text-sm text-muted-foreground">{me.club?.name ?? "—"}</p>
       <div className="space-y-3">
         {isAdmin ? (
@@ -225,6 +262,7 @@ function ClubHub({ me }: { me: MeResponse }) {
         <AccordionSection title="Visuel">
           <IdentitySection
             accentColor={me.club?.accentColor ?? null}
+            accentColorDark={me.club?.accentColorDark ?? null}
             accentPalette={me.club?.accentPalette ?? null}
             logoUrl={me.club?.logoUrl ?? null}
             clubName={me.club?.name ?? ""}

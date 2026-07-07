@@ -71,9 +71,13 @@ class Club
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $logoUrl = null;
 
-    /** Club accent colour (hex, e.g. #3498DB) driving the UI `--accent`. */
+    /** Club accent colour for the LIGHT theme (hex, e.g. #3498DB) driving the UI `--accent`. */
     #[ORM\Column(type: 'string', length: 9, nullable: true)]
     private ?string $accentColor = null;
+
+    /** Club accent colour for the DARK theme (hex). null = derive from accentColor. */
+    #[ORM\Column(type: 'string', length: 9, nullable: true)]
+    private ?string $accentColorDark = null;
 
     /**
      * Up to 3 hex colours extracted from the club logo, used to tint the theme.
@@ -307,6 +311,18 @@ class Club
     public function setAccentColor(?string $accentColor): self
     {
         $this->accentColor = $accentColor;
+
+        return $this;
+    }
+
+    public function getAccentColorDark(): ?string
+    {
+        return $this->accentColorDark;
+    }
+
+    public function setAccentColorDark(?string $accentColorDark): self
+    {
+        $this->accentColorDark = $accentColorDark;
 
         return $this;
     }

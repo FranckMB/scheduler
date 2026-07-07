@@ -26,10 +26,10 @@ export function AccordionSection({ title, defaultOpen = false, children, classNa
         aria-expanded={open}
         aria-controls={open ? bodyId : undefined}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group flex w-full items-center justify-between gap-2 rounded-lg px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-accent/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {title}
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open ? "rotate-180" : "")} />
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform group-hover:text-accent", open ? "rotate-180" : "")} />
       </button>
       {open ? (
         <div id={bodyId} className="border-t border-border px-4 py-4">

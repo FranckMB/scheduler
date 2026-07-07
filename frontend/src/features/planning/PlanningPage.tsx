@@ -211,7 +211,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     <div>
       <div className="mb-4 flex items-center gap-3">
         {me?.club?.logoUrl ? <img src={me.club.logoUrl} alt="" className="size-8 shrink-0 rounded object-contain" /> : null}
-        <h1 className="text-2xl font-semibold">Planning</h1>
+        <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">Planning</h1>
       </div>
 
       {/* The home ("/") cockpit stays locked until the season's socle is validated

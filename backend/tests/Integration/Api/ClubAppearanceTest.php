@@ -40,12 +40,35 @@ final class ClubAppearanceTest extends WebTestCase
         $this->client->request('PATCH', '/api/club/appearance', [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/json',
-        ], json_encode(['accentColor' => '#e11d48', 'accentPalette' => ['#e11d48', '#1e293b', '#f59e0b']], \JSON_THROW_ON_ERROR));
+        ], json_encode(['accentColor' => '#e11d48', 'accentColorDark' => '#f59e0b', 'accentPalette' => ['#e11d48', '#1e293b', '#f59e0b']], \JSON_THROW_ON_ERROR));
 
         self::assertResponseIsSuccessful();
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame('#e11d48', $data['accentColor']);
+        self::assertSame('#f59e0b', $data['accentColorDark']);
         self::assertSame(['#e11d48', '#1e293b', '#f59e0b'], $data['accentPalette']);
+
+        // /api/me exposes both accents so the theme applies the right one per mode.
+        // The stateless JWT firewall needs a Bearer on this request (loginUser's
+        // session is ignored there).
+        $token = self::getContainer()->get(\Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface::class)->create($this->user);
+        $this->client->request('GET', '/api/me', [], [], ['HTTP_X-Club-Id' => $this->club->getId(), 'HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseIsSuccessful();
+        $me = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('#e11d48', $me['club']['accentColor']);
+        self::assertSame('#f59e0b', $me['club']['accentColorDark']);
+    }
+
+    public function testInvalidDarkHexIsRejected(): void
+    {
+        $this->client->loginUser($this->user);
+
+        $this->client->request('PATCH', '/api/club/appearance', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['accentColorDark' => 'noir'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
     }
 
     public function testInvalidHexIsRejected(): void

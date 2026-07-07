@@ -23,6 +23,7 @@ export interface MeResponse {
     onboardingCompleted: boolean;
     logoUrl: string | null;
     accentColor: string | null;
+    accentColorDark: string | null;
     accentPalette: string[] | null;
     schoolZone: string | null;
   } | null;

@@ -89,6 +89,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'onboardingCompleted' => ['type' => 'boolean'],
                             'logoUrl' => ['type' => 'string', 'nullable' => true],
                             'accentColor' => ['type' => 'string', 'nullable' => true],
+                            'accentColorDark' => ['type' => 'string', 'nullable' => true],
                             'accentPalette' => ['type' => 'array', 'nullable' => true, 'items' => ['type' => 'string']],
                         ]],
                         'baselineScheduleId' => ['type' => 'string', 'nullable' => true],

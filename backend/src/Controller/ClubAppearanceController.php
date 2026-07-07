@@ -57,6 +57,14 @@ final class ClubAppearanceController extends AbstractController
             $club->setAccentColor($color);
         }
 
+        if (\array_key_exists('accentColorDark', $data)) {
+            $colorDark = $data['accentColorDark'];
+            if (null !== $colorDark && (!\is_string($colorDark) || 1 !== preg_match(self::HEX, $colorDark))) {
+                return $this->json(['error' => 'accentColorDark must be a #RRGGBB hex colour or null.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+            $club->setAccentColorDark($colorDark);
+        }
+
         if (\array_key_exists('accentPalette', $data)) {
             $palette = $data['accentPalette'];
             if (null !== $palette) {
@@ -77,6 +85,7 @@ final class ClubAppearanceController extends AbstractController
 
         return $this->json([
             'accentColor' => $club->getAccentColor(),
+            'accentColorDark' => $club->getAccentColorDark(),
             'accentPalette' => $club->getAccentPalette(),
         ]);
     }

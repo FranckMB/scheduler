@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const me = { data: { role: "admin", club: { name: "BC Test", accentColor: null, accentPalette: null, logoUrl: null } }, isLoading: false };
+const me = { data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } }, isLoading: false };
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => me,
@@ -20,7 +20,7 @@ import { ClubPage } from "./ClubPage";
 
 describe("ClubPage", () => {
   beforeEach(() => {
-    me.data = { role: "admin", club: { name: "BC Test", accentColor: null, accentPalette: null, logoUrl: null } };
+    me.data = { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
   });
 
   it("shows both sections for an admin, Demandes open by default", () => {
@@ -33,7 +33,7 @@ describe("ClubPage", () => {
   });
 
   it("hides the Demandes section for a non-admin", () => {
-    me.data = { role: "member", club: { name: "BC Test", accentColor: null, accentPalette: null, logoUrl: null } };
+    me.data = { role: "member", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
     render(<ClubPage />);
     expect(screen.queryByRole("button", { name: /Demandes/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Visuel/ })).toBeInTheDocument();
