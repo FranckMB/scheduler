@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Service\PasswordPolicy;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,6 +26,7 @@ final class PasswordController extends AbstractController
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly MailerInterface $mailer,
         private readonly RateLimiterFactory $authPasswordForgotLimiter,
+        private readonly PasswordPolicy $passwordPolicy,
     ) {}
 
     #[Route('/api/password/forgot', name: 'api_password_forgot', methods: ['POST'])]
@@ -69,8 +71,8 @@ final class PasswordController extends AbstractController
         if ('' === $token) {
             return $this->json(['error' => 'Token is required'], 400);
         }
-        if (\strlen($password) < 8) {
-            return $this->json(['error' => 'Password must be at least 8 characters'], 400);
+        if (null !== ($passwordError = $this->passwordPolicy->validate($password))) {
+            return $this->json(['error' => $passwordError], 400);
         }
 
         try {

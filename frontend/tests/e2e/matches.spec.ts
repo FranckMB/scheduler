@@ -7,7 +7,7 @@ const PASSWORD = "maraboubccl";
 async function login(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
-  await page.getByLabel("Mot de passe").fill(PASSWORD);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("button", { name: "Saison de travail" })).toBeVisible({ timeout: 15_000 });
 }

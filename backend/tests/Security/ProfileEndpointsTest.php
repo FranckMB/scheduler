@@ -64,21 +64,21 @@ final class ProfileEndpointsTest extends WebTestCase
     {
         [$token] = $this->register('PRFE');
 
-        $this->post('/api/me/password', $token, ['currentPassword' => 'wrong-one', 'newPassword' => 'newpassword123']);
+        $this->post('/api/me/password', $token, ['currentPassword' => 'wrong-one', 'newPassword' => 'newPassword123!']);
         self::assertResponseStatusCodeSame(400, 'a wrong current password must be rejected');
     }
 
     public function testChangePasswordRejectsShortNew(): void
     {
         [$token] = $this->register('PRFF');
-        $this->post('/api/me/password', $token, ['currentPassword' => 'password123', 'newPassword' => 'short']);
+        $this->post('/api/me/password', $token, ['currentPassword' => 'Password123!', 'newPassword' => 'short']);
         self::assertResponseStatusCodeSame(400);
     }
 
     public function testChangePasswordSucceedsWithCorrectCurrent(): void
     {
         [$token] = $this->register('PRFG');
-        $this->post('/api/me/password', $token, ['currentPassword' => 'password123', 'newPassword' => 'brandnewpass123']);
+        $this->post('/api/me/password', $token, ['currentPassword' => 'Password123!', 'newPassword' => 'Brandnewpass123!']);
         self::assertResponseIsSuccessful();
     }
 
@@ -124,7 +124,7 @@ final class ProfileEndpointsTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => $email, 'password' => 'password123',
+            'email' => $email, 'password' => 'Password123!',
             'firstName' => 'P', 'lastName' => 'Rofile', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 

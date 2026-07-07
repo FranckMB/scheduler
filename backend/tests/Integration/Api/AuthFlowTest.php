@@ -25,7 +25,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $data = $this->register([
             'email' => 'admin@newclub.fr',
-            'password' => 'password123',
+            'password' => 'Password123!',
             'firstName' => 'Jean',
             'lastName' => 'Dupont',
             'ara' => 'NEWARA1',
@@ -42,7 +42,7 @@ final class AuthFlowTest extends WebTestCase
     {
         // Real FFBB shape: GES (Grand Est) + 0067 (Bas-Rhin) → Strasbourg, zone B.
         $this->register([
-            'email' => 'zone@club.fr', 'password' => 'password123',
+            'email' => 'zone@club.fr', 'password' => 'Password123!',
             'firstName' => 'Zoe', 'lastName' => 'Ne', 'ara' => 'GES0067060', 'club_name' => 'Zone Club',
         ]);
 
@@ -55,13 +55,13 @@ final class AuthFlowTest extends WebTestCase
     {
         // First registration creates the club (active admin).
         $this->register([
-            'email' => 'owner@club.fr', 'password' => 'password123',
+            'email' => 'owner@club.fr', 'password' => 'Password123!',
             'firstName' => 'Owner', 'lastName' => 'One', 'ara' => 'EXIST1', 'club_name' => 'Existing Club',
         ]);
 
         // Second registration on the same ARA -> pending membership, no new club.
         $data = $this->register([
-            'email' => 'joiner@club.fr', 'password' => 'password123',
+            'email' => 'joiner@club.fr', 'password' => 'Password123!',
             'firstName' => 'Joiner', 'lastName' => 'Two', 'ara' => 'EXIST1', 'club_name' => 'ignored',
         ]);
 
@@ -79,7 +79,7 @@ final class AuthFlowTest extends WebTestCase
     public function testRegisterDuplicateEmailIsRejected(): void
     {
         $payload = [
-            'email' => 'dup@club.fr', 'password' => 'password123',
+            'email' => 'dup@club.fr', 'password' => 'Password123!',
             'firstName' => 'Dup', 'lastName' => 'User', 'ara' => 'DUP1', 'club_name' => 'Dup Club',
         ];
         $this->register($payload);
@@ -92,11 +92,23 @@ final class AuthFlowTest extends WebTestCase
     public function testRegisterRequiresFirstAndLastName(): void
     {
         $this->register([
-            'email' => 'noname@club.fr', 'password' => 'password123',
+            'email' => 'noname@club.fr', 'password' => 'Password123!',
             'ara' => 'NONAME1', 'club_name' => 'No Name Club',
         ]);
 
         self::assertResponseStatusCodeSame(400);
+    }
+
+    public function testRegisterRejectsAPasswordBelowPolicy(): void
+    {
+        // Policy: ≥12 chars, ≥1 uppercase, ≥1 special. "password123" fails all three.
+        $body = $this->register([
+            'email' => 'weakpw@club.fr', 'password' => 'password123',
+            'firstName' => 'Weak', 'lastName' => 'Pw', 'ara' => 'WEAKPW1', 'club_name' => 'Weak Club',
+        ]);
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertStringContainsString('12 caractères', $body['error'] ?? '');
     }
 
     protected function setUp(): void

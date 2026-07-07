@@ -47,19 +47,19 @@ final class PasswordResetTest extends WebTestCase
         $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'change@reset.fr']);
         $token = self::getContainer()->get(ResetPasswordHelperInterface::class)->generateResetToken($user)->getToken();
 
-        $this->postJson('/api/password/reset', ['token' => $token, 'password' => 'brandnewpass']);
+        $this->postJson('/api/password/reset', ['token' => $token, 'password' => 'Brandnewpass1!']);
         self::assertResponseIsSuccessful();
 
         // The new password now authenticates.
         $this->client->request('POST', '/api/login', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
-            'email' => 'change@reset.fr', 'password' => 'brandnewpass',
+            'email' => 'change@reset.fr', 'password' => 'Brandnewpass1!',
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseIsSuccessful();
     }
 
     public function testResetWithInvalidTokenIsRejected(): void
     {
-        $this->postJson('/api/password/reset', ['token' => 'not-a-real-token', 'password' => 'whatever123']);
+        $this->postJson('/api/password/reset', ['token' => 'not-a-real-token', 'password' => 'Whatever123!']);
 
         self::assertResponseStatusCodeSame(400);
     }
@@ -77,7 +77,7 @@ final class PasswordResetTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => $email, 'password' => 'password123',
+            'email' => $email, 'password' => 'Password123!',
             'firstName' => 'Reset', 'lastName' => 'User', 'ara' => $ara, 'club_name' => "Club {$ara}",
         ], \JSON_THROW_ON_ERROR));
     }

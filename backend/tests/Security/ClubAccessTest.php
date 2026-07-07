@@ -157,7 +157,7 @@ final class ClubAccessTest extends WebTestCase
         $user->setEmail($role . $uid . '@test.fr');
         $user->setFirstName('N');
         $user->setLastName('Admin');
-        $user->setPasswordHash($hasher->hashPassword($user, 'password123'));
+        $user->setPasswordHash($hasher->hashPassword($user, 'Password123!'));
         $em->persist($user);
 
         $membership = new ClubUser;
@@ -195,7 +195,7 @@ final class ClubAccessTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => $suffix . '@test.fr', 'password' => 'password123',
+            'email' => $suffix . '@test.fr', 'password' => 'Password123!',
             'firstName' => 'C', 'lastName' => 'Access', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 

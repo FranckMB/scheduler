@@ -117,7 +117,7 @@ classiques avec `#[Route]`.
 | Route | Méthode | Description |
 |-------|---------|-------------|
 | `/api/login` | POST | Connexion — gérée par le firewall `json_login` de Symfony (username `email`, password `password`), succès/échec délégués à LexikJWT. Route déclarée dans `config/routes.yaml`. |
-| `/api/register` | POST | Inscription à deux modes selon le code ARA (rate-limité par IP, `auth_register` : 5/15 min). **Club inexistant** : crée `User` + `Club` (slug + code FFBB/ARA) + `ClubUser` actif (rôle `admin`) + `Season` active + `Sport` basketball + 9 `SportCategory` — `membershipStatus: "active"`. **ARA d'un club existant** : crée `User` + `ClubUser` **inactif** (`isActive=false`, en attente d'approbation admin, aucun accès aux données du club) — `membershipStatus: "pending"`. Retourne 201 `{ token, membershipStatus, user }`. Validation : email, password ≥ 8, ARA 3-20 alphanumérique majuscule, `club_name` requis si nouveau club. |
+| `/api/register` | POST | Inscription à deux modes selon le code ARA (rate-limité par IP, `auth_register` : 5/15 min). **Club inexistant** : crée `User` + `Club` (slug + code FFBB/ARA) + `ClubUser` actif (rôle `admin`) + `Season` active + `Sport` basketball + 9 `SportCategory` — `membershipStatus: "active"`. **ARA d'un club existant** : crée `User` + `ClubUser` **inactif** (`isActive=false`, en attente d'approbation admin, aucun accès aux données du club) — `membershipStatus: "pending"`. Retourne 201 `{ token, membershipStatus, user }`. Validation : email, mot de passe (politique `PasswordPolicy` : ≥12 car. + majuscule + spécial), ARA 3-20 alphanumérique majuscule, `club_name` requis si nouveau club. |
 | `/api/me` | GET | Profil courant — retourne `id`, `email`, `firstName`, `lastName`, `membershipStatus` (`none`/`pending`/`active`), `role`, `club` (id, name, `onboardingCompleted`, `logoUrl`, `accentColor`, `accentPalette`), `baselineScheduleId` (planning principal de la saison active), `hasGenerated` (booléen : `generationCountSeason > 0`). |
 
 ### Mots de passe (`PasswordController.php`)
@@ -125,7 +125,7 @@ classiques avec `#[Route]`.
 | Route | Méthode | Description |
 |-------|---------|-------------|
 | `/api/password/forgot` | POST | Demande de réinitialisation (SymfonyCasts ResetPassword). Rate-limité par IP (`auth_password_forgot` : 5/15 min). Envoie un email avec lien `/reset-password/{token}` (expiration 1 h). Répond **toujours** 200 `{status:"sent"}` — pas d'énumération d'emails. |
-| `/api/password/reset` | POST | Body `{ token, password }` (password ≥ 8). Valide le token, consomme la demande, re-hash le mot de passe. 400 si token invalide/expiré. Entité support : `ResetPasswordRequest`. |
+| `/api/password/reset` | POST | Body `{ token, password }` (politique `PasswordPolicy` : ≥12 car. + majuscule + spécial). Valide le token, consomme la demande, re-hash le mot de passe. 400 si token invalide/expiré. Entité support : `ResetPasswordRequest`. |
 
 ### Génération de planning
 

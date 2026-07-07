@@ -87,7 +87,7 @@ final class OnboardingFlowTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => strtolower($ara) . '@test.fr', 'password' => 'password123',
+            'email' => strtolower($ara) . '@test.fr', 'password' => 'Password123!',
             'firstName' => 'On', 'lastName' => 'Board', 'ara' => strtoupper($ara), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 

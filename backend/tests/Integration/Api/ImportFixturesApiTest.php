@@ -114,7 +114,7 @@ final class ImportFixturesApiTest extends WebTestCase
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
-            'email' => $suffix . '@test.fr', 'password' => 'password123',
+            'email' => $suffix . '@test.fr', 'password' => 'Password123!',
             'firstName' => 'F', 'lastName' => 'Bi', 'ara' => strtoupper($suffix), 'club_name' => $clubName,
         ], \JSON_THROW_ON_ERROR));
         $token = json_decode((string) $this->client->getResponse()->getContent(), true)['token'] ?? '';

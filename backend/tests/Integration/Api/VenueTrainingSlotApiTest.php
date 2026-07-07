@@ -102,7 +102,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $user->setEmail('test-' . uniqid() . '@example.com');
         $user->setFirstName('Test');
         $user->setLastName('User');
-        $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'password123'));
+        $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'Password123!'));
 
         $this->em->persist($user);
         $this->em->flush();
