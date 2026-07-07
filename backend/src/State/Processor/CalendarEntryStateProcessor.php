@@ -35,9 +35,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
+        \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
 
     protected function getEntityClass(): string

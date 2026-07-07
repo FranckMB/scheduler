@@ -31,11 +31,14 @@ final class ReopenScheduleController extends AbstractController implements Seaso
         private readonly RequestStack $requestStack,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
+        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/schedules/{id}/reopen', name: 'api_schedule_reopen', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
         try {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
         } catch (Throwable) {

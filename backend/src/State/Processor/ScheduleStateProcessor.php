@@ -30,9 +30,16 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
+        \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
     ) {
-        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard);
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+    }
+
+    /** SEC-07: schedule create/rename/delete is cockpit management surface. */
+    protected function requiresManagementRole(): bool
+    {
+        return true;
     }
 
     protected function getEntityClass(): string
@@ -127,12 +134,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        if (null !== $input->status) {
-            $status = ScheduleStatus::tryFrom($input->status);
-            if (null !== $status) {
-                $entity->setStatus($status);
-            }
+        // SEC-07 review finding: a client-supplied status could fabricate a
+        // COMPLETED/VALIDATED plan without ever running the solver (the PUT
+        // path already forbids this — the POST path must match). Only DRAFT
+        // may be set at creation; lifecycle transitions go through the
+        // dedicated endpoints (generate/validate/reopen).
+        if (null !== $input->status && ScheduleStatus::DRAFT->value !== $input->status) {
+            throw new ConflictHttpException('A schedule is created as DRAFT; use the lifecycle endpoints to change its status.');
         }
+        $entity->setStatus(ScheduleStatus::DRAFT);
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);
         }

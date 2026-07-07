@@ -9,6 +9,7 @@ use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\TenantOwnedInterface;
+use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -30,6 +31,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         protected readonly RequestStack $requestStack,
         protected readonly SeasonResolver $seasonResolver,
         protected readonly SeasonAccessGuard $seasonAccessGuard,
+        protected readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
@@ -37,6 +39,11 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
         $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+
+        // SEC-07 — before the season guard so 403 wins over 409 (Import idiom).
+        if ($this->requiresManagementRole()) {
+            $this->managementAccessGuard->assertManager();
+        }
 
         // Archived-season writes are refused (409). Only season-scoped entities
         // are gated — Club/User/Season carry no seasonId and stay editable.
@@ -60,6 +67,17 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         }
 
         return $data;
+    }
+
+    /**
+     * SEC-07: processors whose writes are management-sensitive (cockpit surface)
+     * override this to true — every POST/PUT/PATCH/DELETE then requires an
+     * owner/admin membership. Opt-in so wizard-entity processors keep their
+     * current semantics until the coach-role permission model is designed.
+     */
+    protected function requiresManagementRole(): bool
+    {
+        return false;
     }
 
     /**

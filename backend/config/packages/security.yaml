@@ -39,6 +39,9 @@ security:
         - { path: ^/api/password, roles: PUBLIC_ACCESS }
         - { path: ^/api/health, roles: PUBLIC_ACCESS }
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
+        # SEC-10 (accepted): a club logo is a public brand asset, served to
+        # unauthenticated consumers by design (emails, exported PDFs, future
+        # public pages). The club id is an unguessable uuid; only GET is public.
         - { path: ^/api/clubs/[^/]+/logo$, methods: [GET], roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 

@@ -8,6 +8,12 @@ SCHEDULE_ID=""
 CLUB_ID_ARG=""
 POLL_INTERVAL=5
 TIMEOUT_SECONDS=650
+# Watchdog: how long the schedule may stay PENDING (never reaching GENERATING)
+# before we bail with a targeted diagnostic. A stuck PENDING almost always means
+# the messenger-worker is not consuming the queue (dead / crash-looping on a
+# wiped Redis consumer group), NOT a slow solver — so it deserves a fast, loud
+# failure instead of waiting out the full TIMEOUT_SECONDS in silence.
+PENDING_TIMEOUT_SECONDS="${PENDING_TIMEOUT_SECONDS:-90}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -213,6 +219,8 @@ esac
 info "Génération lancée"
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
+pending_deadline=$((SECONDS + PENDING_TIMEOUT_SECONDS))
+saw_progress=0
 attempt=0
 current_status=""
 schedule_score=""
@@ -257,11 +265,34 @@ else:
     printf '%b[%d]%b Status: %s\n' "$BLUE" "$attempt" "$NC" "$current_status"
   fi
 
+  # Once the worker has picked the message up, PENDING is behind us — from here
+  # only the (legitimately slow) solver governs, under the hard TIMEOUT cap.
   case "$current_status" in
+    GENERATING)
+      saw_progress=1
+      ;;
     COMPLETED|FAILED)
+      saw_progress=1
       break
       ;;
   esac
+
+  # Watchdog: still PENDING and never progressed after PENDING_TIMEOUT_SECONDS.
+  # Two very different causes — DIAGNOSE before acting (review finding: a blind
+  # stream wipe would destroy legitimately queued generations):
+  #   (a) worker busy solving ANOTHER schedule (single worker, solves can take
+  #       minutes) → just wait / raise PENDING_TIMEOUT_SECONDS;
+  #   (b) worker dead or crash-looping (NOGROUP after a Redis wipe) → restart.
+  if [[ "$saw_progress" -eq 0 && "$SECONDS" -ge "$pending_deadline" ]]; then
+    die "Génération jamais démarrée : statut toujours '$current_status' après ${PENDING_TIMEOUT_SECONDS}s (jamais passé à GENERATING).
+  DIAGNOSTIC (dans l'ordre — ne rien supprimer à l'aveugle) :
+  1. Worker occupé par un autre solve ?   docker compose exec -T redis redis-cli XPENDING messages symfony
+     → 'pending: 1' + logs engine actifs = solve en cours : ATTENDRE ou relancer avec PENDING_TIMEOUT_SECONDS plus grand.
+  2. Worker mort / crash-loop ?           docker compose logs --tail=50 messenger-worker   (chercher 'NOGROUP')
+     → redémarrer :  docker compose restart messenger-worker
+  3. DERNIER RECOURS (détruit les générations en file — schedules resteront PENDING) :
+     docker compose stop messenger-worker && docker compose exec -T redis redis-cli DEL messages messages__queue && docker compose start messenger-worker"
+  fi
 
   if [[ "$SECONDS" -ge "$deadline" ]]; then
     die "Timeout après ~10 minutes en attendant la génération"

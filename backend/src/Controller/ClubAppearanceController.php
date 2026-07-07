@@ -26,11 +26,14 @@ final class ClubAppearanceController extends AbstractController
         private readonly ClubRepository $clubRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
+        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/club/appearance', name: 'club_appearance', methods: ['PATCH'])]
     public function __invoke(): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
         if (!\is_string($clubId) || '' === $clubId) {

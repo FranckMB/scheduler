@@ -24,11 +24,14 @@ final class ManualEditController extends AbstractController implements SeasonSco
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ManualEditService $manualEditService,
+        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly \Psr\Log\LoggerInterface $logger,
     ) {}
 
     #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
     public function applyConstraint(string $id, Request $request): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
         $slot = $this->findSlot($id);
 
         if (!$slot instanceof ScheduleSlotTemplate) {
@@ -59,7 +62,10 @@ final class ManualEditController extends AbstractController implements SeasonSco
                 isset($data['createdBy']) ? (string) $data['createdBy'] : null,
             );
         } catch (Throwable $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
+            // SEC-08: log the internal detail, never surface getMessage() to the client.
+            $this->logger->error('Manual edit failed.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
         }
 
         return $this->json([
@@ -71,6 +77,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
     #[Route('/api/schedule-slots/{id}/manual-edit/lock', name: 'api_manual_edit_lock', methods: ['POST'])]
     public function applyLock(string $id, Request $request): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
         $slot = $this->findSlot($id);
 
         if (!$slot instanceof ScheduleSlotTemplate) {
@@ -107,6 +114,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
     #[Route('/api/schedule-slots/{id}/manual-edit/one-time', name: 'api_manual_edit_one_time', methods: ['POST'])]
     public function applyOneTimeUpdate(string $id, Request $request): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
         $slot = $this->findSlot($id);
 
         if (!$slot instanceof ScheduleSlotTemplate) {
@@ -135,9 +143,20 @@ final class ManualEditController extends AbstractController implements SeasonSco
         try {
             $this->manualEditService->applyOneTimeUpdate($slot, $data);
         } catch (InvalidArgumentException $e) {
+            // Doctrine's ORMInvalidArgumentException extends InvalidArgumentException:
+            // only the service's own domain messages may reach the client (SEC-08).
+            if ($e instanceof \Doctrine\ORM\ORMInvalidArgumentException) {
+                $this->logger->error('Manual edit failed.', ['exception' => $e]);
+
+                return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
+            }
+
             return $this->json(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
         } catch (Throwable $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
+            // SEC-08: log the internal detail, never surface getMessage() to the client.
+            $this->logger->error('Manual edit failed.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
         }
 
         return $this->json(['message' => 'One-time update applied.'], Response::HTTP_OK);

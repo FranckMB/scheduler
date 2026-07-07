@@ -24,10 +24,13 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
         private RequestStack $requestStack,
+        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     public function __invoke(string $id): JsonResponse
     {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
         try {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
         } catch (Throwable) {
