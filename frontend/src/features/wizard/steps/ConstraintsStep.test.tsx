@@ -9,6 +9,7 @@ const createMut = vi.fn();
 vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: [] }),
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }] }),
+  usePriorityTiers: () => ({ data: [{ id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }] }),

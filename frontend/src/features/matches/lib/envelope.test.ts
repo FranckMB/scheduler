@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Category, Fixture, LeagueWindow, Team } from "../api";
 import { isInEnvelope, isoWeekday, resolveEnvelope, timeToMinutes } from "./envelope";
 
-const team = (over: Partial<Team> = {}): Team => ({ id: "team-1", name: "U13 M", sportCategoryId: "cat-u13", level: "DEPARTEMENTAL", gender: "M", ...over });
+const team = (over: Partial<Team> = {}): Team => ({ id: "team-1", name: "U13 M", sportCategoryId: "cat-u13", level: "DEPARTEMENTAL", gender: "M", priorityTierId: 3, tierOrder: 0, ...over });
 const category = (over: Partial<Category> = {}): Category => ({ id: "cat-u13", name: "U13", ...over });
 const fixture = (over: Partial<Fixture> = {}): Fixture => ({
   id: "fx-1",

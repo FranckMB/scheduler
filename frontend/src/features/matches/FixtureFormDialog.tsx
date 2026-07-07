@@ -2,12 +2,14 @@ import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
+import { TeamSelect } from "@/shared/components/ui/team-select";
 
-import type { Competition, HomeAway, Team } from "./api";
+import type { Competition, HomeAway, PriorityTier, Team } from "./api";
 import { useCreateFixture } from "./queries";
 
 interface FixtureFormDialogProps {
   teams: Team[];
+  tiers: PriorityTier[];
   competitions: Competition[];
   onClose: () => void;
 }
@@ -15,7 +17,7 @@ interface FixtureFormDialogProps {
 const fieldClass = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
 
 /** Manual entry of a fixture (until the FBI import, PR-4). Friendly = no competition. */
-export function FixtureFormDialog({ teams, competitions, onClose }: FixtureFormDialogProps) {
+export function FixtureFormDialog({ teams, tiers, competitions, onClose }: FixtureFormDialogProps) {
   const createFixture = useCreateFixture();
   const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [matchDate, setMatchDate] = useState("");
@@ -41,21 +43,16 @@ export function FixtureFormDialog({ teams, competitions, onClose }: FixtureFormD
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted-foreground">Équipe</span>
-          <select
+          <TeamSelect
             aria-label="Équipe"
-            className={fieldClass}
+            teams={teams}
+            tiers={tiers}
             value={teamId}
             onChange={(e) => {
               setTeamId(e.target.value);
               setCompetitionId(""); // the old team's competition no longer applies
             }}
-          >
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          />
         </label>
 
         <label className="flex flex-col gap-1 text-sm">

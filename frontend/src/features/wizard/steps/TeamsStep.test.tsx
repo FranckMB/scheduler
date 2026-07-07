@@ -40,11 +40,17 @@ describe("TeamsStep", () => {
 
   it("shows a play-level select and no redundant inner heading", () => {
     renderWithProviders(<TeamsStep />);
-    // Play-level select exists (distinct from the rank/"Rang" select).
+    // Play-level select exists on both the add form and the row.
     expect(screen.getAllByLabelText("Niveau de jeu").length).toBeGreaterThan(0);
-    expect(screen.getAllByLabelText("Rang").length).toBeGreaterThan(0);
     // Point 5: the sticky wizard header owns the title; no inner "Équipes" h2.
     expect(screen.queryByRole("heading", { name: "Équipes" })).toBeNull();
+  });
+
+  it("keeps a Rang select on the ADD form but NOT on team rows (rang changed via Trier)", () => {
+    renderWithProviders(<TeamsStep />); // exactly one team (t1) is rendered
+    // Only the add form still offers a rank picker; the row has none — a team's
+    // tier is changed via the "Trier" drag & drop, not an inline dropdown.
+    expect(screen.getAllByLabelText("Rang")).toHaveLength(1);
   });
 
   it("keeps the gender select (categories are ungendered now)", () => {

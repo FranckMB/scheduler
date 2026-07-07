@@ -19,7 +19,7 @@ const fixture = (over: Partial<Fixture> = {}): Fixture => ({
 });
 
 const venues = new Map<string, Venue>([["venue-1", { id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }]]);
-const teams = new Map<string, Team>([["team-1", { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null }]]);
+const teams = new Map<string, Team>([["team-1", { id: "team-1", name: "U13", sportCategoryId: "cat", level: null, gender: null, priorityTierId: 3, tierOrder: 0 }]]);
 
 describe("weekendKeyOf", () => {
   it("buckets Saturday and its Sunday into the same weekend (the Saturday)", () => {

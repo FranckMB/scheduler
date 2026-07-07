@@ -7,6 +7,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { TIER_MEANING } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
@@ -15,16 +16,6 @@ import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
-
-// Manager-facing meaning of each priority tier (backend tier names are FFBB
-// competition levels; here we explain what the rank means for scheduling).
-const TIER_MEANING: Record<string, string> = {
-  S: "Fanion",
-  A: "Importante",
-  B: "Moyenne",
-  C: "De base",
-  D: "Bonus",
-};
 
 const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "—" },
@@ -136,13 +127,8 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
           onChange={(e) => setSessions(e.target.value)}
           onBlur={() => Number(sessions) !== team.sessionsPerWeek && onField(team, { sessionsPerWeek: Number(sessions) })}
         />
-        <Select aria-label="Rang" className="h-8 w-32" value={team.priorityTierId} onChange={(e) => onField(team, { priorityTierId: Number(e.target.value) })}>
-          {tiers.map((t) => (
-            <option key={t.id} value={t.id}>
-              {tierLabel(t)}
-            </option>
-          ))}
-        </Select>
+        {/* Rang is not edited inline: changing a team's tier is done via the
+            "Trier" mode (drag & drop between S/A/B/C/D zones). */}
         <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
           <Trash2 className="size-4" />
         </Button>
@@ -465,7 +451,7 @@ function TeamsEditor() {
       ) : (
         <>
           <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 text-sm">
-            <Input ref={nameRef} aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-40 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input ref={nameRef} aria-label="Nom de l'équipe" placeholder="Nom de l'équipe" className="h-8 min-w-0 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
             <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
