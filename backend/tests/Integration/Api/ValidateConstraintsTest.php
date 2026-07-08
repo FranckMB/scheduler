@@ -61,6 +61,33 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertNotEmpty($data['conflicts']);
     }
 
+    public function testVenueMinimumExceedingTeamSessionsIsRejectedBeforeGeneration(): void
+    {
+        // ALIGN-05 fail-fast: "au moins 2 séances à ce gymnase" for a 1-session/week
+        // team is provably impossible — surface it as an ERROR before generating.
+        $teamId = $this->team(sessionsPerWeek: 1);
+        $constraint = new Constraint;
+        $constraint->setClubId($this->club->getId());
+        $constraint->setSeasonId($this->season->getId());
+        $constraint->setName('min venue');
+        $constraint->setScope(ConstraintScope::TEAM);
+        $constraint->setScopeTargetId($teamId);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['minAtVenueId' => 'venue-x', 'minAtVenueCount' => 2]);
+        $constraint->setIsActive(true);
+        $this->em->persist($constraint);
+        $this->em->flush();
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(422);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($data['valid']);
+        self::assertNotEmpty($data['errors'], 'the impossible venue minimum must surface as an error');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -122,5 +149,22 @@ final class ValidateConstraintsTest extends WebTestCase
         $constraint->setIsActive(true);
         $this->em->persist($constraint);
         $this->em->flush();
+    }
+
+    /** Persist a minimal team scoped to the test club/season, return its id. */
+    private function team(int $sessionsPerWeek): string
+    {
+        $team = new \App\Entity\Team;
+        $team->setClubId($this->club->getId());
+        $team->setSeasonId($this->season->getId());
+        $team->setSportCategoryId($this->club->getId()); // any guid — unused by the gate
+        $team->setPriorityTierId(3);
+        $team->setName('Test Team');
+        $team->setSessionsPerWeek($sessionsPerWeek);
+        $team->setIsActive(true);
+        $this->em->persist($team);
+        $this->em->flush();
+
+        return $team->getId();
     }
 }

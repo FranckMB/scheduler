@@ -377,3 +377,139 @@ class TestConflictAndNonRegression:
         assert result.status != "infeasible"
         assert len(slots) == 1
         assert slots[0].day_of_week == 2
+
+
+class TestMaxEndTime:
+    """ALIGN-04: a TIME maxEndTime forbids slots whose END (start + duration)
+    falls after the bound — 'finir avant X h'."""
+
+    @staticmethod
+    def _time(team_id: str, config: dict[str, object]) -> dict[str, object]:
+        return {
+            "id": f"c-{team_id}-time",
+            "family": "TIME",
+            "ruleType": "HARD",
+            "scope": "TEAM",
+            "scopeTargetId": team_id,
+            "isActive": True,
+            "config": config,
+        }
+
+    def test_max_end_time_forbids_a_session_ending_after_the_bound(self) -> None:
+        # 90-min sessions: day 1 @17:30 ends 19:00 (ok) ; day 2 @18:00 ends 19:30 (late).
+        input_data = make_input(
+            teams=[make_team("t", 1)],
+            constraints=[self._time("t", {"maxEndTime": "19:00"})],
+            slots_per_venue=[
+                make_slot(1, "17:30"),
+                make_slot(2, "18:00"),
+            ],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        slots = team_slots(result, "t")
+        assert result.status != "infeasible"
+        assert len(slots) == 1
+        assert slots[0].day_of_week == 1  # the only session ending by 19:00
+
+    def test_max_end_time_respects_slot_duration(self) -> None:
+        # A 120-min session @18:00 ends 20:00 (late for 19:30) ; a 60-min @18:00
+        # ends 19:00 (ok). Only the short one survives.
+        input_data = make_input(
+            teams=[make_team("t", 1)],
+            constraints=[self._time("t", {"maxEndTime": "19:30"})],
+            slots_per_venue=[
+                make_slot(1, "18:00", duration_minutes=60),
+                make_slot(2, "18:00", duration_minutes=120),
+            ],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        slots = team_slots(result, "t")
+        assert result.status != "infeasible"
+        assert len(slots) == 1
+        assert slots[0].day_of_week == 1
+
+
+def _facility_min(team_id: str, venue_id: str, count: int) -> dict[str, object]:
+    return {
+        "id": f"c-{team_id}-minvenue",
+        "family": "FACILITY",
+        "ruleType": "HARD",
+        "scope": "TEAM",
+        "scopeTargetId": team_id,
+        "isActive": True,
+        "config": {"minAtVenueId": venue_id, "minAtVenueCount": count},
+    }
+
+
+def _two_venue_input(team_sessions: int, constraints: list[dict[str, object]]) -> ScheduleInputSchema:
+    return ScheduleInputSchema.model_validate({
+        "clubId": "c", "seasonId": "s",
+        "teams": [make_team("t", team_sessions)],
+        "venues": [
+            {"id": "venue-A", "name": "A", "isActive": True, "trainingSlots": [make_slot(1, "18:00"), make_slot(2, "18:00")]},
+            {"id": "venue-B", "name": "B", "isActive": True, "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")]},
+        ],
+        "constraints": constraints, "slotTemplates": [],
+    })
+
+
+class TestVenueMinimum:
+    """ALIGN-05: 'au moins N séances dans tel gymnase' (count, not forced)."""
+
+    def test_at_least_one_session_at_venue(self) -> None:
+        result = asyncio.run(build_schedule(_two_venue_input(2, [_facility_min("t", "venue-A", 1)])))
+        slots = team_slots(result, "t")
+        assert result.status != "infeasible"
+        assert sum(1 for s in slots if s.venue_id == "venue-A") >= 1
+
+    def test_other_sessions_stay_free(self) -> None:
+        # min 1 at A leaves the 2nd session free to land at B (≠ forcedVenueId).
+        result = asyncio.run(build_schedule(_two_venue_input(2, [_facility_min("t", "venue-A", 1)])))
+        venues = {s.venue_id for s in team_slots(result, "t")}
+        assert "venue-A" in venues  # the guaranteed one
+
+    def test_unreachable_minimum_emits_diagnostic_not_infeasible(self) -> None:
+        # venue-A has only 2 slots ; asking for 3 is provably impossible.
+        result = asyncio.run(build_schedule(_two_venue_input(2, [_facility_min("t", "venue-A", 3)])))
+        diag = [d for d in result.diagnostics if d.type == "venue_minimum_unreachable"]
+        assert result.status != "infeasible"
+        assert diag and diag[0].team_id == "t"
+        assert diag[0].severity == "ERROR"
+
+
+class TestSpacingPenalty:
+    """ALIGN-06: implicit soft nudge — a team prefers non-consecutive training
+    days. Never blocks (soft) ; only steers when there's a free choice."""
+
+    def test_prefers_non_consecutive_days_when_possible(self) -> None:
+        # Days 1,2,4 available for a 2-session team. {1,2} are consecutive (malus);
+        # {1,4} / {2,4} are spaced. The nudge picks a spaced pair.
+        input_data = make_input(
+            teams=[make_team("t", 2)],
+            constraints=[],
+            slots_per_venue=[make_slot(1, "18:00"), make_slot(2, "18:00"), make_slot(4, "18:00")],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        days = sorted(s.day_of_week for s in team_slots(result, "t"))
+        assert result.status != "infeasible"
+        assert len(days) == 2
+        assert days[1] - days[0] > 1  # not consecutive
+
+    def test_spacing_never_blocks_when_only_consecutive_slots_exist(self) -> None:
+        # Only days 1,2 exist for a 2-session team → must use both (soft, no block).
+        input_data = make_input(
+            teams=[make_team("t", 2)],
+            constraints=[],
+            slots_per_venue=[make_slot(1, "18:00"), make_slot(2, "18:00")],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        assert result.status != "infeasible"
+        assert len(team_slots(result, "t")) == 2

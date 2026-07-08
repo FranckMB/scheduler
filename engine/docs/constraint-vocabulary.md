@@ -26,8 +26,9 @@
 |---|---|---|---|
 | `minStartTime` (`"HH:MM"`) | ne pas **commencer avant** | fenêtre dure (créneaux plus tôt interdits) | bonus objectif (préfère plus tard) |
 | `maxStartTime` (`"HH:MM"`) | ne pas **commencer après** | fenêtre dure | bonus objectif (préfère plus tôt) |
+| `maxEndTime` (`"HH:MM"`) | la séance doit **finir avant** (fin = début + durée du créneau) | fenêtre dure (créneaux dont la fin dépasse interdits) | — **HARD-only** : le chemin soft `add_preferred_time_bonus` ne lit que min/maxStartTime |
 
-⚠ **Pas de `maxEndTime`** : « finir avant 20h30 » se modélise en **début max** (ex. début ≤ 19h00 pour une séance de 90 min).
+**`maxEndTime`** (ALIGN-04) est calculé par créneau : `slot_start + slot_duration > maxEnd → var = 0`. Le wizard l'émet en mode « Fini avant » (toujours HARD).
 
 **Exemples BCCL**
 - `EMB (U9/U11) - Début au premier créneau (max 17h30)` → `{ family:"TIME", ruleType:"HARD", config:{ maxStartTime:"17:30", targetTag:"EMB" } }`
@@ -64,7 +65,9 @@
 | `forcedVenueId` (uuid) | **imposer** ce gymnase | l'équipe ne joue QUE là (tous les autres interdits) | — |
 | `preferredVenueId` (uuid) | ce gymnase | **HARD/LOCK = forcé** (comme `forcedVenueId`) | bonus objectif **+60** par séance dans ce gymnase |
 | `forbiddenVenueId` (uuid) | **éviter** ce gymnase | assignation interdite (dur) | malus objectif **−60** (soft « évite ») |
+| `minAtVenueId` (uuid) + `minAtVenueCount` (int, défaut 1) | **au moins N** séances dans ce gymnase (plancher, ≠ forçage) | pose `somme(vars de l'équipe dans ce gymnase) ≥ N` ; les autres séances restent libres | — **HARD-only** |
 
+- **`minAtVenueId`** (ALIGN-05) est un **plancher**, pas un forçage : contrairement à `forcedVenueId` (TOUTES les séances), il garantit `≥ N` séances ici et laisse le reste libre. **Fail-soft** : si l'équipe a moins de créneaux disponibles dans ce gymnase que `N`, l'engine **n'ajoute pas** la contrainte et émet un diagnostic `venue_minimum_unreachable` (sévérité ERROR) au lieu d'un INFEASIBLE. Le backend refuse en amont `N > séances/semaine de l'équipe` (fail-fast avant génération).
 - **Exclusivité groupe** : `CLUB + targetTag + (forcedVenueId ou preferredVenueId HARD)` → le backend force le tag ET **interdit le gymnase hors tag** → gymnase **réservé** au groupe.
 - **Fermeture datée** (`config.type = "venue_closed"`, période cockpit) → le backend l'**étend** en `forbiddenVenueId` HARD par équipe sur la fenêtre.
 
@@ -122,11 +125,10 @@ supérieur l'emporte dans l'objectif. Le **minimum de séances** du rang est une
 | `COACH_PLAYER_NO_OVERLAP` | un coach qui **joue** aussi n'est jamais convoqué à 2 séances simultanées (ex. Mathis coach U13M2 + joueur U21M1) |
 | `MIN_SESSIONS` | chaque équipe vise son nombre de séances/semaine (**cible soft**, cf. ENG-18) |
 | jour de repos après match | bonus soft (`add_match_day_rest_bonus`) : préfère laisser le lendemain d'un match libre |
+| espacement des jours (`spacing`) | **bonus soft** (`add_spacing_penalty`, poids `−2`) : malus sur deux séances d'une même équipe sur des jours consécutifs (jour, jour+1) — préfère espacer, ne bloque jamais (ALIGN-06) |
 
 ## Ce que l'engine NE comprend PAS (à ce jour)
 
-- **`maxEndTime`** (heure de fin) — approximé via `maxStartTime`.
-- **« au moins N séances dans tel gymnase »** — aucun équivalent de `forcedDays` pour les gymnases (voir `backend/docs/constraint-coverage.md`).
-- **`max_consecutive_days`** / « pas 3 jours d'affilée » / « espacer les séances d'un jour » — non modélisé (seul le repos post-match est un bonus soft).
+- **`max_consecutive_days`** / « pas 3 jours d'affilée » (contrainte **dure** d'écart) — non modélisé ; seul l'**espacement soft** (`spacing`, ci-dessus) et le repos post-match existent.
 
 **Verrous** : `engine/tests/semantic/constraint_matrix.py` (matrice UI↔engine) + `docs/architecture/constraint-matrix.md` (jumeau humain de l'**offre du wizard**). Ce document-ci couvre le vocabulaire **engine complet**, y compris ce que le wizard n'émet pas encore.

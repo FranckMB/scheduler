@@ -17,7 +17,7 @@ from .model import _time_to_minutes
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V6"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -35,6 +35,10 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "C": 10,
         "D": 1,
         "rest": 3,
+        # Implicit spacing nudge (ALIGN-06): a small malus when a team trains on
+        # two CONSECUTIVE days. Low weight (< rest) so it only breaks ties — never
+        # moves or drops a real placement (each session is worth ≥ 21).
+        "spacing": -2,
     }
 )
 
@@ -90,6 +94,7 @@ BONUS_WEIGHT_NAMES = (
     "preferred_time",
     "rest",
     "session_count",
+    "spacing",
 )
 
 _PRIORITY_TIER_FIELDS = (
@@ -531,6 +536,52 @@ def add_match_day_rest_bonus(
         model.Add(sum(rest_day_vars) == 0).OnlyEnforceIf(rest_ok)
         model.Add(sum(rest_day_vars) >= 1).OnlyEnforceIf(rest_ok.Not())
         soft_terms.append((rest_ok, "rest"))
+
+    return soft_terms
+
+
+def add_spacing_penalty(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    teams: Iterable[Any],
+    weights: Mapping[str, int],
+) -> list[tuple[BoolVarLike, str]]:
+    """Implicit soft rule (ALIGN-06): gently discourage a team training on two
+    CONSECUTIVE days (spacing). Malus only — never blocks feasibility; the low
+    weight means it only breaks ties, never moves a real placement."""
+    if "spacing" not in weights:
+        raise KeyError("spacing")
+
+    team_day_vars: dict[str, dict[int, list[BoolVarLike]]] = {}
+    for slot_key, variable in x.items():
+        if not isinstance(slot_key, tuple) or len(slot_key) < 4:
+            continue
+        team_id = _scalar_id(slot_key[0])
+        try:
+            day = int(_scalar_id(slot_key[2]))
+        except (TypeError, ValueError):
+            continue
+        team_day_vars.setdefault(str(team_id), {}).setdefault(day, []).append(variable)
+
+    soft_terms: list[tuple[BoolVarLike, str]] = []
+    for team in teams:
+        team_id = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
+        if team_id is None:
+            continue
+        days = team_day_vars.get(str(team_id), {})
+        for day in sorted(days):
+            if day + 1 not in days:
+                continue
+            d1 = model.NewBoolVar(f"has_{team_id}_{day}")
+            model.Add(sum(days[day]) >= 1).OnlyEnforceIf(d1)
+            model.Add(sum(days[day]) == 0).OnlyEnforceIf(d1.Not())
+            d2 = model.NewBoolVar(f"has_{team_id}_{day + 1}")
+            model.Add(sum(days[day + 1]) >= 1).OnlyEnforceIf(d2)
+            model.Add(sum(days[day + 1]) == 0).OnlyEnforceIf(d2.Not())
+            both = model.NewBoolVar(f"consec_{team_id}_{day}")
+            model.AddBoolAnd([d1, d2]).OnlyEnforceIf(both)
+            model.AddBoolOr([d1.Not(), d2.Not()]).OnlyEnforceIf(both.Not())
+            soft_terms.append((both, "spacing"))
 
     return soft_terms
 

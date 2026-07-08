@@ -52,9 +52,9 @@ def test_hard_only_team_no_penalty() -> None:
     )
 
 
-def test_score_formula_version_is_v6() -> None:
+def test_score_formula_version_is_v7() -> None:
     """Guard: version bumped to V5 when preferred_time was added (E-feat)."""
-    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V6", (
+    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V7", (
         f"expected V5, got {SCORE_FORMULA_VERSION!r}"
     )
 

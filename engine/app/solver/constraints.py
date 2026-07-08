@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
-from .model import _time_to_minutes
+from .model import DEFAULT_SESSION_MINUTES, _time_to_minutes
 
 logger = logging.getLogger("engine.constraints")
 
@@ -43,6 +43,7 @@ class ParsedConstraints(TypedDict):
     forced_venues: dict[str, str]
     preferred_venues: dict[str, str]
     avoided_venues: list[dict[str, str]]
+    venue_minimums: list[dict[str, Any]]
     venue_capacity_caps: dict[str, int]
     time_windows: list[dict[str, Any]]
     priority_tiers: dict[int, int]
@@ -857,8 +858,10 @@ def add_time_window_constraints(
 
         min_start_time = config.get("minStartTime")
         max_start_time = config.get("maxStartTime")
+        max_end_time = config.get("maxEndTime")
         min_start_minutes = _time_to_minutes(min_start_time) if min_start_time is not None else None
         max_start_minutes = _time_to_minutes(max_start_time) if max_start_time is not None else None
+        max_end_minutes = _time_to_minutes(max_end_time) if max_end_time is not None else None
 
         for slot_key, var in x.items():
             if not isinstance(slot_key, tuple) or len(slot_key) < 4:
@@ -877,6 +880,14 @@ def add_time_window_constraints(
             if max_start_minutes is not None and slot_start_minutes > max_start_minutes:
                 model.Add(var == 0)
                 added += 1
+                continue
+            # maxEndTime: the session must END by that time (start + its duration).
+            # The duration is the slot's own (venue/day/start), default 90 min.
+            if max_end_minutes is not None:
+                duration = model.slot_durations.get((slot_key[1], slot_key[2], slot_key[3]), DEFAULT_SESSION_MINUTES)
+                if slot_start_minutes + duration > max_end_minutes:
+                    model.Add(var == 0)
+                    added += 1
 
     team_day_vars: dict[str, dict[int, list[BoolVarLike]]] = defaultdict(lambda: defaultdict(list))
     team_all_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
@@ -1004,6 +1015,51 @@ def add_forced_venue_constraints(
         model.Add(assignment.var == 0)
         added += 1
     return added
+
+
+def add_venue_minimum_constraints(
+    model: Any,
+    x: Mapping[Any, BoolVarLike],
+    venue_minimums: Iterable[Mapping[str, Any]] = (),
+) -> tuple[int, list[dict[str, Any]]]:
+    """ALIGN-05: 'at least N of the team's sessions at venue V'.
+
+    A COUNT (sum(team vars at V) >= N), NOT a forced venue. If the team has fewer
+    available slots at V than N, it is provably unsatisfiable → emit an explicit
+    diagnostic (never a silent INFEASIBLE)."""
+    added = 0
+    conflicts: list[dict[str, Any]] = []
+
+    for rule in venue_minimums or []:
+        team_id = str(rule.get("scope_target_id"))
+        venue_id = str(rule.get("venue_id"))
+        minimum = int(rule.get("min") or 1)
+
+        team_venue_vars = [
+            var
+            for slot_key, var in x.items()
+            if isinstance(slot_key, tuple) and len(slot_key) >= 2 and str(slot_key[0]) == team_id and str(slot_key[1]) == venue_id
+        ]
+
+        if len(team_venue_vars) < minimum:
+            conflicts.append({
+                "id": f"venue_minimum_unreachable-{team_id}-{venue_id}",
+                "type": "venue_minimum_unreachable",
+                "severity": "ERROR",
+                "teamId": team_id,
+                "message": (
+                    f"Team {team_id} cannot reach {minimum} session(s) at venue {venue_id}: "
+                    f"only {len(team_venue_vars)} slot(s) available there."
+                ),
+                "suggestions": ["Lower the minimum, or add availability slots at this venue."],
+                "createdAt": datetime.now(UTC).isoformat(),
+            })
+            continue
+
+        model.Add(sum(team_venue_vars) >= minimum)
+        added += 1
+
+    return added, conflicts
 
 
 def _normalise_assignments(
@@ -1596,6 +1652,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
         "forced_venues": {},
         "preferred_venues": {},
         "avoided_venues": [],
+        "venue_minimums": [],
         "venue_capacity_caps": {},
         "time_windows": [],
         "priority_tiers": {},
@@ -1719,6 +1776,23 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope_target_id
         ):
             _set_venue_rule(result["forced_venues"], scope_target_id, config["forcedVenueId"], c, result["parse_warnings"])
+
+        elif (
+            family == "FACILITY"
+            and config.get("minAtVenueId")
+            and rule_type in ("HARD", "LOCK")
+            and scope == "TEAM"
+            and scope_target_id
+        ):
+            # "au moins N séances dans ce gymnase" — un compte, PAS un forçage de
+            # toutes les séances (≠ forcedVenueId). Défaut N=1 (cas courant).
+            raw_count = config.get("minAtVenueCount")
+            min_count = int(raw_count) if raw_count is not None else 1
+            result["venue_minimums"].append({
+                "scope_target_id": str(scope_target_id),
+                "venue_id": str(config["minAtVenueId"]),
+                "min": max(1, min_count),
+            })
 
         elif (
             family == "FACILITY"
