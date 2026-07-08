@@ -18,7 +18,8 @@
 | **FACILITY** « préfère » | `preferredVenueId` | sélecteur | Matéo préféré Régionales |
 | **FACILITY** « évite » | `forbiddenVenueId` | sélecteur | Vétérans interdits |
 | **FACILITY** « impose » | `forcedVenueId` | **HARD** (épinglé) | SM4 → Jean Vilar |
-| **COACH_AVAILABILITY** | `coachId` + `unavailableDays` | **HARD** (épinglé) | Lionel indispo vendredi |
+| **COACH_AVAILABILITY** « indisponible » | `coachId` + `unavailableDays` | **HARD** (épinglé) | Lionel indispo vendredi |
+| **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) | **HARD** (épinglé) | coach dispo seulement le mardi |
 | **Cible** | `targetTag` si groupe (sinon `scope`/`scopeTargetId`) | — | groupe FEMININE / REGIONAL |
 | **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** | — | épingle 1 séance sur un créneau |
 | **Écran Gymnases** (hors onglet contraintes) | `FACILITY_CAPACITY` `maxTeams` (`canSplit`) | — | ADN divisible |
@@ -36,13 +37,13 @@ Colonnes : le **front** l'émet-il ? · le **backend** le transmet/transforme-t-
 | `preferredVenueId` | ✅ « préfère » | HARD→forcé + exclusivité tag | ✅ +60 soft / forcé | ✅ **aligné** |
 | `forbiddenVenueId` | ✅ « évite » | passe | ✅ interdit / −60 soft | ✅ **aligné** |
 | `forcedVenueId` | ✅ « impose » | + exclusivité tag | ✅ salle forcée | ✅ **aligné** |
-| `unavailableDays` | ✅ coach | passe | ✅ union, dur | ✅ **aligné** |
+| `unavailableDays` | ✅ coach « indisponible » | passe | ✅ union, dur | ✅ **aligné** |
+| `availableDays` (coach « disponible **uniquement** ») | ✅ coach *(depuis ALIGN)* | passe | ✅ whitelist (intersection) | ✅ **aligné** |
 | `maxTeams` | ✅ (écran Gymnases) | passe | ✅ cap capacité | ✅ **aligné** |
 | `venue_closed` (période) | ✅ (cockpit) | → `forbiddenVenueId`/équipe | ✅ | ✅ **aligné** *(via expansion backend)* |
 | `targetTag` (groupe) | ✅ | → N contraintes TEAM | ✅ (par équipe) | ✅ **aligné** |
 | `orToolsWeight` (tier) | ✅ (classement) | passe | ✅ poids objectif | ✅ **aligné** |
 | **`forcedDays`** (« au moins une séance tel jour ») | ❌ non émis | — | ✅ compris | 🟠 **scission A** : engine sait, le front n'expose pas |
-| **`availableDays`** (« coach dispo **uniquement** tel jour ») | ❌ non émis | — | ✅ compris (whitelist, intersection) | 🟠 **scission A** : engine sait, le front n'expose pas |
 | **`preferredDays`** | ❌ non émis | — | ✅ (objectif) | 🟠 **scission A** (racine d'ENG-10) |
 | **`maxEndTime`** (« finir avant X h ») | ❌ | ❌ | ❌ | 🔴 **angle mort triple** |
 | **« au moins une séance dans tel gymnase »** | ❌ | ❌ | ❌ | 🔴 **angle mort triple** (contournement : « Réserver ») |
@@ -51,7 +52,7 @@ Colonnes : le **front** l'émet-il ? · le **backend** le transmet/transforme-t-
 ## 3. Synthèse — scissions & angles morts
 
 - **Aligné** : tout ce que le wizard émet est écrit par le backend et honoré par l'engine. Les scissions historiques « déclaré ≠ effectif » (ENG-10/11/12/13 offre↔engine, **ENG-16** forcedDays↔allowedDays) sont **corrigées** et verrouillées par `constraint_matrix.py`.
-- **🟠 Scission A — l'engine sait, le front n'émet pas** : `forcedDays` (au moins une séance tel jour), `availableDays` (coach dispo uniquement tel jour), `preferredDays`. **Feature possible** : exposer ces modes dans le wizard (petit ajout UI + cellule de matrice).
+- **🟠 Scission A — l'engine sait, le front n'émet pas** : `forcedDays` (au moins une séance tel jour), `preferredDays`. *(`availableDays` — coach « disponible uniquement » — vient d'être **exposé/aligné**.)* **Feature possible** : exposer les modes restants (petit ajout UI + cellule de matrice).
 - **🔴 Angle mort triple — personne ne le fait** : `maxEndTime` (« finir avant X h »), **minimum de séances par gymnase** (« au moins une à tel gymnase »), **anti-jours-consécutifs / espacement**. **Chantier 3-couches** (engine d'abord, puis backend + front).
 
 > **Où le vérifier automatiquement** : `constraint_matrix.py` + son test figent l'offre wizard↔engine (colonnes Frontend↔Engine, cellules **offertes**). La couche **backend** (targetTag→N, venue_closed→forbidden, HARD preferred→forcé) et les **angles morts** ci-dessus ne sont **pas** couverts par ce test — c'est le rôle de l'**axe « alignement contraintes » de l'audit** (`/audit`) de les contre-vérifier bout-en-bout à chaque édition.

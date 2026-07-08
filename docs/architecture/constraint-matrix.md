@@ -23,7 +23,8 @@ test Vitest).
 | FACILITY `preferredVenueId` | dure (salle forcée) | **dure** *(fix ENG-12 — était mort)* | soft |
 | FACILITY `forcedVenueId` | dure — mode **« impose »** (doit se dérouler ici), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `forbiddenVenueId` | dure | dure | **soft « éviter ce gymnase »** *(fix ENG-11 — était escaladé en dur → INFEASIBLE possible sur une préférence)* |
-| COACH_AVAILABILITY `unavailableDays` | dure + **union multi-contraintes** *(fix ENG-13 — la 2e écrasait la 1re)* | — l'UI force **Obligatoire** (pas de sélecteur : le solveur applique toujours dur) | — |
+| COACH_AVAILABILITY `unavailableDays` | mode « indisponible » — dure + **union multi-contraintes** *(fix ENG-13)* | — l'UI force **Obligatoire** | — |
+| COACH_AVAILABILITY `availableDays` | mode « disponible uniquement » — dure (whitelist, **intersection** multi) *(ALIGN — l'UI expose la capacité engine)* | — l'UI force **Obligatoire** | — |
 
 - **BONUS retiré de l'offre** *(ENG-12 : aucune sémantique définie nulle part)*. Les lignes BONUS
   déjà en base sont **normalisées en PREFERRED par l'engine** (honorées soft, jamais droppées).

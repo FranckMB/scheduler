@@ -144,6 +144,9 @@ export function ConstraintsStep() {
   const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced">("preferred");
   const [venueId, setVenueId] = useState("");
   const [coachId, setCoachId] = useState("");
+  // "indisponible" (unavailableDays, blacklist) vs "disponible uniquement"
+  // (availableDays, whitelist — l'engine intersecte les whitelists d'un coach).
+  const [coachMode, setCoachMode] = useState<"unavailable" | "available">("unavailable");
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
   // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -205,14 +208,15 @@ export function ConstraintsStep() {
     if ("" === coachId || 0 === days.size) {
       return null;
     }
+    const coachDaysKey = "available" === coachMode ? "availableDays" : "unavailableDays";
     return {
-      name: `${coachName.get(coachId)} · indispo ${dayNames(days)}`,
+      name: `${coachName.get(coachId)} · ${"available" === coachMode ? "dispo uniquement" : "indispo"} ${dayNames(days)}`,
       scope: "COACH",
       scopeTargetId: coachId,
       family,
       // Always hard: the engine enforces coach availability unconditionally.
       ruleType: "HARD",
-      config: { coachId, unavailableDays: [...days] },
+      config: { coachId, [coachDaysKey]: [...days] },
     };
   }
 
@@ -229,6 +233,7 @@ export function ConstraintsStep() {
     setEditingId(null);
     setTarget("");
     setDayMode("forbidden");
+    setCoachMode("unavailable");
     setVenueMode("preferred");
     setVenueId("");
     setCoachId("");
@@ -269,7 +274,9 @@ export function ConstraintsStep() {
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
       setCoachId("string" === typeof cfg.coachId ? cfg.coachId : (c.scopeTargetId ?? ""));
-      setDays(new Set(asNums(cfg.unavailableDays)));
+      const available = Array.isArray(cfg.availableDays);
+      setCoachMode(available ? "available" : "unavailable");
+      setDays(new Set(asNums(available ? cfg.availableDays : cfg.unavailableDays)));
     } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
       setTarget(c.scopeTargetId);
     } else {
@@ -435,7 +442,10 @@ export function ConstraintsStep() {
                 </option>
               ))}
             </Select>
-            <span className="text-xs text-muted-foreground">indispo</span>
+            <Select aria-label="Disponibilité" className="h-8 w-44" value={coachMode} onChange={(e) => setCoachMode(e.target.value as "unavailable" | "available")}>
+              <option value="unavailable">indisponible</option>
+              <option value="available">disponible uniquement</option>
+            </Select>
             <DayPicker days={days} toggle={toggleDay} />
           </>
         )}

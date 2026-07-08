@@ -95,6 +95,9 @@ MATRIX: tuple[MatrixCell, ...] = (
     MatrixCell("COACH_AVAILABILITY", "PREFERRED", "unavailableDays", "COACH", Expectation.WARNING, False,
                note="UI forces HARD; a legacy soft row is enforced hard + INFO diagnostic",
                config={"unavailableDays": [3]}),
+    MatrixCell("COACH_AVAILABILITY", "HARD", "availableDays", "COACH", Expectation.HONORED_HARD, True,
+               note="wizard 'coach disponible uniquement' = whitelist (INTERSECTION per coach)",
+               config={"availableDays": [1]}),
     # --- Legacy / guard cells ---------------------------------------------------
     MatrixCell("DAY", "BONUS", "forbiddenDays", "TEAM", Expectation.HONORED_SOFT, False,
                note="ENG-12: BONUS removed from the UI; legacy rows normalize to PREFERRED",
