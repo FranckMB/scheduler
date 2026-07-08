@@ -2,3 +2,13 @@ services:
     App\Service\DevScheduleReportWriter:
         autowire: true
         autoconfigure: true
+
+    # Dev-only clock override: consumers of ClockInterface get the simulated
+    # clock (pinned instant from Redis, else real time). `$inner` is bound to the
+    # native `clock` service explicitly so the alias below can't recurse.
+    App\Clock\SimulatedClock:
+        autowire: true
+        arguments:
+            $inner: '@clock'
+    Psr\Clock\ClockInterface: '@App\Clock\SimulatedClock'
+    Symfony\Component\Clock\ClockInterface: '@App\Clock\SimulatedClock'

@@ -16,6 +16,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -56,6 +57,7 @@ final class TransitionReminderCommand extends Command
         private readonly SeasonResolver $seasonResolver,
         private readonly TransitionReminderLogRepository $reminderLogRepository,
         private readonly TransitionReminderMailBuilder $mailBuilder,
+        private readonly ClockInterface $clock,
     ) {
         parent::__construct();
     }
@@ -82,7 +84,7 @@ final class TransitionReminderCommand extends Command
         // Coarse month gate: no bucket can match outside May–July whatever the
         // club timezone (buckets live in [May 15, July 15[; ±1 day of TZ drift
         // never leaves the May–July span) — skip the whole club walk off-season.
-        $gateDay = $forcedToday ?? new DateTimeImmutable;
+        $gateDay = $forcedToday ?? DateTimeImmutable::createFromInterface($this->clock->now());
         $month = (int) $gateDay->format('n');
         if ($month < 5 || $month > 7) {
             $io->success('Outside the anticipation window (May–July) — nothing to do.');
@@ -229,7 +231,8 @@ final class TransitionReminderCommand extends Command
             }
         }
 
-        return new DateTimeImmutable(new DateTimeImmutable('now', new DateTimeZone($timezone))->format('Y-m-d'));
+        // "now" from the clock (dev simulator can pin it), read in the club TZ.
+        return new DateTimeImmutable($this->clock->now()->setTimezone(new DateTimeZone($timezone))->format('Y-m-d'));
     }
 
     /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). No --date → null (per-club today). */
