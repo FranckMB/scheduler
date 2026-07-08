@@ -18,6 +18,11 @@ const config = defineConfig({
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
+      // Exported PDF/PNG files live under the backend's public/exports.
+      '/exports': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
       '/.well-known/mercure': {
         target: 'http://127.0.0.1:3000',
         changeOrigin: true,

@@ -18,6 +18,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
 final class ExportPdfController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
+    use ResolvesExportScopeTrait;
 
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -41,6 +42,10 @@ final class ExportPdfController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
+        // Optional export scope: a single venue (validated against this schedule's
+        // club+season; foreign/unknown → 404 via the shared trait).
+        $venueId = $this->resolveExportVenueId($this->entityManager, $this->requestStack, $schedule);
+
         $schedule->setPdfExportStatus('pending');
         $this->entityManager->flush();
 
@@ -48,6 +53,7 @@ final class ExportPdfController extends AbstractController
             new ExportPdfMessage(
                 scheduleId: $schedule->getId(),
                 clubId: $schedule->getClubId(),
+                venueId: $venueId,
             ),
         );
 

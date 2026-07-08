@@ -27,3 +27,6 @@
 # generated / test artifacts (never commit)
 .phpunit.result.cache
 /config/reference.php
+
+# Generated schedule exports (PDF/PNG)
+/public/exports/

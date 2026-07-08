@@ -10,6 +10,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { OverlaysExistError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { availableResources, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
@@ -246,6 +247,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               baselineScheduleId={baselineScheduleId}
             />
             <div className="ml-auto flex items-center gap-2">
+              {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
               <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
             </div>
           </div>

@@ -65,12 +65,12 @@ final readonly class ExportPdfHandler
         $this->entityManager->flush();
 
         try {
-            $result = $this->pdfGenerator->generate($schedule);
+            $result = $this->pdfGenerator->generate($schedule, $message->getVenueId());
             $schedule->setPdfExportStatus('completed');
             $schedule->setPdfExportUrl($result['pdf']);
-            if (null !== $result['png']) {
-                $schedule->setPngExportUrl($result['png']);
-            }
+            // Always overwrite (null if this run produced no PNG) so a previous,
+            // different-scope export URL can never be served for this one.
+            $schedule->setPngExportUrl($result['png']);
         } catch (Throwable) {
             $schedule->setPdfExportStatus('failed');
             $schedule->setPdfExportUrl(null);

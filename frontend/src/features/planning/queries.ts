@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 
 import { toast } from "@/shared/stores/toastStore";
 
@@ -89,6 +90,78 @@ export function useGenerate() {
     // The controller flips the schedule to PENDING synchronously; refetch starts the poll.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
+}
+
+export type ExportFormat = "pdf" | "png" | "xlsx";
+
+const EXPORT_POLL_MS = 1500;
+const EXPORT_TIMEOUT_MS = 60_000;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Trigger a browser download of a URL (same-origin) under a chosen filename. */
+function download(url: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke on the next macrotask: a synchronous revoke can cancel the download
+  // the click just started in some browsers.
+  if (url.startsWith("blob:")) {
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+}
+
+/**
+ * Export a schedule to PDF/PNG (async worker → poll status → download the file)
+ * or XLSX (synchronous blob → download). `busy` is the in-flight format, or null.
+ */
+export function useScheduleExport(scheduleId: string | null) {
+  const [busy, setBusy] = useState<ExportFormat | null>(null);
+
+  const run = useCallback(
+    async (format: ExportFormat, venueId: planningApi.ExportVenueScope): Promise<void> => {
+      if (null === scheduleId || null !== busy) {
+        return;
+      }
+      setBusy(format);
+      try {
+        if ("xlsx" === format) {
+          const blob = await planningApi.exportScheduleXlsx(scheduleId, venueId);
+          download(URL.createObjectURL(blob), "planning.xlsx");
+          return;
+        }
+        await planningApi.exportSchedulePdf(scheduleId, venueId);
+        // The worker writes the file path with a scope suffix (-all / -<venueId8>);
+        // the schedule row carries a single, shared export URL, so only download
+        // once it matches THIS request's scope — guards against another in-flight
+        // export (other tab/scope) whose 'completed' + URL we'd otherwise grab.
+        const scopeToken = `-${null === venueId ? "all" : venueId.slice(0, 8)}.${format}`;
+        const deadline = Date.now() + EXPORT_TIMEOUT_MS;
+        for (;;) {
+          await sleep(EXPORT_POLL_MS);
+          const schedule = await planningApi.getSchedule(scheduleId);
+          if ("failed" === schedule.pdfExportStatus || Date.now() > deadline) {
+            throw new Error("export failed");
+          }
+          const url = "pdf" === format ? schedule.pdfExportUrl : schedule.pngExportUrl;
+          if ("completed" === schedule.pdfExportStatus && null != url && url.endsWith(scopeToken)) {
+            download(url, `planning.${format}`);
+            return;
+          }
+        }
+      } catch {
+        toast.error("Export impossible — réessayez.");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [scheduleId, busy],
+  );
+
+  return { run, busy };
 }
 
 /** Lock a COMPLETED schedule → VALIDATED (read-only). */

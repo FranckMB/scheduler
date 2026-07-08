@@ -1,7 +1,10 @@
-Last verified @ feat/matchs-palier-a-pr4 2026-07-07
+Last verified @ feat/export-planning 2026-07-08
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **61 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **62 paths.**
 Changements récents :
+- **Export planning (2026-07-08)** : `POST /api/schedules/{id}/export-xlsx` (opération API Platform
+  custom sur `ScheduleResource`, patron `export-pdf`) — export Excel synchrone (téléchargement direct).
+  `export-pdf` accepte désormais un `venueId` optionnel (périmètre tous gymnases / un gymnase).
 - **Module matchs palier A PR-4 (2026-07-07)** : `POST /api/teams/{id}/fixtures/import` (opération API
   Platform custom sur `TeamResource`, patron `clubs/{id}/import-teams`) — import FBI des rencontres,
   multipart. `FixtureResource.externalRef` exposé en lecture. Voir [`module-matchs.md`](module-matchs.md).

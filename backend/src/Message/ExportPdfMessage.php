@@ -15,6 +15,8 @@ final readonly class ExportPdfMessage
         // field existed deserialize with an uninitialized property; the handler
         // fails those gracefully instead of crashing on getClubId().
         private ?string $clubId = null,
+        // Export scope: null = all venues, else a single venue id.
+        private ?string $venueId = null,
     ) {}
 
     public function getScheduleId(): string
@@ -26,5 +28,10 @@ final readonly class ExportPdfMessage
     {
         // isset() guards the uninitialized-readonly case of a legacy payload.
         return $this->clubId ?? null;
+    }
+
+    public function getVenueId(): ?string
+    {
+        return $this->venueId ?? null;
     }
 }

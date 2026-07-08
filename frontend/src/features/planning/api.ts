@@ -65,7 +65,22 @@ export interface Schedule {
   updatedAt: string;
   /** Non-null → this schedule is a period overlay (palier B), not a season plan. */
   calendarEntryId: string | null;
+  /** PDF/PNG export lifecycle (async worker): null | pending | generating | completed | failed. */
+  pdfExportStatus?: string | null;
+  pdfExportUrl?: string | null;
+  pngExportUrl?: string | null;
 }
+
+/** Export scope: all venues (null) or a single one. */
+export type ExportVenueScope = string | null;
+
+/** Queue a PDF+PNG export (async worker). Poll the schedule for pdfExportStatus/Url. */
+export const exportSchedulePdf = (id: string, venueId: ExportVenueScope): Promise<unknown> =>
+  api.post(`schedules/${id}/export-pdf`, { json: null === venueId ? {} : { venueId } }).json();
+
+/** Download the schedule as an .xlsx (synchronous stream). Returns the blob. */
+export const exportScheduleXlsx = async (id: string, venueId: ExportVenueScope): Promise<Blob> =>
+  api.post(`schedules/${id}/export-xlsx`, { json: null === venueId ? {} : { venueId } }).blob();
 
 export interface Slot {
   id: string;
@@ -199,6 +214,7 @@ export const listSchedules = (): Promise<Schedule[]> =>
   collectionAll<Schedule>("schedules").then((rows) =>
     rows.map((s) => ({ ...s, calendarEntryId: s.calendarEntryId ?? null, score: s.score ?? null })),
   );
+export const getSchedule = (id: string): Promise<Schedule> => api.get(`schedules/${id}`).json<Schedule>();
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
