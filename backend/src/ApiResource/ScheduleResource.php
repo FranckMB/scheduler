@@ -34,6 +34,12 @@ use Symfony\Component\Serializer\Attribute\Groups;
         name: 'export_pdf',
     ),
     new Post(
+        uriTemplate: '/schedules/{id}/export-xlsx',
+        controller: 'App\Controller\ExportXlsxController',
+        read: false,
+        name: 'export_xlsx',
+    ),
+    new Post(
         uriTemplate: '/schedules/{id}/generate',
         controller: 'App\Controller\GenerateScheduleController',
         input: false,

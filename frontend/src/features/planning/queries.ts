@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
 
 import { toast } from "@/shared/stores/toastStore";
 
@@ -89,6 +90,74 @@ export function useGenerate() {
     // The controller flips the schedule to PENDING synchronously; refetch starts the poll.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
+}
+
+export type ExportFormat = "pdf" | "png" | "xlsx";
+
+const EXPORT_POLL_MS = 1500;
+const EXPORT_TIMEOUT_MS = 60_000;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Trigger a browser download of a URL (same-origin) under a chosen filename. */
+function download(url: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/**
+ * Export a schedule to PDF/PNG (async worker → poll status → download the file)
+ * or XLSX (synchronous blob → download). `busy` is the in-flight format, or null.
+ */
+export function useScheduleExport(scheduleId: string | null) {
+  const [busy, setBusy] = useState<ExportFormat | null>(null);
+
+  const run = useCallback(
+    async (format: ExportFormat, venueId: planningApi.ExportVenueScope): Promise<void> => {
+      if (null === scheduleId || null !== busy) {
+        return;
+      }
+      setBusy(format);
+      try {
+        if ("xlsx" === format) {
+          const blob = await planningApi.exportScheduleXlsx(scheduleId, venueId);
+          const url = URL.createObjectURL(blob);
+          download(url, "planning.xlsx");
+          URL.revokeObjectURL(url);
+          return;
+        }
+        await planningApi.exportSchedulePdf(scheduleId, venueId);
+        // Poll the schedule until the worker finishes the PDF+PNG pair.
+        const deadline = Date.now() + EXPORT_TIMEOUT_MS;
+        for (;;) {
+          await sleep(EXPORT_POLL_MS);
+          const schedule = await planningApi.getSchedule(scheduleId);
+          if ("completed" === schedule.pdfExportStatus) {
+            const url = "pdf" === format ? schedule.pdfExportUrl : schedule.pngExportUrl;
+            if (null === url || undefined === url) {
+              throw new Error("export url missing");
+            }
+            download(url, `planning.${format}`);
+            return;
+          }
+          if ("failed" === schedule.pdfExportStatus || Date.now() > deadline) {
+            throw new Error("export failed");
+          }
+        }
+      } catch {
+        toast.error("Export impossible — réessayez.");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [scheduleId, busy],
+  );
+
+  return { run, busy };
 }
 
 /** Lock a COMPLETED schedule → VALIDATED (read-only). */

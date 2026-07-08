@@ -6,44 +6,44 @@ namespace App\Controller;
 
 use App\Entity\Schedule;
 use App\Entity\Venue;
-use App\Message\ExportPdfMessage;
+use App\Service\SpreadsheetGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
-use Symfony\Component\Messenger\MessageBusInterface;
 
+/**
+ * Excel export of a schedule (flat data table). Synchronous — PhpSpreadsheet is
+ * fast and needs no headless browser, so the .xlsx streams straight back as a
+ * download instead of going through the async PDF/PNG worker queue.
+ */
 #[AsController]
-final class ExportPdfController extends AbstractController
+final class ExportXlsxController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
 
     public function __construct(
-        private EntityManagerInterface $entityManager,
-        private MessageBusInterface $messageBus,
+        private readonly EntityManagerInterface $entityManager,
+        private readonly SpreadsheetGenerator $spreadsheetGenerator,
         private readonly RequestStack $requestStack,
     ) {}
 
-    public function __invoke(string $id): JsonResponse
+    public function __invoke(string $id): Response
     {
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
-
         if (!$schedule instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
         }
 
-        // BCK-07: make the tenant boundary explicit (RLS already fail-closes the
-        // find above; this is defense-in-depth + consistency with the sibling
-        // schedule controllers) instead of relying on RLS alone.
+        // Explicit tenant boundary (RLS already fail-closes the find; defense-in-depth).
         $currentClubId = $this->resolveCurrentClubId($this->requestStack);
         if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return new JsonResponse(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        // Optional export scope: a single venue. Validate it belongs to this
-        // club+season so a foreign/unknown id can't be smuggled into the worker.
         $venueId = $this->readVenueId();
         if (null !== $venueId) {
             $venue = $this->entityManager->getRepository(Venue::class)->findOneBy([
@@ -52,28 +52,24 @@ final class ExportPdfController extends AbstractController
                 'seasonId' => $schedule->getSeasonId(),
             ]);
             if (!$venue instanceof Venue) {
-                return $this->json(['error' => 'Venue not found.'], Response::HTTP_NOT_FOUND);
+                return new JsonResponse(['error' => 'Venue not found.'], Response::HTTP_NOT_FOUND);
             }
         }
 
-        $schedule->setPdfExportStatus('pending');
-        $this->entityManager->flush();
+        $binary = $this->spreadsheetGenerator->generate($schedule, $venueId);
+        $filename = \sprintf('planning-%s.xlsx', preg_replace('/[^a-zA-Z0-9_-]+/', '-', $schedule->getName()) ?: 'export');
 
-        $this->messageBus->dispatch(
-            new ExportPdfMessage(
-                scheduleId: $schedule->getId(),
-                clubId: $schedule->getClubId(),
-                venueId: $venueId,
-            ),
-        );
+        $response = new Response($binary, Response::HTTP_OK);
+        $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $response->headers->set('Content-Disposition', \sprintf('attachment; filename="%s"', $filename));
 
-        return $this->json(['message' => 'PDF export queued.'], Response::HTTP_ACCEPTED);
+        return $response;
     }
 
     private function readVenueId(): ?string
     {
         $request = $this->requestStack->getCurrentRequest();
-        if (null === $request) {
+        if (!$request instanceof Request) {
             return null;
         }
         $body = json_decode($request->getContent() ?: '{}', true);
