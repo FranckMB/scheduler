@@ -181,6 +181,9 @@ final class FixtureApiTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
+        // Matches need a validated socle (cockpit state 3); stamp it so this API
+        // test targets fixture behaviour, not the socle guard.
+        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
         $this->em->flush();
 

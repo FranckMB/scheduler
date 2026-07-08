@@ -3,6 +3,18 @@
 > **But** : permettre au gestionnaire de **finaliser/verrouiller** un planning (lecture seule), de le **rouvrir** pour l'éditer, et distinguer le **« Planning de la saison »** (baseline) des **plannings secondaires**. Spec d'exécution pour la PR-3 de la série wizard/boucle-de-travail.
 > **Source de vérité** : le **code** (confronté au besoin exprimé). La roadmap n'est qu'une base de discussion.
 
+## 0. Machine à états accueil/onboarding (cockpit) — 2026-07-08
+
+Le point d'entrée après login dérive d'un **seul critère : le planning principal existe-t-il** (`season.baselineScheduleId`, posé à la 1ʳᵉ génération) et **est-il validé** (`season.socleValidatedAt`, sticky). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage** (dérivé du baseline ; toujours écrit en base par cohérence).
+
+| État | Condition | Landing | « Ouvrir » (carte planning principal) | Restrictions |
+|---|---|---|---|---|
+| **1. Pas de planning principal** | `baselineScheduleId = null` | **/wizard** — étape **Récap** (ou 1ʳᵉ étape incomplète) | — | app verrouillée au wizard (`AuthGuard`, burger profil/club autorisé) |
+| **2. Existe, non validé** | baseline ≠ null, `socleValidatedAt = null` | **cockpit** (déverrouillé) + bandeau « valider pour débloquer » | → **/wizard** étape **Génération** | **matchs** + **plannings secondaires** bloqués (front désactivé + `SocleGuard` 409) |
+| **3. Existe et validé** | baseline ≠ null, socle validé | **cockpit** (tout ouvert) | → /planning | aucune |
+
+Ancrages : `AuthGuard.tsx` (onboarding = baseline null), `CockpitPage.tsx` (baseline null → /wizard), `WizardLayout.tsx` (guided = baseline null, landing Récap), `BaselineBanner.tsx` (« Ouvrir » état 2→wizard génération), `AppLayout.tsx` + `MatchesPage.tsx` (matchs verrouillés hors état 3), `App\Service\SocleGuard` (409 création match/import/overlay en état ≠ 3, appliqué dans `FixtureStateProcessor`, `ImportFixturesController`, `GenerateScheduleController`). Fixtures : BCCL = état 3 (baseline validé seedé), FakeClub = état 1.
+
 ## 1. Modèle produit (validé avec le gestionnaire)
 
 - **`VALIDATED`** = planning **fini + verrouillé (lecture seule)**. **Plusieurs** plannings peuvent être VALIDATED (c'est bon signe).

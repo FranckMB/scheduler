@@ -4,20 +4,45 @@ declare(strict_types=1);
 
 namespace App\State\Processor;
 
+use ApiPlatform\Metadata\HttpOperation;
+use ApiPlatform\Metadata\Operation;
 use App\ApiResource\FixtureResource;
 use App\Dto\FixtureInput;
 use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Service\SocleGuard;
 use DateTimeImmutable;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use Symfony\Contracts\Service\Attribute\Required;
 
 /**
  * @extends AbstractStateProcessor<Fixture, FixtureInput, FixtureResource>
  */
 class FixtureStateProcessor extends AbstractStateProcessor
 {
+    private SocleGuard $socleGuard;
+
+    #[Required]
+    public function setSocleGuard(SocleGuard $socleGuard): void
+    {
+        $this->socleGuard = $socleGuard;
+    }
+
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
+    {
+        // A match can only be created/edited once the season's main plan is
+        // validated (cockpit state 2 → 3). DELETE stays allowed (cleanup).
+        $method = $operation instanceof HttpOperation ? $operation->getMethod() : '';
+        if (\in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+            $request = $this->requestStack->getCurrentRequest();
+            $this->socleGuard->assertValidated($request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id'));
+        }
+
+        return parent::process($data, $operation, $uriVariables, $context);
+    }
+
     protected function getEntityClass(): string
     {
         return Fixture::class;

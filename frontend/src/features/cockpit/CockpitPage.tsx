@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 
@@ -32,17 +33,30 @@ export function CockpitPage() {
   if (isLoading) {
     return <FullPageSpinner />;
   }
-  // Sticky gate: no validated socle yet → the work-loop is the home screen.
-  if (!me?.socleValidatedAt) {
-    return <Navigate to="/planning" replace />;
+  // Onboarding (no main plan yet) → the wizard is home (AuthGuard also enforces
+  // this; kept here as a defensive redirect). Once a baseline exists the cockpit
+  // is the home screen, whether or not the socle is validated yet.
+  if (null === (me?.baselineScheduleId ?? null)) {
+    return <Navigate to="/wizard" replace />;
   }
+  // State 2 (baseline exists but not validated): the cockpit is reachable but
+  // matches + secondary plans stay locked until the main plan is validated.
+  const socleValidated = null !== me?.socleValidatedAt;
 
   const prev = () => setCursor((c) => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }));
   const next = () => setCursor((c) => (c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }));
 
   return (
     <div className="space-y-4">
-      <BaselineBanner schedules={schedules} baselineScheduleId={me.baselineScheduleId} loading={schedulesLoading} />
+      {!socleValidated ? (
+        <div className="flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
+          <Lock className="mt-0.5 size-4 shrink-0 text-accent" />
+          <span className="text-muted-foreground">
+            Planning principal <strong className="text-foreground">non validé</strong> — validez-le pour débloquer les <strong className="text-foreground">matchs</strong> et les <strong className="text-foreground">plannings secondaires</strong>.
+          </span>
+        </div>
+      ) : null}
+      <BaselineBanner schedules={schedules} baselineScheduleId={me?.baselineScheduleId ?? null} socleValidated={socleValidated} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={holidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel

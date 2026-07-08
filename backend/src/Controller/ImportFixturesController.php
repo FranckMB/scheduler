@@ -10,6 +10,7 @@ use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Service\FbiFixtureImporter;
 use App\Service\SeasonAccessGuard;
+use App\Service\SocleGuard;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -34,6 +35,7 @@ final class ImportFixturesController extends AbstractController
         private readonly FbiFixtureImporter $importer,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonAccessGuard $seasonAccessGuard,
+        private readonly SocleGuard $socleGuard,
     ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
@@ -66,6 +68,8 @@ final class ImportFixturesController extends AbstractController
 
         // Archived-season write refused (409) — AFTER auth so 403 wins first.
         $this->seasonAccessGuard->assertWritable($request);
+        // Matches require the season's main plan validated first (cockpit state 2→3).
+        $this->socleGuard->assertValidated($request->attributes->get('_season_id') ?? $request->headers->get('X-Season-Id'));
 
         /** @var UploadedFile|null $file */
         $file = $request->files->get('file');

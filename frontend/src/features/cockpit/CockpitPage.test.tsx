@@ -40,30 +40,39 @@ function renderCockpit() {
         <Routes>
           <Route path="/" element={<CockpitPage />} />
           <Route path="/planning" element={<div>PLANNING SCREEN</div>} />
+          <Route path="/wizard" element={<div>WIZARD SCREEN</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe("CockpitPage sticky gate", () => {
+describe("CockpitPage state machine", () => {
   beforeEach(() => {
     meData = null;
     publicHolidayWindows.length = 0;
   });
 
-  it("redirects to /planning when the socle is not validated", () => {
-    meData = { socleValidatedAt: null, baselineScheduleId: "s1" };
+  it("state 1 — no main plan (baseline null) → redirects to the wizard", () => {
+    meData = { socleValidatedAt: null, baselineScheduleId: null };
     renderCockpit();
-    expect(screen.getByText("PLANNING SCREEN")).toBeInTheDocument();
+    expect(screen.getByText("WIZARD SCREEN")).toBeInTheDocument();
   });
 
-  it("renders the 3 cockpit zones once the socle is validated", () => {
+  it("state 2 — baseline exists but not validated → cockpit unlocked with a lock hint", () => {
+    meData = { socleValidatedAt: null, baselineScheduleId: "s1" };
+    renderCockpit();
+    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    expect(screen.getByText(/validez-le pour débloquer/i)).toBeInTheDocument();
+    expect(screen.queryByText("WIZARD SCREEN")).not.toBeInTheDocument();
+  });
+
+  it("state 3 — validated → full cockpit, no lock hint", () => {
     meData = { socleValidatedAt: "2026-01-15T10:00:00Z", baselineScheduleId: "s1" };
     renderCockpit();
     expect(screen.getByText("Planning principal")).toBeInTheDocument();
     expect(screen.getByText("À traiter")).toBeInTheDocument();
-    expect(screen.queryByText("PLANNING SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText(/validez-le pour débloquer/i)).not.toBeInTheDocument();
   });
 
   it("fetches public holidays on two explicit windows: visible month grid + radar horizon", () => {

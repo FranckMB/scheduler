@@ -25,6 +25,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private MessageBusInterface $messageBus,
         private RequestStack $requestStack,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly \App\Service\SocleGuard $socleGuard,
     ) {}
 
     public function __invoke(string $id): JsonResponse
@@ -48,6 +49,13 @@ final class GenerateScheduleController extends AbstractController implements Sea
 
         if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
             return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before regenerating.'], Response::HTTP_CONFLICT);
+        }
+
+        // A secondary plan (period overlay) can only be generated once the season's
+        // main plan is validated. Generating the main plan itself (no overlay) is
+        // always allowed — that is how the socle gets created in the first place.
+        if (null !== $schedule->getCalendarEntryId()) {
+            $this->socleGuard->assertValidated($schedule->getSeasonId());
         }
 
         $schedule->setStatus(ScheduleStatus::PENDING);

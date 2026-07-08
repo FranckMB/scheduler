@@ -9,6 +9,9 @@ import { useMatchesStore } from "./store";
 
 const { placeFixture } = vi.hoisted(() => ({ placeFixture: vi.fn(() => Promise.resolve({})) }));
 
+// Matches are unlocked only once the season's socle is validated.
+vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { socleValidatedAt: "2026-01-15T10:00:00Z" } }) }));
+
 vi.mock("./api", () => ({
   getFixtures: vi.fn(() =>
     Promise.resolve([

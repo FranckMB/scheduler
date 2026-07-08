@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+// Established club (a main plan exists) → free wizard navigation, not guided.
 vi.mock("@/features/auth/queries", () => ({
-  useMe: () => ({ data: { club: { id: "c", name: "C", onboardingCompleted: true } } }),
+  useMe: () => ({ data: { baselineScheduleId: "b1", club: { id: "c", name: "C", onboardingCompleted: true } } }),
 }));
 
 import * as api from "./api";
