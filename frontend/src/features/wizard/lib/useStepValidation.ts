@@ -105,13 +105,18 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
   }
   if ("venues" === stepId) {
-    const empty = venuesWithoutSlot(venues, slots);
     const errors: string[] = [];
     if (0 === venues.length) {
       errors.push("Ajoutez au moins un gymnase.");
     }
-    if (empty.length > 0) {
-      errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
+    // In period mode the venues + their slots are inherited from the base plan and
+    // read-only — a "sans créneau" blocker there is a false alarm (the user cannot
+    // add slots on a secondary planning). The rule only applies to the base plan.
+    if (null === periodEntryId) {
+      const empty = venuesWithoutSlot(venues, slots);
+      if (empty.length > 0) {
+        errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
+      }
     }
     return { errors, warnings: [] };
   }
@@ -127,7 +132,6 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     return { errors: [], warnings: computeReservationWarnings(reservations, teams, venues, slots) };
   }
   if ("recap" === stepId) {
-    const empty = venuesWithoutSlot(venues, slots);
     const errors: string[] = [];
     if (0 === teams.length) {
       errors.push("Ajoutez au moins une équipe.");
@@ -138,8 +142,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     if (0 === venues.length) {
       errors.push("Ajoutez au moins un gymnase.");
     }
-    if (empty.length > 0) {
-      errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
+    // Period mode: slots are inherited & read-only — skip the "sans créneau" gate
+    // (same rationale as the venues step above).
+    if (null === periodEntryId) {
+      const empty = venuesWithoutSlot(venues, slots);
+      if (empty.length > 0) {
+        errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
+      }
     }
     if (constraintValidation && !constraintValidation.valid) {
       for (const messages of Object.values(constraintValidation.errors)) {

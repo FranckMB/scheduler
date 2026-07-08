@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { PriorityTier, Team } from "../api";
-import { orderedTeams, teamsOfTier, usedTiers } from "./ranking";
+import type { Coach, PriorityTier, Team } from "../api";
+import { coachMeta, orderedCoaches, orderedTeams, teamsOfTier, usedTiers } from "./ranking";
 
 function team(over: Partial<Team>): Team {
   return { id: "id", name: "T", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true, ...over };
@@ -27,6 +27,46 @@ describe("orderedTeams", () => {
       ["a", 3],
       ["loisir", 4],
     ]);
+  });
+});
+
+function coach(over: Partial<Coach>): Coach {
+  return { id: "id", firstName: "F", lastName: "L", email: null, isEmployee: false, isActive: true, ...over };
+}
+
+describe("orderedCoaches", () => {
+  it("orders salaried first, then coach-players, then the rest — each alphabetical", () => {
+    const coaches = [
+      coach({ id: "other-z", firstName: "Zoe", isEmployee: false }),
+      coach({ id: "player-1", firstName: "Bob", isEmployee: false }),
+      coach({ id: "salaried-2", firstName: "Bea", isEmployee: true }),
+      coach({ id: "salaried-1", firstName: "Ana", isEmployee: true }),
+      coach({ id: "other-a", firstName: "Amy", isEmployee: false }),
+      coach({ id: "player-2", firstName: "Cid", isEmployee: false }),
+    ];
+    const players = new Set(["player-1", "player-2"]);
+    expect(orderedCoaches(coaches, players).map((r) => [r.coach.id, r.group])).toEqual([
+      ["salaried-1", "salaried"],
+      ["salaried-2", "salaried"],
+      ["player-1", "player"],
+      ["player-2", "player"],
+      ["other-a", "other"],
+      ["other-z", "other"],
+    ]);
+  });
+
+  it("treats a salaried coach-player as salaried (salaried wins)", () => {
+    const coaches = [coach({ id: "sp", isEmployee: true })];
+    expect(orderedCoaches(coaches, new Set(["sp"]))[0].group).toBe("salaried");
+  });
+});
+
+describe("coachMeta", () => {
+  it("joins the tags, undefined when neither", () => {
+    expect(coachMeta(true, true)).toBe("salarié · coach-joueur");
+    expect(coachMeta(true, false)).toBe("salarié");
+    expect(coachMeta(false, true)).toBe("coach-joueur");
+    expect(coachMeta(false, false)).toBeUndefined();
   });
 });
 

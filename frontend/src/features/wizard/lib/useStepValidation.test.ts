@@ -1,8 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Team, Venue, VenueTrainingSlot } from "../api";
 import type { Reservation } from "../store";
-import { computeReservationWarnings } from "./useStepValidation";
+import { computeReservationWarnings, useStepValidation } from "./useStepValidation";
+import { useWizardStore } from "../store";
+
+// A gym with NO availability slot — the "sans créneau" rule fires on it in base
+// mode but must stay silent in period mode (slots are inherited & read-only).
+vi.mock("../queries", () => ({
+  useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),
+  useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }], isLoading: false }),
+  useVenueSlots: () => ({ data: [], isLoading: false }),
+  useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Ana", lastName: "A", email: null, isEmployee: true, isActive: true }], isLoading: false }),
+  useWizardTeamCoaches: () => ({ data: [] }),
+  useWizardCoachPlayers: () => ({ data: [] }),
+  useConstraintValidation: () => ({ data: undefined, isLoading: false }),
+}));
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -83,5 +97,21 @@ describe("computeReservationWarnings (W6)", () => {
     const reservations = [reservation("r1", "t1", "v1", 2, "18:00"), reservation("r2", "t1", "v1", 2, "20:00")];
     const warnings = computeReservationWarnings(reservations, teams, venues, slots);
     expect(warnings).toContainEqual("U13 : 2 séances le même jour (mardi).");
+  });
+});
+
+describe("useStepValidation — venue slot rule is skipped in period mode", () => {
+  afterEach(() => useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams", reservations: [] }));
+
+  it("flags a gym without a slot in base (season) mode", () => {
+    useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "venues" });
+    const { result } = renderHook(() => useStepValidation("venues"));
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(true);
+  });
+
+  it("does NOT flag it in period mode — slots are inherited & read-only", () => {
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+    const { result } = renderHook(() => useStepValidation("venues"));
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
   });
 });

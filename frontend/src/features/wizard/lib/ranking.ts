@@ -1,4 +1,4 @@
-import type { PriorityTier, Team } from "../api";
+import type { Coach, PriorityTier, Team } from "../api";
 
 export interface RankedTeam {
   team: Team;
@@ -28,4 +28,32 @@ export function teamsOfTier(teams: Team[], tierId: number): Team[] {
 export function usedTiers(teams: Team[], tiers: PriorityTier[]): PriorityTier[] {
   const present = new Set(teams.map((t) => t.priorityTierId));
   return tiers.filter((t) => present.has(t.id)).sort((a, b) => a.id - b.id);
+}
+
+/** Which staffing bucket a coach falls into (drives the display order). */
+export type CoachGroup = "salaried" | "player" | "other";
+
+export interface RankedCoach {
+  coach: Coach;
+  group: CoachGroup;
+}
+
+const COACH_GROUP_RANK: Record<CoachGroup, number> = { salaried: 0, player: 1, other: 2 };
+
+/**
+ * Display order for coaches: salaried employees first, then coach-players (a coach
+ * with an active CoachPlayerMembership), then the rest — each bucket alphabetical.
+ * `coachPlayerIds` is the set of coach ids with an active player membership.
+ */
+export function orderedCoaches(coaches: Coach[], coachPlayerIds: Set<string>): RankedCoach[] {
+  const groupOf = (c: Coach): CoachGroup => (c.isEmployee ? "salaried" : coachPlayerIds.has(c.id) ? "player" : "other");
+  const fullName = (c: Coach): string => `${c.firstName} ${c.lastName}`.trim();
+  return coaches
+    .map((coach) => ({ coach, group: groupOf(coach) }))
+    .sort((a, b) => COACH_GROUP_RANK[a.group] - COACH_GROUP_RANK[b.group] || fullName(a.coach).localeCompare(fullName(b.coach), "fr"));
+}
+
+/** Coach staffing tags ("salarié · coach-joueur") — undefined when neither. */
+export function coachMeta(isEmployee: boolean, isPlayer: boolean): string | undefined {
+  return [isEmployee ? "salarié" : null, isPlayer ? "coach-joueur" : null].filter(Boolean).join(" · ") || undefined;
 }
