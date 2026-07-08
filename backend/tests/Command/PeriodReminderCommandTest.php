@@ -25,6 +25,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Mailer\MailerInterface;
@@ -247,6 +248,7 @@ final class PeriodReminderCommandTest extends KernelTestCase
             $container->get(SeasonResolver::class),
             $container->get(PeriodReminderLogRepository::class),
             new PeriodReminderMailBuilder('http://localhost:5173'),
+            $container->get(ClockInterface::class),
         );
 
         $tester = new CommandTester($command);

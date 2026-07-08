@@ -1,0 +1,12 @@
+services:
+    # Wire the dev clock override in the test env too, so a non-regression test
+    # can pin the clock and assert the season pivot / reminder crons follow it
+    # (the structuring axis this simulator threads through). Unpinned, the
+    # SimulatedClock returns real time — identical to the native clock, so other
+    # tests are unaffected. `$inner` is bound to the native `clock` (no recursion).
+    App\Clock\SimulatedClock:
+        autowire: true
+        arguments:
+            $inner: '@clock'
+    Psr\Clock\ClockInterface: '@App\Clock\SimulatedClock'
+    Symfony\Component\Clock\ClockInterface: '@App\Clock\SimulatedClock'

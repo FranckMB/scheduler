@@ -18,11 +18,15 @@ interface ClockState {
 const getClock = (): Promise<ClockState> => api.get("dev/clock").json<ClockState>();
 const setClock = (at: string | null): Promise<ClockState> => api.post("dev/clock", { json: { at } }).json<ClockState>();
 
-/** ISO string → value for a <input type="datetime-local"> (local, no seconds). */
-function toLocalInput(iso: string): string {
+// The whole widget works in UTC so the calendar day the dev picks is exactly
+// the day the season pivot (SeasonResolver, UTC date) sees — no off-by-one near
+// midnight from a browser-local → UTC conversion.
+
+/** ISO string → value for a <input type="datetime-local">, in UTC (no seconds). */
+function toInputValue(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
 export function DevClock() {
@@ -59,10 +63,10 @@ export function DevClock() {
     return null;
   }
 
-  const label = new Date(data.now).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  const label = new Date(data.now).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" });
   const shift = (days: number): void => {
     const d = new Date(data.now);
-    d.setDate(d.getDate() + days);
+    d.setUTCDate(d.getUTCDate() + days);
     mutation.mutate(d.toISOString());
   };
 
@@ -86,12 +90,14 @@ export function DevClock() {
           <input
             type="datetime-local"
             aria-label="Date et heure simulées"
-            defaultValue={toLocalInput(data.now)}
+            defaultValue={toInputValue(data.now)}
             className="mb-2 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
             onChange={(e) => {
               const v = e.target.value;
               if ("" !== v) {
-                mutation.mutate(new Date(v).toISOString());
+                // Interpret the picked wall time as UTC so the chosen day is
+                // exactly the day the season pivot sees.
+                mutation.mutate(new Date(`${v}:00Z`).toISOString());
               }
             }}
           />

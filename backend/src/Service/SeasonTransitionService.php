@@ -15,6 +15,7 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -45,6 +46,7 @@ final class SeasonTransitionService
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SeasonResolver $seasonResolver,
+        private readonly ClockInterface $clock,
     ) {}
 
     /**
@@ -54,6 +56,10 @@ final class SeasonTransitionService
      */
     public function transition(Season $source, ?DateTimeImmutable $today = null): Season
     {
+        // Resolve "today" once from the clock (dev simulator can pin it) and
+        // thread it to BOTH the current-season guard AND the target-year anchor
+        // in copy() — otherwise a rehearsal transitions to a real-time year.
+        $today ??= DateTimeImmutable::createFromInterface($this->clock->now());
         $clubId = $source->getClubId();
 
         $current = $this->seasonResolver->currentSeason($clubId, $today);
@@ -70,7 +76,7 @@ final class SeasonTransitionService
             $filters->disable('season_filter');
         }
 
-        return $this->entityManager->wrapInTransaction(function () use ($source, $clubId): Season {
+        return $this->entityManager->wrapInTransaction(function () use ($source, $clubId, $today): Season {
             // Serialize concurrent transitions of the same club: without this,
             // two requests both pass the successor check and fork the club into
             // duplicate N+1 seasons (no DB unique on club_id + season-year).
@@ -88,7 +94,7 @@ final class SeasonTransitionService
                 }
             }
 
-            return $this->copy($source);
+            return $this->copy($source, $today);
         });
     }
 
@@ -101,7 +107,7 @@ final class SeasonTransitionService
         // NEXT season-year (source-year + 1). Anchored to today so a dormant
         // club whose stale current season is years old still gets a next
         // season that is actually upcoming, not another past one.
-        $today ??= new DateTimeImmutable('today');
+        $today ??= DateTimeImmutable::createFromInterface($this->clock->now());
         $targetYear = max(
             SeasonResolver::seasonYear($source->getStartDate()) + 1,
             SeasonResolver::seasonYear($today) + 1,

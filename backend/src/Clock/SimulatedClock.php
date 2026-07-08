@@ -36,8 +36,6 @@ final class SimulatedClock implements ClockInterface, PsrClockInterface
 
     public function withTimeZone(DateTimeZone|string $timezone): static
     {
-        $clone = clone $this;
-
         return new self($this->inner->withTimeZone($timezone), $this->store);
     }
 

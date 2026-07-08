@@ -6,6 +6,7 @@ namespace App\Clock;
 
 use DateTimeImmutable;
 use DateTimeInterface;
+use Exception;
 use Psr\Cache\CacheItemPoolInterface;
 
 /**
@@ -30,8 +31,16 @@ final class DevClockStore
             return null;
         }
         $iso = $item->get();
-
-        return \is_string($iso) ? new DateTimeImmutable($iso) : null;
+        if (!\is_string($iso)) {
+            return null;
+        }
+        // A corrupt/stale value must never 500 the season-resolution hot path:
+        // treat an unparseable pin as "no pin" (real time).
+        try {
+            return new DateTimeImmutable($iso);
+        } catch (Exception) {
+            return null;
+        }
     }
 
     /** Pin the clock to a given instant, or null to release it back to real time. */
