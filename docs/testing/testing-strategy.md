@@ -75,5 +75,14 @@ Backend & engine tests run **inside Docker** — running `phpunit`/`pytest` on t
 
 ---
 
+## 4bis. Frontend accessibility guardrail (WCAG 2.2 AA)
+
+Two layers, added as **tests** so any frontend change is checked against the norm:
+
+- **Static lint** — `eslint-plugin-jsx-a11y` (recommended set) runs inside `npm run lint` (CI `frontend` job). **Currently `warn`** (non-blocking): the norm is measured on every change, but the known audit violations (A11Y-01/03/05/06) do not break CI yet. **PR2 fixes them, then flips the ruleset to `error`** (blocking).
+- **Structural axe** — `vitest-axe` in `src/test/a11y.test.tsx` renders the shared primitives (Button/Input/Select/ConfirmDialog) and asserts `toHaveNoViolations()` via the `expectNoA11yViolations()` helper (`src/test/utils.tsx`). Key screens (Modal, WeekGrid, MonthCalendar) are **`describe.skip` scaffolds asserting nothing yet** — PR2 fixes each and unskips it. Runs in `vitest run`. jsdom has no layout engine, so axe **skips colour-contrast (WCAG 1.4.3)** here — that axis is covered by the Playwright/axe pass added in PR2 alongside the contrast fixes. Known-violating components are `describe.skip` scaffolds, unskipped as PR2 fixes land.
+
+Matcher wiring: runtime `expect.extend` in `src/test/setup.ts`; the vitest-v3 type augmentation is `src/test/vitest-axe.d.ts` (vitest-axe ships only a stale global `Vi.Assertion`).
+
 ## 5. Known testing gaps
 - None outstanding. `TenantCacheIsolationTest` is implemented (B3) and the 9 PHPUnit 11 doc-comment deprecations were migrated to attributes (B6) — both resolved 2026-07-01 (see `../technical-debt.md`).
