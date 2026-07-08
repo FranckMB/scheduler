@@ -150,10 +150,21 @@ function VenuesEditor() {
   // Capture the venue at click time — the dropdown selection may change before
   // the user confirms, and we must delete the venue the dialog is about.
   const [pendingDeleteVenue, setPendingDeleteVenue] = useState<Venue | null>(null);
+  // Colours assigned to gyms created faster than the venues query refetches, so
+  // rapid successive adds don't all pick VENUE_PALETTE[0] off the stale list.
+  // Pruned once a colour actually lands in the venue list.
+  const pendingColorsRef = useRef<string[]>([]);
 
   // Fall back to the first venue when the selected id isn't in the list yet
   // (just-created, list refetching) so the panel never flashes "no venue".
   const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0] ?? null;
+
+  // Drop pending colours that the refetched venue list now carries.
+  const persistedColors = new Set(venues.map((v) => v.color?.toLowerCase()).filter((c): c is string => undefined !== c && null !== c));
+  useEffect(() => {
+    pendingColorsRef.current = pendingColorsRef.current.filter((c) => !persistedColors.has(c.toLowerCase()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venues]);
   const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
 
   const addVenue = (event: FormEvent) => {
@@ -167,9 +178,12 @@ function VenuesEditor() {
     setNameError(false);
     // Select the freshly created venue so the slot grid targets it — otherwise
     // the selection stays on the previous gym and slots land on the wrong one.
-    // A new gym gets a distinct rainbow colour by default (not flat grey).
+    // A new gym gets a distinct rainbow colour by default (not flat grey); count
+    // in-flight assignments so rapid adds don't collide on the same palette hue.
+    const color = nextVenueColor([...venues.map((v) => v.color), ...pendingColorsRef.current]);
+    pendingColorsRef.current.push(color);
     create.mutate(
-      { name: name.trim(), color: nextVenueColor(venues.map((v) => v.color)), canSplit: false },
+      { name: name.trim(), color, canSplit: false },
       { onSuccess: (created) => setSelectedId(created.id) },
     );
     setName("");
@@ -235,6 +249,9 @@ function VenuesEditor() {
               onChange={(e) => {
                 setSelectedId(e.target.value);
                 setEditingSlot(null);
+                // Drop the rename buffer so switching gyms can't write the name
+                // typed for the previous one onto the newly selected gym.
+                setVenueName("");
               }}
             >
               {venues.map((v) => (

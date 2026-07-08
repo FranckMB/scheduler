@@ -82,8 +82,10 @@ export function WizardPage() {
   const validation = useStepValidation(stepId);
   // The generation step is gated by the SAME blockers as the Récap "Continuer"
   // button — otherwise the left nav lets an onboarded club (nav never locked)
-  // jump straight to génération and bypass the gate. Lock it here too.
-  const generateBlocked = useStepValidation("recap").errors.length > 0;
+  // jump straight to génération and bypass the gate. Lock it here too, and keep
+  // it locked while the verdict is still loading (fail-closed).
+  const recapValidation = useStepValidation("recap");
+  const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
 
   // The period mode is persisted (localStorage). If its entry was deleted in the
   // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).

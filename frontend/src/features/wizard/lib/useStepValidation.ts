@@ -79,13 +79,19 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const reservations = useWizardStore((s) => s.reservations);
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
-  const { data: constraintValidation } = useConstraintValidation("recap" === stepId, periodEntryId);
+  // The pre-solve constraint check is only needed for the recap verdict, and only
+  // while the user is actually on the recap OR generate step — firing it on every
+  // earlier step is a wasted backend round-trip.
+  const currentStepId = useWizardStore((s) => s.stepId);
+  const constraintNeeded = "recap" === stepId && ("recap" === currentStepId || "generate" === currentStepId);
+  const constraintQuery = useConstraintValidation(constraintNeeded, periodEntryId);
+  const constraintValidation = constraintQuery.data;
 
   // On first load the queries default to [], which would flash a false blocking
   // error ("Ajoutez au moins une équipe") before the data arrives. Stay neutral
-  // until they settle (isLoading = first load only, not background refetches).
+  // but mark pending so gates stay closed (isLoading = first load only).
   if (teamsQuery.isLoading || venuesQuery.isLoading || slotsQuery.isLoading || coachesQuery.isLoading) {
-    return okValidation();
+    return { errors: [], warnings: [], pending: true };
   }
 
   if ("teams" === stepId) {
@@ -138,7 +144,9 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
         errors.push(humanizeConstraintError(conflict.reason));
       }
     }
-    return { errors, warnings: [] };
+    // Until the pre-solve check resolves, report pending so the generate gate
+    // stays closed rather than briefly allowing a launch on an invalid setup.
+    return { errors, warnings: [], pending: constraintNeeded && constraintQuery.isLoading };
   }
   return okValidation();
 }

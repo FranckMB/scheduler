@@ -15,7 +15,7 @@ const EXACT: Record<string, string> = {
   "LOCK rule type is only valid for TIME or DAY family.": "Le verrouillage n'est possible que sur une contrainte d'horaire ou de jour.",
   "Scope CLUB should not have a scope_target_id.": "Une contrainte à l'échelle du club ne doit pas cibler une équipe précise.",
   "Contradictory day constraints: allowed days overlap with forbidden days.": "Contraintes de jour contradictoires : un même jour est à la fois autorisé et interdit.",
-  "Contradictory time constraints: maxStartTime is less than minStartTime.": "Contraintes d'horaire contradictoires : l'heure de fin est avant l'heure de début.",
+  "Contradictory time constraints: maxStartTime is less than minStartTime.": "Contraintes d'horaire contradictoires : l'heure de début maximale est avant l'heure de début minimale.",
 };
 
 /** Turn a raw validator message into user-facing French; leave unknowns as-is. */
@@ -27,6 +27,12 @@ export function humanizeConstraintError(raw: string): string {
   // "Scope TEAM requires a scope_target_id." — the family varies, match the shape.
   if (/^Scope \w+ requires a scope_target_id\.$/.test(raw)) {
     return "Cette contrainte doit cibler une équipe ou un groupe.";
+  }
+  // The map is manually synced with the backend validator: an unknown string
+  // means it drifted. Surface it in dev so we notice, but still show it (raw
+  // English is better than hiding a real blocker) rather than swallowing it.
+  if (import.meta.env.DEV) {
+    console.warn(`[constraintErrors] unmapped validator message (backend drift?): ${JSON.stringify(raw)}`);
   }
   return raw;
 }
