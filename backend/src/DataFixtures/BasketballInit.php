@@ -777,81 +777,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         // ============================================================
-        // SECTION 8 — SLOT TEMPLATES (SM1 hard locks)
-        // ============================================================
-        //        $slotTemplates = [
-        //            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-        //            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-        //        ];
-        //
-        //        foreach ($slotTemplates as $slotData) {
-        //            $startTime = new DateTimeImmutable($slotData['startTime']);
-        //            $existing = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
-        //                'teamId' => $slotData['team']->getId(),
-        //                'venueId' => $venues[$slotData['venue']]->getId(),
-        //                'dayOfWeek' => $slotData['day'],
-        //                'startTime' => $startTime,
-        //            ]);
-        //            if (!$existing instanceof ScheduleSlotTemplate) {
-        //                $slot = new ScheduleSlotTemplate;
-        //                $slot->setClubId($club->getId());
-        //                $slot->setSeasonId($season->getId());
-        //                $slot->setScheduleId($season->getId());
-        //                $slot->setTeamId($slotData['team']->getId());
-        //                $slot->setVenueId($venues[$slotData['venue']]->getId());
-        //                $slot->setDayOfWeek($slotData['day']);
-        //                $slot->setStartTime($startTime);
-        //                $slot->setDurationMinutes($slotData['duration']);
-        //                $slot->setLockLevel($slotData['lock']);
-        //                $manager->persist($slot);
-        //            } elseif ($existing->getDurationMinutes() !== $slotData['duration']) {
-        //                $existing->setDurationMinutes($slotData['duration']);
-        //            }
-        //        }
-        //        $manager->flush();
-
-        // Loisir Féminine — HARD slot: Thursday at vDebarrosAnnexe, 20:30-22:30 (120 min)
-        // Remove old FACILITY constraint if it exists
-        //        $oldLoisirF = $manager->getRepository(Constraint::class)->findOneBy([
-        //            'clubId' => $club->getId(),
-        //            'name' => 'Loisir Féminine - Annexe jeudi exclusivement',
-        //        ]);
-        //        if ($oldLoisirF instanceof Constraint) {
-        //            $manager->remove($oldLoisirF);
-        //            $manager->flush();
-        //        }
-        //
-        //        $loisirF = $teams['Loisir Feminine'];
-        //        $lfSlotStart = new DateTimeImmutable('20:30');
-        //        $existingLfSlot = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
-        //            'teamId' => $loisirF->getId(),
-        //            'venueId' => $venues['vDebarrosAnnexe']->getId(),
-        //            'dayOfWeek' => 4,
-        //            'startTime' => $lfSlotStart,
-        //        ]);
-        //        if (!$existingLfSlot instanceof ScheduleSlotTemplate) {
-        //            $slot = new ScheduleSlotTemplate;
-        //            $slot->setClubId($club->getId());
-        //            $slot->setSeasonId($season->getId());
-        //            $slot->setScheduleId($season->getId());
-        //            $slot->setTeamId($loisirF->getId());
-        //            $slot->setVenueId($venues['vDebarros']->getId());
-        //            $slot->setDayOfWeek(4);
-        //            $slot->setStartTime($lfSlotStart);
-        //            $slot->setDurationMinutes(120);
-        //            $slot->setLockLevel(LockLevel::HARD);
-        //            $manager->persist($slot);
-        //        } else {
-        //            if (120 !== $existingLfSlot->getDurationMinutes()) {
-        //                $existingLfSlot->setDurationMinutes(120);
-        //            }
-        //            if (LockLevel::HARD !== $existingLfSlot->getLockLevel()) {
-        //                $existingLfSlot->setLockLevel(LockLevel::HARD);
-        //            }
-        //        }
-        //        $manager->flush();
-
-        // ============================================================
         // SECTION 9 — CONSTRAINTS
         // ============================================================
 
@@ -1017,24 +942,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             }
         }
 
-        // 9j — SM3: Wednesday only (HARD DAY constraint)
-        //        $existing = $manager->getRepository(Constraint::class)->findOneBy([
-        //            'clubId' => $club->getId(),
-        //            'name' => 'SM3 - Mercredi et Armand uniquement',
-        //        ]);
-        //        if (!$existing instanceof Constraint) {
-        //            $c = new Constraint;
-        //            $c->setClubId($club->getId());
-        //            $c->setSeasonId($season->getId());
-        //            $c->setScope(ConstraintScope::TEAM);
-        //            $c->setScopeTargetId($sm3->getId());
-        //            $c->setFamily(ConstraintFamily::DAY);
-        //            $c->setRuleType(ConstraintRuleType::HARD);
-        //            $c->setName('SM3 - Mercredi uniquement');
-        //            $c->setConfig(['forcedDays' => [3], 'preferredVenueId' => $venues['vArmand']->getId()]);
-        //            $c->setIsActive(true);
-        //            $manager->persist($c);
-        //        }
+
         // Veterans: Vendredi uniquement, interdit sur Camus/JDR/Jean Vilar/Tonkin/ADN
         $veteransTeam = $teams['Veterans'];
         $forbiddenVenueIds = [

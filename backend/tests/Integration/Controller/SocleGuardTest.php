@@ -16,6 +16,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
  *
  * @see \App\Service\SocleGuard
  */
+#[Group('phase1')]
 #[Group('integration')]
 final class SocleGuardTest extends WebTestCase
 {

@@ -127,16 +127,23 @@ export function WizardPage() {
     const venueList = venues.data ?? [];
     const slotList = slots.data ?? [];
     const withSlot = new Set(slotList.map((s) => s.venueId));
-    let target: WizardStepId = "recap";
+    let gap: WizardStepId | null = null;
     if (0 === (teams.data ?? []).length) {
-      target = "teams";
+      gap = "teams";
     } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id))) {
-      target = "venues";
+      gap = "venues";
     } else if (0 === (coaches.data ?? []).length) {
-      target = "coaches";
+      gap = "coaches";
     }
-    jumpTo(target);
-  }, [guided, ready, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
+    if (null !== gap) {
+      jumpTo(gap); // pull back to the first incomplete step
+    } else if (WIZARD_STEPS.findIndex((s) => s.id === stepId) < WIZARD_STEPS.findIndex((s) => "recap" === s.id)) {
+      // Everything filled and the user is before Récap → land on Récap. Do NOT
+      // pull a user already ON/AFTER Récap back (e.g. mid first-generation on the
+      // génération step — a remount must not yank them off the progress view).
+      jumpTo("recap");
+    }
+  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
   const quitPeriod = () => {
     exitPeriodMode();

@@ -247,6 +247,9 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $this->em->persist($baseline);
         $this->em->flush();
         $season->setBaselineScheduleId($baseline->getId());
+        // A validated baseline stamps the socle — overlays (secondary plans) need
+        // it (cockpit state 3), matching the real validate/set-baseline flow.
+        $season->setSocleValidatedAt(new DateTimeImmutable);
 
         $this->em->flush();
 
