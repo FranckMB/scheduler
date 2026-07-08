@@ -183,6 +183,39 @@ final class ScheduleConstraintBuilderTest extends TestCase
         self::assertSame([], $serialized, 'an unresolvable tag must emit NOTHING (no club-wide forbiddenVenueId)');
     }
 
+    public function testForcedVenueOnTagReservesItExclusively(): void
+    {
+        // Review NR (PR #120, F2): "impose" (forcedVenueId) on a group must DEDICATE
+        // the venue — forbid it for teams outside the tag — exactly like HARD
+        // "préfère" (preferredVenueId), else the strong-sounding impose would be
+        // weaker than a mere preference (the tagged group forced in, others free to
+        // pile in too).
+        $tag = (new TeamTag)->setId('tag-fem')->setClubId('club-1')->setName('FEMININE');
+        $this->teamTagRepository->method('findOneBy')->willReturn($tag);
+        $this->teamTagAssignmentRepository->method('findBy')->willReturn([
+            (new TeamTagAssignment)->setTeamId('team-a')->setTagId('tag-fem')->setSeasonId('season-1'),
+        ]);
+
+        $constraint = (new Constraint)
+            ->setId('c-impose')
+            ->setName('Groupe FEMININE · impose Gymnase A')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['targetTag' => 'FEMININE', 'forcedVenueId' => 'v-1'])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', [$this->team('team-a'), $this->team('team-b')]);
+
+        $forced = array_values(array_filter($serialized, static fn (array $r): bool => 'v-1' === ($r['config']['forcedVenueId'] ?? null)));
+        $forbidden = array_values(array_filter($serialized, static fn (array $r): bool => 'v-1' === ($r['config']['forbiddenVenueId'] ?? null)));
+        self::assertCount(1, $forced, 'the tagged team is forced onto the venue');
+        self::assertSame('team-a', $forced[0]['scopeTargetId']);
+        self::assertCount(1, $forbidden, 'a non-tag team gets the venue forbidden (exclusivity)');
+        self::assertSame('team-b', $forbidden[0]['scopeTargetId']);
+    }
+
     public function testCoachAvailabilityIsNeverClubExpanded(): void
     {
         $constraint = (new Constraint)

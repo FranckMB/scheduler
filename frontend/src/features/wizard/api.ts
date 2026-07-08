@@ -197,6 +197,7 @@ export const listTeamTags = (): Promise<TeamTag[]> => collectionAll<TeamTag>("te
 /** Base plan constraints (permanent=1) or a period's dated constraints (calendarEntryId). */
 export const listConstraints = (params?: Record<string, string>): Promise<Constraint[]> => collectionAll<Constraint>("constraints", params);
 export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();
+export const updateConstraint = (id: string, body: ConstraintPayload): Promise<Constraint> => api.put(`constraints/${id}`, { json: body }).json();
 export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
 
 // --- Recap + generate (W5) ---
