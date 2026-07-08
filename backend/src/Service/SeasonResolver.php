@@ -168,6 +168,8 @@ final class SeasonResolver
      */
     public function isReadonly(Season $season, ?DateTimeImmutable $today = null): bool
     {
-        return self::isReadonlyAmong($season, $this->seasonsForClub($season->getClubId()), $today);
+        // Clock-aware like currentSeason()/isCurrent() — the dev simulator shifts
+        // this too (and prod stays on real time via the native clock).
+        return self::isReadonlyAmong($season, $this->seasonsForClub($season->getClubId()), $today ?? $this->clock->now());
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Clock;
 
-use DateTimeImmutable;
 use DateTimeZone;
 use Psr\Clock\ClockInterface as PsrClockInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -37,11 +36,5 @@ final class SimulatedClock implements ClockInterface, PsrClockInterface
     public function withTimeZone(DateTimeZone|string $timezone): static
     {
         return new self($this->inner->withTimeZone($timezone), $this->store);
-    }
-
-    /** Convenience for callers that just need a DateTimeImmutable. */
-    public function nowImmutable(): DateTimeImmutable
-    {
-        return DateTimeImmutable::createFromInterface($this->now());
     }
 }
