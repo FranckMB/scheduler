@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/shared/components/ui/card";
 
 import type { TeamLevel } from "../api";
 import { coachMeta, orderedCoaches } from "../lib/ranking";
+import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
 import { SectionCountTitle, SummaryRow, TeamTierAccordion, VenueSwatch } from "./StructureSummary";
@@ -52,10 +53,7 @@ export function RecapStep() {
   const salaried = coaches.filter((c) => c.isEmployee).length;
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
   const hardConstraints = constraints.filter((c) => c.ruleType === "HARD").length;
-  const slotsByVenue = new Map<string, number>();
-  for (const s of slots) {
-    slotsByVenue.set(s.venueId, (slotsByVenue.get(s.venueId) ?? 0) + 1);
-  }
+  const slotsByVenue = countSlotsByVenue(slots);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
@@ -65,9 +63,6 @@ export function RecapStep() {
     const coach = link ? coaches.find((c) => c.id === link.coachId) : undefined;
     return coach ? `${coach.firstName} ${coach.lastName}`.trim() : null;
   };
-  // Teams a coach handles, by name (for "Maxime (SM1)" / "Emerick (SF1, U15F1)").
-  const coachTeamNames = (coachId: string): string[] =>
-    teamCoaches.filter((tc) => tc.coachId === coachId).map((tc) => teamName.get(tc.teamId) ?? "").filter((n) => "" !== n);
 
   return (
     <div>
@@ -127,11 +122,12 @@ export function RecapStep() {
           {0 === coaches.length
             ? empty
             : orderedCoaches(coaches, coachPlayerIds).map(({ coach: c }) => {
-                const teamsOf = coachTeamNames(c.id);
+                const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
+                const fullName = `${c.firstName} ${c.lastName}`.trim();
                 return (
                   <SummaryRow
                     key={c.id}
-                    label={`${c.firstName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
+                    label={`${fullName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
                     meta={coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}
                   />
                 );

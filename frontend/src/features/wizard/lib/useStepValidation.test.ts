@@ -114,4 +114,12 @@ describe("useStepValidation — venue slot rule is skipped in period mode", () =
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
   });
+
+  it("skips the rule in period mode even before the entry id resolves (no dead-end)", () => {
+    // Keyed on mode, not the id: mode='period' with calendarEntryId=null must NOT
+    // raise a blocker the user cannot clear (slots are read-only in period mode).
+    useWizardStore.setState({ mode: "period", calendarEntryId: null, stepId: "venues" });
+    const { result } = renderHook(() => useStepValidation("venues"));
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+  });
 });

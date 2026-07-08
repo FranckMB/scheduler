@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Team } from "../api";
 import { useEntryConflicts } from "@/features/cockpit/queries";
 import { coachMeta, orderedCoaches } from "../lib/ranking";
+import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { usePriorityTiers, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 
 /** One item per row — shared by the recap and the period read-only views. */
@@ -88,10 +89,7 @@ export function ReadonlyVenues({ calendarEntryId }: { calendarEntryId: string | 
   const { data: slots = [] } = useVenueSlots();
   const { data: conflicts } = useEntryConflicts(calendarEntryId);
   const closed = new Set(conflicts?.venueIds ?? []);
-  const slotsByVenue = new Map<string, number>();
-  for (const s of slots) {
-    slotsByVenue.set(s.venueId, (slotsByVenue.get(s.venueId) ?? 0) + 1);
-  }
+  const slotsByVenue = countSlotsByVenue(slots);
 
   return (
     <div className="space-y-3">
@@ -137,8 +135,6 @@ export function ReadonlyCoaches() {
 
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const coachTeamNames = (coachId: string): string[] =>
-    teamCoaches.filter((tc) => tc.coachId === coachId).map((tc) => teamName.get(tc.teamId) ?? "").filter((n) => "" !== n);
 
   return (
     <div className="space-y-3">
@@ -148,13 +144,12 @@ export function ReadonlyCoaches() {
       ) : (
         <ul className="flex flex-col gap-1 rounded-md border border-border">
           {orderedCoaches(coaches, coachPlayerIds).map(({ coach: c }) => {
-            const teamsOf = coachTeamNames(c.id);
+            const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
+            const meta = coachMeta(c.isEmployee, coachPlayerIds.has(c.id));
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-1.5 text-sm last:border-0">
                 <span>{`${c.firstName} ${c.lastName}`.trim() + (teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : "")}</span>
-                {coachMeta(c.isEmployee, coachPlayerIds.has(c.id)) ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">{coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}</span>
-                ) : null}
+                {meta ? <span className="shrink-0 text-xs text-muted-foreground">{meta}</span> : null}
               </li>
             );
           })}

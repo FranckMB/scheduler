@@ -85,6 +85,10 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const reservations = useWizardStore((s) => s.reservations);
+  // Period (secondary planning) mode — keyed on the mode itself, NOT the entry id:
+  // a period with a not-yet-resolved calendarEntryId is still period mode, and the
+  // slots there are inherited & read-only regardless.
+  const periodMode = useWizardStore((s) => "period" === s.mode);
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
@@ -112,7 +116,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     // In period mode the venues + their slots are inherited from the base plan and
     // read-only — a "sans créneau" blocker there is a false alarm (the user cannot
     // add slots on a secondary planning). The rule only applies to the base plan.
-    if (null === periodEntryId) {
+    if (!periodMode) {
       const empty = venuesWithoutSlot(venues, slots);
       if (empty.length > 0) {
         errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
@@ -144,7 +148,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     }
     // Period mode: slots are inherited & read-only — skip the "sans créneau" gate
     // (same rationale as the venues step above).
-    if (null === periodEntryId) {
+    if (!periodMode) {
       const empty = venuesWithoutSlot(venues, slots);
       if (empty.length > 0) {
         errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
