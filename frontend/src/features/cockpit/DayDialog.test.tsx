@@ -8,15 +8,16 @@ import { DayDialog } from "./DayDialog";
 
 const deleteMutate = vi.fn();
 const cutoffMutate = vi.fn();
+const closureMutate = vi.fn();
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
-  useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/features/planning/queries", () => ({
-  useVenues: () => ({ data: [] }),
+  useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
 }));
 
 const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
@@ -105,5 +106,32 @@ describe("DayDialog — deletion is always confirmed", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
 
     expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure de Noël", startDate: "2026-05-12", endDate: "2026-05-18" }, expect.anything());
+  });
+
+  it("builds a structured '{venue} — {reason}' closure title, defaulting the reason to 'fermé'", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Signaler une indisponibilité" }));
+    await userEvent.selectOptions(screen.getByRole("combobox"), "v1");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(closureMutate).toHaveBeenCalledWith(
+      { title: "Gymnase A — fermé", startDate: "2026-05-12", endDate: "2026-05-12", venueId: "v1" },
+      expect.anything(),
+    );
+  });
+
+  it("puts the typed reason after the venue in the closure title", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Signaler une indisponibilité" }));
+    await userEvent.selectOptions(screen.getByRole("combobox"), "v1");
+    await userEvent.type(screen.getByPlaceholderText(/Intitulé \(optionnel/), "Travaux");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(closureMutate).toHaveBeenCalledWith(
+      { title: "Gymnase A — Travaux", startDate: "2026-05-12", endDate: "2026-05-12", venueId: "v1" },
+      expect.anything(),
+    );
   });
 });

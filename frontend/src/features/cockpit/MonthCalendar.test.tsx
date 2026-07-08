@@ -68,8 +68,10 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(screen.getAllByTitle("Gym fermé")[0]).toHaveTextContent("⛔");
     expect(screen.getByTitle("Tournoi")).toHaveTextContent("🚫");
     expect(screen.getByTitle("AG")).toHaveTextContent("🎉");
-    // Holiday window 14→17 May = 4 beach markers.
-    expect(screen.getAllByTitle("Vacances scolaires")).toHaveLength(4);
+    // Holiday window 14→17 May = 4 beach markers, tooltip names the break.
+    expect(screen.getAllByTitle("Vacances — Pont de mai")).toHaveLength(4);
+    // The break name is also written in the cell (small label), one per covered day.
+    expect(screen.getAllByText("Pont de mai")).toHaveLength(4);
   });
 
   it("marks a cutoff 🛑 (distinct from other periods) on every day of its window", () => {

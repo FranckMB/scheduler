@@ -180,8 +180,11 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
   const submit = () => {
     if (venueId === "" || !validEnd) return;
     const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Salle";
+    // Structured "gymnase — raison" so the calendar tooltip always names both the
+    // venue and why it's closed (the reason defaults to "fermé" when left blank).
+    const reason = title.trim() === "" ? "fermé" : title.trim();
     createClosure.mutate(
-      { title: title.trim() === "" ? `${venueName} fermé` : title.trim(), startDate: iso, endDate, venueId },
+      { title: `${venueName} — ${reason}`, startDate: iso, endDate, venueId },
       // Errors are toasted by the hook itself (unmount-safe rollback message).
       { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); } },
     );
