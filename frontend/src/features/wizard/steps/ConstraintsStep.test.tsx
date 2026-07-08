@@ -4,17 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-const createMut = vi.fn();
+import type { Constraint } from "../api";
+
+const h = vi.hoisted(() => ({ createMut: vi.fn(), updateMut: vi.fn(), list: [] as Constraint[] }));
 
 vi.mock("../queries", () => ({
-  useWizardConstraints: () => ({ data: [] }),
+  useWizardConstraints: () => ({ data: h.list }),
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }] }),
   usePriorityTiers: () => ({ data: [{ id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
-  useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }] }),
+  useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
-  useCreateConstraint: () => ({ mutate: createMut, isPending: false }),
+  useCreateConstraint: () => ({ mutate: h.createMut, isPending: false }),
+  useUpdateConstraint: () => ({ mutate: h.updateMut, isPending: false }),
   useDeleteConstraint: () => ({ mutate: vi.fn() }),
 }));
 
@@ -27,7 +30,11 @@ import { ConstraintsStep } from "./ConstraintsStep";
  * here must update the matrix (and its generated engine test) first.
  */
 describe("ConstraintsStep — constraint-matrix offer lock", () => {
-  beforeEach(() => createMut.mockClear());
+  beforeEach(() => {
+    h.createMut.mockClear();
+    h.updateMut.mockClear();
+    h.list = [];
+  });
 
   it("offers exactly Obligatoire/Préféré/Verrouillé — BONUS is gone (ENG-12)", () => {
     renderWithProviders(<ConstraintsStep />);
@@ -49,8 +56,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.click(screen.getByRole("button", { name: "Lun" }));
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(createMut).toHaveBeenCalledOnce();
-    expect(createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", unavailableDays: [1] } });
+    expect(h.createMut).toHaveBeenCalledOnce();
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", unavailableDays: [1] } });
   });
 
   it("DAY emits forbiddenDays (the matrix key) whatever the ruleType", async () => {
@@ -62,8 +69,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     // default ruleType = PREFERRED (soft "avoid these days", ENG-10 fix engine-side)
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(createMut).toHaveBeenCalledOnce();
-    expect(createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "PREFERRED", config: { forbiddenDays: [3] } });
+    expect(h.createMut).toHaveBeenCalledOnce();
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "PREFERRED", config: { forbiddenDays: [3] } });
   });
 
   it("FACILITY emits preferredVenueId or forbiddenVenueId (matrix keys)", async () => {
@@ -74,6 +81,90 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", config: { preferredVenueId: "v1" } });
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", config: { preferredVenueId: "v1" } });
+  });
+
+  it("FACILITY 'impose' emits a HARD forcedVenueId (matrix HONORED_HARD)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    await user.selectOptions(screen.getByLabelText("Préférence"), "forced");
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v1" } });
+  });
+
+  it("DAY 'uniquement' emits HARD forcedDays (matrix HONORED_HARD)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+    await user.selectOptions(screen.getByLabelText("Type de jour"), "forced");
+    await user.click(screen.getByRole("button", { name: "Ven" }));
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { forcedDays: [5] } });
+  });
+});
+
+/**
+ * Editing an EXISTING constraint reuses the same form (PUT). The critical
+ * guard: loading a forced-venue/day rule back into the form and saving must
+ * NOT downgrade forcedVenueId→preferredVenueId (a silent §7.1 semantics break).
+ */
+describe("ConstraintsStep — edit an existing constraint", () => {
+  const forcedFacility: Constraint = {
+    id: "c-sm4",
+    name: "SM1 · impose Gymnase A",
+    scope: "TEAM",
+    scopeTargetId: "t1",
+    family: "FACILITY",
+    ruleType: "HARD",
+    config: { forcedVenueId: "v1" },
+    isActive: true,
+  };
+
+  beforeEach(() => {
+    h.createMut.mockClear();
+    h.updateMut.mockClear();
+    h.list = [forcedFacility];
+  });
+
+  it("round-trips a forced venue without downgrading it to preferred, and PUTs the same id", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    expect(screen.getByText("SM1 · impose Gymnase A")).toBeInTheDocument();
+
+    // Enter edit mode → the form pre-fills from config.
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    expect(screen.getByLabelText("Préférence")).toHaveValue("forced");
+    expect(screen.getByLabelText("Gymnase")).toHaveValue("v1");
+
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+
+    expect(h.createMut).not.toHaveBeenCalled();
+    expect(h.updateMut).toHaveBeenCalledOnce();
+    const arg = h.updateMut.mock.calls[0][0] as { id: string; body: Constraint };
+    expect(arg.id).toBe("c-sm4");
+    expect(arg.body.config).toHaveProperty("forcedVenueId", "v1");
+    expect(arg.body.config).not.toHaveProperty("preferredVenueId");
+    expect(arg.body.ruleType).toBe("HARD");
+  });
+
+  it("persists an edited venue choice under the forced key", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+
+    const arg = h.updateMut.mock.calls[0][0] as { body: Constraint };
+    expect(arg.body.config).toEqual({ forcedVenueId: "v2" });
   });
 });

@@ -108,14 +108,20 @@ MATRIX: tuple[MatrixCell, ...] = (
     MatrixCell("FACILITY", "PREFERRED", "preferredVenueId", "CLUB", Expectation.WARNING, False,
                note="target-less facility rule cannot be applied — explicit warning",
                config={"preferredVenueId": "{good_venue}"}),
+    # --- FACILITY forcedVenueId / DAY forcedDays (wizard "impose"/"uniquement") --
+    # The wizard edit form offers these as always-hard modes so seeded "must play
+    # here" / "this day only" rules (SM4→Jean Vilar, Veterans vendredi) round-trip
+    # faithfully instead of being downgraded to a soft preference.
+    MatrixCell("FACILITY", "HARD", "forcedVenueId", "TEAM", Expectation.HONORED_HARD, True,
+               note="wizard 'impose' = forced venue (must play here), always hard",
+               config={"forcedVenueId": "{good_venue}"}),
+    MatrixCell("DAY", "HARD", "forcedDays", "TEAM", Expectation.HONORED_HARD, True,
+               note="wizard 'uniquement' = only these days allowed (forced), always hard",
+               config={"forcedDays": [1]}),
     # --- Understood by the engine but never emitted by the wizard ---------------
-    MatrixCell("DAY", "HARD", "forcedDays", "TEAM", Expectation.NOT_OFFERED, False,
-               note="engine-only vocabulary (honored hard if ever sent)"),
     MatrixCell("DAY", "HARD", "allowedDays", "TEAM", Expectation.NOT_OFFERED, False),
     MatrixCell("DAY", "PREFERRED", "preferredDays", "TEAM", Expectation.NOT_OFFERED, False,
                note="objective reads it, wizard never emits it (ENG-10 root)"),
-    MatrixCell("FACILITY", "HARD", "forcedVenueId", "TEAM", Expectation.NOT_OFFERED, False,
-               note="emitted by the backend venue-closure expansion, not the wizard"),
     MatrixCell("FACILITY_CAPACITY", "HARD", "maxTeams", "TEAM", Expectation.NOT_OFFERED, False,
                note="emitted by the backend (canSplit), not the wizard"),
 )

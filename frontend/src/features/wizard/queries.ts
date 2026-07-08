@@ -209,6 +209,14 @@ export function useCreateConstraint() {
   });
 }
 
+export function useUpdateConstraint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ConstraintPayload }) => wizardApi.updateConstraint(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
+  });
+}
+
 export function useDeleteConstraint() {
   const queryClient = useQueryClient();
   return useMutation({

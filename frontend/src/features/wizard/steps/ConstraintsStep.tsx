@@ -1,4 +1,4 @@
-import { Lock, Plus, Trash2 } from "lucide-react";
+import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, PriorityTier, Team, Venue } from "../api";
 import { DAYS, dayLabel, hhmm } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
 const FAMILIES: { key: ConstraintFamily; label: string }[] = [
@@ -33,6 +33,9 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
   BONUS: "Bonus",
   LOCK: "Verrouillé",
 };
+
+/** Coerce a JSON config value (unknown) into a day-number array. */
+const asNums = (v: unknown): number[] => (Array.isArray(v) ? v.map(Number).filter((n) => !Number.isNaN(n)) : []);
 
 function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) => void }) {
   return (
@@ -121,6 +124,7 @@ export function ConstraintsStep() {
   const { data: coaches = [] } = useWizardCoaches();
   const { data: venues = [] } = useWizardVenues();
   const create = useCreateConstraint();
+  const update = useUpdateConstraint();
   const del = useDeleteConstraint();
 
   const [family, setFamily] = useState<ConstraintFamily>("TIME");
@@ -131,10 +135,15 @@ export function ConstraintsStep() {
   const [minTime, setMinTime] = useState("");
   const [maxTime, setMaxTime] = useState("");
   const [days, setDays] = useState<Set<number>>(new Set());
-  const [venueMode, setVenueMode] = useState<"preferred" | "forbidden">("preferred");
+  // "à éviter" (forbiddenDays) vs "uniquement" (forcedDays — le seul jour permis).
+  const [dayMode, setDayMode] = useState<"forbidden" | "forced">("forbidden");
+  // "préfère" (preferredVenueId) · "évite" (forbiddenVenueId) · "impose" (forcedVenueId, dur).
+  const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced">("preferred");
   const [venueId, setVenueId] = useState("");
   const [coachId, setCoachId] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
+  // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
@@ -170,11 +179,19 @@ export function ConstraintsStep() {
       if (0 === days.size) {
         return null;
       }
+      if ("forced" === dayMode) {
+        // "uniquement" = seuls ces jours sont permis (forcedDays), toujours dur.
+        return { name: `${who} · uniquement ${dayNames(days)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedDays: [...days] } };
+      }
       return { name: `${who} · pas ${dayNames(days)}`, scope, scopeTargetId, family, ruleType, config: { ...tagConfig, forbiddenDays: [...days] } };
     }
     if ("FACILITY" === family) {
       if ("" === venueId) {
         return null;
+      }
+      if ("forced" === venueMode) {
+        // "impose" = doit se dérouler dans ce gymnase (forcedVenueId), toujours dur.
+        return { name: `${who} · impose ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedVenueId: venueId } };
       }
       const config = { ...tagConfig, ...("preferred" === venueMode ? { preferredVenueId: venueId } : { forbiddenVenueId: venueId }) };
       const verb = "preferred" === venueMode ? "préfère" : "évite";
@@ -195,16 +212,71 @@ export function ConstraintsStep() {
     };
   }
 
-  const add = () => {
+  const resetForm = () => {
+    setEditingId(null);
+    setTarget("");
+    setMinTime("");
+    setMaxTime("");
+    setDays(new Set());
+    setDayMode("forbidden");
+    setVenueMode("preferred");
+    setVenueId("");
+    setCoachId("");
+    setRuleType("PREFERRED");
+  };
+
+  const submit = () => {
     const payload = build();
     if (null === payload) {
       return;
     }
+    if (null !== editingId) {
+      // Edit: PUT the existing row, keep it active, then clear the form.
+      update.mutate({ id: editingId, body: { ...payload, isActive: true } }, { onSuccess: resetForm });
+      return;
+    }
     // In period mode, attach the constraint to the entry → dated (excluded from base).
-    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload);
-    setMinTime("");
-    setMaxTime("");
-    setDays(new Set());
+    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload, { onSuccess: resetForm });
+  };
+
+  // Load an existing constraint into the shared form (reverse of build()): resolve
+  // the target picker + per-family config back into the controlled inputs.
+  const editConstraint = (c: Constraint) => {
+    setMode("constraint");
+    setFamily(c.family);
+    setRuleType(c.ruleType);
+    const cfg = c.config;
+    const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
+    if ("COACH_AVAILABILITY" === c.family) {
+      setCoachId("string" === typeof cfg.coachId ? cfg.coachId : (c.scopeTargetId ?? ""));
+      setDays(new Set(asNums(cfg.unavailableDays)));
+    } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
+      setTarget(c.scopeTargetId);
+    } else {
+      setTarget("" !== tag ? `tag:${tag}` : "");
+    }
+    if ("TIME" === c.family) {
+      setMinTime("string" === typeof cfg.minStartTime ? cfg.minStartTime : "");
+      setMaxTime("string" === typeof cfg.maxStartTime ? cfg.maxStartTime : "");
+    }
+    if ("DAY" === c.family) {
+      const forced = Array.isArray(cfg.forcedDays);
+      setDayMode(forced ? "forced" : "forbidden");
+      setDays(new Set(asNums(forced ? cfg.forcedDays : cfg.forbiddenDays)));
+    }
+    if ("FACILITY" === c.family) {
+      if ("string" === typeof cfg.forcedVenueId) {
+        setVenueMode("forced");
+        setVenueId(cfg.forcedVenueId);
+      } else if ("string" === typeof cfg.forbiddenVenueId) {
+        setVenueMode("forbidden");
+        setVenueId(cfg.forbiddenVenueId);
+      } else {
+        setVenueMode("preferred");
+        setVenueId("string" === typeof cfg.preferredVenueId ? cfg.preferredVenueId : "");
+      }
+    }
+    setEditingId(c.id);
   };
 
   const teamPicker = (
@@ -250,6 +322,10 @@ export function ConstraintsStep() {
               key={f.key}
               type="button"
               onClick={() => {
+                // Switching family cancels any in-progress edit (the form is shared).
+                if (null !== editingId) {
+                  resetForm();
+                }
                 setMode("constraint");
                 setFamily(f.key);
               }}
@@ -261,7 +337,12 @@ export function ConstraintsStep() {
         })}
         <button
           type="button"
-          onClick={() => setMode("reserve")}
+          onClick={() => {
+            if (null !== editingId) {
+              resetForm();
+            }
+            setMode("reserve");
+          }}
           className={cn(
             "-mb-px flex items-center gap-1 border-b-2 px-3 py-1.5 text-sm",
             "reserve" === mode ? "border-accent font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
@@ -295,16 +376,20 @@ export function ConstraintsStep() {
 
         {"DAY" === family && (
           <>
-            <span className="text-xs text-muted-foreground">à éviter :</span>
+            <Select aria-label="Type de jour" className="h-8 w-28" value={dayMode} onChange={(e) => setDayMode(e.target.value as "forbidden" | "forced")}>
+              <option value="forbidden">à éviter</option>
+              <option value="forced">uniquement</option>
+            </Select>
             <DayPicker days={days} toggle={toggleDay} />
           </>
         )}
 
         {"FACILITY" === family && (
           <>
-            <Select aria-label="Préférence" className="h-8 w-24" value={venueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden")}>
+            <Select aria-label="Préférence" className="h-8 w-24" value={venueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden" | "forced")}>
               <option value="preferred">préfère</option>
               <option value="forbidden">évite</option>
+              <option value="forced">impose</option>
             </Select>
             <Select aria-label="Gymnase" className="h-8 w-44" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
               <option value="">— gymnase —</option>
@@ -332,10 +417,10 @@ export function ConstraintsStep() {
           </>
         )}
 
-        {"COACH_AVAILABILITY" === family ? (
-          // A coach availability is ALWAYS enforced hard by the solver (a person
-          // cannot be in two places) — offering a rule selector here was a lie
-          // (audit ENG-10..13 review); the payload pins HARD below.
+        {"COACH_AVAILABILITY" === family || ("DAY" === family && "forced" === dayMode) || ("FACILITY" === family && "forced" === venueMode) ? (
+          // Coach availability + "impose"/"uniquement" are ALWAYS hard (a person
+          // can't be in two places; a forced venue/day is a must, not a nudge) —
+          // the payload pins HARD, so a rule selector here would be a lie.
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Obligatoire</span>
         ) : (
           <Select aria-label="Règle" className="h-8 w-28" value={ruleType} onChange={(e) => setRuleType(e.target.value as ConstraintRuleType)}>
@@ -346,8 +431,20 @@ export function ConstraintsStep() {
             ))}
           </Select>
         )}
-        <Button size="icon" className="ml-auto size-8" onClick={add} disabled={create.isPending} title="Ajouter la contrainte" aria-label="Ajouter la contrainte">
-          <Plus className="size-4" />
+        {null !== editingId && (
+          <Button size="sm" variant="ghost" className="ml-auto h-8" onClick={resetForm} title="Annuler la modification">
+            Annuler
+          </Button>
+        )}
+        <Button
+          size="icon"
+          className={cn("size-8", null === editingId && "ml-auto")}
+          onClick={submit}
+          disabled={create.isPending || update.isPending}
+          title={null !== editingId ? "Enregistrer la contrainte" : "Ajouter la contrainte"}
+          aria-label={null !== editingId ? "Enregistrer la contrainte" : "Ajouter la contrainte"}
+        >
+          {null !== editingId ? <Check className="size-4" /> : <Plus className="size-4" />}
         </Button>
       </div>
 
@@ -357,9 +454,12 @@ export function ConstraintsStep() {
       ) : (
         <ul className="flex flex-col gap-1">
           {list.map((c: Constraint) => (
-            <li key={c.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
+            <li key={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
               <span className="flex-1">{c.name}</span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
+              <button type="button" aria-label="Modifier" className="text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
+                <Pencil className="size-4" />
+              </button>
               <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
                 <Trash2 className="size-4" />
               </button>
