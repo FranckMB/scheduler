@@ -48,7 +48,12 @@ final class DevClockController extends AbstractController
         $this->assertDev();
 
         $body = json_decode($request->getContent() ?: '{}', true);
-        $at = \is_array($body) ? ($body['at'] ?? null) : null;
+        // Require an explicit `at` key so a malformed/empty body can't silently
+        // reset a pinned clock (which would read as a 200, not the bug it is).
+        if (!\is_array($body) || !\array_key_exists('at', $body)) {
+            return $this->json(['error' => 'Invalid payload: expected {"at": ISO|null}.'], Response::HTTP_BAD_REQUEST);
+        }
+        $at = $body['at'];
 
         if (null === $at) {
             $this->store->set(null); // release → real time
@@ -70,9 +75,14 @@ final class DevClockController extends AbstractController
      */
     private function state(): array
     {
+        // Single store read: when pinned, `now` IS the pin; only fall back to the
+        // real clock when unpinned (avoids a second Redis round-trip per call).
+        $pinned = $this->store->get();
+        $now = $pinned ?? DateTimeImmutable::createFromInterface($this->clock->now());
+
         return [
-            'now' => $this->clock->now()->format(DateTimeInterface::ATOM),
-            'pinned' => null !== $this->store->get(),
+            'now' => $now->format(DateTimeInterface::ATOM),
+            'pinned' => null !== $pinned,
         ];
     }
 
