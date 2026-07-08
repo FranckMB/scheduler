@@ -15,7 +15,7 @@ import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
-import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
+import { ReadonlyTeams } from "./StructureSummary";
 
 const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "—" },
@@ -203,9 +203,8 @@ const zoneTierId = (id: string): number | null => (id.startsWith("zone-") ? Numb
 
 export function TeamsStep() {
   const periodMode = useWizardStore((s) => s.mode === "period");
-  const { data: teams = [] } = useWizardTeams();
   if (periodMode) {
-    return <PeriodReadOnlyStructure title="Équipes" items={teams.map((t) => ({ id: t.id, label: t.name }))} />;
+    return <ReadonlyTeams />;
   }
   return <TeamsEditor />;
 }

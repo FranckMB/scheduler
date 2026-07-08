@@ -22,7 +22,7 @@ import {
   useWizardTeams,
 } from "../queries";
 import { useWizardStore } from "../store";
-import { PeriodReadOnlyStructure } from "./PeriodReadOnly";
+import { ReadonlyCoaches } from "./StructureSummary";
 
 function payload(coach: Coach, patch: Partial<Coach>) {
   return { firstName: coach.firstName, lastName: coach.lastName, email: coach.email, isEmployee: coach.isEmployee, isActive: coach.isActive, ...patch };
@@ -126,9 +126,8 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
 
 export function CoachesStep() {
   const periodMode = useWizardStore((s) => s.mode === "period");
-  const { data: coaches = [] } = useWizardCoaches();
   if (periodMode) {
-    return <PeriodReadOnlyStructure title="Coachs" items={coaches.map((c) => ({ id: c.id, label: `${c.firstName} ${c.lastName}`.trim() }))} />;
+    return <ReadonlyCoaches />;
   }
   return <CoachesEditor />;
 }
