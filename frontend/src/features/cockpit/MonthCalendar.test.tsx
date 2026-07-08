@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { axe } from "vitest-axe";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { MonthCalendar } from "./MonthCalendar";
@@ -87,6 +88,30 @@ describe("MonthCalendar — projection of the exception layer", () => {
 
     // role/aria-label: the marker must be perceivable beyond the hover tooltip.
     expect(screen.getByRole("img", { name: "Férié — Fête du Travail" })).toBeInTheDocument();
+  });
+
+  it("exposes info-carrying emojis as text alternatives, not colour/tooltip only (A11Y-05, WCAG 1.1.1)", async () => {
+    const { container } = renderMay(
+      [entry({ id: "a1", title: "AG du club", startDate: "2026-05-26", endDate: "2026-05-26" })],
+      holidays,
+    );
+
+    // The 🏖 holiday marker and the 🎉 event marker carry a screen-reader label,
+    // not just a hover title — regression for the audit's title-only inconsistency.
+    expect(screen.getAllByRole("img", { name: "Vacances — Pont de mai" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "AG du club" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("gives an empty-title entry a meaningful accessible name, never an empty one (review C3)", async () => {
+    const { container } = renderMay([
+      entry({ id: "cut", kind: "period", periodType: "cutoff", title: "", startDate: "2026-05-12", endDate: "2026-05-12" }),
+    ]);
+
+    // A blank title must not become aria-label="" (silent for SR, axe violation) —
+    // it falls back to the marker's meaning.
+    expect(screen.getByRole("img", { name: "Coupure" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it("opens the day dialog on click with that day's entries", async () => {

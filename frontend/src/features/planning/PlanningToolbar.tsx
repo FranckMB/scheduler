@@ -55,6 +55,7 @@ export function PlanningToolbar({
     <>
       {null !== editingName ? (
         <input
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- reveals an inline rename field; focusing it immediately is the expected behaviour
           autoFocus
           aria-label="Nom du planning"
           value={editingName}

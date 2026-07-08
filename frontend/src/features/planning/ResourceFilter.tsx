@@ -50,6 +50,7 @@ export function ResourceFilter({ viewMode, resources, selected, onToggle, onClea
           <div className="absolute z-[60] mt-1 w-72 rounded-md border border-border bg-card shadow-md">
             <div className="border-b border-border p-2">
               <input
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- search field inside a just-opened popover; focusing it is the expected behaviour
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

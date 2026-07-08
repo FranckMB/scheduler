@@ -101,6 +101,7 @@ export function Menu({ label, trigger, children, className }: MenuProps) {
           ref={panelRef}
           id={menuId}
           role="menu"
+          tabIndex={-1}
           aria-label={label}
           onKeyDown={onPanelKeyDown}
           className="absolute right-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-background p-1 shadow-lg"

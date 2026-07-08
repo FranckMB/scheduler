@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { axe } from "vitest-axe";
 
 import type { Coach, Slot, Team, Venue } from "./api";
 import { buildGrid, type Lookups } from "./lib/grid";
@@ -39,5 +40,16 @@ describe("WeekGrid", () => {
     const cell = screen.getByText("U11");
     cell.click();
     expect(onSelect).toHaveBeenCalledWith("a");
+  });
+
+  it("names the venue as TEXT in every view, not colour only (A11Y-01, WCAG 1.4.1)", async () => {
+    // In the team ('equipe') view the venue is no longer a column header — it must
+    // still be readable as text on the cell (not conveyed by the border/tint colour
+    // alone), so a colourblind or touch user can tell venues apart.
+    const model = buildGrid([slot], "equipe", lookups);
+    const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} />);
+
+    expect(screen.getByText("Gymnase Alpha")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

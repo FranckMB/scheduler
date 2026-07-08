@@ -16,6 +16,9 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
+  // Generic heading wrapper — content is always supplied by callers via children
+  // (the rule cannot see through the props spread).
+  // eslint-disable-next-line jsx-a11y/heading-has-content
   return <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />;
 }
 
