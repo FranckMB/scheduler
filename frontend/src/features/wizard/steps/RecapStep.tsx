@@ -1,4 +1,3 @@
-import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AccordionSection } from "@/shared/components/ui/accordion";
@@ -7,6 +6,7 @@ import { Card, CardContent } from "@/shared/components/ui/card";
 import type { TeamLevel } from "../api";
 import { orderedTeams } from "../lib/ranking";
 import { useStepValidation } from "../lib/useStepValidation";
+import { BlockerList } from "./BlockerList";
 import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
@@ -158,16 +158,7 @@ export function RecapStep() {
       </div>
 
       {blockers.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-          <div className="mb-1 flex items-center gap-2 text-sm font-medium text-destructive">
-            <AlertTriangle className="size-4" />À corriger avant de générer
-          </div>
-          <ul className="list-inside list-disc text-sm text-destructive">
-            {blockers.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-        </div>
+        <BlockerList blockers={blockers} className="mb-4" />
       ) : (
         <p className="text-sm text-emerald-500">Tout est prêt. Utilisez « Continuer vers la génération » en bas pour lancer.</p>
       )}

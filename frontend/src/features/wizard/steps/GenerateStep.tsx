@@ -11,8 +11,10 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 
+import { useStepValidation } from "../lib/useStepValidation";
 import { useLaunchGeneration, useScheduleStatus } from "../queries";
 import { useWizardStore } from "../store";
+import { BlockerList } from "./BlockerList";
 
 const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
 
@@ -29,6 +31,12 @@ export function GenerateStep() {
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
+  // Same blockers as the Récap gate — a user already sitting on this step when a
+  // blocker appears must not be able to launch anyway. `pending` keeps the gate
+  // closed while the verdict loads (fail-closed).
+  const recapValidation = useStepValidation("recap");
+  const blockers = recapValidation.errors;
+  const gateClosed = blockers.length > 0 || true === recapValidation.pending;
   const launch = useLaunchGeneration();
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
@@ -157,9 +165,10 @@ export function GenerateStep() {
               Premier calendrier secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les calendriers secondaires (après confirmation).
             </p>
           ) : null}
+          <BlockerList blockers={blockers} className="max-w-md text-left" />
           {/* Period mode: wait for the entry to load so an existing overlay is
-              regenerated (not duplicated → backend 422). */}
-          <Button size="lg" onClick={start} disabled={periodMode && !periodEntry}>
+              regenerated (not duplicated → backend 422). Also gated by blockers. */}
+          <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && !periodEntry)}>
             <Rocket className="size-4" />
             {periodMode ? "Générer le plan de période" : "Lancer la génération"}
           </Button>

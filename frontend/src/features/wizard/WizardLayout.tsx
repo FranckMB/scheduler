@@ -80,6 +80,12 @@ export function WizardPage() {
   const periodMode = "period" === mode;
   const { data: periodEntry, error: periodEntryError } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const validation = useStepValidation(stepId);
+  // The generation step is gated by the SAME blockers as the Récap "Continuer"
+  // button — otherwise the left nav lets an onboarded club (nav never locked)
+  // jump straight to génération and bypass the gate. Lock it here too, and keep
+  // it locked while the verdict is still loading (fail-closed).
+  const recapValidation = useStepValidation("recap");
+  const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
 
   // The period mode is persisted (localStorage). If its entry was deleted in the
   // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).
@@ -165,7 +171,7 @@ export function WizardPage() {
         <nav className="shrink-0 md:w-44">
           <ol className="flex flex-col gap-1">
             {WIZARD_STEPS.map((step, i) => {
-              const locked = guided && i > maxIndex;
+              const locked = (guided && i > maxIndex) || ("generate" === step.id && generateBlocked);
               return (
                 <li key={step.id}>
                   <button

@@ -144,6 +144,7 @@ function CoachesEditor() {
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [employee, setEmployee] = useState(false);
+  const [firstError, setFirstError] = useState(false);
   const firstRef = useRef<HTMLInputElement>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -151,8 +152,12 @@ function CoachesEditor() {
   const add = (event: FormEvent) => {
     event.preventDefault();
     if ("" === first.trim()) {
+      // Silent no-op was frustrating: surface why + jump to the empty field.
+      setFirstError(true);
+      firstRef.current?.focus();
       return;
     }
+    setFirstError(false);
     create.mutate({ firstName: first.trim(), lastName: last.trim() || null, isEmployee: employee, isActive: true });
     setFirst("");
     setLast("");
@@ -165,8 +170,21 @@ function CoachesEditor() {
     <div>
       <p className="mb-4 text-sm text-muted-foreground">Ajoutez vos coachs, marquez les salariés, et liez-les à des équipes (coach, adjoint) ou aux équipes où ils jouent.</p>
 
-      <form onSubmit={add} className="mb-6 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
-        <Input ref={firstRef} aria-label="Prénom" placeholder="Prénom" className="h-9 w-40" value={first} onChange={(e) => setFirst(e.target.value)} />
+      <form onSubmit={add} className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
+        <Input
+          ref={firstRef}
+          aria-label="Prénom"
+          aria-invalid={firstError}
+          placeholder="Prénom"
+          className={`h-9 w-40 ${firstError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+          value={first}
+          onChange={(e) => {
+            setFirst(e.target.value);
+            if (firstError) {
+              setFirstError(false);
+            }
+          }}
+        />
         <Input aria-label="Nom" placeholder="Nom" className="h-9 w-40" value={last} onChange={(e) => setLast(e.target.value)} />
         <label className="flex items-center gap-1 text-sm text-muted-foreground">
           <input type="checkbox" checked={employee} onChange={(e) => setEmployee(e.target.checked)} />
@@ -176,6 +194,12 @@ function CoachesEditor() {
           <Plus className="size-4" />
         </Button>
       </form>
+
+      {firstError ? (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          Indiquez au moins le prénom du coach avant de l'ajouter.
+        </p>
+      ) : null}
 
       {0 === coaches.length ? (
         <p className="text-sm text-muted-foreground">Aucun coach pour le moment.</p>

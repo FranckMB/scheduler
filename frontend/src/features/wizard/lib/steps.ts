@@ -18,6 +18,10 @@ export const WIZARD_STEPS: StepDef[] = [
 export interface StepValidation {
   errors: string[];
   warnings: string[];
+  /** True while the data behind the verdict is still loading. Consumers that
+   * gate an action (e.g. the generate launch) must treat pending as blocked so
+   * the gate is fail-closed during the load window, not briefly open. */
+  pending?: boolean;
 }
 
 export const okValidation = (): StepValidation => ({ errors: [], warnings: [] });
