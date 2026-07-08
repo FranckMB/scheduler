@@ -79,10 +79,11 @@ DB_ADMIN_URL = $(shell cat .env .env.local 2>/dev/null | awk -F= '$$1=="DATABASE
 fixtures: APP_ENV = dev
 fixtures:
 	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction
+	$(EXECROOT) rm -rf ./var/generate/*
 	# Backfill the vacances reference data (global, non-tenant) so the seeded
 	# club's school zone actually shows holidays — offline JSON, deterministic.
+	# Last so a seed hiccup never skips the cleanup above.
 	$(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm php bin/console app:school-holidays:seed --no-interaction
-	$(EXECROOT) rm -rf ./var/generate/*
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:

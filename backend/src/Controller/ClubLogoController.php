@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Repository\ClubRepository;
 use App\Storage\LogoStorage;
+use App\Storage\LogoUrl;
 use Doctrine\ORM\EntityManagerInterface;
 use finfo;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -71,10 +72,7 @@ final class ClubLogoController extends AbstractController
         }
         $this->storage->store($clubId, $bytes);
 
-        // Content-hash cache-buster: the serving URL is otherwise stable, so a new
-        // upload would keep the browser-cached image (esp. in the app header). The
-        // hash changes iff the image bytes change.
-        $url = "/api/clubs/{$clubId}/logo?v=" . substr(md5($bytes), 0, 8);
+        $url = LogoUrl::build($clubId, $bytes);
         $club->setLogoUrl($url);
         $this->entityManager->flush();
 

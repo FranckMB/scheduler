@@ -30,11 +30,13 @@ use App\Service\LeagueResolver;
 use App\Service\SchoolZoneResolver;
 use App\Sport\BasketballCategoryCatalog;
 use App\Storage\LogoStorage;
+use App\Storage\LogoUrl;
 use DateTimeImmutable;
 use Doctrine\Bundle\FixturesBundle\ORMFixtureInterface;
 use Doctrine\Common\DataFixtures\FixtureInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ObjectManager;
+use finfo;
 use RuntimeException;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
@@ -45,6 +47,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
 
     /** Optional default logo for the seeded club (drop a PNG here to ship one). */
     private const BCCL_LOGO_PATH = __DIR__ . '/assets/bccl-logo.png';
+    private const LOGO_MAX_BYTES = 512_000; // 500 KB — same as ClubLogoController
+    private const LOGO_ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp'];
 
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher,
@@ -88,25 +92,24 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // Derive the academic zone + league from the FFBB code, exactly like the
         // registration path (AuthController::createClub) — otherwise the seeded
         // "established" club is LESS configured than a freshly registered one
-        // (no vacances zone shown, no league envelope).
-        $club->setSchoolZone($this->schoolZoneResolver->resolveFromFfbbCode(self::BCCL_FFBB_CODE));
-        $club->setLeague($this->leagueResolver->resolveFromFfbbCode(self::BCCL_FFBB_CODE));
+        // (no vacances zone shown, no league envelope). Only fill when empty so a
+        // re-run never reverts a manual PATCH correction (resolver = best-effort).
+        if (null === $club->getSchoolZone()) {
+            $club->setSchoolZone($this->schoolZoneResolver->resolveFromFfbbCode(self::BCCL_FFBB_CODE));
+        }
+        if (null === $club->getLeague()) {
+            $club->setLeague($this->leagueResolver->resolveFromFfbbCode(self::BCCL_FFBB_CODE));
+        }
         $manager->flush();
 
         $clubId = $club->getId();
         $manager->getConnection()->executeStatement('SELECT set_config(\'app.club_id\', ?, false)', [$clubId]);
 
         // Default club logo (optional asset): store the bytes + point logoUrl at
-        // the public serve route, mirroring ClubLogoController. Skipped silently
-        // if no asset is shipped, so the fixture never fails on its absence.
-        if (null === $club->getLogoUrl() && is_file(self::BCCL_LOGO_PATH)) {
-            $bytes = file_get_contents(self::BCCL_LOGO_PATH);
-            if (false !== $bytes) {
-                $this->logoStorage->store($clubId, $bytes);
-                $club->setLogoUrl(\sprintf('/api/clubs/%s/logo?v=%s', $clubId, substr(md5($bytes), 0, 8)));
-                $manager->flush();
-            }
-        }
+        // the public serve route, mirroring ClubLogoController — including its
+        // size + MIME guards, so the fixture can't ship what an upload would
+        // refuse. Skipped silently if absent/invalid; the fixture never fails.
+        $this->seedDefaultLogo($club, $clubId, $manager);
 
         // --- Sport ---
         $existingSport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basket']);
@@ -1424,6 +1427,34 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             }
         }
 
+        $manager->flush();
+    }
+
+    /**
+     * Store the optional default logo for the seeded club, applying the same
+     * size + MIME guards as ClubLogoController so the fixture never ships an
+     * asset the real upload would reject. Any problem (absent, empty, too big,
+     * wrong type) skips silently — the fixture must not fail on a demo asset.
+     */
+    private function seedDefaultLogo(Club $club, string $clubId, EntityManagerInterface $manager): void
+    {
+        if (null !== $club->getLogoUrl() || !is_file(self::BCCL_LOGO_PATH)) {
+            return;
+        }
+        $size = filesize(self::BCCL_LOGO_PATH);
+        if (false === $size || 0 === $size || $size > self::LOGO_MAX_BYTES) {
+            return;
+        }
+        $mime = new finfo(\FILEINFO_MIME_TYPE)->file(self::BCCL_LOGO_PATH);
+        if (!\in_array($mime, self::LOGO_ALLOWED_MIME, true)) {
+            return;
+        }
+        $bytes = file_get_contents(self::BCCL_LOGO_PATH);
+        if (false === $bytes || '' === $bytes) {
+            return;
+        }
+        $this->logoStorage->store($clubId, $bytes);
+        $club->setLogoUrl(LogoUrl::build($clubId, $bytes));
         $manager->flush();
     }
 }
