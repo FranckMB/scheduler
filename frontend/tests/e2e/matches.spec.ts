@@ -26,7 +26,14 @@ async function login(page: Page): Promise<void> {
 async function ensureValidated(page: Page): Promise<void> {
   await page.goto("/");
   // State 3 → the Matchs nav is a real link. State 1/2 → a disabled span / redirect.
-  if (await page.getByRole("link", { name: "Matchs" }).isVisible({ timeout: 3_000 }).catch(() => false)) {
+  // isVisible() does NOT wait (its timeout is ignored), so use waitFor to actually
+  // give the SPA time to render before deciding the club still needs onboarding.
+  const validated = await page
+    .getByRole("link", { name: "Matchs" })
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (validated) {
     return;
   }
 
