@@ -66,7 +66,7 @@ layouts (`src/app/router.tsx`).
 - Pas de JWT dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`).
 - `membershipStatus === "pending"` → `/waiting`.
 - `club.onboardingCompleted === false` → redirect `/wizard` (sauf si déjà sur `/wizard`).
-- **Gate cockpit (sticky)** : `CockpitPage` redirige vers `/planning` tant que `me.socleValidatedAt === null` (le socle n'a jamais été validé). Le jalon est posé côté backend à la 1re validation du baseline et **jamais retiré** — voir `planning-lifecycle-validated.md` et `specs/evolution/accueil-cockpit-temporel.md` §2ter.
+- **Gate cockpit (sticky)** : `CockpitPage` redirige vers `/planning` tant que `me.socleValidatedAt === null` (le socle n'a jamais été validé). Le jalon est posé côté backend à la 1re validation du baseline et **jamais retiré** — voir `planning-lifecycle-validated.md` et `specs/courantes/accueil-cockpit-temporel.md` §2ter.
 
 ### Routes non livrées
 

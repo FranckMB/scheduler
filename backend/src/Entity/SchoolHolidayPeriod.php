@@ -16,7 +16,7 @@ use Doctrine\ORM\Mapping as ORM;
  * reference, like the `sport` table). Populated from a versioned JSON fallback
  * (app:school-holidays:seed) or the official ODS API (app:school-holidays:import).
  * holidayType is an OPEN slug (métropole + overseas labels differ).
- * See specs/evolution/accueil-cockpit-temporel.md §4bis.
+ * See specs/courantes/accueil-cockpit-temporel.md §4bis.
  */
 #[ORM\Entity(repositoryClass: SchoolHolidayPeriodRepository::class)]
 #[ORM\Table(name: 'school_holiday_period')]

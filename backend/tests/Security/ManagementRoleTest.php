@@ -44,6 +44,8 @@ final class ManagementRoleTest extends WebTestCase
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/generate'],
             ['POST', '/api/teams/reorder'],
             ['PATCH', '/api/club/appearance'],
+            // SEC-12: the pre-solve constraint check is part of the cockpit flow.
+            ['POST', '/api/constraints/validate'],
             // Each manual-edit action carries its own guard call — pin all three.
             ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/constraint'],
             ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/lock'],

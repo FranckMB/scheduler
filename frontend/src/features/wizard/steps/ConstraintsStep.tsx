@@ -135,12 +135,18 @@ export function ConstraintsStep() {
   const [minTime, setMinTime] = useState("");
   const [maxTime, setMaxTime] = useState("");
   const [days, setDays] = useState<Set<number>>(new Set());
-  // "à éviter" (forbiddenDays) vs "uniquement" (forcedDays — le seul jour permis).
+  // "à éviter" (forbiddenDays) vs "uniquement" (allowedDays — whitelist : SEULS
+  // ces jours sont permis, l'engine interdit le complément). NB : forcedDays de
+  // l'engine ne veut dire QUE « au moins une séance ces jours-là » — pas ce qu'on
+  // veut ici (audit ENG-16).
   const [dayMode, setDayMode] = useState<"forbidden" | "forced">("forbidden");
   // "préfère" (preferredVenueId) · "évite" (forbiddenVenueId) · "impose" (forcedVenueId, dur).
   const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced">("preferred");
   const [venueId, setVenueId] = useState("");
   const [coachId, setCoachId] = useState("");
+  // "indisponible" (unavailableDays, blacklist) vs "disponible uniquement"
+  // (availableDays, whitelist — l'engine intersecte les whitelists d'un coach).
+  const [coachMode, setCoachMode] = useState<"unavailable" | "available">("unavailable");
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
   // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -180,8 +186,9 @@ export function ConstraintsStep() {
         return null;
       }
       if ("forced" === dayMode) {
-        // "uniquement" = seuls ces jours sont permis (forcedDays), toujours dur.
-        return { name: `${who} · uniquement ${dayNames(days)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedDays: [...days] } };
+        // "uniquement" = whitelist allowedDays (l'engine interdit tous les autres
+        // jours) — PAS forcedDays qui n'impose qu'« au moins une séance » (ENG-16).
+        return { name: `${who} · uniquement ${dayNames(days)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, allowedDays: [...days] } };
       }
       return { name: `${who} · pas ${dayNames(days)}`, scope, scopeTargetId, family, ruleType, config: { ...tagConfig, forbiddenDays: [...days] } };
     }
@@ -201,14 +208,15 @@ export function ConstraintsStep() {
     if ("" === coachId || 0 === days.size) {
       return null;
     }
+    const coachDaysKey = "available" === coachMode ? "availableDays" : "unavailableDays";
     return {
-      name: `${coachName.get(coachId)} · indispo ${dayNames(days)}`,
+      name: `${coachName.get(coachId)} · ${"available" === coachMode ? "dispo uniquement" : "indispo"} ${dayNames(days)}`,
       scope: "COACH",
       scopeTargetId: coachId,
       family,
       // Always hard: the engine enforces coach availability unconditionally.
       ruleType: "HARD",
-      config: { coachId, unavailableDays: [...days] },
+      config: { coachId, [coachDaysKey]: [...days] },
     };
   }
 
@@ -225,6 +233,7 @@ export function ConstraintsStep() {
     setEditingId(null);
     setTarget("");
     setDayMode("forbidden");
+    setCoachMode("unavailable");
     setVenueMode("preferred");
     setVenueId("");
     setCoachId("");
@@ -257,12 +266,17 @@ export function ConstraintsStep() {
     // build() and hide the rule selector — load them as PREFERRED so that if the
     // user later switches to a soft mode it does NOT stay a hard requirement (the
     // inherited HARD would otherwise leak through, keeping the venue/day forced).
-    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && Array.isArray(cfg.forcedDays)) || "COACH_AVAILABILITY" === c.family;
+    // `cfg.forcedDays` is the LEGACY key for the DAY "uniquement" mode (#120,
+    // before ENG-16) — still recognised so an old row loads correctly and
+    // auto-migrates to allowedDays on save.
+    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && (Array.isArray(cfg.allowedDays) || Array.isArray(cfg.forcedDays))) || "COACH_AVAILABILITY" === c.family;
     setRuleType(isForced ? "PREFERRED" : c.ruleType);
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
       setCoachId("string" === typeof cfg.coachId ? cfg.coachId : (c.scopeTargetId ?? ""));
-      setDays(new Set(asNums(cfg.unavailableDays)));
+      const available = Array.isArray(cfg.availableDays);
+      setCoachMode(available ? "available" : "unavailable");
+      setDays(new Set(asNums(available ? cfg.availableDays : cfg.unavailableDays)));
     } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
       setTarget(c.scopeTargetId);
     } else {
@@ -273,9 +287,12 @@ export function ConstraintsStep() {
       setMaxTime("string" === typeof cfg.maxStartTime ? cfg.maxStartTime : "");
     }
     if ("DAY" === c.family) {
-      const forced = Array.isArray(cfg.forcedDays);
-      setDayMode(forced ? "forced" : "forbidden");
-      setDays(new Set(asNums(forced ? cfg.forcedDays : cfg.forbiddenDays)));
+      // allowedDays (current) OR forcedDays (legacy #120) both mean the "uniquement"
+      // mode; loading the legacy key lets a re-save auto-migrate it to allowedDays.
+      const only = Array.isArray(cfg.allowedDays) ? cfg.allowedDays : cfg.forcedDays;
+      const onlyThese = Array.isArray(only);
+      setDayMode(onlyThese ? "forced" : "forbidden");
+      setDays(new Set(asNums(onlyThese ? only : cfg.forbiddenDays)));
     }
     if ("FACILITY" === c.family) {
       if ("string" === typeof cfg.forcedVenueId) {
@@ -425,7 +442,10 @@ export function ConstraintsStep() {
                 </option>
               ))}
             </Select>
-            <span className="text-xs text-muted-foreground">indispo</span>
+            <Select aria-label="Disponibilité" className="h-8 w-44" value={coachMode} onChange={(e) => setCoachMode(e.target.value as "unavailable" | "available")}>
+              <option value="unavailable">indisponible</option>
+              <option value="available">disponible uniquement</option>
+            </Select>
             <DayPicker days={days} toggle={toggleDay} />
           </>
         )}

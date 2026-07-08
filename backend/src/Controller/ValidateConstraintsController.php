@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\Constraint;
 use App\Repository\ConstraintRepository;
 use App\Service\ConstraintValidationService;
+use App\Service\ManagementAccessGuard;
 use App\Service\SeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,11 +27,16 @@ final class ValidateConstraintsController extends AbstractController
         private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
+        private readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
     public function __invoke(): JsonResponse
     {
+        // SEC-12: the pre-solve gate is a management action (part of the cockpit /
+        // generation flow) — align it with the rest of the cockpit's role gate.
+        $this->managementAccessGuard->assertManager();
+
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
         if (!\is_string($clubId) || '' === $clubId) {

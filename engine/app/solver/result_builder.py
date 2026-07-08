@@ -472,8 +472,11 @@ def _diagnose_session_below_effective_min(
             below_floor = placed < effective_min
             severity = "ERROR" if below_floor else "WARNING"
             if below_floor:
+                # "cible", not "garanti" : le minimum de séances est appliqué en
+                # objectif soft (bonus), pas en plancher dur (ENG-18) — le solveur
+                # ne le garantit pas, il le vise. Dire "garanti" serait faux.
                 reason = (
-                    f"en-dessous de son minimum garanti de {effective_min} "
+                    f"en-dessous de son minimum cible de {effective_min} "
                     "(créneaux de gymnase insuffisants)."
                 )
             else:

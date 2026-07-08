@@ -796,7 +796,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $addConstraint('U13 - Début préféré avant 19h00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['maxStartTime' => '19:00', 'targetTag' => 'U13']);
 
         // --- DAY (jours imposés / interdits) ---
-        $addConstraint('Veterans - Vendredi uniquement', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forcedDays' => [5]]);
+        // « uniquement » = allowedDays (whitelist : seul le vendredi permis). forcedDays
+        // ne veut dire QUE « au moins une séance ce jour-là » côté engine (audit ENG-16).
+        $addConstraint('Veterans - Vendredi uniquement', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [5]]);
         $addConstraint('SM2 - Évite le vendredi', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::PREFERRED, ['forbiddenDays' => [5]]);
         // Jeunes U9/U11 : pas d'entraînement le mercredi (ils ont déjà le CEC ce jour-là).
         foreach (['U11F1', 'U11F2', 'U11M2', 'U9M1', 'U9M2', 'U9F1', 'U9F2'] as $teamName) {

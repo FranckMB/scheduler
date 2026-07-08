@@ -5,7 +5,11 @@ variables and no penalties are introduced in this module.
 
 Implicit rules (always applied):
   VENUE_AT_MOST_ONE, COACH_NO_OVERLAP, COACH_PLAYER_NO_OVERLAP,
-  TEAM_NO_OVERLAP, MIN_SESSIONS
+  TEAM_NO_OVERLAP
+MIN_SESSIONS is CAPABLE of a hard floor (add_min_sessions_constraints) but is
+currently wired SOFT-ONLY: main._solve passes a floor of 0 for every team and
+relies on the objective bonus (session_count) + a WARNING/ERROR diagnostic. It
+is a target, not a guarantee (ENG-18).
 
 Derived rules (parsed from v2 constraints[] payload → ParsedConstraints):
   forbidden_assignments, coach_unavailability, forced_venues,
@@ -894,26 +898,34 @@ def add_time_window_constraints(
 
     for team_id_text, day_rules in day_rules_by_team.items():
         forced_day_set = day_rules["forced"]
-        forbidden_day_set = set(day_rules["forbidden"])
+        original_forbidden = set(day_rules["forbidden"])
         allowed_day_set = day_rules["allowed"]
+        forbidden_day_set = set(original_forbidden)
         # allowedDays = whitelist: forbid every day the team could train on that
         # is not allowed (the complement, restricted to days that actually exist).
         if allowed_day_set:
             forbidden_day_set |= {
                 day for day in team_day_vars.get(team_id_text, {}) if day not in allowed_day_set
             }
-        if forced_day_set & forbidden_day_set:
+        # Contradiction → the team can be placed on NO day. Two shapes: a forced day
+        # is also forbidden, OR a whitelist ('uniquement'/allowedDays) has ALL its
+        # days explicitly forbidden ('évite'). Both are checked against the ORIGINAL
+        # forbidden set (not the whitelist complement) so the diagnostic is explicit
+        # rather than a downstream "insufficient gym slots" (audit ENG-16 review).
+        forced_vs_forbidden = forced_day_set & original_forbidden
+        allowed_all_forbidden = bool(allowed_day_set) and not (allowed_day_set - original_forbidden)
+        if forced_vs_forbidden or allowed_all_forbidden:
             conflicts.append({
                 "id": f"day_constraint_conflict-{team_id_text}",
                 "type": "day_constraint_conflict",
                 "severity": "ERROR",
                 "teamId": team_id_text,
                 "message": (
-                    f"Team {team_id_text} has contradictory forcedDays and forbiddenDays; "
-                    "the team is forced to 0 slots."
+                    f"Team {team_id_text} has contradictory day rules "
+                    "(the allowed/forced days are all forbidden); the team is forced to 0 slots."
                 ),
                 "suggestions": [
-                    "Remove the overlapping days from forcedDays or forbiddenDays.",
+                    "Remove the overlapping days between the 'only these days' / 'forced' rule and the 'avoid' rule.",
                 ],
                 "createdAt": datetime.now(UTC).isoformat(),
             })

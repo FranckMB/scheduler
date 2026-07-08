@@ -17,7 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
  * kind=period: a window that alters the base plan (closure, holiday, cutoff,
  * mutualisation); carries dated constraints (Constraint.calendarEntryId) and,
  * from palier B on, a secondary-plan overlay (overlayScheduleId).
- * See specs/evolution/accueil-cockpit-temporel.md §9ter.
+ * See specs/courantes/accueil-cockpit-temporel.md §9ter.
  */
 #[ORM\Entity(repositoryClass: CalendarEntryRepository::class)]
 #[ORM\Table(name: 'calendar_entry')]

@@ -115,12 +115,14 @@ def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
         return str(slot["startTime"])[:5] < str(config["minStartTime"])
     if key in ("forbiddenDays", "unavailableDays"):
         return int(slot["dayOfWeek"]) in set(config[key])
+    if key == "availableDays":
+        return int(slot["dayOfWeek"]) not in set(config["availableDays"])
     if key in ("preferredVenueId", "forcedVenueId"):
         return slot["venueId"] != config[key]
     if key == "forbiddenVenueId":
         return slot["venueId"] == config["forbiddenVenueId"]
-    if key == "forcedDays":
-        return int(slot["dayOfWeek"]) not in set(config["forcedDays"])
+    if key == "allowedDays":
+        return int(slot["dayOfWeek"]) not in set(config["allowedDays"])
     raise AssertionError(f"no violation predicate for {key}")
 
 

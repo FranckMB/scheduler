@@ -115,8 +115,11 @@ class TestForcedDays:
         days = Counter(slot.day_of_week for slot in slots)
         assert result.status != "infeasible"
         assert len(slots) == 2
-        assert days[1] == 1
-        assert days[3] == 1
+        # forcedDays = "at least one session on the UNION of these days" (engine-only
+        # vocabulary — the wizard 'uniquement' emits allowedDays, ENG-16). It does NOT
+        # force one session per listed day; asserting days[1]==days[3]==1 rode on the
+        # deterministic tie-break, not the model (ENG-19).
+        assert days.get(1, 0) + days.get(3, 0) >= 1
 
     def test_forced_two_days_sessions_per_week_3(self) -> None:
         input_data = make_input(
@@ -135,8 +138,8 @@ class TestForcedDays:
         days = Counter(slot.day_of_week for slot in slots)
         assert result.status != "infeasible"
         assert len(slots) == 3
-        assert days[1] >= 1
-        assert days[3] >= 1
+        # Guaranteed property only (ENG-19): ≥1 session on the union {1,3}.
+        assert days.get(1, 0) + days.get(3, 0) >= 1
 
     def test_forced_two_days_sessions_per_week_1_never_uses_free_day(self) -> None:
         input_data = make_input(
@@ -175,8 +178,30 @@ class TestForcedDays:
         days = Counter(slot.day_of_week for slot in slots)
         assert result.status != "infeasible"
         assert len(slots) == 4
-        assert days[1] >= 1
-        assert days[3] >= 1
+        # Guaranteed property only (ENG-19): ≥1 on {1,3}; the free days 4/5 stay open
+        # (this is exactly why forcedDays ≠ "only these days", ENG-16).
+        assert days.get(1, 0) + days.get(3, 0) >= 1
+
+    def test_allowed_days_whitelist_confines_a_multi_session_team(self) -> None:
+        """allowedDays = the wizard 'uniquement' (ENG-16 fix): a 2-session team is
+        confined to the listed days. The old forcedDays mapping only forced ONE
+        session onto {1,3} and left day 5 open — silently breaking 'uniquement'."""
+        input_data = make_input(
+            teams=[make_team("team-1", 2)],
+            constraints=[day_constraint("team-1", "HARD", {"allowedDays": [1, 3]})],
+            slots_per_venue=[
+                make_slot(1, "18:00"),
+                make_slot(3, "18:00"),
+                make_slot(5, "18:00"),
+            ],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        slots = team_slots(result, "team-1")
+        assert result.status != "infeasible"
+        assert len(slots) == 2
+        assert all(slot.day_of_week in {1, 3} for slot in slots)
 
 
 class TestForcedAndForbiddenDays:
@@ -254,6 +279,31 @@ class TestConflictAndNonRegression:
         assert result.status != "infeasible"
         assert len(conflict_slots) == 0
         assert len(ok_slots) >= 1
+        assert conflict_diagnostics
+        assert conflict_diagnostics[0].severity == "ERROR"
+        assert conflict_diagnostics[0].team_id == "team-conflict"
+
+    def test_allowed_days_all_forbidden_returns_conflict_diagnostic(self) -> None:
+        """ENG-16 review: 'uniquement jour X' (allowedDays) + 'évite jour X'
+        (forbiddenDays) zeroes the team — it must surface the EXPLICIT
+        day_constraint_conflict diagnostic, not a generic below-minimum error."""
+        input_data = make_input(
+            teams=[make_team("team-conflict", 1), make_team("team-ok", 1)],
+            constraints=[
+                day_constraint("team-conflict", "HARD", {"allowedDays": [3]}),
+                day_constraint("team-conflict", "HARD", {"forbiddenDays": [3]}),
+            ],
+            slots_per_venue=[
+                make_slot(1, "18:00"),
+                make_slot(3, "18:00"),
+            ],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        conflict_diagnostics = [diag for diag in result.diagnostics if diag.type == "day_constraint_conflict"]
+        assert result.status != "infeasible"
+        assert len(team_slots(result, "team-conflict")) == 0
         assert conflict_diagnostics
         assert conflict_diagnostics[0].severity == "ERROR"
         assert conflict_diagnostics[0].team_id == "team-conflict"

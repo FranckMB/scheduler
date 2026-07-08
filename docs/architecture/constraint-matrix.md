@@ -19,11 +19,12 @@ test Vitest).
 |---|---|---|---|
 | TIME `minStartTime`/`maxStartTime` | dure | dure (fenêtre figée) | soft |
 | DAY `forbiddenDays` | dure | dure | **soft « éviter ces jours »** *(fix ENG-10 — était un placebo)* |
-| DAY `forcedDays` | dure — mode **« uniquement »** (seuls ces jours permis), toujours HARD (pas de sélecteur) | — | — |
+| DAY `allowedDays` | dure — mode **« uniquement »** (whitelist : l'engine interdit tous les autres jours), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `preferredVenueId` | dure (salle forcée) | **dure** *(fix ENG-12 — était mort)* | soft |
 | FACILITY `forcedVenueId` | dure — mode **« impose »** (doit se dérouler ici), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `forbiddenVenueId` | dure | dure | **soft « éviter ce gymnase »** *(fix ENG-11 — était escaladé en dur → INFEASIBLE possible sur une préférence)* |
-| COACH_AVAILABILITY `unavailableDays` | dure + **union multi-contraintes** *(fix ENG-13 — la 2e écrasait la 1re)* | — l'UI force **Obligatoire** (pas de sélecteur : le solveur applique toujours dur) | — |
+| COACH_AVAILABILITY `unavailableDays` | mode « indisponible » — dure + **union multi-contraintes** *(fix ENG-13)* | — l'UI force **Obligatoire** | — |
+| COACH_AVAILABILITY `availableDays` | mode « disponible uniquement » — dure (whitelist, **intersection** multi) *(ALIGN — l'UI expose la capacité engine)* | — l'UI force **Obligatoire** | — |
 
 - **BONUS retiré de l'offre** *(ENG-12 : aucune sémantique définie nulle part)*. Les lignes BONUS
   déjà en base sont **normalisées en PREFERRED par l'engine** (honorées soft, jamais droppées).
@@ -35,14 +36,16 @@ test Vitest).
 
 ## Vocabulaire compris par l'engine mais jamais émis par le wizard (« non proposé »)
 
-`allowedDays` · `preferredDays` (lu par l'objectif, jamais émis — la racine d'ENG-10) ·
+`forcedDays` (engine-only : « au moins une séance ces jours-là » — ≠ « uniquement » ; le wizard émet `allowedDays`, cf. ENG-16) · `preferredDays` (lu par l'objectif, jamais émis — la racine d'ENG-10) ·
 `FACILITY_CAPACITY.maxTeams` (émis par le backend, `canSplit`). L'onglet « Réserver » passe par
 `slotTemplates` (verrou HARD), hors matrice constraints.
 
-> **MàJ 2026-07-08** : `forcedDays` et `forcedVenueId` sont désormais **émis par le wizard**
+> **MàJ 2026-07-08** : `allowedDays` et `forcedVenueId` sont **émis par le wizard**
 > (modes « uniquement »/« impose », toujours HARD) pour que l'édition des contraintes fixtures
 > (`SM4 → Jean Vilar`, `Veterans vendredi uniquement`) fasse un aller-retour fidèle sans
 > rétrograder en préférence. Les deux cellules passent `NOT_OFFERED → HONORED_HARD`.
+> **Correctif ENG-16** : « uniquement » émet `allowedDays` (whitelist réelle), **pas** `forcedDays`
+> (qui ne veut dire QUE « au moins une séance ces jours-là » et laissait les autres jours ouverts).
 
 ## Verrous
 
