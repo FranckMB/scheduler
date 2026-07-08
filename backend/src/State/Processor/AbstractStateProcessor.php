@@ -164,9 +164,14 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new AccessDeniedHttpException('Access denied');
         }
 
-        $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
-        if (null !== $resolvedSeasonId && method_exists($entity, 'setSeasonId')) {
-            $entity->setSeasonId($resolvedSeasonId);
+        // BCK-09: a PUT must NEVER migrate an existing row to the request's current
+        // season — that silently moves data across seasons (same club). Only stamp a
+        // season if the entity somehow has none; never override its own.
+        if (method_exists($entity, 'setSeasonId') && method_exists($entity, 'getSeasonId') && null === $entity->getSeasonId()) {
+            $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
+            if (null !== $resolvedSeasonId) {
+                $entity->setSeasonId($resolvedSeasonId);
+            }
         }
 
         $this->updateEntityFromInput($entity, $input);

@@ -6,12 +6,17 @@ namespace App\Tests\Unit\State\Processor;
 
 use App\Dto\ConstraintInput;
 use App\Entity\Constraint;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\State\Processor\AbstractStateProcessor;
 use App\State\Processor\ConstraintStateProcessor;
+use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
+use ReflectionProperty;
 
 #[Group('unit')]
 final class ConstraintStateProcessorTest extends TestCase
@@ -63,5 +68,41 @@ final class ConstraintStateProcessorTest extends TestCase
 
         self::assertSame(ConstraintScope::TEAM, $entity->getScope());
         self::assertSame('team-y', $entity->getScopeTargetId());
+    }
+
+    /**
+     * Review NR (audit BCK-09): a PUT must NEVER migrate an existing entity to the
+     * request's current season — that silently moves a row across seasons of the
+     * same club. processPut only stamps a season when the entity has none.
+     */
+    public function testProcessPutDoesNotMigrateAnEntitysSeason(): void
+    {
+        $entity = (new Constraint)
+            ->setClubId('club-1')
+            ->setSeasonId('season-A')
+            ->setName('rule')
+            ->setScope(ConstraintScope::CLUB)
+            ->setScopeTargetId(null)
+            ->setFamily(ConstraintFamily::TIME)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['maxStartTime' => '18:00'])
+            ->setIsActive(true)
+            ->setSortOrder(0);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->method('find')->willReturn($entity);
+
+        $processor = (new ReflectionClass(ConstraintStateProcessor::class))->newInstanceWithoutConstructor();
+        (new ReflectionProperty(AbstractStateProcessor::class, 'entityManager'))->setValue($processor, $em);
+
+        $input = new ConstraintInput;
+        $input->name = 'renamed';
+
+        $method = new ReflectionMethod($processor, 'processPut');
+        $method->setAccessible(true);
+        // clubId matches the entity ; the request season (season-B) is DIFFERENT.
+        $method->invoke($processor, $input, ['id' => 'c-1'], 'club-1', 'season-B');
+
+        self::assertSame('season-A', $entity->getSeasonId(), 'a PUT must not migrate the entity to the request season');
     }
 }

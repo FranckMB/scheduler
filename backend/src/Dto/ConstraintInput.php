@@ -22,6 +22,7 @@ class ConstraintInput
     public ?string $scope = null;
 
     #[Groups(['write'])]
+    #[Assert\Uuid(message: 'scopeTargetId must be a valid UUID.')]
     public ?string $scopeTargetId = null;
 
     #[Assert\NotBlank]
