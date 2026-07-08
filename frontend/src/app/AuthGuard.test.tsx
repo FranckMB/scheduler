@@ -14,7 +14,9 @@ const { meState, info } = vi.hoisted(() => ({
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: meState.data, isLoading: false, isError: false }) }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { info } }));
 
-const activeClub = (onboardingCompleted: boolean) => ({ membershipStatus: "active", club: { onboardingCompleted } });
+// Onboarding lock is keyed on the baseline (main plan) existing, not the legacy
+// club.onboardingCompleted flag: no baseline → still onboarding → locked.
+const activeMember = (hasBaseline: boolean) => ({ membershipStatus: "active", baselineScheduleId: hasBaseline ? "b1" : null, club: { onboardingCompleted: hasBaseline } });
 
 function renderAt(path: string) {
   return render(
@@ -40,40 +42,40 @@ describe("AuthGuard — onboarding lock", () => {
   });
 
   it("keeps the burger routes reachable while onboarding (profile + club)", () => {
-    meState.data = activeClub(false);
+    meState.data = activeMember(false);
     renderAt("/profile");
     expect(screen.getByText("PROFILE")).toBeInTheDocument();
   });
 
   it("keeps /club reachable while onboarding", () => {
-    meState.data = activeClub(false);
+    meState.data = activeMember(false);
     renderAt("/club");
     expect(screen.getByText("CLUB")).toBeInTheDocument();
   });
 
   it("does NOT fire the cockpit hint for a pending (not-yet-active) member", () => {
-    meState.data = { membershipStatus: "pending", club: { onboardingCompleted: false } };
+    meState.data = { membershipStatus: "pending", baselineScheduleId: null, club: { onboardingCompleted: false } };
     renderAt("/");
     expect(screen.getByText("WAITING")).toBeInTheDocument();
     expect(info).not.toHaveBeenCalled();
   });
 
   it("redirects the cockpit home to the wizard with an ephemeral hint", () => {
-    meState.data = activeClub(false);
+    meState.data = activeMember(false);
     renderAt("/");
     expect(screen.getByText("WIZARD")).toBeInTheDocument();
     expect(info).toHaveBeenCalledWith("Lancez votre première génération d'abord.");
   });
 
   it("redirects other locked routes to the wizard silently (no cockpit hint)", () => {
-    meState.data = activeClub(false);
+    meState.data = activeMember(false);
     renderAt("/matchs");
     expect(screen.getByText("WIZARD")).toBeInTheDocument();
     expect(info).not.toHaveBeenCalled();
   });
 
   it("lets the cockpit render once onboarding is complete", () => {
-    meState.data = activeClub(true);
+    meState.data = activeMember(true);
     renderAt("/");
     expect(screen.getByText("COCKPIT")).toBeInTheDocument();
     expect(info).not.toHaveBeenCalled();

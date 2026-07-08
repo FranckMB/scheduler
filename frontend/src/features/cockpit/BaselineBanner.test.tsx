@@ -22,7 +22,7 @@ function renderBanner() {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <BaselineBanner schedules={[baseline]} baselineScheduleId="b1" />
+        <BaselineBanner schedules={[baseline]} baselineScheduleId="b1" socleValidated />
       </MemoryRouter>
     </QueryClientProvider>,
   );

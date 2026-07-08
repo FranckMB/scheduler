@@ -6,17 +6,21 @@ import { useReopenSchedule } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 
+import { useWizardStore } from "@/features/wizard/store";
+
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 
 interface BaselineBannerProps {
   schedules: Schedule[];
   baselineScheduleId: string | null;
+  /** Whether the season's socle is validated (state 3) or not yet (state 2). */
+  socleValidated: boolean;
   /** Schedules query still in flight — don't flash "aucun planning principal". */
   loading?: boolean;
 }
 
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
-export function BaselineBanner({ schedules, baselineScheduleId, loading = false }: BaselineBannerProps) {
+export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, loading = false }: BaselineBannerProps) {
   const navigate = useNavigate();
   const reopen = useReopenSchedule();
   const [listOpen, setListOpen] = useState(false);
@@ -27,6 +31,17 @@ export function BaselineBanner({ schedules, baselineScheduleId, loading = false 
   const baseline = schedules.find((s) => s.id === baselineScheduleId) ?? null;
   const seasonPlans = schedules.filter((s) => null === s.calendarEntryId);
   const overlayCount = schedules.filter((s) => null !== s.calendarEntryId).length;
+
+  // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
+  // wizard's generation step to finish/validate it.
+  const open = () => {
+    if (socleValidated) {
+      navigate("/planning");
+      return;
+    }
+    useWizardStore.getState().jumpTo("generate");
+    navigate("/wizard");
+  };
 
   const edit = () => {
     setConfirmEdit(false);
@@ -80,7 +95,7 @@ export function BaselineBanner({ schedules, baselineScheduleId, loading = false 
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => navigate("/planning")}>
+        <Button variant="outline" size="sm" onClick={open}>
           Ouvrir
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setConfirmEdit(true)} disabled={reopen.isPending}>

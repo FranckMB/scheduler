@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Lock } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -215,16 +215,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">Planning</h1>
       </div>
 
-      {/* The home ("/") cockpit stays locked until the season's socle is validated
-          — explain HOW to unlock it, otherwise the redirect to /planning is opaque. */}
-      {!embedded && !me?.socleValidatedAt && schedules.length > 0 ? (
-        <div className="mb-4 flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
-          <Lock className="mt-0.5 size-4 shrink-0 text-accent" />
-          <span className="text-muted-foreground">
-            Validez un planning pour débloquer le <strong className="text-foreground">tableau de bord</strong> — l'accueil ouvrira alors le calendrier de la saison.
-          </span>
-        </div>
-      ) : null}
 
       {0 === schedules.length ? (
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />

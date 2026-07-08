@@ -47,20 +47,8 @@ beforeEach(() => {
 });
 
 describe("PlanningPage (integration)", () => {
-  it("shows the 'validate to unlock the cockpit' hint while the socle is not validated", async () => {
-    renderWithProviders(<PlanningPage />);
-    await screen.findByText("U11");
-    // role=status carries the full banner text (incl. the nested <strong>), so
-    // the whole phrase matches — unlike getByText, which stops at element edges.
-    expect(screen.getByRole("status")).toHaveTextContent(/débloquer le tableau de bord/i);
-  });
-
-  it("hides the hint once the socle is validated (cockpit is reachable)", async () => {
-    meState.socleValidatedAt = "2026-07-01T00:00:00Z";
-    renderWithProviders(<PlanningPage />);
-    await screen.findByText("U11");
-    expect(screen.queryByRole("status")).toBeNull();
-  });
+  // The "validate to unlock the cockpit" banner moved to the cockpit itself
+  // (state 2) — PlanningPage no longer carries it (see CockpitPage.test).
 
   it("renders the base planning grid: team + coach on the slot, main-plan badge", async () => {
     renderWithProviders(<PlanningPage />);

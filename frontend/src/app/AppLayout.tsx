@@ -52,7 +52,14 @@ export function AppLayout() {
           </div>
           <nav className="flex items-center gap-1">
             <SeasonSelector />
-            <NavItem to="/matchs">Matchs</NavItem>
+            {/* Matches stay locked until the season's main plan is validated. */}
+            {null !== data?.socleValidatedAt ? (
+              <NavItem to="/matchs">Matchs</NavItem>
+            ) : (
+              <span className="cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-muted-foreground/40" title="Validez le planning principal pour débloquer les matchs">
+                Matchs
+              </span>
+            )}
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
               <MenuItem to="/club" icon={<Settings />}>
                 Club

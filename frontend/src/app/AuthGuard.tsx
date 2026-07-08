@@ -6,8 +6,9 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { useAuthStore } from "@/shared/stores/authStore";
 import { toast } from "@/shared/stores/toastStore";
 
-// During onboarding (before the first generation) the app is locked to the
-// wizard — except the account-menu (burger) destinations, which stay reachable.
+// During onboarding — until the season has a main plan (baseline, set by the
+// first generation) — the app is locked to the wizard, except the account-menu
+// (burger) destinations, which stay reachable.
 const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club"];
 
 /**
@@ -23,12 +24,14 @@ export function AuthGuard() {
   const { data, isLoading, isError } = useMe();
   const location = useLocation();
 
-  // First-time club: locked to the wizard until the first generation, but the
-  // account-menu routes (profile, club) stay reachable. Landing on the cockpit
-  // home gets an ephemeral hint on the redirect — only for an ACTIVE member
-  // (pending users are sent to /waiting by the guard below, unrelated to this).
+  // First-time club: locked to the wizard until a main plan exists (baseline),
+  // but the account-menu routes (profile, club) stay reachable. Landing on the
+  // cockpit home gets an ephemeral hint on the redirect — only for an ACTIVE
+  // member (pending users are sent to /waiting by the guard below).
+  // Onboarding phase = no baseline yet (single source of truth; the legacy
+  // club.onboardingCompleted flag is no longer read for routing).
   const membershipActive = "active" === data?.membershipStatus;
-  const onboardingLocked = Boolean(data?.club && !data.club.onboardingCompleted);
+  const onboardingLocked = Boolean(data) && null === (data?.baselineScheduleId ?? null);
   const showCockpitHint = membershipActive && onboardingLocked && "/" === location.pathname;
   useEffect(() => {
     if (showCockpitHint) {

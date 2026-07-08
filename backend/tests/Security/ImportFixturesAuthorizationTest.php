@@ -107,6 +107,9 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
+        // Import needs a validated socle (cockpit state 3) so the auth tests reach
+        // their expected outcome (400/403/404), not the socle guard's 409.
+        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
         $this->em->flush();
 
@@ -119,6 +122,12 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         if (null === $seasonId) {
             $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $clubId])
                 ?? $this->createSeason($clubId, SeasonResolver::seasonYear(new DateTimeImmutable('today')));
+            // The register endpoint seeds the current season without a validated
+            // socle; matches need one (state 3), so stamp it here.
+            if (null === $season->getSocleValidatedAt()) {
+                $season->setSocleValidatedAt(new DateTimeImmutable);
+                $this->em->flush();
+            }
             $seasonId = $season->getId();
         }
 

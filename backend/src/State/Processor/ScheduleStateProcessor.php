@@ -81,6 +81,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             if (!$season instanceof Season || null === $season->getBaselineScheduleId()) {
                 throw new UnprocessableEntityHttpException('The season has no baseline plan yet — validate the base plan first.');
             }
+            // Secondary plans are locked until the main plan is VALIDATED (cockpit
+            // state 3) — same invariant the SocleGuard enforces on generation.
+            if (null === $season->getSocleValidatedAt()) {
+                throw new ConflictHttpException('Validez le planning principal avant de créer un planning secondaire.');
+            }
             // Bind the overlay to the ENTRY's season (not the active one) so the
             // build reads the right season's structure + dated constraints.
             $seasonId = $entry->getSeasonId();

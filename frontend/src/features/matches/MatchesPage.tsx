@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight, Plus, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Plus, Upload } from "lucide-react";
 import { useMemo } from "react";
 
+import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Spinner } from "@/shared/components/ui/spinner";
@@ -22,6 +23,7 @@ function byId<T extends { id: string }>(rows: T[] | undefined): Map<string, T> {
 }
 
 export function MatchesPage() {
+  const { data: me } = useMe();
   const fixtures = useFixtures();
   const competitions = useCompetitions();
   const leagueWindows = useLeagueWindows();
@@ -80,6 +82,17 @@ export function MatchesPage() {
     return (
       <div className="flex justify-center py-16">
         <Spinner />
+      </div>
+    );
+  }
+
+  // Matches are locked until the season's main plan is validated (cockpit state 2).
+  if (null === (me?.socleValidatedAt ?? null)) {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center">
+        <Lock className="mx-auto mb-3 size-8 text-accent" />
+        <h1 className="mb-1 text-lg font-semibold">Matchs verrouillés</h1>
+        <p className="text-sm text-muted-foreground">Validez d'abord votre planning principal (accueil → Ouvrir) pour débloquer les matchs.</p>
       </div>
     );
   }

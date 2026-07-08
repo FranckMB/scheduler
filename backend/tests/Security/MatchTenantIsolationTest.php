@@ -173,6 +173,9 @@ final class MatchTenantIsolationTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
+        // Matches require a validated socle (cockpit state 3) — stamp it so these
+        // isolation tests exercise the tenant boundary, not the socle guard.
+        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
 
         return $season;

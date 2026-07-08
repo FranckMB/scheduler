@@ -105,13 +105,14 @@ export function WizardPage() {
   const [footerExtra, setFooterExtra] = useState<ReactNode>(null);
   const [suppressScrollJump, setSuppressScrollJump] = useState(false);
   const footerCtx = useMemo(() => ({ setFooterExtra, setSuppressScrollJump }), []);
-  // First-time club (not yet onboarded) → guided: forward steps stay locked
+  // Onboarding (no main plan / baseline yet) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely. Period mode is never
   // guided (structure is inherited read-only; nav is open).
-  const guided = !periodMode && me?.club?.onboardingCompleted === false;
+  const guided = !periodMode && null === (me?.baselineScheduleId ?? null);
 
-  // On first entry of a guided wizard, land on the first incomplete step
-  // (no team → Équipes, no gym → Gymnases, …) so the user resumes where needed.
+  // On first entry of a guided wizard, land on the first incomplete step (no
+  // team → Équipes, …); when everything is filled, land on Récap — the last
+  // stop before generating the main plan.
   const teams = useWizardTeams();
   const venues = useWizardVenues();
   const slots = useVenueSlots();
@@ -134,12 +135,15 @@ export function WizardPage() {
     } else if (0 === (coaches.data ?? []).length) {
       gap = "coaches";
     }
-    // Only pull back to a real gap; if everything is filled, leave the user
-    // wherever they were (e.g. already on the generation step).
     if (null !== gap) {
-      jumpTo(gap);
+      jumpTo(gap); // pull back to the first incomplete step
+    } else if (WIZARD_STEPS.findIndex((s) => s.id === stepId) < WIZARD_STEPS.findIndex((s) => "recap" === s.id)) {
+      // Everything filled and the user is before Récap → land on Récap. Do NOT
+      // pull a user already ON/AFTER Récap back (e.g. mid first-generation on the
+      // génération step — a remount must not yank them off the progress view).
+      jumpTo("recap");
     }
-  }, [guided, ready, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
+  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
   const quitPeriod = () => {
     exitPeriodMode();
