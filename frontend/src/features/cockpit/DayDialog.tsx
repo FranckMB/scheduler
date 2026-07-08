@@ -180,11 +180,15 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
   const submit = () => {
     if (venueId === "" || !validEnd) return;
     const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Salle";
-    // Structured "gymnase — raison" so the calendar tooltip always names both the
-    // venue and why it's closed (the reason defaults to "fermé" when left blank).
-    const reason = title.trim() === "" ? "fermé" : title.trim();
+    // Structured "gymnase — raison" so the calendar tooltip names both the venue
+    // and why it's closed. Don't prefix when the typed reason already mentions the
+    // venue (avoids "Gymnase A — Gymnase A …"); default reason to "fermé" when
+    // blank; cap to the Constraint.name column (180) so a long reason can't make
+    // the paired FACILITY constraint fail to persist.
+    const reason = title.trim();
+    const base = reason === "" ? `${venueName} — fermé` : reason.includes(venueName) ? reason : `${venueName} — ${reason}`;
     createClosure.mutate(
-      { title: `${venueName} — ${reason}`, startDate: iso, endDate, venueId },
+      { title: base.slice(0, 180), startDate: iso, endDate, venueId },
       // Errors are toasted by the hook itself (unmount-safe rollback message).
       { onSuccess: () => { toast.success("Indisponibilité enregistrée"); onDone(); } },
     );
@@ -200,7 +204,7 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
           </option>
         ))}
       </select>
-      <input className={fieldClass} placeholder="Intitulé (optionnel)" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className={fieldClass} placeholder="Intitulé (optionnel)" maxLength={140} value={title} onChange={(e) => setTitle(e.target.value)} />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validEnd}>
         Enregistrer

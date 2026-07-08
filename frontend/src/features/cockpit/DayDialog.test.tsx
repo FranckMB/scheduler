@@ -48,6 +48,7 @@ describe("DayDialog — deletion is always confirmed", () => {
   beforeEach(() => {
     deleteMutate.mockReset();
     cutoffMutate.mockReset();
+    closureMutate.mockReset();
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -131,6 +132,20 @@ describe("DayDialog — deletion is always confirmed", () => {
 
     expect(closureMutate).toHaveBeenCalledWith(
       { title: "Gymnase A — Travaux", startDate: "2026-05-12", endDate: "2026-05-12", venueId: "v1" },
+      expect.anything(),
+    );
+  });
+
+  it("does not repeat the venue when the typed reason already names it", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Signaler une indisponibilité" }));
+    await userEvent.selectOptions(screen.getByRole("combobox"), "v1");
+    await userEvent.type(screen.getByPlaceholderText(/Intitulé \(optionnel/), "Gymnase A en travaux");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(closureMutate).toHaveBeenCalledWith(
+      { title: "Gymnase A en travaux", startDate: "2026-05-12", endDate: "2026-05-12", venueId: "v1" },
       expect.anything(),
     );
   });
