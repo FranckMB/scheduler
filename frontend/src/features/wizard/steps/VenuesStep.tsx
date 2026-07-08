@@ -1,10 +1,11 @@
 import { Check, Plus, Trash2, X } from "lucide-react";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { nextVenueColor } from "@/shared/lib/color";
 import { formatDuration } from "@/shared/lib/duration";
 
 import { useEntryConflicts } from "@/features/cockpit/queries";
@@ -67,6 +68,12 @@ function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canS
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
   const [capacity, setCapacity] = useState(slot.capacity);
+  // Clicking a cell opens this editor below the grid — scroll it into view so
+  // the user sees it without hunting (the grid can push it off-screen).
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
 
   const save = () => {
     update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } });
@@ -74,7 +81,7 @@ function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canS
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-accent/40 bg-card p-3">
+    <div ref={rootRef} className="mt-3 rounded-lg border border-accent/40 bg-card p-3">
       <div className="mb-2 text-xs font-medium">Modification du créneau</div>
       <div className="flex flex-wrap items-end gap-2">
         <Select aria-label="Jour" className="h-8 w-24" value={day} onChange={(e) => setDay(Number(e.target.value))}>
@@ -133,6 +140,7 @@ function VenuesEditor() {
   const addSlot = useCreateSlot();
 
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
@@ -151,12 +159,17 @@ function VenuesEditor() {
   const addVenue = (event: FormEvent) => {
     event.preventDefault();
     if ("" === name.trim()) {
+      // Silent no-op was frustrating: surface why + jump to the empty field.
+      setNameError(true);
+      nameRef.current?.focus();
       return;
     }
+    setNameError(false);
     // Select the freshly created venue so the slot grid targets it — otherwise
     // the selection stays on the previous gym and slots land on the wrong one.
+    // A new gym gets a distinct rainbow colour by default (not flat grey).
     create.mutate(
-      { name: name.trim(), canSplit: false },
+      { name: name.trim(), color: nextVenueColor(venues.map((v) => v.color)), canSplit: false },
       { onSuccess: (created) => setSelectedId(created.id) },
     );
     setName("");
@@ -172,12 +185,31 @@ function VenuesEditor() {
         Ajoutez vos gymnases, puis cliquez dans la grille pour poser les créneaux de disponibilité (jour + heure). Un gymnase sans créneau ne peut pas être utilisé.
       </p>
 
-      <form onSubmit={addVenue} className="mb-4 flex items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Input ref={nameRef} aria-label="Nom du gymnase" placeholder="Nom du gymnase" className="h-8 flex-1" value={name} onChange={(e) => setName(e.target.value)} />
+      <form onSubmit={addVenue} className="mb-2 flex items-end gap-2 rounded-lg border border-border bg-card p-3">
+        <Input
+          ref={nameRef}
+          aria-label="Nom du gymnase"
+          aria-invalid={nameError}
+          placeholder="Nom du gymnase"
+          className={`h-8 flex-1 ${nameError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (nameError) {
+              setNameError(false);
+            }
+          }}
+        />
         <Button type="submit" size="icon" className="size-8" disabled={create.isPending} title="Ajouter un gymnase" aria-label="Ajouter un gymnase">
           <Plus className="size-4" />
         </Button>
       </form>
+
+      {nameError ? (
+        <p role="alert" className="mb-3 text-sm text-destructive">
+          Donnez un nom au gymnase avant de l'ajouter.
+        </p>
+      ) : null}
 
       {emptyVenues.length > 0 ? (
         <p role="alert" className="mb-3 text-sm text-destructive">
@@ -189,10 +221,16 @@ function VenuesEditor() {
         <p className="text-sm text-muted-foreground">Aucun gymnase pour le moment.</p>
       ) : (
         <>
+          {/* Selection row — pick WHICH gym to work on (kept visually separate
+              from the edit card below so the two intents don't blur together). */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label className="text-sm font-medium" htmlFor="venue-picker">
+              Gymnase :
+            </label>
             <Select
+              id="venue-picker"
               aria-label="Gymnase"
-              className="h-9 w-48"
+              className="h-9 w-56"
               value={selected.id}
               onChange={(e) => {
                 setSelectedId(e.target.value);
@@ -205,24 +243,38 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
-            <ColorField key={selected.id} venue={selected} onApply={(color) => update.mutate({ id: selected.id, body: { name: selected.name, color, canSplit: selected.canSplit } })} />
-            <Input
-              aria-label="Renommer le gymnase"
-              className="h-9 w-48"
-              defaultValue={selected.name}
-              key={selected.id}
-              onChange={(e) => setVenueName(e.target.value)}
-              onBlur={() => venueName.trim() && venueName !== selected.name && update.mutate({ id: selected.id, body: { name: venueName.trim(), color: selected.color, canSplit: selected.canSplit } })}
-            />
-            <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Un gymnase divisible peut accueillir 2 équipes en même temps (terrain coupé en deux).">
-              <input
-                type="checkbox"
-                checked={selected.canSplit}
-                onChange={(e) => update.mutate({ id: selected.id, body: { name: selected.name, color: selected.color, canSplit: e.target.checked } })}
+            <span aria-hidden className="size-4 shrink-0 rounded-full border border-input" style={{ backgroundColor: selected.color ?? "#666666" }} />
+          </div>
+
+          {/* Edit card — properties of the SELECTED gym (distinct block). */}
+          <div className="mb-3 rounded-lg border border-border bg-card p-3">
+            <div className="mb-2 text-xs font-medium text-muted-foreground">Édition du gymnase « {selected.name} »</div>
+            <div className="flex flex-wrap items-center gap-3">
+              <ColorField key={`color-${selected.id}`} venue={selected} onApply={(color) => update.mutate({ id: selected.id, body: { name: selected.name, color, canSplit: selected.canSplit } })} />
+              <Input
+                aria-label="Renommer le gymnase"
+                className="h-9 w-56"
+                defaultValue={selected.name}
+                key={`name-${selected.id}`}
+                onChange={(e) => setVenueName(e.target.value)}
+                onBlur={() => venueName.trim() && venueName !== selected.name && update.mutate({ id: selected.id, body: { name: venueName.trim(), color: selected.color, canSplit: selected.canSplit } })}
               />
-              Terrain divisible
-            </label>
-            <span className="mx-2 h-6 w-px bg-border" />
+              <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Un gymnase divisible peut accueillir 2 équipes en même temps (terrain coupé en deux).">
+                <input
+                  type="checkbox"
+                  checked={selected.canSplit}
+                  onChange={(e) => update.mutate({ id: selected.id, body: { name: selected.name, color: selected.color, canSplit: e.target.checked } })}
+                />
+                Terrain divisible
+              </label>
+              <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => setPendingDeleteVenue(selected)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Slot-placement toolbar — the size of the next slot dropped on the grid. */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">À poser :</span>
             <Select aria-label="Durée à poser" className="h-9 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
               {DURATIONS.map((d) => (
@@ -232,9 +284,6 @@ function VenuesEditor() {
               ))}
             </Select>
             <CapacitySelect value={capacity} onChange={setCapacity} canSplit={selected.canSplit} className="h-9 w-52" />
-            <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" onClick={() => setPendingDeleteVenue(selected)} title="Supprimer ce gymnase" aria-label="Supprimer ce gymnase">
-              <Trash2 className="size-4" />
-            </Button>
           </div>
 
           <VenueAvailabilityGrid

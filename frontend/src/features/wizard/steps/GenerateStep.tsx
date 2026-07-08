@@ -11,6 +11,7 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 
+import { useStepValidation } from "../lib/useStepValidation";
 import { useLaunchGeneration, useScheduleStatus } from "../queries";
 import { useWizardStore } from "../store";
 
@@ -29,6 +30,9 @@ export function GenerateStep() {
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
+  // Same blockers as the Récap gate — a user already sitting on this step when a
+  // blocker appears must not be able to launch anyway.
+  const blockers = useStepValidation("recap").errors;
   const launch = useLaunchGeneration();
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
@@ -157,9 +161,21 @@ export function GenerateStep() {
               Premier calendrier secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les calendriers secondaires (après confirmation).
             </p>
           ) : null}
+          {blockers.length > 0 ? (
+            <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-left">
+              <div className="mb-1 flex items-center gap-2 text-sm font-medium text-destructive">
+                <AlertTriangle className="size-4" />À corriger avant de générer
+              </div>
+              <ul className="list-inside list-disc text-sm text-destructive">
+                {blockers.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {/* Period mode: wait for the entry to load so an existing overlay is
-              regenerated (not duplicated → backend 422). */}
-          <Button size="lg" onClick={start} disabled={periodMode && !periodEntry}>
+              regenerated (not duplicated → backend 422). Also gated by blockers. */}
+          <Button size="lg" onClick={start} disabled={blockers.length > 0 || (periodMode && !periodEntry)}>
             <Rocket className="size-4" />
             {periodMode ? "Générer le plan de période" : "Lancer la génération"}
           </Button>

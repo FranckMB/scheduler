@@ -59,3 +59,34 @@ export function accentForMode(hex: string, mode: "dark" | "light"): string {
   }
   return hex;
 }
+
+/**
+ * Distinguishable venue colours ordered as a rainbow (no black/white/grey) so a
+ * freshly created gym gets a vivid default instead of a flat grey. Vivid enough
+ * to tell two gyms apart on the planning grid, none so dark it needs lifting.
+ */
+export const VENUE_PALETTE = [
+  "#E6194B", // red
+  "#F58231", // orange
+  "#FFD21E", // yellow
+  "#BFEF45", // lime
+  "#3CB44B", // green
+  "#469990", // teal
+  "#42D4F4", // cyan
+  "#4363D8", // blue
+  "#911EB4", // purple
+  "#F032E6", // magenta
+  "#FA5A8C", // pink
+  "#9A6324", // brown
+] as const;
+
+/**
+ * Next default colour for a new venue: the first palette hue not already used,
+ * so gyms stay visually distinct; once the palette is exhausted it cycles by
+ * count. Comparison is case-insensitive on the hex string.
+ */
+export function nextVenueColor(usedColors: readonly (string | null)[]): string {
+  const used = new Set(usedColors.filter((c): c is string => null !== c).map((c) => c.toLowerCase()));
+  const free = VENUE_PALETTE.find((c) => !used.has(c.toLowerCase()));
+  return free ?? VENUE_PALETTE[used.size % VENUE_PALETTE.length];
+}

@@ -1,6 +1,7 @@
 import type { Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { type Reservation, useWizardStore } from "../store";
+import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
 const DAY_LABELS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
@@ -131,10 +132,10 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     }
     if (constraintValidation && !constraintValidation.valid) {
       for (const messages of Object.values(constraintValidation.errors)) {
-        errors.push(...messages);
+        errors.push(...messages.map(humanizeConstraintError));
       }
       for (const conflict of constraintValidation.conflicts) {
-        errors.push(conflict.reason);
+        errors.push(humanizeConstraintError(conflict.reason));
       }
     }
     return { errors, warnings: [] };

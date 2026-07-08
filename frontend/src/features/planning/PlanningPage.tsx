@@ -259,34 +259,46 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             // container height) — with the default `auto` row the children's h-full
             // cannot resolve, the WeekGrid lays out at full content height and
             // overflows the page instead of scrolling internally.
-            <div
-              className={`lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4 ${embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]"}`}
-            >
-              <div className="relative min-w-0 lg:h-full">
-                <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
-              </div>
-              <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
-                {null !== selectedCell && null !== selectedSlot ? (
-                  <SlotDetail
-                    key={selectedSlot.id}
-                    cell={selectedCell}
-                    slot={selectedSlot}
-                    venues={venues}
-                    categoryLabel={categoryLabel}
-                    busy={busy}
-                    readOnly={isReadOnly}
-                    onClose={() => setSelectedSlotId(null)}
-                    onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
-                    onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
-                  />
-                ) : null}
-                {isReadOnly ? null : (
-                  <div className="min-h-[12rem] flex-1">
-                    <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
+            //
+            // The right column only exists when there is something to show: the
+            // slot-detail panel (opened on click) or, for an editable planning,
+            // the diagnostics. In read-only consultation with no slot selected the
+            // grid takes the full width; closing the panel returns to full width.
+            (() => {
+              const showDetail = null !== selectedCell && null !== selectedSlot;
+              const showAside = showDetail || !isReadOnly;
+              const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
+              return (
+                <div className={`${showAside ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4" : ""} ${height}`}>
+                  <div className="relative min-w-0 lg:h-full">
+                    <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
                   </div>
-                )}
-              </div>
-            </div>
+                  {showAside ? (
+                    <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
+                      {null !== selectedCell && null !== selectedSlot ? (
+                        <SlotDetail
+                          key={selectedSlot.id}
+                          cell={selectedCell}
+                          slot={selectedSlot}
+                          venues={venues}
+                          categoryLabel={categoryLabel}
+                          busy={busy}
+                          readOnly={isReadOnly}
+                          onClose={() => setSelectedSlotId(null)}
+                          onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
+                          onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
+                        />
+                      ) : null}
+                      {isReadOnly ? null : (
+                        <div className="min-h-[12rem] flex-1">
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()
           )}
         </>
       )}
