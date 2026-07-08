@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Season;
 use App\Repository\SeasonRepository;
 use DateTimeImmutable;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -31,6 +32,7 @@ final class SeasonResolver
 
     public function __construct(
         private readonly SeasonRepository $seasonRepository,
+        private readonly ClockInterface $clock,
     ) {}
 
     /**
@@ -132,7 +134,9 @@ final class SeasonResolver
      */
     public function currentSeason(string $clubId, ?DateTimeImmutable $today = null): ?Season
     {
-        return self::currentAmong($this->seasonsForClub($clubId), $today);
+        // Default "now" from the clock so the dev simulator shifts it too; the
+        // static helpers keep taking $today explicitly (their callers pass it).
+        return self::currentAmong($this->seasonsForClub($clubId), $today ?? $this->clock->now());
     }
 
     /**

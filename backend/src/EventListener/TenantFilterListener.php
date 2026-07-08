@@ -13,6 +13,7 @@ use App\Repository\SeasonRepository;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,6 +30,7 @@ class TenantFilterListener implements EventSubscriberInterface
         private readonly SeasonResolver $seasonResolver,
         private readonly TokenStorageInterface $tokenStorage,
         private readonly TenantConnectionContext $tenantConnectionContext,
+        private readonly ClockInterface $clock,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -132,12 +134,13 @@ class TenantFilterListener implements EventSubscriberInterface
 
                 return;
             }
-            $readonly = SeasonResolver::isReadonlyAmong($season, $seasons);
+            $readonly = SeasonResolver::isReadonlyAmong($season, $seasons, $this->clock->now());
         } else {
             // Current season derived from the calendar (SeasonResolver) —
             // replaces the historical single `status='active'` lookup. The
-            // current season is writable by definition.
-            $season = SeasonResolver::currentAmong($seasons);
+            // current season is writable by definition. "Now" comes from the
+            // clock so the dev simulator can shift the July-15 pivot.
+            $season = SeasonResolver::currentAmong($seasons, $this->clock->now());
             $readonly = false;
         }
 

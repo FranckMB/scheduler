@@ -24,6 +24,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -45,6 +46,7 @@ final class AuthController extends AbstractController
         private readonly SchoolZoneResolver $schoolZoneResolver,
         private readonly LeagueResolver $leagueResolver,
         private readonly SeasonResolver $seasonResolver,
+        private readonly ClockInterface $clock,
         private readonly PasswordPolicy $passwordPolicy,
     ) {}
 
@@ -163,7 +165,8 @@ final class AuthController extends AbstractController
                 ];
 
                 $allSeasons = $this->seasonResolver->seasonsForClub($clubEntity->getId());
-                $current = SeasonResolver::currentAmong($allSeasons);
+                $now = $this->clock->now();
+                $current = SeasonResolver::currentAmong($allSeasons, $now);
                 $currentSeasonId = $current?->getId();
 
                 // The gates (cockpit/wizard) follow the SELECTED season
@@ -189,7 +192,7 @@ final class AuthController extends AbstractController
                         'startDate' => $season->getStartDate()->format('Y-m-d'),
                         'endDate' => $season->getEndDate()->format('Y-m-d'),
                         'isCurrent' => $season->getId() === $currentSeasonId,
-                        'isReadonly' => SeasonResolver::isReadonlyAmong($season, $allSeasons),
+                        'isReadonly' => SeasonResolver::isReadonlyAmong($season, $allSeasons, $now),
                     ];
                 }
             }

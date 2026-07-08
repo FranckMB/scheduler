@@ -16,6 +16,7 @@ use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -55,6 +56,7 @@ final class PeriodReminderCommand extends Command
         private readonly SeasonResolver $seasonResolver,
         private readonly PeriodReminderLogRepository $reminderLogRepository,
         private readonly PeriodReminderMailBuilder $mailBuilder,
+        private readonly ClockInterface $clock,
     ) {
         parent::__construct();
     }
@@ -209,7 +211,8 @@ final class PeriodReminderCommand extends Command
             }
         }
 
-        return new DateTimeImmutable(new DateTimeImmutable('now', new DateTimeZone($timezone))->format('Y-m-d'));
+        // "now" from the clock (dev simulator can pin it), read in the club TZ.
+        return new DateTimeImmutable($this->clock->now()->setTimezone(new DateTimeZone($timezone))->format('Y-m-d'));
     }
 
     /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). No --date → null (per-club today). */

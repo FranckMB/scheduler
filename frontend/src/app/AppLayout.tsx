@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
 import { ReadonlySeasonBanner } from "./ReadonlySeasonBanner";
+import { DevClock } from "./DevClock";
 import { SeasonSelector } from "./SeasonSelector";
 import { SeasonTransitionBanner } from "./SeasonTransitionBanner";
 
@@ -38,14 +39,17 @@ export function AppLayout() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
           {/* The club title IS the home link — everything else (planning,
               assistant) is reached from the cockpit, not the top bar. */}
-          <NavLink to="/" aria-label="Accueil" title="Retour à l'accueil (tableau de bord)" className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80">
-            {data?.club?.logoUrl ? (
-              <img src={data.club.logoUrl} alt="" className="size-6 rounded-full object-cover" />
-            ) : (
-              <CalendarCheck2 className="size-5 text-accent" />
-            )}
-            <span className="text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
-          </NavLink>
+          <div className="flex min-w-0 items-center gap-2">
+            <NavLink to="/" aria-label="Accueil" title="Retour à l'accueil (tableau de bord)" className="flex items-center gap-2 rounded-md transition-opacity hover:opacity-80">
+              {data?.club?.logoUrl ? (
+                <img src={data.club.logoUrl} alt="" className="size-6 rounded-full object-cover" />
+              ) : (
+                <CalendarCheck2 className="size-5 text-accent" />
+              )}
+              <span className="truncate text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
+            </NavLink>
+            {import.meta.env.DEV ? <DevClock /> : null}
+          </div>
           <nav className="flex items-center gap-1">
             <SeasonSelector />
             <NavItem to="/matchs">Matchs</NavItem>
