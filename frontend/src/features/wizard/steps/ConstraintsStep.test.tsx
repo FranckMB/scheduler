@@ -197,4 +197,31 @@ describe("ConstraintsStep — edit an existing constraint", () => {
     const arg = h.updateMut.mock.calls[0][0] as { body: Constraint };
     expect(arg.body.config).toEqual({ forcedVenueId: "v2" });
   });
+
+  it("loads a legacy forcedDays 'uniquement' rule and auto-migrates it to allowedDays on save (ENG-16 review)", async () => {
+    const user = userEvent.setup();
+    h.list = [
+      {
+        id: "c-legacy-day",
+        name: "SM1 · uniquement Ven",
+        scope: "TEAM",
+        scopeTargetId: "t1",
+        family: "DAY",
+        ruleType: "HARD",
+        config: { forcedDays: [5] }, // legacy key from #120
+        isActive: true,
+      },
+    ];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    // Legacy forcedDays loads as the "uniquement" mode, day preselected.
+    expect(screen.getByLabelText("Type de jour")).toHaveValue("forced");
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+
+    const arg = h.updateMut.mock.calls[0][0] as { body: Constraint };
+    expect(arg.body.config).toEqual({ allowedDays: [5] });
+    expect(arg.body.config).not.toHaveProperty("forcedDays");
+  });
 });

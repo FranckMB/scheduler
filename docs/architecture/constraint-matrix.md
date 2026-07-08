@@ -19,7 +19,7 @@ test Vitest).
 |---|---|---|---|
 | TIME `minStartTime`/`maxStartTime` | dure | dure (fenêtre figée) | soft |
 | DAY `forbiddenDays` | dure | dure | **soft « éviter ces jours »** *(fix ENG-10 — était un placebo)* |
-| DAY `forcedDays` | dure — mode **« uniquement »** (seuls ces jours permis), toujours HARD (pas de sélecteur) | — | — |
+| DAY `allowedDays` | dure — mode **« uniquement »** (whitelist : l'engine interdit tous les autres jours), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `preferredVenueId` | dure (salle forcée) | **dure** *(fix ENG-12 — était mort)* | soft |
 | FACILITY `forcedVenueId` | dure — mode **« impose »** (doit se dérouler ici), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `forbiddenVenueId` | dure | dure | **soft « éviter ce gymnase »** *(fix ENG-11 — était escaladé en dur → INFEASIBLE possible sur une préférence)* |
@@ -35,14 +35,16 @@ test Vitest).
 
 ## Vocabulaire compris par l'engine mais jamais émis par le wizard (« non proposé »)
 
-`allowedDays` · `preferredDays` (lu par l'objectif, jamais émis — la racine d'ENG-10) ·
+`forcedDays` (engine-only : « au moins une séance ces jours-là » — ≠ « uniquement » ; le wizard émet `allowedDays`, cf. ENG-16) · `preferredDays` (lu par l'objectif, jamais émis — la racine d'ENG-10) ·
 `FACILITY_CAPACITY.maxTeams` (émis par le backend, `canSplit`). L'onglet « Réserver » passe par
 `slotTemplates` (verrou HARD), hors matrice constraints.
 
-> **MàJ 2026-07-08** : `forcedDays` et `forcedVenueId` sont désormais **émis par le wizard**
+> **MàJ 2026-07-08** : `allowedDays` et `forcedVenueId` sont **émis par le wizard**
 > (modes « uniquement »/« impose », toujours HARD) pour que l'édition des contraintes fixtures
 > (`SM4 → Jean Vilar`, `Veterans vendredi uniquement`) fasse un aller-retour fidèle sans
 > rétrograder en préférence. Les deux cellules passent `NOT_OFFERED → HONORED_HARD`.
+> **Correctif ENG-16** : « uniquement » émet `allowedDays` (whitelist réelle), **pas** `forcedDays`
+> (qui ne veut dire QUE « au moins une séance ces jours-là » et laissait les autres jours ouverts).
 
 ## Verrous
 

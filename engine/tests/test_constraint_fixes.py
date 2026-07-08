@@ -283,6 +283,31 @@ class TestConflictAndNonRegression:
         assert conflict_diagnostics[0].severity == "ERROR"
         assert conflict_diagnostics[0].team_id == "team-conflict"
 
+    def test_allowed_days_all_forbidden_returns_conflict_diagnostic(self) -> None:
+        """ENG-16 review: 'uniquement jour X' (allowedDays) + 'évite jour X'
+        (forbiddenDays) zeroes the team — it must surface the EXPLICIT
+        day_constraint_conflict diagnostic, not a generic below-minimum error."""
+        input_data = make_input(
+            teams=[make_team("team-conflict", 1), make_team("team-ok", 1)],
+            constraints=[
+                day_constraint("team-conflict", "HARD", {"allowedDays": [3]}),
+                day_constraint("team-conflict", "HARD", {"forbiddenDays": [3]}),
+            ],
+            slots_per_venue=[
+                make_slot(1, "18:00"),
+                make_slot(3, "18:00"),
+            ],
+        )
+
+        result = asyncio.run(build_schedule(input_data))
+
+        conflict_diagnostics = [diag for diag in result.diagnostics if diag.type == "day_constraint_conflict"]
+        assert result.status != "infeasible"
+        assert len(team_slots(result, "team-conflict")) == 0
+        assert conflict_diagnostics
+        assert conflict_diagnostics[0].severity == "ERROR"
+        assert conflict_diagnostics[0].team_id == "team-conflict"
+
     def test_forbidden_days_still_block_forbidden_weekday(self) -> None:
         input_data = make_input(
             teams=[make_team("team-1", 1)],
