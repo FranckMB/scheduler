@@ -96,7 +96,7 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v1" } });
   });
 
-  it("DAY 'uniquement' emits HARD forcedDays (matrix HONORED_HARD)", async () => {
+  it("DAY 'uniquement' emits HARD allowedDays (whitelist — only these days, ENG-16)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
 
@@ -105,7 +105,7 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.click(screen.getByRole("button", { name: "Ven" }));
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { forcedDays: [5] } });
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { allowedDays: [5] } });
   });
 
   it("keeps the target after a create so several constraints can be added in a row (F5)", async () => {

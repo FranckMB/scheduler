@@ -135,7 +135,10 @@ export function ConstraintsStep() {
   const [minTime, setMinTime] = useState("");
   const [maxTime, setMaxTime] = useState("");
   const [days, setDays] = useState<Set<number>>(new Set());
-  // "à éviter" (forbiddenDays) vs "uniquement" (forcedDays — le seul jour permis).
+  // "à éviter" (forbiddenDays) vs "uniquement" (allowedDays — whitelist : SEULS
+  // ces jours sont permis, l'engine interdit le complément). NB : forcedDays de
+  // l'engine ne veut dire QUE « au moins une séance ces jours-là » — pas ce qu'on
+  // veut ici (audit ENG-16).
   const [dayMode, setDayMode] = useState<"forbidden" | "forced">("forbidden");
   // "préfère" (preferredVenueId) · "évite" (forbiddenVenueId) · "impose" (forcedVenueId, dur).
   const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced">("preferred");
@@ -180,8 +183,9 @@ export function ConstraintsStep() {
         return null;
       }
       if ("forced" === dayMode) {
-        // "uniquement" = seuls ces jours sont permis (forcedDays), toujours dur.
-        return { name: `${who} · uniquement ${dayNames(days)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedDays: [...days] } };
+        // "uniquement" = whitelist allowedDays (l'engine interdit tous les autres
+        // jours) — PAS forcedDays qui n'impose qu'« au moins une séance » (ENG-16).
+        return { name: `${who} · uniquement ${dayNames(days)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, allowedDays: [...days] } };
       }
       return { name: `${who} · pas ${dayNames(days)}`, scope, scopeTargetId, family, ruleType, config: { ...tagConfig, forbiddenDays: [...days] } };
     }
@@ -257,7 +261,7 @@ export function ConstraintsStep() {
     // build() and hide the rule selector — load them as PREFERRED so that if the
     // user later switches to a soft mode it does NOT stay a hard requirement (the
     // inherited HARD would otherwise leak through, keeping the venue/day forced).
-    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && Array.isArray(cfg.forcedDays)) || "COACH_AVAILABILITY" === c.family;
+    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && Array.isArray(cfg.allowedDays)) || "COACH_AVAILABILITY" === c.family;
     setRuleType(isForced ? "PREFERRED" : c.ruleType);
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
@@ -273,9 +277,9 @@ export function ConstraintsStep() {
       setMaxTime("string" === typeof cfg.maxStartTime ? cfg.maxStartTime : "");
     }
     if ("DAY" === c.family) {
-      const forced = Array.isArray(cfg.forcedDays);
-      setDayMode(forced ? "forced" : "forbidden");
-      setDays(new Set(asNums(forced ? cfg.forcedDays : cfg.forbiddenDays)));
+      const onlyThese = Array.isArray(cfg.allowedDays);
+      setDayMode(onlyThese ? "forced" : "forbidden");
+      setDays(new Set(asNums(onlyThese ? cfg.allowedDays : cfg.forbiddenDays)));
     }
     if ("FACILITY" === c.family) {
       if ("string" === typeof cfg.forcedVenueId) {

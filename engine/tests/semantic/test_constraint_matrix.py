@@ -119,8 +119,8 @@ def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
         return slot["venueId"] != config[key]
     if key == "forbiddenVenueId":
         return slot["venueId"] == config["forbiddenVenueId"]
-    if key == "forcedDays":
-        return int(slot["dayOfWeek"]) not in set(config["forcedDays"])
+    if key == "allowedDays":
+        return int(slot["dayOfWeek"]) not in set(config["allowedDays"])
     raise AssertionError(f"no violation predicate for {key}")
 
 

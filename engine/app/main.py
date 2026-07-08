@@ -114,7 +114,10 @@ def _day_constraint_conflict_team_ids(time_windows: list[dict[str, Any]]) -> set
         family = constraint.get("family")
         if rule_type == "PREFERRED" and family == "TIME":
             continue
-        if rule_type != "HARD" or family != "DAY":
+        # LOCK is enforced as hard as HARD downstream (add_time_window_constraints),
+        # so it must be considered here too (ENG-20) — else a LOCK DAY with a
+        # forced∩forbidden overlap would slip past the conflict pre-detection.
+        if rule_type not in ("HARD", "LOCK") or family != "DAY":
             continue
 
         team_id = constraint.get("scope_target_id") or constraint.get("scopeTargetId")

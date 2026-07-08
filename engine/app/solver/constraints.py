@@ -5,7 +5,11 @@ variables and no penalties are introduced in this module.
 
 Implicit rules (always applied):
   VENUE_AT_MOST_ONE, COACH_NO_OVERLAP, COACH_PLAYER_NO_OVERLAP,
-  TEAM_NO_OVERLAP, MIN_SESSIONS
+  TEAM_NO_OVERLAP
+MIN_SESSIONS is CAPABLE of a hard floor (add_min_sessions_constraints) but is
+currently wired SOFT-ONLY: main._solve passes a floor of 0 for every team and
+relies on the objective bonus (session_count) + a WARNING/ERROR diagnostic. It
+is a target, not a guarantee (ENG-18).
 
 Derived rules (parsed from v2 constraints[] payload → ParsedConstraints):
   forbidden_assignments, coach_unavailability, forced_venues,
