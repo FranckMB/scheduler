@@ -1041,7 +1041,17 @@ def add_venue_minimum_constraints(
             if isinstance(slot_key, tuple) and len(slot_key) >= 2 and str(slot_key[0]) == team_id and str(slot_key[1]) == venue_id
         ]
 
-        if len(team_venue_vars) < minimum:
+        # Reachability is bounded by the number of DISTINCT DAYS available at the
+        # venue, NOT the raw slot count: a team plays ≤1 session/day (per-day cap),
+        # so two same-day slots still contribute at most ONE session. Counting raw
+        # vars would let a provably-infeasible minimum slip past → silent INFEASIBLE.
+        team_venue_days = {
+            slot_key[2]
+            for slot_key in x
+            if isinstance(slot_key, tuple) and len(slot_key) >= 3 and str(slot_key[0]) == team_id and str(slot_key[1]) == venue_id
+        }
+
+        if len(team_venue_days) < minimum:
             conflicts.append({
                 "id": f"venue_minimum_unreachable-{team_id}-{venue_id}",
                 "type": "venue_minimum_unreachable",
@@ -1049,9 +1059,9 @@ def add_venue_minimum_constraints(
                 "teamId": team_id,
                 "message": (
                     f"Team {team_id} cannot reach {minimum} session(s) at venue {venue_id}: "
-                    f"only {len(team_venue_vars)} slot(s) available there."
+                    f"only {len(team_venue_days)} distinct day(s) available there (≤1 session/day)."
                 ),
-                "suggestions": ["Lower the minimum, or add availability slots at this venue."],
+                "suggestions": ["Lower the minimum, or add availability slots on OTHER days at this venue."],
                 "createdAt": datetime.now(UTC).isoformat(),
             })
             continue

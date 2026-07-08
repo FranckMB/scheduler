@@ -125,11 +125,13 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     renderWithProviders(<ConstraintsStep />);
 
     await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    // "au moins N" is per-team → target a specific team (TEAM scope, the only shape the engine honors).
+    await user.selectOptions(screen.getByLabelText("Cible"), "t1");
     await user.selectOptions(screen.getByLabelText("Préférence"), "min");
     await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", ruleType: "HARD", config: { minAtVenueId: "v1", minAtVenueCount: 1 } });
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", scope: "TEAM", ruleType: "HARD", config: { minAtVenueId: "v1", minAtVenueCount: 1 } });
   });
 
   it("DAY 'uniquement' emits HARD allowedDays (whitelist — only these days, ENG-16)", async () => {

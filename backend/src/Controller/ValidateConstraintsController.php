@@ -60,10 +60,15 @@ final class ValidateConstraintsController extends AbstractController
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
         }
 
-        // Map teamId → sessions/week for the fail-fast venue-minimum check.
+        // Map teamId → sessions/week for the fail-fast venue-minimum check — only
+        // loaded when at least one constraint actually carries a minAtVenueId (the
+        // vast majority of validations are TIME/DAY/COACH and never need it).
         $teamSessions = [];
-        foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
-            $teamSessions[$team->getId()] = $team->getSessionsPerWeek();
+        $needsTeams = array_filter($constraints, static fn (Constraint $c): bool => isset($c->getConfig()['minAtVenueId']));
+        if ([] !== $needsTeams) {
+            foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+                $teamSessions[$team->getId()] = $team->getSessionsPerWeek();
+            }
         }
 
         $errors = [];

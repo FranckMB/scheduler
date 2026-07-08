@@ -229,6 +229,26 @@ final class ConstraintValidationServiceTest extends TestCase
         self::assertSame([], $this->service->validate($constraint));
     }
 
+    public function testMaxEndTimeAtPreferredIsRejected(): void
+    {
+        // The engine only honors maxEndTime on HARD/LOCK — a PREFERRED end-bound is a placebo (C4).
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::TIME)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['maxEndTime' => '20:30']);
+        self::assertContains('maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+    }
+
+    public function testMinAtVenueIdAtPreferredIsRejected(): void
+    {
+        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['minAtVenueId' => 'v']);
+        self::assertContains('minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+    }
+
+    public function testMinAtVenueIdAtClubScopeIsRejected(): void
+    {
+        // CLUB-scoped minAtVenueId is dropped by parse_v2_constraints (TEAM-only) — reject it (C3).
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v']);
+        self::assertContains('minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.', $this->service->validate($constraint));
+    }
+
     public function testVenueMinimumErrorWhenCountExceedsSessions(): void
     {
         $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 3]);

@@ -569,18 +569,22 @@ def add_spacing_penalty(
         if team_id is None:
             continue
         days = team_day_vars.get(str(team_id), {})
+        # One reified "team trains on day D" bool per day, reused across both
+        # adjacent pairs (D is the right end of (D-1,D) and the left end of
+        # (D,D+1)) — building it per-pair doubled the vars/constraints (C8).
+        present: dict[int, BoolVarLike] = {}
         for day in sorted(days):
             if day + 1 not in days:
                 continue
-            d1 = model.NewBoolVar(f"has_{team_id}_{day}")
-            model.Add(sum(days[day]) >= 1).OnlyEnforceIf(d1)
-            model.Add(sum(days[day]) == 0).OnlyEnforceIf(d1.Not())
-            d2 = model.NewBoolVar(f"has_{team_id}_{day + 1}")
-            model.Add(sum(days[day + 1]) >= 1).OnlyEnforceIf(d2)
-            model.Add(sum(days[day + 1]) == 0).OnlyEnforceIf(d2.Not())
+            for d in (day, day + 1):
+                if d not in present:
+                    has_d = model.NewBoolVar(f"has_{team_id}_{d}")
+                    model.Add(sum(days[d]) >= 1).OnlyEnforceIf(has_d)
+                    model.Add(sum(days[d]) == 0).OnlyEnforceIf(has_d.Not())
+                    present[d] = has_d
             both = model.NewBoolVar(f"consec_{team_id}_{day}")
-            model.AddBoolAnd([d1, d2]).OnlyEnforceIf(both)
-            model.AddBoolOr([d1.Not(), d2.Not()]).OnlyEnforceIf(both.Not())
+            model.AddBoolAnd([present[day], present[day + 1]]).OnlyEnforceIf(both)
+            model.AddBoolOr([present[day].Not(), present[day + 1].Not()]).OnlyEnforceIf(both.Not())
             soft_terms.append((both, "spacing"))
 
     return soft_terms

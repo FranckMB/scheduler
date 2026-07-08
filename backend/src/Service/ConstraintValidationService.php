@@ -39,6 +39,12 @@ final class ConstraintValidationService
                 if (!isset($config['maxStartTime']) && !isset($config['minStartTime']) && !isset($config['maxEndTime'])) {
                     $errors[] = 'TIME family requires maxStartTime, minStartTime or maxEndTime in config.';
                 }
+                // maxEndTime is honored by the engine ONLY on HARD/LOCK rules (the
+                // soft path add_preferred_time_bonus reads only min/maxStartTime).
+                // A PREFERRED end-bound would be accepted here yet silently ignored.
+                if (isset($config['maxEndTime']) && !\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
+                    $errors[] = 'maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
+                }
                 break;
 
             case ConstraintFamily::DAY:
@@ -55,6 +61,17 @@ final class ConstraintValidationService
                 // engine branch, so it is not accepted here.
                 if (!isset($config['forcedVenueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId']) && !isset($config['minAtVenueId'])) {
                     $errors[] = 'FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.';
+                }
+                // minAtVenueId ("au moins N ici") is honored by the engine ONLY as
+                // a per-TEAM, HARD/LOCK count. A CLUB-scoped or PREFERRED one is
+                // accepted nowhere in parse_v2_constraints → silently dropped.
+                if (isset($config['minAtVenueId'])) {
+                    if (!\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
+                        $errors[] = 'minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
+                    }
+                    if (ConstraintScope::TEAM !== $scope) {
+                        $errors[] = 'minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.';
+                    }
                 }
                 break;
 

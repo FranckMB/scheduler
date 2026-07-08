@@ -480,6 +480,27 @@ class TestVenueMinimum:
         assert diag and diag[0].team_id == "t"
         assert diag[0].severity == "ERROR"
 
+    def test_same_day_slots_count_as_one_reachable_day(self) -> None:
+        # Reachability is DISTINCT DAYS, not raw slots (≤1 session/day). venue-A has
+        # 2 slots but BOTH on day 1 → asking for 2 is unreachable (would be a silent
+        # INFEASIBLE if the guard counted raw vars). Regression for review C1.
+        input_data = ScheduleInputSchema.model_validate({
+            "clubId": "c", "seasonId": "s",
+            "teams": [make_team("t", 2)],
+            "venues": [{
+                "id": "venue-A", "name": "A", "isActive": True,
+                "trainingSlots": [make_slot(1, "18:00"), make_slot(1, "20:00")],
+            }, {
+                "id": "venue-B", "name": "B", "isActive": True,
+                "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")],
+            }],
+            "constraints": [_facility_min("t", "venue-A", 2)], "slotTemplates": [],
+        })
+        result = asyncio.run(build_schedule(input_data))
+        diag = [d for d in result.diagnostics if d.type == "venue_minimum_unreachable"]
+        assert result.status != "infeasible"
+        assert diag and diag[0].team_id == "t", "two same-day slots must not pass as 2 reachable sessions"
+
 
 class TestSpacingPenalty:
     """ALIGN-06: implicit soft nudge — a team prefers non-consecutive training
