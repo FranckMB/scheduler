@@ -34,10 +34,13 @@ export function useModalA11y({ ref, onClose, active = true }: ModalA11yOptions):
 
     const trigger = document.activeElement as HTMLElement | null;
     const panel = ref.current;
+    if (!panel) {
+      return;
+    }
     // Move focus into the dialog. The panel itself carries tabIndex={-1} so it
     // can receive focus without being a tab stop — a neutral entry point that
     // avoids auto-focusing (and pre-arming) a destructive action button.
-    panel?.focus();
+    panel.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -48,8 +51,8 @@ export function useModalA11y({ ref, onClose, active = true }: ModalA11yOptions):
       if (event.key !== "Tab") {
         return;
       }
-      const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE);
-      if (!focusables || focusables.length === 0) {
+      const focusables = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (focusables.length === 0) {
         return;
       }
       const first = focusables[0];
@@ -64,12 +67,22 @@ export function useModalA11y({ ref, onClose, active = true }: ModalA11yOptions):
       }
     };
 
-    document.addEventListener("keydown", onKeyDown);
+    // Listen on the PANEL, not document: a ConfirmDialog nested inside a Modal is
+    // a separate portal subtree, so Escape/Tab only reach the dialog that holds
+    // focus — pressing Escape on the inner confirm no longer also closes the outer
+    // modal (both are body-level portals; a document listener fired both).
+    panel.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      // WCAG 2.4.3: return focus to the trigger so keyboard/SR users are not
-      // dropped at the top of the page when the dialog closes.
-      trigger?.focus?.();
+      panel.removeEventListener("keydown", onKeyDown);
+      // WCAG 2.4.3: return focus to the trigger. If the trigger was removed by the
+      // action this dialog confirmed (e.g. the row's delete button), fall back to
+      // the next still-open dialog so focus is not dropped to <body>.
+      if (trigger?.isConnected) {
+        trigger.focus();
+        return;
+      }
+      const remaining = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter((d) => d !== panel);
+      remaining[remaining.length - 1]?.focus();
     };
   }, [active, ref]);
 }

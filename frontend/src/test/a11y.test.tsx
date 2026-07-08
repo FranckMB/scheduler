@@ -49,6 +49,21 @@ describe("a11y — shared UI primitives", () => {
       <ConfirmDialog open title="Supprimer cette contrainte ?" description="Action définitive." onConfirm={() => {}} onCancel={() => {}} />,
     );
   });
+
+  it("ConfirmDialog focuses the panel (not the destructive button) and Escape cancels", async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(<ConfirmDialog open title="Supprimer ?" onConfirm={onConfirm} onCancel={onCancel} />);
+
+    // Initial focus is the neutral panel, so a stray Enter never fires the
+    // destructive action (the removed autoFocus was on the confirm button).
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
 });
 
 describe("a11y — Modal focus management (WCAG 2.1.2 / 2.4.3)", () => {
@@ -68,6 +83,25 @@ describe("a11y — Modal focus management (WCAG 2.1.2 / 2.4.3)", () => {
 
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Escape on a nested ConfirmDialog does not also close the surrounding Modal (review C1)", async () => {
+    const onModalClose = vi.fn();
+    const onConfirmCancel = vi.fn();
+    render(
+      <Modal label="Extérieur" title="Extérieur" onClose={onModalClose}>
+        <button type="button">Contenu</button>
+        <ConfirmDialog open title="Confirmer ?" onConfirm={() => {}} onCancel={onConfirmCancel} />
+      </Modal>,
+    );
+
+    // Put focus on the inner confirm (its real state when stacked on the modal).
+    // Escape must dismiss only it (panel-scoped listener), leaving the outer modal
+    // open — a document-level listener fired both.
+    screen.getByRole("dialog", { name: "Confirmer ?" }).focus();
+    await userEvent.keyboard("{Escape}");
+    expect(onConfirmCancel).toHaveBeenCalledOnce();
+    expect(onModalClose).not.toHaveBeenCalled();
   });
 
   it("restores focus to the trigger element on close (WCAG 2.4.3)", () => {

@@ -17,6 +17,21 @@ const entryIcon = (e: CalendarEntry): string => {
   return e.isDisruptive ? "🚫" : "🎉";
 };
 
+/**
+ * Accessible name for an entry marker. `title` may be empty (imported / auto-named
+ * entries), so fall back to the marker's meaning — never an empty aria-label, which
+ * would be a silent marker for a screen reader (and an axe violation).
+ */
+const entryLabel = (e: CalendarEntry): string => {
+  if (e.title.trim() !== "") {
+    return e.title;
+  }
+  if (e.kind === "period") {
+    return e.periodType === "cutoff" ? "Coupure" : "Période fermée";
+  }
+  return e.isDisruptive ? "Événement perturbant" : "Événement";
+};
+
 interface MonthCalendarProps {
   year: number;
   month: number;
@@ -92,7 +107,7 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
                   <span role="img" aria-label={`Férié — ${publicHoliday.label}`} title={`Férié — ${publicHoliday.label}`} className="inline-block size-1.5 rounded-full bg-destructive" />
                 ) : null}
                 {dayEntries.map((e) => (
-                  <span key={e.id} role="img" aria-label={e.title} title={e.title}>
+                  <span key={e.id} role="img" aria-label={entryLabel(e)} title={e.title || entryLabel(e)}>
                     {entryIcon(e)}
                   </span>
                 ))}

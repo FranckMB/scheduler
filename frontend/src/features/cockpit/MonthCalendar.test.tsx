@@ -103,6 +103,17 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("gives an empty-title entry a meaningful accessible name, never an empty one (review C3)", async () => {
+    const { container } = renderMay([
+      entry({ id: "cut", kind: "period", periodType: "cutoff", title: "", startDate: "2026-05-12", endDate: "2026-05-12" }),
+    ]);
+
+    // A blank title must not become aria-label="" (silent for SR, axe violation) —
+    // it falls back to the marker's meaning.
+    expect(screen.getByRole("img", { name: "Coupure" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it("opens the day dialog on click with that day's entries", async () => {
     renderMay([entry({ id: "a1", title: "AG", startDate: "2026-05-26", endDate: "2026-05-26" })]);
 
