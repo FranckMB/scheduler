@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
-use App\Entity\Venue;
 use App\Message\ExportPdfMessage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,6 +18,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
 final class ExportPdfController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
+    use ResolvesExportScopeTrait;
 
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -42,19 +42,9 @@ final class ExportPdfController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        // Optional export scope: a single venue. Validate it belongs to this
-        // club+season so a foreign/unknown id can't be smuggled into the worker.
-        $venueId = $this->readVenueId();
-        if (null !== $venueId) {
-            $venue = $this->entityManager->getRepository(Venue::class)->findOneBy([
-                'id' => $venueId,
-                'clubId' => $schedule->getClubId(),
-                'seasonId' => $schedule->getSeasonId(),
-            ]);
-            if (!$venue instanceof Venue) {
-                return $this->json(['error' => 'Venue not found.'], Response::HTTP_NOT_FOUND);
-            }
-        }
+        // Optional export scope: a single venue (validated against this schedule's
+        // club+season; foreign/unknown → 404 via the shared trait).
+        $venueId = $this->resolveExportVenueId($this->entityManager, $this->requestStack, $schedule);
 
         $schedule->setPdfExportStatus('pending');
         $this->entityManager->flush();
@@ -68,17 +58,5 @@ final class ExportPdfController extends AbstractController
         );
 
         return $this->json(['message' => 'PDF export queued.'], Response::HTTP_ACCEPTED);
-    }
-
-    private function readVenueId(): ?string
-    {
-        $request = $this->requestStack->getCurrentRequest();
-        if (null === $request) {
-            return null;
-        }
-        $body = json_decode($request->getContent() ?: '{}', true);
-        $venueId = \is_array($body) ? ($body['venueId'] ?? null) : null;
-
-        return \is_string($venueId) && '' !== $venueId ? $venueId : null;
     }
 }

@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
-use App\Entity\Venue;
 use App\Service\SpreadsheetGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
@@ -24,6 +23,7 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 final class ExportXlsxController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
+    use ResolvesExportScopeTrait;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -44,37 +44,20 @@ final class ExportXlsxController extends AbstractController
             return new JsonResponse(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        $venueId = $this->readVenueId();
-        if (null !== $venueId) {
-            $venue = $this->entityManager->getRepository(Venue::class)->findOneBy([
-                'id' => $venueId,
-                'clubId' => $schedule->getClubId(),
-                'seasonId' => $schedule->getSeasonId(),
-            ]);
-            if (!$venue instanceof Venue) {
-                return new JsonResponse(['error' => 'Venue not found.'], Response::HTTP_NOT_FOUND);
-            }
-        }
+        $venueId = $this->resolveExportVenueId($this->entityManager, $this->requestStack, $schedule);
 
         $binary = $this->spreadsheetGenerator->generate($schedule, $venueId);
-        $filename = \sprintf('planning-%s.xlsx', preg_replace('/[^a-zA-Z0-9_-]+/', '-', $schedule->getName()) ?: 'export');
 
         $response = new Response($binary, Response::HTTP_OK);
         $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        $response->headers->set('Content-Disposition', \sprintf('attachment; filename="%s"', $filename));
+        // makeDisposition emits both an ASCII fallback and a RFC 5987 filename*,
+        // so an accented schedule name survives instead of collapsing to dashes.
+        $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(
+            HeaderUtils::DISPOSITION_ATTACHMENT,
+            \sprintf('planning-%s.xlsx', $schedule->getName()),
+            \sprintf('planning-%s.xlsx', preg_replace('/[^a-zA-Z0-9_-]+/', '-', $schedule->getName()) ?: 'export'),
+        ));
 
         return $response;
-    }
-
-    private function readVenueId(): ?string
-    {
-        $request = $this->requestStack->getCurrentRequest();
-        if (!$request instanceof Request) {
-            return null;
-        }
-        $body = json_decode($request->getContent() ?: '{}', true);
-        $venueId = \is_array($body) ? ($body['venueId'] ?? null) : null;
-
-        return \is_string($venueId) && '' !== $venueId ? $venueId : null;
     }
 }

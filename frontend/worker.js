@@ -9,9 +9,6 @@ const OUTPUT_DIR = '/app/backend/public/exports';
 // A4 in CSS px at 96dpi. Landscape swaps the two. ~24px of margin each way.
 const A4 = { w: 794, h: 1123 };
 const MARGIN = 24;
-// Readability floor: a training week that would need to shrink past this is
-// shown at this scale and clipped to one page rather than becoming illegible.
-const MIN_SCALE = 0.4;
 
 async function generateFiles(html, filename, landscape) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -35,7 +32,10 @@ async function generateFiles(html, filename, landscape) {
 
     const contentH = await page.evaluate(() => document.documentElement.scrollHeight);
     const contentW = await page.evaluate(() => document.documentElement.scrollWidth);
-    const scale = Math.max(MIN_SCALE, Math.min(1, availH / contentH, availW / contentW));
+    // Shrink as far as needed so the WHOLE week fits one page (font gets small
+    // rather than any gym/row being dropped) — a multi-page training plan is not
+    // useful. No floor: fitting everything beats truncating.
+    const scale = Math.min(1, availH / contentH, availW / contentW);
 
     // PDF — single A4 page, given scale, no auto-pagination overflow.
     const pdfPath = path.join(OUTPUT_DIR, filename);

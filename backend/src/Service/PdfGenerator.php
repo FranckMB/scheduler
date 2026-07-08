@@ -28,7 +28,10 @@ class PdfGenerator
     private const PDF_WORKER_URL = 'http://pdf-worker:3000/generate';
     private const OUTPUT_DIR = '/app/backend/public/exports';
     private const PUBLIC_PATH = '/exports';
-    private const STEP_MINUTES = 30;
+    // Match the on-screen planning grid's granularity (grid.ts stepMin = 15) so
+    // slots starting at :15/:45 land on the right row instead of being snapped or
+    // dropped into a coarser bucket.
+    private const STEP_MINUTES = 15;
 
     /** Monday→Sunday; dayOfWeek is 1..7 ISO (the training week is usually 1..6). */
     private const DAY_LABELS = [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'];
@@ -56,12 +59,10 @@ class PdfGenerator
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
         $pngFilename = \sprintf('schedule-%s-%s.png', $schedule->getId(), $scope);
 
-        // The Puppeteer worker (a separate container, different uid) writes the
-        // PDF/PNG into this shared volume, so the dir must be writable by it too.
-        if (!is_dir(self::OUTPUT_DIR)) {
-            mkdir(self::OUTPUT_DIR, 0o777, true);
-        }
-        @chmod(self::OUTPUT_DIR, 0o777);
+        // The Puppeteer worker (a separate container) both creates this dir and
+        // writes the files, as its own uid — PHP only reads back the result, so we
+        // do NOT pre-create it here (that left it owned by www-data, unwritable by
+        // the worker, and forced a world-writable chmod).
 
         try {
             $this->callWorker($html, $pdfFilename);
@@ -124,12 +125,14 @@ class PdfGenerator
 
         [$startMin, $endMin] = $this->timeBounds($slots);
 
-        // Index slots by column + start step for O(1) placement.
+        // Index slots by column + start step. A step can hold MORE than one slot
+        // (a split court runs two teams at the same time in the same gym), so we
+        // keep a list per bucket instead of overwriting.
         $byColStep = [];
         foreach ($slots as $slot) {
             $key = $slot->getDayOfWeek() . '|' . $slot->getVenueId();
             $startStep = intdiv($this->minutesOf($slot->getStartTime()) - $startMin, self::STEP_MINUTES);
-            $byColStep[$key][$startStep] = $slot;
+            $byColStep[$key][$startStep][] = $slot;
         }
 
         $steps = max(1, intdiv($endMin - $startMin, self::STEP_MINUTES));
@@ -147,11 +150,11 @@ class PdfGenerator
     }
 
     /**
-     * @param list<array{day:int,venueId:string}>             $columns
-     * @param array<string, array<int, ScheduleSlotTemplate>> $byColStep
-     * @param array<string, string>                           $teamNames
-     * @param array<string, array{name:string,color:?string}> $venues
-     * @param array<string, string>                           $coachNames
+     * @param list<array{day:int,venueId:string}>                   $columns
+     * @param array<string, array<int, list<ScheduleSlotTemplate>>> $byColStep
+     * @param array<string, string>                                 $teamNames
+     * @param array<string, array{name:string,color:?string}>       $venues
+     * @param array<string, string>                                 $coachNames
      */
     private function buildRows(array $columns, array $byColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
     {
@@ -165,17 +168,21 @@ class PdfGenerator
                 if (isset($covered[$colIndex][$step])) {
                     continue;
                 }
-                $slot = $byColStep[$col['day'] . '|' . $col['venueId']][$step] ?? null;
-                if (!$slot instanceof ScheduleSlotTemplate) {
+                $bucket = $byColStep[$col['day'] . '|' . $col['venueId']][$step] ?? [];
+                if ([] === $bucket) {
                     $cells .= '<td class="cell"></td>';
 
                     continue;
                 }
-                $span = max(1, (int) ceil($slot->getDurationMinutes() / self::STEP_MINUTES));
+                // Cell spans the longest concurrent session in this bucket.
+                $span = 1;
+                foreach ($bucket as $slot) {
+                    $span = max($span, (int) ceil($slot->getDurationMinutes() / self::STEP_MINUTES));
+                }
                 for ($k = 1; $k < $span; ++$k) {
                     $covered[$colIndex][$step + $k] = true;
                 }
-                $cells .= $this->slotCell($slot, $span, $teamNames, $venues, $coachNames, $singleVenue);
+                $cells .= $this->slotCell($bucket, $span, $teamNames, $venues, $coachNames, $singleVenue);
             }
             $rows .= \sprintf('<tr><th class="time">%s</th>%s</tr>', $timeLabel, $cells);
         }
@@ -184,29 +191,38 @@ class PdfGenerator
     }
 
     /**
+     * @param list<ScheduleSlotTemplate>                      $bucket     concurrent slots (≥1) in one cell
      * @param array<string, string>                           $teamNames
      * @param array<string, array{name:string,color:?string}> $venues
      * @param array<string, string>                           $coachNames
      */
-    private function slotCell(ScheduleSlotTemplate $slot, int $span, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
+    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
     {
-        $teamName = $teamNames[$slot->getTeamId()] ?? 'Équipe inconnue';
-        $venue = $venues[$slot->getVenueId()] ?? ['name' => 'Salle', 'color' => null];
+        // Colour the cell by the (shared) venue of the bucket; stack each team.
+        $venue = $venues[$bucket[0]->getVenueId()] ?? ['name' => 'Salle', 'color' => null];
         $color = $venue['color'] ?? '#666666';
         $fg = $this->readableForeground($color);
-        $coachId = $slot->getCoachId();
-        $coachName = null !== $coachId ? ($coachNames[$coachId] ?? null) : null;
 
-        // In a single-venue export the venue name is redundant (it's in the title).
-        $sub = $singleVenue ? ($coachName ?? '') : trim($venue['name'] . (null !== $coachName ? ' · ' . $coachName : ''));
+        $entries = '';
+        foreach ($bucket as $slot) {
+            $teamName = $teamNames[$slot->getTeamId()] ?? 'Équipe inconnue';
+            $coachId = $slot->getCoachId();
+            $coachName = null !== $coachId ? ($coachNames[$coachId] ?? null) : null;
+            // In a single-venue export the venue name is redundant (it's in the title).
+            $sub = $singleVenue ? ($coachName ?? '') : trim($venue['name'] . (null !== $coachName ? ' · ' . $coachName : ''));
+            $entries .= \sprintf(
+                '<div class="entry"><span class="team">%s</span>%s</div>',
+                htmlspecialchars($teamName),
+                '' === $sub ? '' : \sprintf('<span class="sub">%s</span>', htmlspecialchars($sub)),
+            );
+        }
 
         return \sprintf(
-            '<td class="cell filled" rowspan="%d" style="background:%s;color:%s"><span class="team">%s</span>%s</td>',
+            '<td class="cell filled" rowspan="%d" style="background:%s;color:%s">%s</td>',
             $span,
             htmlspecialchars($color),
             htmlspecialchars($fg),
-            htmlspecialchars($teamName),
-            '' === $sub ? '' : \sprintf('<span class="sub">%s</span>', htmlspecialchars($sub)),
+            $entries,
         );
     }
 
@@ -298,6 +314,7 @@ class PdfGenerator
                 th.corner { width: 34px; background: #fff; border: none; }
                 th.time { background: #fafafa; text-align: right; white-space: nowrap; font-weight: normal; color: #555; width: 34px; }
                 td.cell { height: 14px; }
+                td.filled .entry + .entry { margin-top: 2px; padding-top: 2px; border-top: 1px dashed rgba(255,255,255,0.45); }
                 td.filled .team { display: block; font-weight: bold; line-height: 1.1; }
                 td.filled .sub { display: block; font-size: 8px; opacity: 0.9; line-height: 1.1; }
                 .empty { color: #999; font-style: italic; }

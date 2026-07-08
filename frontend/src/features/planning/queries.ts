@@ -107,6 +107,11 @@ function download(url: string, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
+  // Revoke on the next macrotask: a synchronous revoke can cancel the download
+  // the click just started in some browsers.
+  if (url.startsWith("blob:")) {
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 }
 
 /**
@@ -125,27 +130,26 @@ export function useScheduleExport(scheduleId: string | null) {
       try {
         if ("xlsx" === format) {
           const blob = await planningApi.exportScheduleXlsx(scheduleId, venueId);
-          const url = URL.createObjectURL(blob);
-          download(url, "planning.xlsx");
-          URL.revokeObjectURL(url);
+          download(URL.createObjectURL(blob), "planning.xlsx");
           return;
         }
         await planningApi.exportSchedulePdf(scheduleId, venueId);
-        // Poll the schedule until the worker finishes the PDF+PNG pair.
+        // The worker writes the file path with a scope suffix (-all / -<venueId8>);
+        // the schedule row carries a single, shared export URL, so only download
+        // once it matches THIS request's scope — guards against another in-flight
+        // export (other tab/scope) whose 'completed' + URL we'd otherwise grab.
+        const scopeToken = `-${null === venueId ? "all" : venueId.slice(0, 8)}.${format}`;
         const deadline = Date.now() + EXPORT_TIMEOUT_MS;
         for (;;) {
           await sleep(EXPORT_POLL_MS);
           const schedule = await planningApi.getSchedule(scheduleId);
-          if ("completed" === schedule.pdfExportStatus) {
-            const url = "pdf" === format ? schedule.pdfExportUrl : schedule.pngExportUrl;
-            if (null === url || undefined === url) {
-              throw new Error("export url missing");
-            }
-            download(url, `planning.${format}`);
-            return;
-          }
           if ("failed" === schedule.pdfExportStatus || Date.now() > deadline) {
             throw new Error("export failed");
+          }
+          const url = "pdf" === format ? schedule.pdfExportUrl : schedule.pngExportUrl;
+          if ("completed" === schedule.pdfExportStatus && null != url && url.endsWith(scopeToken)) {
+            download(url, `planning.${format}`);
+            return;
           }
         }
       } catch {
