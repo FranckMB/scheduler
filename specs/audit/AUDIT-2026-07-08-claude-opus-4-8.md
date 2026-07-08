@@ -10,6 +10,28 @@
 
 > **Nouveauté de cette édition** : 3 axes UX additifs (Cohérence · Simplicité-Intuitivité · Inclusivité-a11y), notés **à part** du `/100` des briques, **sévérité extrême**, score général = le plus bas des sous-axes. Les éditions passées n'avaient pas ces axes → baseline `non couvert`, pas de rétro-notation.
 
+---
+
+## Addendum 2026-07-08 — re-passe axe « alignement contraintes 3 couches » (HEAD `dfe288b`, PR #126)
+
+> Re-passe **ciblée** (même jour, HEAD avancé par les PR de correction d'audit). Nouvel axe **Étape 2 quater** (findings `ALIGN-`). Les autres axes ne sont pas re-scannés — voir le corps de l'édition (photo `b00c81b`).
+
+**Findings de l'édition du matin désormais corrigés** (via #126, vérifiés) : **ENG-16** (« uniquement » → `allowedDays` whitelist, Vétérans placé vendredi only), ENG-18 (wording « cible »), ENG-19, ENG-20 (défensif) · **SEC-12** (`assertManager` sur `/validate`), **SEC-13** (`Assert\Uuid`), **BCK-09** (PUT ne migre plus la saison) · **DOC-12/13/04** (job CI, spec cockpit graduée + liens, frontend-wizard). Différés notés : ENG-17, SEC-08 résiduel, BCK-10.
+
+**Axe ALIGN — vérification bout-en-bout (front `build()` → backend `ScheduleConstraintBuilder` → engine `parse_v2_constraints`/`objective`).**
+
+| ID | Titre | Gravité | Vérif | Statut |
+|---|---|---|---|---|
+| — | **Clés émises par le wizard : toutes honorées** (TIME dur+PREFERRED soft via `_add_preferred_bonus` filtre `ruleType==PREFERRED`, DAY/FACILITY dur+soft, COACH, capacité, tag→N, venue_closed→forbidden) | — | confirmé (code lu) | ✅ **aligné** (la dernière scission, ENG-16, est corrigée) |
+| ALIGN-01 | **Scission « coach dispo uniquement » non exposée** : l'engine gère `availableDays` (whitelist coach, intersection) mais le wizard n'avait que `unavailableDays` | Moyenne | confirmé | **corrigé cette passe** — mode « disponible uniquement » ajouté (front + matrice + test) |
+| ALIGN-02 | Scission A `forcedDays` (« au moins une séance tel jour ») — compris par l'engine, non exposé par le wizard | Mineure | confirmé | **ouvert** (feature, valeur faible) |
+| ALIGN-03 | Scission A `preferredDays` — objectif engine, jamais émis | Mineure | confirmé | **ouvert** |
+| ALIGN-04 | **Angle mort `maxEndTime`** (« finir avant X h ») — absent des 3 couches, approximé via début max | Moyenne | confirmé | **ouvert** (chantier 3-couches) |
+| ALIGN-05 | **Angle mort « au moins une séance dans tel gymnase »** — aucun équivalent de `forcedDays` pour les salles ; contournement = réservation manuelle | Moyenne | confirmé | **ouvert** (chantier) |
+| ALIGN-06 | **Angle mort anti-jours-consécutifs / espacement** (« pas 3 d'affilée », « espacer d'un jour ») — non modélisé (hors repos post-match soft) | Moyenne | confirmé | **ouvert** (chantier) |
+
+**Verdict alignement** : le motif « déclaré ≠ effectif » (ENG-10→16) est **éteint** sur tout ce que le wizard émet ; la scission engine>front la plus utile (`availableDays`) est **résorbée**. Restent des **angles morts** (features multi-couches, ALIGN-04/05/06) désormais **redevables** dans le registre. Détail : `frontend/docs/constraint-emission.md` (table d'alignement).
+
 ## Tableau de couverture
 
 | Axe | Couverture | Détail |
