@@ -10,7 +10,6 @@ use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
-use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Sport;
@@ -25,7 +24,6 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\Gender;
 use App\Enum\LockLevel;
-use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
 use App\Service\LeagueResolver;
@@ -148,17 +146,25 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
         $manager->flush();
 
-        // --- Fetch new youth categories ---
-        $u5 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U5']);
-        \assert($u5 instanceof SportCategory);
-        $u7 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U7']);
-        \assert($u7 instanceof SportCategory);
-        $u9 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U9']);
-        \assert($u9 instanceof SportCategory);
-        $u11 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U11']);
-        \assert($u11 instanceof SportCategory);
-        $u13 = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => 'U13']);
-        \assert($u13 instanceof SportCategory);
+        // --- Fetch ALL sport categories in one place (every one is created by the
+        // loop above; regrouped here so teams/constraints share a single source). ---
+        $fetchCat = static function (string $name) use ($manager, $sport): SportCategory {
+            $cat = $manager->getRepository(SportCategory::class)->findOneBy(['sportId' => $sport->getId(), 'name' => $name]);
+            \assert($cat instanceof SportCategory);
+
+            return $cat;
+        };
+        $u5 = $fetchCat('U5');
+        $u7 = $fetchCat('U7');
+        $u9 = $fetchCat('U9');
+        $u11 = $fetchCat('U11');
+        $u13 = $fetchCat('U13');
+        $u15 = $fetchCat('U15');
+        $u18 = $fetchCat('U18');
+        $u21 = $fetchCat('U21');
+        $senior = $fetchCat('Senior');
+        $veteran = $fetchCat('Vétéran');
+        $loisir = $fetchCat('Loisir');
 
         // ============================================================
         // SECTION 1 — PRIORITY TIERS
@@ -203,21 +209,10 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($season);
         }
 
-        // Established club = state 3 (accueil-cockpit-temporel.md state machine):
-        // a validated main plan, so the seeded club lands on the FULL cockpit and
-        // matches/secondary plans are unlocked. The gate keys on socleValidatedAt,
-        // not the plan's contents, so a minimal (slot-less) validated baseline is
-        // enough. FakeClub stays state 1 (no baseline → guided wizard).
-        if (null === $season->getBaselineScheduleId()) {
-            $baseline = new Schedule;
-            $baseline->setClubId($club->getId());
-            $baseline->setSeasonId($season->getId());
-            $baseline->setName('Planning principal');
-            $baseline->setStatus(ScheduleStatus::VALIDATED);
-            $manager->persist($baseline);
-            $season->setBaselineScheduleId($baseline->getId());
-            $season->setSocleValidatedAt(new DateTimeImmutable);
-        }
+        // BCCL is seeded as an INCOMPLETE onboarding (cockpit state 1): all the
+        // data is entered but NO plan has been generated yet, so the club lands on
+        // the wizard (Récap) before its first generation — the realistic demo of a
+        // freshly-onboarding club. No baseline / no validated socle is stamped.
 
         // --- User ---
         $existingUser = $manager->getRepository(User::class)->findOneBy(['email' => 'mara.mb@bccl.fr']);
@@ -418,46 +413,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         // ============================================================
-        // SECTION 3 — SPORT CATEGORIES (fetch additional ones)
-        // ============================================================
-        $senior = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'Senior',
-        ]);
-        \assert($senior instanceof SportCategory);
-
-        $u15 = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'U15',
-        ]);
-        \assert($u15 instanceof SportCategory);
-
-        $u18 = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'U18',
-        ]);
-        \assert($u18 instanceof SportCategory);
-
-        $u21 = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'U21',
-        ]);
-        \assert($u21 instanceof SportCategory);
-
-        $veteran = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'Vétéran',
-        ]);
-        \assert($veteran instanceof SportCategory);
-
-        $loisir = $manager->getRepository(SportCategory::class)->findOneBy([
-            'sportId' => $sport->getId(),
-            'name' => 'Loisir',
-        ]);
-        \assert($loisir instanceof SportCategory);
-
-        // ============================================================
         // SECTION 4 — NEW TEAMS
+        // (sport categories are all fetched up-front, see $fetchCat above)
         // ============================================================
         $newTeamsData = [
             ['name' => 'SM1', 'sportCategory' => $senior, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 1, 'gender' => Gender::M],
@@ -670,7 +627,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['coach' => $coachMara, 'team' => $sf2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachLionel, 'team' => $sf3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMaxime, 'team' => $sm1, 'role' => TeamCoachRole::MAIN],
-            //            ['coach' => $coachThomas, 'team' => $sm1, 'role' => TeamCoachRole::ASSISTANT],
+            ['coach' => $coachThomas, 'team' => $sm1, 'role' => TeamCoachRole::ASSISTANT],
             ['coach' => $coachNicoPatin, 'team' => $sm2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachFlo, 'team' => $sm3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachChris, 'team' => $sm4, 'role' => TeamCoachRole::MAIN],
@@ -746,6 +703,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['coach' => $coachAnna, 'team' => $u18f1],
             ['coach' => $coachCharlie, 'team' => $u15f1],
             ['coach' => $coachJulia, 'team' => $u15f1],
+            // Mathis entraîne U13M2 mais joue aussi en U21M1 ; Florian entraîne
+            // U18F3 et joue en Loisir 3 — le solveur en tire un conflit coach
+            // (impossible d'être aux deux séances en même temps).
+            ['coach' => $coachMathis, 'team' => $u21m1],
+            ['coach' => $coachFlorian, 'team' => $teams['Loisir 3']],
         ];
 
         foreach ($newPlayerLinks as $link) {
@@ -777,287 +739,97 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $manager->flush();
 
         // ============================================================
-        // SECTION 9 — CONSTRAINTS
+        // SECTION 9 — CONSTRAINTS (regroupées par famille : TIME · DAY · FACILITY · COACH)
         // ============================================================
 
-        // Delete old Jeunes constraint before recreating EMB rule
-        $oldJeunesConstraint = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Jeunes - Fin entraînement 19h30',
-        ]);
-        if ($oldJeunesConstraint instanceof Constraint) {
-            $manager->remove($oldJeunesConstraint);
-            $manager->flush();
-        }
-
-        $existingEmb = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'EMB (U9/U11) - Début au premier créneau (max 17h30)',
-        ]);
-        if (!$existingEmb instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('EMB (U9/U11) - Début au premier créneau (max 17h30)');
-            $c->setConfig(['maxStartTime' => '18:00', 'targetTag' => 'EMB']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 9d — U11/U13 preferred from 17h30 (PREFERRED)
-        foreach (['U13'] as $tag) {
-            $constraintName = $tag . ' - Début préféré 17h30';
-            $existing = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existing instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::CLUB);
-                $c->setScopeTargetId(null);
-                $c->setFamily(ConstraintFamily::TIME);
-                $c->setRuleType(ConstraintRuleType::PREFERRED);
-                $c->setName($constraintName);
-                $c->setConfig(['minStartTime' => '18:00', 'targetTag' => $tag]);
-                $c->setIsActive(true);
-                $manager->persist($c);
-            }
-        }
-
-        // 9e — Jean Vilar: no girl teams (HARD)
-        $existing = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Jean Vilar - Pas équipes féminines',
-        ]);
-        if (!$existing instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Jean Vilar - Pas équipes féminines');
-            $c->setConfig(['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 9f — Matéo preferred for regional teams (PREFERRED)
-        $existing = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Matéo - Préféré équipes régionales',
-        ]);
-        if (!$existing instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::PREFERRED);
-            $c->setName('Matéo - Préféré équipes régionales');
-            $c->setConfig(['preferredVenueId' => $venues['vMateo']->getId(), 'targetTag' => 'REGIONAL']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 9g — De Barros Annexe preferred for departemental (PREFERRED)
-        $existing = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'De Barros Annexe - Préféré équipes départementales',
-        ]);
-        if (!$existing instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::PREFERRED);
-            $c->setName('De Barros Annexe - Préféré équipes départementales');
-            $c->setConfig(['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'DEPARTEMENTAL']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 9h — De Barros Annexe preferred for loisir teams (PREFERRED), one constraint per loisir level
-        foreach ([TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE] as $loisirLevel) {
-            $constraintName = 'De Barros Annexe - Préféré ' . $loisirLevel->value;
-            $existing = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
+        // Helper idempotent (le nom fait office de clé naturelle) — défini en tête
+        // pour que chaque groupe ci-dessous s'y appuie.
+        $addConstraint = function (string $name, ConstraintScope $scope, ?string $targetId, ConstraintFamily $family, ConstraintRuleType $rule, array $config) use ($manager, $club, $season): void {
+            $existing = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $name]);
             if ($existing instanceof Constraint) {
-                continue;
+                return;
             }
             $c = new Constraint;
             $c->setClubId($club->getId());
             $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::PREFERRED);
-            $c->setName($constraintName);
-            $c->setConfig(['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
+            $c->setScope($scope);
+            $c->setScopeTargetId($targetId);
+            $c->setFamily($family);
+            $c->setRuleType($rule);
+            $c->setName($name);
+            $c->setConfig($config);
             $c->setIsActive(true);
             $manager->persist($c);
-        }
+        };
 
-        // 9i — Camus reserved EXCLUSIVELY for Loisir 1 / 2 / 3 (individual HARD TEAM constraints)
-        // Remove old CLUB-scoped constraint if it exists
-        $oldCamusPreferred = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Camus - Réservé loisir exclusivement',
-        ]);
-        if ($oldCamusPreferred instanceof Constraint) {
-            $manager->remove($oldCamusPreferred);
-            $manager->flush();
-        }
-        foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
-            $loisirTeam = $teams[$loisirName];
-            $constraintName = 'Camus - Réservé ' . $loisirName . ' exclusivement';
-            $existingCamus = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existingCamus instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::TEAM);
-                $c->setScopeTargetId($loisirTeam->getId());
-                $c->setFamily(ConstraintFamily::FACILITY);
-                $c->setRuleType(ConstraintRuleType::HARD);
-                $c->setName($constraintName);
-                $c->setConfig(['preferredVenueId' => $venues['vCamus']->getId()]);
-                $c->setIsActive(true);
-                $manager->persist($c);
+        // Purge des contraintes renommées/retirées par d'anciennes versions de la
+        // fixture (utile en mode append ; un rechargement complet truncate d'abord).
+        foreach ([
+            'Jeunes - Fin entraînement 19h30',
+            'Jeunes - Début maximum 20h15',
+            'EMB - Début maximum 19h50',
+            'Camus - Réservé loisir exclusivement',
+        ] as $retiredName) {
+            $stale = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $retiredName]);
+            if ($stale instanceof Constraint) {
+                $manager->remove($stale);
             }
-        }
-
-
-        // Veterans: Vendredi uniquement, interdit sur Camus/JDR/Jean Vilar/Tonkin/ADN
-        $veteransTeam = $teams['Veterans'];
-        $forbiddenVenueIds = [
-            $venues['vCamus']->getId(),
-            $venues['vJdr']->getId(),
-            $venues['vJeanVilar']->getId(),
-            $venues['vTonkin']->getId(),
-            $venues['vAdn']->getId(),
-        ];
-        foreach ($forbiddenVenueIds as $forbiddenVenueId) {
-            $constraintName = 'Veterans - Interdit ' . $forbiddenVenueId;
-            $existingVet = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existingVet instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::TEAM);
-                $c->setScopeTargetId($veteransTeam->getId());
-                $c->setFamily(ConstraintFamily::FACILITY);
-                $c->setRuleType(ConstraintRuleType::HARD);
-                $c->setName($constraintName);
-                $c->setConfig(['forbiddenVenueId' => $forbiddenVenueId]);
-                $c->setIsActive(true);
-                $manager->persist($c);
-            }
-        }
-        // Veterans: Vendredi uniquement
-        $existingVetDay = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Veterans - Vendredi uniquement',
-        ]);
-        if (!$existingVetDay instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::TEAM);
-            $c->setScopeTargetId($veteransTeam->getId());
-            $c->setFamily(ConstraintFamily::DAY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Veterans - Vendredi uniquement');
-            $c->setConfig(['forcedDays' => [5]]);
-            $c->setIsActive(true);
-            $manager->persist($c);
         }
         $manager->flush();
 
-        // 9l — Adultes - Début minimum 18h50 (HARD TIME, CLUB scope, targetTag SENIOR)
-        // SENIOR tag = teams with ageMin >= 19 (resolved by TeamTagService)
-        $existingAdultTime = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Adultes - Début minimum 18h50',
-        ]);
-        if (!$existingAdultTime instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Adultes - Début minimum 18h50');
-            $c->setConfig(['minStartTime' => '18:50', 'targetTag' => 'SENIOR']);
-            $c->setIsActive(true);
-            $manager->persist($c);
+        // --- TIME (heures de début, portée club par tranche d'âge) ---
+        $addConstraint('EMB (U9/U11) - Début au premier créneau (max 17h30)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
+        $addConstraint('Adultes - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR']);
+        $addConstraint('Jeunes - Début maximum 19h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
+        // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
+        $addConstraint('U15 - Fin 20h30 max (début max 19h00)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
+        $addConstraint('U13 - Début après 17h00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['minStartTime' => '17:00', 'targetTag' => 'U13']);
+        // U13 : ne pas commencer après 19h00 (laisse la marge du vendredi 20h30, l'exception par-jour n'étant pas exprimable).
+        $addConstraint('U13 - Début préféré avant 19h00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['maxStartTime' => '19:00', 'targetTag' => 'U13']);
+
+        // --- DAY (jours imposés / interdits) ---
+        $addConstraint('Veterans - Vendredi uniquement', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forcedDays' => [5]]);
+        $addConstraint('SM2 - Évite le vendredi', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::PREFERRED, ['forbiddenDays' => [5]]);
+        // Jeunes U9/U11 : pas d'entraînement le mercredi (ils ont déjà le CEC ce jour-là).
+        foreach (['U11F1', 'U11F2', 'U11M2', 'U9M1', 'U9M2', 'U9F1', 'U9F2'] as $teamName) {
+            $addConstraint($teamName . ' - Pas d\'entraînement le mercredi', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [3]]);
         }
 
-        // 9m — Jeunes - Début maximum 19h50 (HARD TIME, CLUB scope, targetTag JEUNE)
-        // JEUNE tag = U13/U15/U18 age range (ageMin <= 18, ageMax > 12, resolved by TeamTagService)
-        // Delete old constraint (was 20h15) before creating the corrected one
-        $oldYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Jeunes - Début maximum 20h15',
-        ]);
-        if ($oldYouthTime instanceof Constraint) {
-            $manager->remove($oldYouthTime);
-            $manager->flush();
+        // --- FACILITY (gymnases imposés / interdits / préférés) ---
+        $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
+        $addConstraint('SM4 - Jean Vilar obligatoire', ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['venueId' => $venues['vJeanVilar']->getId()]);
+        // Camus réservé EXCLUSIVEMENT aux Loisir 1/2/3 (HARD venueId, pas un simple nudge).
+        foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
+            $addConstraint('Camus - Réservé ' . $loisirName . ' exclusivement', ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['venueId' => $venues['vCamus']->getId()]);
+        }
+        // Veterans interdits sur Camus/JDR/Jean Vilar/Tonkin/ADN.
+        foreach (['vCamus', 'vJdr', 'vJeanVilar', 'vTonkin', 'vAdn'] as $venueVar) {
+            $venueId = $venues[$venueVar]->getId();
+            $addConstraint('Veterans - Interdit ' . $venueId, ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venueId]);
+        }
+        // Préférences de gymnase par niveau (portée club).
+        $addConstraint('Matéo - Préféré équipes régionales', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vMateo']->getId(), 'targetTag' => 'REGIONAL']);
+        $addConstraint('De Barros Annexe - Préféré équipes départementales', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'DEPARTEMENTAL']);
+        foreach ([TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE] as $loisirLevel) {
+            $addConstraint('De Barros Annexe - Préféré ' . $loisirLevel->value, ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
+        }
+        // Jean Vilar préféré pour les garçons U15/U18/U21.
+        foreach ([$u15m1, $u15m2, $u18m1, $u18m2, $u21m1, $u21m2] as $targetTeam) {
+            $addConstraint($targetTeam->getName() . ' - Jean Vilar préféré', ConstraintScope::TEAM, $targetTeam->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vJeanVilar']->getId()]);
+        }
+        // U18F2 / U18M2 : au moins une séance à Armand ou Matéo (préférence). preferredVenueId
+        // ne cible qu'un gymnase → une contrainte par gymnase ; une séance dans l'un OU l'autre décroche le bonus.
+        foreach (['U18F2', 'U18M2'] as $teamName) {
+            foreach (['vArmand' => 'Armand', 'vMateo' => 'Matéo'] as $venueVar => $venueLabel) {
+                $addConstraint(\sprintf('%s - %s préféré', $teamName, $venueLabel), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues[$venueVar]->getId()]);
+            }
         }
 
-        $existingYouthTime = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'Jeunes - Début maximum 19h50',
-        ]);
-        if (!$existingYouthTime instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('Jeunes - Début maximum 19h50');
-            $c->setConfig(['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        $existingEMBTime = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'EMB - Début maximum 19h50',
-        ]);
-        if (!$existingEMBTime instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::CLUB);
-            $c->setScopeTargetId(null);
-            $c->setFamily(ConstraintFamily::TIME);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('EMB - Début maximum 19h50');
-            $c->setConfig(['maxStartTime' => '19:50', 'targetTag' => 'EMB']);
-            $c->setIsActive(true);
-            $manager->persist($c);
+        // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
+        // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
+        foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachNicoPatin, 4], [$coachEmerick, 4]] as [$coach, $day]) {
+            $label = 5 === $day ? 'le vendredi' : 'le jeudi';
+            $addConstraint(\sprintf('%s - Indisponible %s', $coach->getFirstName(), $label), ConstraintScope::COACH, $coach->getId(), ConstraintFamily::COACH_AVAILABILITY, ConstraintRuleType::HARD, ['coachId' => $coach->getId(), 'unavailableDays' => [$day]]);
         }
 
         $manager->flush();
@@ -1120,113 +892,6 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $slot->setDurationMinutes($slotData['duration']);
                 $slot->setLockLevel($slotData['lock']);
                 $manager->persist($slot);
-            }
-        }
-
-        // ============================================================
-        // SECTION 11 — NEW CONSTRAINTS
-        // ============================================================
-
-        //        // 11a — 3x3 team: forced to ADN on Wednesday, slot starts at 20h30
-        //        $existing11a = $manager->getRepository(Constraint::class)->findOneBy([
-        //            'clubId' => $club->getId(),
-        //            'name' => '3x3 - ADN mercredi 20h30 exclusivement',
-        //        ]);
-        //        if (!$existing11a instanceof Constraint) {
-        //            $c = new Constraint;
-        //            $c->setClubId($club->getId());
-        //            $c->setSeasonId($season->getId());
-        //            $c->setScope(ConstraintScope::TEAM);
-        //            $c->setScopeTargetId($team3x3->getId());
-        //            $c->setFamily(ConstraintFamily::FACILITY);
-        //            $c->setRuleType(ConstraintRuleType::HARD);
-        //            $c->setName('3x3 - ADN mercredi 20h30 exclusivement');
-        //            $c->setConfig(['forcedVenueId' => $venues['vAdn']->getId(), 'forcedDay' => 3, 'minStartTime' => '20:30']);
-        //            $c->setIsActive(true);
-        //            $manager->persist($c);
-        //        }
-
-        //        // 11c — SF1: at least one training at Matéo (PREFERRED)
-        //        $existing11c = $manager->getRepository(Constraint::class)->findOneBy([
-        //            'clubId' => $club->getId(),
-        //            'name' => 'SF1 - Minimum 1 entraînement à Matéo',
-        //        ]);
-        //        if (!$existing11c instanceof Constraint) {
-        //            $c = new Constraint;
-        //            $c->setClubId($club->getId());
-        //            $c->setSeasonId($season->getId());
-        //            $c->setScope(ConstraintScope::TEAM);
-        //            $c->setScopeTargetId($sf1->getId());
-        //            $c->setFamily(ConstraintFamily::FACILITY);
-        //            $c->setRuleType(ConstraintRuleType::PREFERRED);
-        //            $c->setName('SF1 - Minimum 1 entraînement à Matéo');
-        //            $c->setConfig(['preferredVenueId' => $venues['vMateo']->getId()]);
-        //            $c->setIsActive(true);
-        //            $manager->persist($c);
-        //        }
-
-        // 11d — Jean Vilar: preferred for U15M/U18M/U21M (PREFERRED)
-        foreach ([$u15m1, $u15m2, $u18m1, $u18m2, $u21m1, $u21m2] as $targetTeam) {
-            /** @var Team $targetTeam */
-            $constraintName = $targetTeam->getName() . ' - Jean Vilar préféré';
-            $existingJv = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existingJv instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::TEAM);
-                $c->setScopeTargetId($targetTeam->getId());
-                $c->setFamily(ConstraintFamily::FACILITY);
-                $c->setRuleType(ConstraintRuleType::PREFERRED);
-                $c->setName($constraintName);
-                $c->setConfig(['preferredVenueId' => $venues['vJeanVilar']->getId()]);
-                $c->setIsActive(true);
-                $manager->persist($c);
-            }
-        }
-
-        // 11e — SM4 forced to Jean Vilar (HARD)
-        $existingSm4Jv = $manager->getRepository(Constraint::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'name' => 'SM4 - Jean Vilar obligatoire',
-        ]);
-        if (!$existingSm4Jv instanceof Constraint) {
-            $c = new Constraint;
-            $c->setClubId($club->getId());
-            $c->setSeasonId($season->getId());
-            $c->setScope(ConstraintScope::TEAM);
-            $c->setScopeTargetId($sm4->getId());
-            $c->setFamily(ConstraintFamily::FACILITY);
-            $c->setRuleType(ConstraintRuleType::HARD);
-            $c->setName('SM4 - Jean Vilar obligatoire');
-            $c->setConfig(['forcedVenueId' => $venues['vJeanVilar']->getId()]);
-            $c->setIsActive(true);
-            $manager->persist($c);
-        }
-
-        // 11f — Jeunes: pas d'entraînement le mercredi (HARD), ils ont deja CEC le mercredi
-        foreach (['U11F1', 'U11F2', 'U11M2', 'U9M1', 'U9M2', 'U9F1', 'U9F2'] as $teamName) {
-            $targetTeam = $teams[$teamName];
-            $constraintName = $teamName . ' - Pas d\'entraînement le mercredi';
-            $existingNoWednesday = $manager->getRepository(Constraint::class)->findOneBy([
-                'clubId' => $club->getId(),
-                'name' => $constraintName,
-            ]);
-            if (!$existingNoWednesday instanceof Constraint) {
-                $c = new Constraint;
-                $c->setClubId($club->getId());
-                $c->setSeasonId($season->getId());
-                $c->setScope(ConstraintScope::TEAM);
-                $c->setScopeTargetId($targetTeam->getId());
-                $c->setFamily(ConstraintFamily::DAY);
-                $c->setRuleType(ConstraintRuleType::HARD);
-                $c->setName($constraintName);
-                $c->setConfig(['forbiddenDays' => [3]]);
-                $c->setIsActive(true);
-                $manager->persist($c);
             }
         }
 

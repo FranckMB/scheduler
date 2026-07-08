@@ -47,8 +47,11 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::FACILITY:
-                if (!isset($config['venueId']) && !isset($config['targetTag'])) {
-                    $errors[] = 'FACILITY family requires venueId or targetTag in config.';
+                // A FACILITY rule names a VENUE (forced / forbidden / preferred).
+                // Targeting is carried by the scope (scopeTargetId) or targetTag,
+                // NOT by venueId — so any of the three venue keys is valid.
+                if (!isset($config['venueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId'])) {
+                    $errors[] = 'FACILITY family requires venueId, forbiddenVenueId or preferredVenueId in config.';
                 }
                 break;
 
@@ -105,15 +108,19 @@ final class ConstraintValidationService
 
     private function checkConflict(Constraint $c1, Constraint $c2): ?string
     {
-        // Same scope target with contradictory rules
+        $config1 = $c1->getConfig();
+        $config2 = $c2->getConfig();
+
+        // Same scope target with contradictory rules. The targetTag is part of the
+        // target: two CLUB-scoped rules aimed at DIFFERENT tags (e.g. EMB max 18:00
+        // vs SENIOR min 18:50) apply to disjoint teams and do NOT conflict.
         if ($c1->getScopeTargetId() === $c2->getScopeTargetId()
             && $c1->getScope() === $c2->getScope()
+            && ($config1['targetTag'] ?? null) === ($config2['targetTag'] ?? null)
             && $c1->getFamily() === $c2->getFamily()
             && 'HARD' === $c1->getRuleType()->value
             && 'HARD' === $c2->getRuleType()->value
         ) {
-            $config1 = $c1->getConfig();
-            $config2 = $c2->getConfig();
 
             // Check for contradictory day constraints
             if (ConstraintFamily::DAY === $c1->getFamily()) {
