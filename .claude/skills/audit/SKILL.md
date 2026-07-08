@@ -19,7 +19,7 @@ Lance 5 agents d'analyse en parallèle (lecture seule, aucun test destructif) :
 
 - **Doc** : exactitude (sonder 5-6 affirmations clés de CLAUDE.md/project-map/AGENTS.md/TENANT.md contre le code), structure (duplication, doc morte), utilité pour un agent IA, tenue du cycle specs (initiales figées / courantes à jour vs PRs récentes / graduation evolution→courantes).
 - **Backend** (`backend/`, statique) : architecture (classes > 300 lignes, couplage), multi-tenant (TenantFilter, RLS réel — vérifier `CREATE POLICY` dans migrations + init SQL, PAS seulement la doc), async (failure_transport, retries, idempotence, locks), Doctrine (migrations, N+1), tests (couverture des trous, pas seulement des chemins heureux — notamment entités SANS club_id), config, sécurité (exposition API Platform opération par opération, validation input, contrôles d'appartenance sur les routes custom).
-- **Engine** (`engine/`, statique) : architecture, modèle CP-SAT, **vérifier que chaque contrainte parsée depuis le payload backend réel est effectivement appliquée** (suivre le format de bout en bout : frontend → ConstraintSerializer → parse engine → matching), concurrence (solve CPU-bound vs event loop), schemas/contrat, tests (les pipelines de test correspondent-ils au chemin prod `main._solve` ?), robustesse (logging, erreurs).
+- **Engine** (`engine/`, statique) : architecture, modèle CP-SAT, **vérifier que chaque contrainte parsée depuis le payload backend réel est effectivement appliquée** (suivre le format de bout en bout : frontend → ConstraintSerializer → parse engine → matching ; l'alignement 3 couches est traité à part en **Étape 2 quater**, sur la base de `engine/docs/constraint-vocabulary.md`), concurrence (solve CPU-bound vs event loop), schemas/contrat, tests (les pipelines de test correspondent-ils au chemin prod `main._solve` ?), robustesse (logging, erreurs).
 - **Frontend** (`frontend/`, exécuter `npx tsc --noEmit` et `vitest run`) : architecture, types (générés vs manuels, duplication), data-fetching (gestion erreurs queries ET mutations, temps réel), features principales, tests, a11y/qualité.
 - **UX** (`frontend/src/`, statique — collecte reproductible pour les axes additifs de l'Étape 2 ter) : inventorier les **primitives partagées** (`shared/components/ui/*` + primitives métier type `SummaryRow`/`VenueSwatch`/`TeamTierAccordion`) et lister les **one-off** qui ré-implémentent un pattern existant ; relever les **valeurs de style en dur** (`#hex`, couleurs hors palette/tokens du thème) ; repérer les **divergences de terminologie** dans les libellés FR visibles (ex. « gymnase » vs « salle », « créneau » vs « slot », « coach » vs « entraîneur ») ; relever le **jargon technique exposé au gestionnaire** (`HARD`/`PREFERRED`, `socle`, `overlay`, `slot`…) ; recenser les cas où l'**information repose sur la seule couleur** (sans icône/label/texte redondant) et l'état des `aria-label`/`role`/`alt`/focus. Rendre des `fichier:ligne`, pas un avis.
 
@@ -65,6 +65,24 @@ Charge cognitive pour le gestionnaire lambda :
 
 > La notation de ces axes est **extrêmement sévère** (barre = app **simple d'utilisation ET robuste en tout point**) : plafonds durcis, score général = le plus bas des sous-axes — voir Étape 4. Un défaut critique confirmé (couleur seule sur flux critique, flux-clé infaisable au clavier, contraste AA échoué sur texte principal, jargon bloquant) **plafonne son sous-axe à 40**.
 
+## Étape 2 quater — Alignement contraintes 3 couches (OBLIGATOIRE)
+
+Le motif « contrainte saisie ≠ contrainte honorée » (ENG-10/11/12/13/16) est **la** faiblesse récurrente du produit. Cette étape le traque **systématiquement** (findings préfixe `ALIGN-`), au-delà de l'agent Engine bout-en-bout.
+
+**Checklist = les 3 docs de référence** (les lire, puis vérifier au code) : `frontend/docs/constraint-emission.md` (ce que le wizard émet + **table d'alignement**), `engine/docs/constraint-vocabulary.md` (ce que l'engine comprend), `backend/docs/constraint-coverage.md` (besoins gestionnaire couverts).
+
+Pour **chaque ligne** de la table d'alignement (chaque clé de `config` + chaque mode du wizard) :
+1. **Front émet ?** — lire `ConstraintsStep.tsx` `build()` : quelle `config` pour ce mode/famille.
+2. **Backend transmet/transforme ?** — `ScheduleConstraintBuilder` (targetTag→N TEAM, `venue_closed`→`forbiddenVenueId`, HARD `preferredVenueId`→forcé + exclusivité tag).
+3. **Engine honore ?** — `parse_v2_constraints` / `add_time_window_constraints` / `objective.py` : la clé est-elle lue, et le mécanisme (dur/soft) est-il celui promis par l'UI ?
+
+**Findings à sortir :**
+- **Scission** (`ALIGN-`, gravité selon l'impact) : une clé émise par le front que le backend droppe ou que l'engine n'applique pas comme promis (ex. ENG-16 : « uniquement » émis en `forcedDays` = « au moins un »). **Sur un flux critique = Élevée minimum.**
+- **Angle mort** (`ALIGN-`, gravité selon la valeur métier) : un besoin de `backend/docs/constraint-coverage.md` marqué ❌/🟡 (ex. « au moins une séance dans tel gymnase », `maxEndTime`, anti-jours-consécutifs) — le noter même s'il est connu, pour le rendre redevable.
+- **Doc périmée** : une des 3 docs qui ne colle plus au code (comme un mensonge CLAUDE.md) → finding `DOC-`.
+
+**Vérification** : les scissions confirmées se re-vérifient à la main (Étape 3). Le verrou automatique existant (`constraint_matrix.py` + test) ne couvre QUE l'offre wizard↔engine des cellules **offertes** — il ne voit ni la couche backend ni les angles morts ; ne pas s'y fier pour cette étape.
+
 ## Étape 3 — Vérification contradictoire (OBLIGATOIRE)
 
 Chaque finding **critique ou élevé** doit être contre-vérifié à la main avant publication : lire les fichiers/lignes cités, chercher la preuve inverse. Issues possibles : `confirmé` / `réfuté` / `non vérifié`. Un finding réfuté reste dans le rapport, barré, avec la preuve de réfutation — c'est ce qui rend l'audit digne de confiance. Ne publie JAMAIS un finding critique non vérifié sans le marquer `non vérifié`.
@@ -108,7 +126,7 @@ La référence de notation est **l'application commercialisable**, pas le stade 
 
 1. **En-tête** : date, modèle exact, SHA HEAD, tableau de couverture des axes — **inclure les lignes `UX-Cohérence`, `UX-Simplicité/Intuitivité`, `Inclusivité-a11y`** (chacune `couvert` / `partiel` / `non couvert (raison)`).
 2. **Synthèse des notes** (/100, uniquement les axes couverts). Le **score UX** est présenté dans un **bloc séparé**, hors du `/100` des briques : les **3 sous-notes `/100`** (Cohérence · Simplicité-Intuitivité · Inclusivité-a11y) **et** le **Score UX général `/100` = le plus bas des sous-axes couverts** (voir Étape 4, notation extrêmement sévère).
-3. **Registre des findings** — LE cœur de la comparaison. Table : `ID | Titre court | Zone | Gravité | Statut vérif (confirmé/réfuté/non vérifié) | Statut vs édition précédente (nouveau/ouvert/corrigé/réfuté)`. Règles d'ID : préfixe zone (`SEC-`, `ENG-`, `BCK-`, `FRT-`, `DOC-`, `DEP-`, `INF-`, `UX-` (générique, hérité), `UXC-` (cohérence), `UXS-` (simplicité/intuitivité), `A11Y-` (inclusivité/accessibilité), `PERF-`, `RGPD-`) + numéro incrémental **jamais réutilisé**. Reprendre les IDs de l'édition précédente pour les findings ouverts ; marquer `corrigé` ceux qui ont disparu (avec preuve).
+3. **Registre des findings** — LE cœur de la comparaison. Table : `ID | Titre court | Zone | Gravité | Statut vérif (confirmé/réfuté/non vérifié) | Statut vs édition précédente (nouveau/ouvert/corrigé/réfuté)`. Règles d'ID : préfixe zone (`SEC-`, `ENG-`, `BCK-`, `FRT-`, `DOC-`, `DEP-`, `INF-`, `ALIGN-` (scission/angle mort d'alignement contraintes 3 couches, Étape 2 quater), `UX-` (générique, hérité), `UXC-` (cohérence), `UXS-` (simplicité/intuitivité), `A11Y-` (inclusivité/accessibilité), `PERF-`, `RGPD-`) + numéro incrémental **jamais réutilisé**. Reprendre les IDs de l'édition précédente pour les findings ouverts ; marquer `corrigé` ceux qui ont disparu (avec preuve).
 4. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
 5. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
 6. **Features intéressantes à développer** (ratio valeur/effort, tenant compte de l'état réel).
