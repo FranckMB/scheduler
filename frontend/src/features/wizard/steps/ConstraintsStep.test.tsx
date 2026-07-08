@@ -107,6 +107,20 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { forcedDays: [5] } });
   });
+
+  it("keeps the target after a create so several constraints can be added in a row (F5)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+    await user.selectOptions(screen.getByLabelText("Cible"), "t1");
+    await user.click(screen.getByRole("button", { name: "Mer" }));
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut).toHaveBeenCalledOnce();
+    // The target survives the add (only the value inputs are cleared).
+    expect(screen.getByLabelText("Cible")).toHaveValue("t1");
+  });
 });
 
 /**
@@ -153,6 +167,22 @@ describe("ConstraintsStep — edit an existing constraint", () => {
     expect(arg.body.config).toHaveProperty("forcedVenueId", "v1");
     expect(arg.body.config).not.toHaveProperty("preferredVenueId");
     expect(arg.body.ruleType).toBe("HARD");
+  });
+
+  it("softening a forced venue to 'préfère' emits a PREFERRED rule, not the inherited HARD (F1)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    // Switch impose → préfère: the inherited HARD must NOT leak (HARD preferredVenueId
+    // is still a forced venue engine-side — the opposite of what the user wants).
+    await user.selectOptions(screen.getByLabelText("Préférence"), "preferred");
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+
+    const arg = h.updateMut.mock.calls[0][0] as { body: Constraint };
+    expect(arg.body.ruleType).toBe("PREFERRED");
+    expect(arg.body.config).toEqual({ preferredVenueId: "v1" });
   });
 
   it("persists an edited venue choice under the forced key", async () => {

@@ -62,6 +62,13 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         if (null !== $input->scopeTargetId) {
             $entity->setScopeTargetId($input->scopeTargetId);
         }
+        // Invariant: a CLUB-scoped constraint has NO target. A PUT that widens a
+        // TEAM/COACH rule to CLUB sends scopeTargetId=null, but a null field means
+        // "leave unchanged" above — so clear it explicitly, else a stale target id
+        // survives with scope=CLUB (mis-read by expandClosedVenues, ScheduleConstraintBuilder).
+        if (ConstraintScope::CLUB === $entity->getScope()) {
+            $entity->setScopeTargetId(null);
+        }
         if (null !== $input->family) {
             $entity->setFamily($this->parseFamily($input->family));
         }

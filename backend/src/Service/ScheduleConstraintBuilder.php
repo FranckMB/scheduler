@@ -637,8 +637,13 @@ final class ScheduleConstraintBuilder
                     $result[] = $this->serializeConstraintRow($constraint, $constraint->getId() . ':' . $teamId, $teamId, $resolvedConfig);
                 }
 
-                // When HARD + preferredVenueId: also forbid the venue for all teams NOT in the tag
-                if (ConstraintRuleType::HARD === $constraint->getRuleType() && isset($config['preferredVenueId'])) {
+                // When HARD + a forced venue (preferredVenueId in HARD, or the
+                // explicit forcedVenueId "impose" mode): the venue is DEDICATED to
+                // the tag → also forbid it for every team NOT in the tag. Both keys
+                // force the tag onto the venue engine-side, so exclusivity must
+                // cover both, else "impose" would be weaker than HARD "préfère".
+                $dedicatedVenueId = $config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null;
+                if (ConstraintRuleType::HARD === $constraint->getRuleType() && null !== $dedicatedVenueId) {
                     $tagTeamIdSet = array_flip($teamIds);
                     foreach ($teams as $team) {
                         if (isset($tagTeamIdSet[$team->getId()])) {
@@ -648,7 +653,7 @@ final class ScheduleConstraintBuilder
                             $constraint,
                             $constraint->getId() . ':forbidden:' . $team->getId(),
                             $team->getId(),
-                            ['forbiddenVenueId' => $config['preferredVenueId']],
+                            ['forbiddenVenueId' => $dedicatedVenueId],
                             name: $constraint->getName() . ' (interdit hors tag)',
                             ruleType: ConstraintRuleType::HARD->value,
                         );

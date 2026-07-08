@@ -212,17 +212,24 @@ export function ConstraintsStep() {
     };
   }
 
-  const resetForm = () => {
-    setEditingId(null);
-    setTarget("");
+  // Clears only the per-constraint value inputs, keeping the target/venue/rule
+  // so several constraints for the same team can be added in a row (old add()).
+  const clearInputs = () => {
     setMinTime("");
     setMaxTime("");
     setDays(new Set());
+  };
+
+  // Full reset: also drops the target + exits edit mode (used after an edit or on cancel).
+  const resetForm = () => {
+    setEditingId(null);
+    setTarget("");
     setDayMode("forbidden");
     setVenueMode("preferred");
     setVenueId("");
     setCoachId("");
     setRuleType("PREFERRED");
+    clearInputs();
   };
 
   const submit = () => {
@@ -231,12 +238,13 @@ export function ConstraintsStep() {
       return;
     }
     if (null !== editingId) {
-      // Edit: PUT the existing row, keep it active, then clear the form.
+      // Edit: PUT the existing row, keep it active, then clear the whole form.
       update.mutate({ id: editingId, body: { ...payload, isActive: true } }, { onSuccess: resetForm });
       return;
     }
+    // Create: keep the target/rule for rapid multi-add, clear only the values.
     // In period mode, attach the constraint to the entry → dated (excluded from base).
-    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload, { onSuccess: resetForm });
+    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload, { onSuccess: clearInputs });
   };
 
   // Load an existing constraint into the shared form (reverse of build()): resolve
@@ -244,8 +252,13 @@ export function ConstraintsStep() {
   const editConstraint = (c: Constraint) => {
     setMode("constraint");
     setFamily(c.family);
-    setRuleType(c.ruleType);
     const cfg = c.config;
+    // Forced modes (impose/uniquement) + coach availability are pinned HARD by
+    // build() and hide the rule selector — load them as PREFERRED so that if the
+    // user later switches to a soft mode it does NOT stay a hard requirement (the
+    // inherited HARD would otherwise leak through, keeping the venue/day forced).
+    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && Array.isArray(cfg.forcedDays)) || "COACH_AVAILABILITY" === c.family;
+    setRuleType(isForced ? "PREFERRED" : c.ruleType);
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
       setCoachId("string" === typeof cfg.coachId ? cfg.coachId : (c.scopeTargetId ?? ""));
