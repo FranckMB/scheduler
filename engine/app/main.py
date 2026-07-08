@@ -114,9 +114,11 @@ def _day_constraint_conflict_team_ids(time_windows: list[dict[str, Any]]) -> set
         family = constraint.get("family")
         if rule_type == "PREFERRED" and family == "TIME":
             continue
-        # LOCK is enforced as hard as HARD downstream (add_time_window_constraints),
-        # so it must be considered here too (ENG-20) — else a LOCK DAY with a
-        # forced∩forbidden overlap would slip past the conflict pre-detection.
+        # LOCK is enforced as hard as HARD downstream. Aligning this set is defensive
+        # only (ENG-20): its consumer just writes 0 into a min-floor that is already
+        # all-zeros today (min is soft-only, ENG-18), and the ACTUAL LOCK-DAY conflict
+        # enforcement already lives in add_time_window_constraints. Kept for the day a
+        # hard min floor is re-activated, not for any effect today.
         if rule_type not in ("HARD", "LOCK") or family != "DAY":
             continue
 
