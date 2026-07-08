@@ -75,11 +75,15 @@ db-reset-test:
 # .env.local overrides .env — read both, last definition wins.
 DB_ADMIN_URL = $(shell cat .env .env.local 2>/dev/null | awk -F= '$$1=="DATABASE_ADMIN_URL" {sub(/^[^=]*=/,""); gsub(/"/,""); print}' | tail -n 1)
 
-.PHONY: fixtures ## Load backend fixtures (also clears var/generate)
+.PHONY: fixtures ## Load backend fixtures + seed school-holiday reference data (clears var/generate)
 fixtures: APP_ENV = dev
 fixtures:
 	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction
 	$(EXECROOT) rm -rf ./var/generate/*
+	# Backfill the vacances reference data (global, non-tenant) so the seeded
+	# club's school zone actually shows holidays — offline JSON, deterministic.
+	# Last so a seed hiccup never skips the cleanup above.
+	$(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm php bin/console app:school-holidays:seed --no-interaction
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:
