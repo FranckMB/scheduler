@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Club;
-use App\Entity\Coach;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
-use App\Entity\Team;
-use App\Entity\Venue;
+use App\Export\ScheduleExportData;
+use App\Export\ScheduleExportDataProvider;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use RuntimeException;
@@ -33,12 +32,10 @@ class PdfGenerator
     // dropped into a coarser bucket.
     private const STEP_MINUTES = 15;
 
-    /** Monday→Sunday; dayOfWeek is 1..7 ISO (the training week is usually 1..6). */
-    private const DAY_LABELS = [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'];
-
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly HttpClientInterface $httpClient,
+        private readonly ScheduleExportDataProvider $exportData,
     ) {}
 
     /**
@@ -46,14 +43,7 @@ class PdfGenerator
      */
     public function generate(Schedule $schedule, ?string $venueId = null): array
     {
-        $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([
-            'scheduleId' => $schedule->getId(),
-        ]);
-        if (null !== $venueId) {
-            $slots = array_values(array_filter($slots, static fn (ScheduleSlotTemplate $s): bool => $s->getVenueId() === $venueId));
-        }
-
-        $html = $this->buildHtml($schedule, $slots, $venueId);
+        $html = $this->buildHtml($schedule, $this->exportData->load($schedule, $venueId), $venueId);
         // Scope suffix keeps the all-venues and per-venue exports as distinct files.
         $scope = null === $venueId ? 'all' : substr($venueId, 0, 8);
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
@@ -96,14 +86,12 @@ class PdfGenerator
         }
     }
 
-    /**
-     * @param array<ScheduleSlotTemplate> $slots
-     */
-    private function buildHtml(Schedule $schedule, array $slots, ?string $venueId): string
+    private function buildHtml(Schedule $schedule, ScheduleExportData $data, ?string $venueId): string
     {
-        $teamNames = $this->getTeamNames($schedule);
-        $venues = $this->getVenues($schedule);
-        $coachNames = $this->getCoachNames($schedule);
+        $slots = $data->slots;
+        $teamNames = $data->teamNames;
+        $venues = $data->venues;
+        $coachNames = $data->coachNames;
         $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
 
         // Columns = ordered (day, venue) pairs that actually carry a slot, so the
@@ -239,7 +227,7 @@ class PdfGenerator
         }
         $dayRow = '<th class="corner"></th>';
         foreach ($dayGroups as $day => $count) {
-            $dayRow .= \sprintf('<th class="day" colspan="%d">%s</th>', $count, htmlspecialchars(self::DAY_LABELS[$day] ?? ''));
+            $dayRow .= \sprintf('<th class="day" colspan="%d">%s</th>', $count, htmlspecialchars(ScheduleExportData::DAY_LABELS[$day] ?? ''));
         }
         $venueRow = '<th class="corner"></th>';
         foreach ($columns as $col) {
@@ -327,59 +315,5 @@ class PdfGenerator
             $scheduleName,
             $body,
         );
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function getTeamNames(Schedule $schedule): array
-    {
-        $teams = $this->entityManager->getRepository(Team::class)->findBy([
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-        ]);
-
-        $names = [];
-        foreach ($teams as $team) {
-            $names[$team->getId()] = $team->getName();
-        }
-
-        return $names;
-    }
-
-    /**
-     * @return array<string, array{name:string,color:?string}>
-     */
-    private function getVenues(Schedule $schedule): array
-    {
-        $venues = $this->entityManager->getRepository(Venue::class)->findBy([
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-        ]);
-
-        $map = [];
-        foreach ($venues as $venue) {
-            $map[$venue->getId()] = ['name' => $venue->getName(), 'color' => $venue->getColor()];
-        }
-
-        return $map;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function getCoachNames(Schedule $schedule): array
-    {
-        $coaches = $this->entityManager->getRepository(Coach::class)->findBy([
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-        ]);
-
-        $names = [];
-        foreach ($coaches as $coach) {
-            $names[$coach->getId()] = trim(\sprintf('%s %s', $coach->getFirstName(), $coach->getLastName()));
-        }
-
-        return $names;
     }
 }

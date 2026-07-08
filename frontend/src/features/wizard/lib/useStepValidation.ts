@@ -61,6 +61,13 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
   return warnings;
 }
 
+/** Venues that carry no availability slot — the "gym without slot" rule, shared
+ * by the venues and recap gates. */
+function venuesWithoutSlot(venues: Venue[], slots: VenueTrainingSlot[]): Venue[] {
+  const withSlot = new Set(slots.map((s) => s.venueId));
+  return venues.filter((v) => !withSlot.has(v.id));
+}
+
 /**
  * Validation of a step for the "Suivant" gate + nav badges. Blocking rules per
  * step: ≥1 team; every gym has ≥1 availability slot; ≥1 coach. The constraints
@@ -98,8 +105,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
   }
   if ("venues" === stepId) {
-    const withSlot = new Set(slots.map((s) => s.venueId));
-    const empty = venues.filter((v) => !withSlot.has(v.id));
+    const empty = venuesWithoutSlot(venues, slots);
     const errors: string[] = [];
     if (0 === venues.length) {
       errors.push("Ajoutez au moins un gymnase.");
@@ -121,8 +127,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     return { errors: [], warnings: computeReservationWarnings(reservations, teams, venues, slots) };
   }
   if ("recap" === stepId) {
-    const withSlot = new Set(slots.map((s) => s.venueId));
-    const empty = venues.filter((v) => !withSlot.has(v.id));
+    const empty = venuesWithoutSlot(venues, slots);
     const errors: string[] = [];
     if (0 === teams.length) {
       errors.push("Ajoutez au moins une équipe.");

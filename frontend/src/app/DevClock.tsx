@@ -23,11 +23,7 @@ const setClock = (at: string | null): Promise<ClockState> => api.post("dev/clock
 // midnight from a browser-local → UTC conversion.
 
 /** ISO string → value for a <input type="datetime-local">, in UTC (no seconds). */
-function toInputValue(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
-}
+const toInputValue = (iso: string): string => new Date(iso).toISOString().slice(0, 16);
 
 export function DevClock() {
   const queryClient = useQueryClient();

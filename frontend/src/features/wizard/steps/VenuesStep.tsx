@@ -160,10 +160,9 @@ function VenuesEditor() {
   const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0] ?? null;
 
   // Drop pending colours that the refetched venue list now carries.
-  const persistedColors = new Set(venues.map((v) => v.color?.toLowerCase()).filter((c): c is string => undefined !== c && null !== c));
   useEffect(() => {
-    pendingColorsRef.current = pendingColorsRef.current.filter((c) => !persistedColors.has(c.toLowerCase()));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const persisted = new Set(venues.map((v) => v.color?.toLowerCase()).filter((c): c is string => undefined !== c && null !== c));
+    pendingColorsRef.current = pendingColorsRef.current.filter((c) => !persisted.has(c.toLowerCase()));
   }, [venues]);
   const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
 

@@ -30,8 +30,10 @@ async function generateFiles(html, filename, landscape) {
     await page.setViewport({ width: availW, height: availH });
     await page.setContent(html, { waitUntil: 'networkidle0' });
 
-    const contentH = await page.evaluate(() => document.documentElement.scrollHeight);
-    const contentW = await page.evaluate(() => document.documentElement.scrollWidth);
+    const { contentH, contentW } = await page.evaluate(() => ({
+      contentH: document.documentElement.scrollHeight,
+      contentW: document.documentElement.scrollWidth,
+    }));
     // Shrink as far as needed so the WHOLE week fits one page (font gets small
     // rather than any gym/row being dropped) — a multi-page training plan is not
     // useful. No floor: fitting everything beats truncating.
