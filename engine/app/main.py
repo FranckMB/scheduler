@@ -13,7 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
-from app.solver.constraints import add_level_1_hard_constraints, add_time_window_constraints, parse_v2_constraints
+from app.solver.constraints import (
+    add_level_1_hard_constraints,
+    add_time_window_constraints,
+    add_venue_minimum_constraints,
+    parse_v2_constraints,
+)
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
 from app.solver.objective import (
     LEVEL_2_OBJECTIVE_WEIGHTS,
@@ -21,6 +26,7 @@ from app.solver.objective import (
     add_match_day_rest_bonus,
     add_preferred_day_bonus,
     add_preferred_time_bonus,
+    add_spacing_penalty,
     is_team_satisfied_by_hard_locks,
 )
 from app.solver.result_builder import build_result
@@ -362,9 +368,10 @@ def _solve(
     )
 
     _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])
+    _vm_added, vm_conflicts = add_venue_minimum_constraints(model, model.x, parsed.get("venue_minimums", []))
     # Parse-time "constraint not honored" warnings (target-less scope, coach
     # ruleType coerced…) ride the same diagnostics channel as hard conflicts.
-    conflicts = [*conflicts, *parsed.get("parse_warnings", [])]
+    conflicts = [*conflicts, *vm_conflicts, *parsed.get("parse_warnings", [])]
 
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
@@ -403,6 +410,7 @@ def _solve(
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
     soft_terms.extend(add_preferred_time_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
     soft_terms.extend(add_match_day_rest_bonus(model, model.x, data.get("teams", []), LEVEL_2_OBJECTIVE_WEIGHTS))
+    soft_terms.extend(add_spacing_penalty(model, model.x, data.get("teams", []), LEVEL_2_OBJECTIVE_WEIGHTS))
 
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their

@@ -14,7 +14,7 @@
 | « Ne pas commencer avant X h » | TIME `minStartTime` (HARD) | ✅ | Adultes ≥ 18h50 |
 | « Ne pas commencer après X h » | TIME `maxStartTime` (HARD) | ✅ | EMB ≤ 17h30 |
 | « Préférer plus tôt / plus tard » | TIME `min/maxStartTime` (PREFERRED) | ✅ soft | U13 début préféré < 19h00 |
-| **« Finir avant X h »** | pas de `maxEndTime` — approximé via début max | 🟡 | U15 « fin 20h30 » = début ≤ 19h00 (séance 90 min) |
+| **« Finir avant X h »** | TIME `maxEndTime` (HARD, mode « Fini avant ») — fin = début + durée du créneau | ✅ *(ALIGN-04)* | U15 « fini avant 20h30 » |
 
 ## Axe JOUR
 
@@ -24,8 +24,8 @@
 | « Éviter tel jour » (préférence) | DAY `forbiddenDays` (PREFERRED) | ✅ soft | SM2 évite le vendredi |
 | « Uniquement tel(s) jour(s) » | DAY `allowedDays` (whitelist, HARD) | ✅ | Vétérans le vendredi uniquement |
 | **« Au moins une séance tel jour »** | DAY `forcedDays` (engine-only, **pas exposé dans l'UI**) | 🟡 | — (le moteur sait, le wizard ne l'émet pas) |
-| **« Espacer les séances d'un jour »** / « pas 2 jours d'affilée » | non modélisé (hors repos post-match soft) | ❌ | besoin BCCL « implicite », non garanti |
-| **« Pas 3 entraînements d'affilée »** | pas de `max_consecutive_days` | ❌ | besoin BCCL, non couvert |
+| **« Espacer les séances d'un jour »** / « pas 2 jours d'affilée » | règle **implicite soft** `spacing` (poids −2, malus sur jours consécutifs) — activée pour toutes les équipes, ne bloque jamais | ✅ soft *(ALIGN-06)* | besoin BCCL « implicite » — préféré, pas garanti |
+| **« Pas 3 entraînements d'affilée »** (dur) | pas de `max_consecutive_days` (contrainte dure d'écart) | ❌ | besoin BCCL, non couvert (le soft `spacing` ne le garantit pas) |
 
 ## Axe GYMNASE
 
@@ -37,7 +37,7 @@
 | « Préférer tel gymnase » | FACILITY `preferredVenueId` (PREFERRED, +60) | ✅ soft | Matéo préféré aux Régionales |
 | « Pas ce type d'équipe dans ce gymnase » | FACILITY `forbiddenVenueId` + `targetTag` | ✅ | Jean Vilar pas de féminines |
 | « Gymnase fermé sur une période » | période cockpit `venue_closed` → `forbiddenVenueId` daté | ✅ | (calendrier cockpit) |
-| **« Au moins une séance dans tel gymnase »** | **aucun** (`forcedVenueId` = TOUTES les séances ; `preferredVenueId` = soft, non garanti) | ❌ | contourner via l'onglet **« Réserver »** (épingle 1 séance sur un créneau du gymnase, lock HARD) |
+| **« Au moins une séance dans tel gymnase »** | FACILITY `minAtVenueId` + `minAtVenueCount` (HARD, mode « au moins N ») — plancher, ≠ forçage ; les autres séances restent libres | ✅ *(ALIGN-05)* | « au moins 1 séance à Armand » ; fail-fast backend si N > séances/semaine |
 | « Nb max d'équipes par créneau d'un gymnase » | FACILITY_CAPACITY `maxTeams` (écran Gymnases, `canSplit`) | ✅ | ADN divisible en 3 |
 
 ## Axe COACH
@@ -58,13 +58,18 @@
 | « Jamais 2 équipes sur le même créneau » | `VENUE_AT_MOST_ONE` / capacité (implicite) | ✅ | — |
 | « Jour de repos après un match » | bonus soft `add_match_day_rest_bonus` | ✅ soft | — |
 
-## Synthèse des trous (❌ / 🟡 prioritaires)
+## Angles morts traités (2026-07-08)
 
-1. **« Au moins une séance dans tel gymnase »** (❌) — le cas le plus demandé sans solution native ; aujourd'hui seulement via une **réservation** manuelle (onglet « Réserver »). Candidat feature : un minimum de séances par gymnase (équivalent de `forcedDays` pour les salles).
-2. **Espacement / anti-jours-consécutifs** (❌) — « espacer d'un jour », « pas 3 d'affilée », « repos entre 2 séances » : non modélisés (hors repos post-match). Candidat : `max_consecutive_days` + contrainte d'écart.
-3. **« Finir avant X h »** (🟡) — pas de `maxEndTime`, approximé via le début max.
-4. **Minimum de séances garanti** (🟡) — actuellement une cible soft ; à trancher si un plancher dur est voulu (risque d'INFEASIBLE si capacité insuffisante).
-5. **« Au moins une séance tel jour »** (🟡) — le moteur sait (`forcedDays`) mais le wizard ne l'expose pas.
+Les 3 angles morts historiques d'alignement sont désormais couverts :
+- **ALIGN-04 « Finir avant X h »** → TIME `maxEndTime` (HARD, mode « Fini avant »).
+- **ALIGN-05 « Au moins une séance dans tel gymnase »** → FACILITY `minAtVenueId` + `minAtVenueCount` (plancher HARD, fail-soft si inatteignable, fail-fast backend si N > séances/semaine).
+- **ALIGN-06 espacement des séances** → règle implicite soft `spacing` (malus jours consécutifs, jamais bloquant).
+
+## Synthèse des trous restants (❌ / 🟡)
+
+1. **« Pas 3 entraînements d'affilée » / écart dur** (❌) — le soft `spacing` **préfère** espacer mais ne garantit rien ; une contrainte **dure** `max_consecutive_days` reste non modélisée.
+2. **Minimum de séances garanti** (🟡) — `MIN_SESSIONS` est une cible soft ; à trancher si un plancher dur est voulu (risque d'INFEASIBLE si capacité insuffisante).
+3. **« Au moins une séance tel jour »** (🟡) — le moteur sait (`forcedDays`) mais le wizard ne l'expose pas.
 
 > Détail moteur exhaustif (toutes les clés + mécanismes) : `engine/docs/constraint-vocabulary.md`.
 > Offre réellement câblée dans le wizard : `docs/architecture/constraint-matrix.md`.

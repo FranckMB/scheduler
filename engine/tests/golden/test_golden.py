@@ -35,7 +35,7 @@ class TestGoldenDatasets:
         result = solve_payload(data)
 
         assert result["status"] == "completed"
-        assert result["score"] == 22250
+        assert result["score"] == 22251
         assert len(result["slots"]) == 7
 
     def test_medium_club_is_feasible_or_optimal(self) -> None:
@@ -43,7 +43,7 @@ class TestGoldenDatasets:
         result = solve_payload(data, timeout=30)
 
         assert result["status"] == "completed"
-        assert result["score"] == 69683
+        assert result["score"] == 69684
         assert len(result["slots"]) == 32
 
     @pytest.mark.timeout(180)
@@ -75,7 +75,7 @@ class TestGoldenDatasets:
         result = solve_payload(data, timeout=30)
 
         assert result["status"] == "completed"
-        assert result["score"] == 64520
+        assert result["score"] == 64521
         assert len(result["slots"]) > 0
         conflict_diags = [d for d in result["diagnostics"] if d["type"] == "conflict"]
         assert conflict_diags == []

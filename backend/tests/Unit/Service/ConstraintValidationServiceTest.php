@@ -98,7 +98,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('TIME family requires maxStartTime or minStartTime in config.', $errors);
+        self::assertContains('TIME family requires maxStartTime, minStartTime or maxEndTime in config.', $errors);
     }
 
     public function testDayFamilyRequiresAllowedOrForbiddenDays(): void
@@ -124,7 +124,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.', $errors);
+        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.', $errors);
     }
 
     public function testFacilityFamilyAcceptsTheThreeEngineHonoredKeys(): void
@@ -149,7 +149,7 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setRuleType(ConstraintRuleType::HARD);
         $constraint->setConfig(['venueId' => 42]);
 
-        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.', $this->service->validate($constraint));
+        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.', $this->service->validate($constraint));
     }
 
     public function testCoachAvailabilityFamilyRequiresCoachIdOrTargetTag(): void
@@ -215,6 +215,53 @@ final class ConstraintValidationServiceTest extends TestCase
         $errors = $this->service->validate($constraint);
 
         self::assertNotContains('LOCK rule type is only valid for TIME or DAY family.', $errors);
+    }
+
+    public function testTimeFamilyAcceptsMaxEndTime(): void
+    {
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::TIME)->setRuleType(ConstraintRuleType::HARD)->setConfig(['maxEndTime' => '20:30']);
+        self::assertSame([], $this->service->validate($constraint));
+    }
+
+    public function testFacilityFamilyAcceptsMinAtVenueId(): void
+    {
+        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 1]);
+        self::assertSame([], $this->service->validate($constraint));
+    }
+
+    public function testMaxEndTimeAtPreferredIsRejected(): void
+    {
+        // The engine only honors maxEndTime on HARD/LOCK — a PREFERRED end-bound is a placebo (C4).
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::TIME)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['maxEndTime' => '20:30']);
+        self::assertContains('maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+    }
+
+    public function testMinAtVenueIdAtPreferredIsRejected(): void
+    {
+        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['minAtVenueId' => 'v']);
+        self::assertContains('minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+    }
+
+    public function testMinAtVenueIdAtClubScopeIsRejected(): void
+    {
+        // CLUB-scoped minAtVenueId is dropped by parse_v2_constraints (TEAM-only) — reject it (C3).
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v']);
+        self::assertContains('minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.', $this->service->validate($constraint));
+    }
+
+    public function testVenueMinimumErrorWhenCountExceedsSessions(): void
+    {
+        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 3]);
+        self::assertNotNull($this->service->venueMinimumError($constraint, 2), 'min 3 > 2 sessions/week must error');
+    }
+
+    public function testVenueMinimumErrorNullWhenWithinSessions(): void
+    {
+        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 1]);
+        self::assertNull($this->service->venueMinimumError($constraint, 2));
+        // Non venue-minimum → always null.
+        $other = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['forcedVenueId' => 'v']);
+        self::assertNull($this->service->venueMinimumError($other, 1));
     }
 
     protected function setUp(): void

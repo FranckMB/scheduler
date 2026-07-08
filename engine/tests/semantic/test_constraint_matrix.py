@@ -95,7 +95,10 @@ def _only_bad_payload(cell: MatrixCell) -> dict[str, Any]:
     if cell.scope == "COACH":
         constraints.append(team_coach("tc", "t", "coach-1"))
     if cell.family == "TIME":
-        venues = [make_venue(GOOD_VENUE, [(GOOD_DAY, "17:00")])]  # violates minStartTime 19:00
+        # The lone slot must VIOLATE the cell's own rule: 17:00 is too early for a
+        # minStartTime floor; 20:00 ends too late (21:30) for a maxEndTime bound.
+        bad_start = "20:00" if cell.config_key == "maxEndTime" else "17:00"
+        venues = [make_venue(GOOD_VENUE, [(GOOD_DAY, bad_start)])]
     else:
         venues = [make_venue(BAD_VENUE, [(BAD_DAY, "18:00")])]
     return make_payload(teams=[_team()], venues=venues, constraints=constraints)
@@ -113,6 +116,16 @@ def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
     config = _fill(cell.config)
     if key == "minStartTime":
         return str(slot["startTime"])[:5] < str(config["minStartTime"])
+    if key == "maxEndTime":
+        # Matrix TIME slots run the default 90 min; the END must fall by the bound.
+        def _mins(hhmm: str) -> int:
+            h, m = hhmm[:5].split(":")
+            return int(h) * 60 + int(m)
+
+        return _mins(str(slot["startTime"])) + 90 > _mins(str(config["maxEndTime"]))
+    if key == "minAtVenueId":
+        # 1-session team: the floor of "≥1 at venue" coincides with "is at venue".
+        return slot["venueId"] != config["minAtVenueId"]
     if key in ("forbiddenDays", "unavailableDays"):
         return int(slot["dayOfWeek"]) in set(config[key])
     if key == "availableDays":
@@ -159,7 +172,7 @@ def test_soft_rule_never_blocks_feasibility(cell: MatrixCell) -> None:
 
 @pytest.mark.parametrize(
     "cell",
-    [c for c in OFFERED if c.expected is Expectation.HONORED_HARD],
+    [c for c in OFFERED if c.expected is Expectation.HONORED_HARD and c.hard_only_bad_unplaced],
     ids=lambda c: c.case_id,
 )
 def test_hard_rule_never_places_in_violation(cell: MatrixCell) -> None:

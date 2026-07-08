@@ -134,15 +134,20 @@ export function ConstraintsStep() {
   const [target, setTarget] = useState("");
   const [minTime, setMinTime] = useState("");
   const [maxTime, setMaxTime] = useState("");
+  // "finir avant" = maxEndTime (l'engine calcule fin = début + durée du créneau).
+  const [endTime, setEndTime] = useState("");
   const [days, setDays] = useState<Set<number>>(new Set());
   // "à éviter" (forbiddenDays) vs "uniquement" (allowedDays — whitelist : SEULS
   // ces jours sont permis, l'engine interdit le complément). NB : forcedDays de
   // l'engine ne veut dire QUE « au moins une séance ces jours-là » — pas ce qu'on
   // veut ici (audit ENG-16).
   const [dayMode, setDayMode] = useState<"forbidden" | "forced">("forbidden");
-  // "préfère" (preferredVenueId) · "évite" (forbiddenVenueId) · "impose" (forcedVenueId, dur).
-  const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced">("preferred");
+  // "préfère" (preferredVenueId) · "évite" (forbiddenVenueId) · "impose"
+  // (forcedVenueId, dur) · "au moins N" (minAtVenueId + minAtVenueCount, dur).
+  const [venueMode, setVenueMode] = useState<"preferred" | "forbidden" | "forced" | "min">("preferred");
   const [venueId, setVenueId] = useState("");
+  // Compteur du mode "au moins N séances dans ce gymnase" (défaut 1, le cas courant).
+  const [venueMinCount, setVenueMinCount] = useState(1);
   const [coachId, setCoachId] = useState("");
   // "indisponible" (unavailableDays, blacklist) vs "disponible uniquement"
   // (availableDays, whitelist — l'engine intersecte les whitelists d'un coach).
@@ -168,7 +173,7 @@ export function ConstraintsStep() {
 
   function build(): ConstraintPayload | null {
     if ("TIME" === family) {
-      if ("" === minTime && "" === maxTime) {
+      if ("" === minTime && "" === maxTime && "" === endTime) {
         return null;
       }
       const config: Record<string, string> = { ...tagConfig };
@@ -178,8 +183,15 @@ export function ConstraintsStep() {
       if ("" !== maxTime) {
         config.maxStartTime = maxTime;
       }
-      const parts = [maxTime && `pas après ${maxTime}`, minTime && `pas avant ${minTime}`].filter(Boolean).join(", ");
-      return { name: `${who} · ${parts}`, scope, scopeTargetId, family, ruleType, config };
+      if ("" !== endTime) {
+        config.maxEndTime = endTime;
+      }
+      const parts = [maxTime && `pas après ${maxTime}`, minTime && `pas avant ${minTime}`, endTime && `fini avant ${endTime}`].filter(Boolean).join(", ");
+      // maxEndTime (fin de séance) n'existe que dur côté engine : le chemin soft
+      // (preferredTime) ne lit que min/maxStartTime → une "Fini avant" préférée
+      // serait un placebo. Dès qu'on impose une fin, la règle est obligatoire.
+      const timeRule: ConstraintRuleType = "" !== endTime ? "HARD" : ruleType;
+      return { name: `${who} · ${parts}`, scope, scopeTargetId, family, ruleType: timeRule, config };
     }
     if ("DAY" === family) {
       if (0 === days.size) {
@@ -199,6 +211,12 @@ export function ConstraintsStep() {
       if ("forced" === venueMode) {
         // "impose" = doit se dérouler dans ce gymnase (forcedVenueId), toujours dur.
         return { name: `${who} · impose ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedVenueId: venueId } };
+      }
+      if ("min" === venueMode) {
+        // "au moins N séances ici" = compte plancher (minAtVenueId + minAtVenueCount),
+        // toujours dur. Le backend refuse N > séances/semaine de l'équipe avant génération.
+        const count = Math.max(1, venueMinCount);
+        return { name: `${who} · au moins ${count} à ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, minAtVenueId: venueId, minAtVenueCount: count } };
       }
       const config = { ...tagConfig, ...("preferred" === venueMode ? { preferredVenueId: venueId } : { forbiddenVenueId: venueId }) };
       const verb = "preferred" === venueMode ? "préfère" : "évite";
@@ -225,6 +243,7 @@ export function ConstraintsStep() {
   const clearInputs = () => {
     setMinTime("");
     setMaxTime("");
+    setEndTime("");
     setDays(new Set());
   };
 
@@ -236,6 +255,7 @@ export function ConstraintsStep() {
     setCoachMode("unavailable");
     setVenueMode("preferred");
     setVenueId("");
+    setVenueMinCount(1);
     setCoachId("");
     setRuleType("PREFERRED");
     clearInputs();
@@ -269,7 +289,7 @@ export function ConstraintsStep() {
     // `cfg.forcedDays` is the LEGACY key for the DAY "uniquement" mode (#120,
     // before ENG-16) — still recognised so an old row loads correctly and
     // auto-migrates to allowedDays on save.
-    const isForced = ("FACILITY" === c.family && "string" === typeof cfg.forcedVenueId) || ("DAY" === c.family && (Array.isArray(cfg.allowedDays) || Array.isArray(cfg.forcedDays))) || "COACH_AVAILABILITY" === c.family;
+    const isForced = ("FACILITY" === c.family && ("string" === typeof cfg.forcedVenueId || "string" === typeof cfg.minAtVenueId)) || ("DAY" === c.family && (Array.isArray(cfg.allowedDays) || Array.isArray(cfg.forcedDays))) || "COACH_AVAILABILITY" === c.family;
     setRuleType(isForced ? "PREFERRED" : c.ruleType);
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
@@ -285,6 +305,7 @@ export function ConstraintsStep() {
     if ("TIME" === c.family) {
       setMinTime("string" === typeof cfg.minStartTime ? cfg.minStartTime : "");
       setMaxTime("string" === typeof cfg.maxStartTime ? cfg.maxStartTime : "");
+      setEndTime("string" === typeof cfg.maxEndTime ? cfg.maxEndTime : "");
     }
     if ("DAY" === c.family) {
       // allowedDays (current) OR forcedDays (legacy #120) both mean the "uniquement"
@@ -298,6 +319,10 @@ export function ConstraintsStep() {
       if ("string" === typeof cfg.forcedVenueId) {
         setVenueMode("forced");
         setVenueId(cfg.forcedVenueId);
+      } else if ("string" === typeof cfg.minAtVenueId) {
+        setVenueMode("min");
+        setVenueId(cfg.minAtVenueId);
+        setVenueMinCount("number" === typeof cfg.minAtVenueCount ? cfg.minAtVenueCount : 1);
       } else if ("string" === typeof cfg.forbiddenVenueId) {
         setVenueMode("forbidden");
         setVenueId(cfg.forbiddenVenueId);
@@ -401,6 +426,10 @@ export function ConstraintsStep() {
               Pas après
               <Input aria-label="Pas après" type="time" className="mt-0.5 h-8 w-28" value={maxTime} onChange={(e) => setMaxTime(e.target.value)} />
             </label>
+            <label className="text-xs text-muted-foreground">
+              Fini avant
+              <Input aria-label="Fini avant" type="time" className="mt-0.5 h-8 w-28" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            </label>
           </>
         )}
 
@@ -416,11 +445,18 @@ export function ConstraintsStep() {
 
         {"FACILITY" === family && (
           <>
-            <Select aria-label="Préférence" className="h-8 w-24" value={venueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden" | "forced")}>
+            <Select aria-label="Préférence" className="h-8 w-28" value={venueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden" | "forced" | "min")}>
               <option value="preferred">préfère</option>
               <option value="forbidden">évite</option>
               <option value="forced">impose</option>
+              <option value="min">au moins</option>
             </Select>
+            {"min" === venueMode && (
+              <label className="text-xs text-muted-foreground">
+                Combien
+                <Input aria-label="Nombre de séances" type="number" min={1} className="mt-0.5 h-8 w-16" value={venueMinCount} onChange={(e) => setVenueMinCount(Math.max(1, Number(e.target.value) || 1))} />
+              </label>
+            )}
             <Select aria-label="Gymnase" className="h-8 w-44" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
               <option value="">— gymnase —</option>
               {venues.map((v) => (
@@ -450,10 +486,11 @@ export function ConstraintsStep() {
           </>
         )}
 
-        {"COACH_AVAILABILITY" === family || ("DAY" === family && "forced" === dayMode) || ("FACILITY" === family && "forced" === venueMode) ? (
-          // Coach availability + "impose"/"uniquement" are ALWAYS hard (a person
-          // can't be in two places; a forced venue/day is a must, not a nudge) —
-          // the payload pins HARD, so a rule selector here would be a lie.
+        {"COACH_AVAILABILITY" === family || ("TIME" === family && "" !== endTime) || ("DAY" === family && "forced" === dayMode) || ("FACILITY" === family && ("forced" === venueMode || "min" === venueMode)) ? (
+          // Coach availability + "impose"/"uniquement" + "Fini avant" are ALWAYS
+          // hard (a person can't be in two places; a forced venue/day and a
+          // gym-closing end-bound are musts, not nudges) — the payload pins HARD,
+          // so a rule selector here would be a lie.
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Obligatoire</span>
         ) : (
           <Select aria-label="Règle" className="h-8 w-28" value={ruleType} onChange={(e) => setRuleType(e.target.value as ConstraintRuleType)}>

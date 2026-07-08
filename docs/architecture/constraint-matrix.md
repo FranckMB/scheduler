@@ -18,10 +18,12 @@ test Vitest).
 | Famille · config | HARD (Obligatoire) | LOCK (Verrouillé) | PREFERRED (Préféré) |
 |---|---|---|---|
 | TIME `minStartTime`/`maxStartTime` | dure | dure (fenêtre figée) | soft |
+| TIME `maxEndTime` | dure — mode **« Fini avant »** (fin = début + durée du créneau), toujours HARD (pas de sélecteur) *(ALIGN-04)* | — | — *(le chemin soft `preferredTime` ne lit que min/maxStartTime → une préférence serait un placebo)* |
 | DAY `forbiddenDays` | dure | dure | **soft « éviter ces jours »** *(fix ENG-10 — était un placebo)* |
 | DAY `allowedDays` | dure — mode **« uniquement »** (whitelist : l'engine interdit tous les autres jours), toujours HARD (pas de sélecteur) | — | — |
 | FACILITY `preferredVenueId` | dure (salle forcée) | **dure** *(fix ENG-12 — était mort)* | soft |
 | FACILITY `forcedVenueId` | dure — mode **« impose »** (doit se dérouler ici), toujours HARD (pas de sélecteur) | — | — |
+| FACILITY `minAtVenueId` + `minAtVenueCount` | dure — mode **« au moins N »** (plancher de séances dans ce gymnase, ≠ forçage), toujours HARD (pas de sélecteur) *(ALIGN-05)* ; plancher inatteignable → **fail-soft** (diagnostic `venue_minimum_unreachable` ERROR, pas INFEASIBLE) ; le backend refuse `N > séances/semaine` avant génération | — | — |
 | FACILITY `forbiddenVenueId` | dure | dure | **soft « éviter ce gymnase »** *(fix ENG-11 — était escaladé en dur → INFEASIBLE possible sur une préférence)* |
 | COACH_AVAILABILITY `unavailableDays` | mode « indisponible » — dure + **union multi-contraintes** *(fix ENG-13)* | — l'UI force **Obligatoire** | — |
 | COACH_AVAILABILITY `availableDays` | mode « disponible uniquement » — dure (whitelist, **intersection** multi) *(ALIGN — l'UI expose la capacité engine)* | — l'UI force **Obligatoire** | — |
@@ -46,6 +48,13 @@ test Vitest).
 > rétrograder en préférence. Les deux cellules passent `NOT_OFFERED → HONORED_HARD`.
 > **Correctif ENG-16** : « uniquement » émet `allowedDays` (whitelist réelle), **pas** `forcedDays`
 > (qui ne veut dire QUE « au moins une séance ces jours-là » et laissait les autres jours ouverts).
+>
+> **MàJ 2026-07-08 (angles morts d'alignement)** : trois capacités engine désormais alignées.
+> `maxEndTime` (**ALIGN-04**, mode « Fini avant ») et `minAtVenueId`+`minAtVenueCount` (**ALIGN-05**,
+> mode « au moins N ») deviennent **émis par le wizard** (toujours HARD). **ALIGN-06** ajoute une
+> **règle implicite soft** : espacement des jours d'entraînement (poids `spacing = −2`, malus sur
+> deux séances consécutives d'une même équipe) — activée pour toutes les équipes, ne bloque jamais
+> (soft). `SCORE_FORMULA_VERSION` **bumpé V6→V7** (nouveau poids `spacing`).
 
 ## Verrous
 

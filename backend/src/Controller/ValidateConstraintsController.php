@@ -28,6 +28,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
+        private readonly \App\Repository\TeamRepository $teamRepository,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -59,9 +60,24 @@ final class ValidateConstraintsController extends AbstractController
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
         }
 
+        // Map teamId → sessions/week for the fail-fast venue-minimum check — only
+        // loaded when at least one constraint actually carries a minAtVenueId (the
+        // vast majority of validations are TIME/DAY/COACH and never need it).
+        $teamSessions = [];
+        $needsTeams = array_filter($constraints, static fn (Constraint $c): bool => isset($c->getConfig()['minAtVenueId']));
+        if ([] !== $needsTeams) {
+            foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+                $teamSessions[$team->getId()] = $team->getSessionsPerWeek();
+            }
+        }
+
         $errors = [];
         foreach ($constraints as $constraint) {
             $messages = $this->validationService->validate($constraint);
+            $venueMinError = $this->validationService->venueMinimumError($constraint, $teamSessions[$constraint->getScopeTargetId()] ?? null);
+            if (null !== $venueMinError) {
+                $messages[] = $venueMinError;
+            }
             if ([] !== $messages) {
                 $errors[$constraint->getId()] = $messages;
             }

@@ -43,6 +43,11 @@ class MatrixCell:
     expected: Expectation
     offered_by_ui: bool
     note: str = ""
+    # HONORED_HARD default: when only the forbidden option exists the team stays
+    # unplaced. minAtVenueId breaks this — an unreachable floor fails SOFT (an
+    # ERROR diagnostic, team still placed) instead of INFEASIBLE, so it opts out
+    # of the only-bad assertion (its fail-soft path has a dedicated test).
+    hard_only_bad_unplaced: bool = True
     # Sample config the wizard would emit for this cell; "{good}"/"{bad}"
     # placeholders are filled by the test scenario builder.
     config: dict[str, Any] = field(default_factory=dict)
@@ -63,6 +68,14 @@ MATRIX: tuple[MatrixCell, ...] = (
                config={"minStartTime": "19:00"}),
     MatrixCell("TIME", "PREFERRED", "minStartTime", "TEAM", Expectation.HONORED_SOFT, True,
                config={"minStartTime": "19:00"}),
+    # --- TIME maxEndTime (ALIGN-04, "finir avant") -----------------------------
+    # HARD-only offer: the soft time path (add_preferred_time_bonus) reads only
+    # min/maxStartTime, so a PREFERRED end-bound would be a placebo — the wizard
+    # pins "Fini avant" HARD. 90-min sessions: 17:00 ends 18:30 (ok), 20:00 ends
+    # 21:30 (late for the 18:30 bound).
+    MatrixCell("TIME", "HARD", "maxEndTime", "TEAM", Expectation.HONORED_HARD, True,
+               note="wizard 'Fini avant' = session END must fall by the bound, always hard",
+               config={"maxEndTime": "18:30"}),
     # --- DAY forbiddenDays ------------------------------------------------------
     MatrixCell("DAY", "HARD", "forbiddenDays", "TEAM", Expectation.HONORED_HARD, True,
                config={"forbiddenDays": [3]}),
@@ -118,6 +131,14 @@ MATRIX: tuple[MatrixCell, ...] = (
     MatrixCell("FACILITY", "HARD", "forcedVenueId", "TEAM", Expectation.HONORED_HARD, True,
                note="wizard 'impose' = forced venue (must play here), always hard",
                config={"forcedVenueId": "{good_venue}"}),
+    # ALIGN-05: wizard "au moins N" = a FLOOR count at a venue (minAtVenueId +
+    # minAtVenueCount), always hard. For a 1-session team it coincides with
+    # forced-venue in the mixed scenario; when unreachable it fails SOFT (dedicated
+    # test), hence hard_only_bad_unplaced=False.
+    MatrixCell("FACILITY", "HARD", "minAtVenueId", "TEAM", Expectation.HONORED_HARD, True,
+               note="wizard 'au moins N' = min sessions at venue (floor count), always hard",
+               config={"minAtVenueId": "{good_venue}", "minAtVenueCount": 1},
+               hard_only_bad_unplaced=False),
     # ENG-16: the wizard "uniquement" maps to allowedDays (a WHITELIST: the engine
     # forbids every non-listed day) — NOT forcedDays, which only means "at least one
     # session on these days" and leaves the other days open (silently violating

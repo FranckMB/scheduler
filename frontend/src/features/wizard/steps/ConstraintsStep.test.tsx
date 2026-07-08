@@ -109,6 +109,31 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v1" } });
   });
 
+  it("TIME 'Fini avant' emits a HARD maxEndTime (soft path can't honor an end-bound — ALIGN-04)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    // TIME is the default family. Setting an end-bound pins the rule HARD.
+    await user.type(screen.getByLabelText("Fini avant"), "20:30");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "TIME", ruleType: "HARD", config: { maxEndTime: "20:30" } });
+  });
+
+  it("FACILITY 'au moins' emits a HARD minAtVenueId + minAtVenueCount (floor count — ALIGN-05)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    // "au moins N" is per-team → target a specific team (TEAM scope, the only shape the engine honors).
+    await user.selectOptions(screen.getByLabelText("Cible"), "t1");
+    await user.selectOptions(screen.getByLabelText("Préférence"), "min");
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "FACILITY", scope: "TEAM", ruleType: "HARD", config: { minAtVenueId: "v1", minAtVenueCount: 1 } });
+  });
+
   it("DAY 'uniquement' emits HARD allowedDays (whitelist — only these days, ENG-16)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);

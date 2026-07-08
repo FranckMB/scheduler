@@ -35,8 +35,15 @@ final class ConstraintValidationService
 
         switch ($family) {
             case ConstraintFamily::TIME:
-                if (!isset($config['maxStartTime']) && !isset($config['minStartTime'])) {
-                    $errors[] = 'TIME family requires maxStartTime or minStartTime in config.';
+                // maxEndTime = "finir avant X h" (l'engine calcule fin = début + durée).
+                if (!isset($config['maxStartTime']) && !isset($config['minStartTime']) && !isset($config['maxEndTime'])) {
+                    $errors[] = 'TIME family requires maxStartTime, minStartTime or maxEndTime in config.';
+                }
+                // maxEndTime is honored by the engine ONLY on HARD/LOCK rules (the
+                // soft path add_preferred_time_bonus reads only min/maxStartTime).
+                // A PREFERRED end-bound would be accepted here yet silently ignored.
+                if (isset($config['maxEndTime']) && !\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
+                    $errors[] = 'maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
                 }
                 break;
 
@@ -47,12 +54,24 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::FACILITY:
-                // A FACILITY rule names a VENUE via one of the three keys the ENGINE
-                // actually reads: forcedVenueId (must-be-at, HARD), preferredVenueId
-                // (soft nudge, or forced when HARD) or forbiddenVenueId (avoid). A bare
-                // `venueId` is honored by NO engine branch, so it is not accepted here.
-                if (!isset($config['forcedVenueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId'])) {
-                    $errors[] = 'FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.';
+                // A FACILITY rule names a VENUE via one of the keys the ENGINE actually
+                // reads: forcedVenueId (must-be-at), preferredVenueId (soft/forced when
+                // HARD), forbiddenVenueId (avoid), or minAtVenueId (au moins N séances
+                // ici — un compte, pas un forçage). A bare `venueId` is honored by NO
+                // engine branch, so it is not accepted here.
+                if (!isset($config['forcedVenueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId']) && !isset($config['minAtVenueId'])) {
+                    $errors[] = 'FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.';
+                }
+                // minAtVenueId ("au moins N ici") is honored by the engine ONLY as
+                // a per-TEAM, HARD/LOCK count. A CLUB-scoped or PREFERRED one is
+                // accepted nowhere in parse_v2_constraints → silently dropped.
+                if (isset($config['minAtVenueId'])) {
+                    if (!\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
+                        $errors[] = 'minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
+                    }
+                    if (ConstraintScope::TEAM !== $scope) {
+                        $errors[] = 'minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.';
+                    }
                 }
                 break;
 
@@ -76,6 +95,27 @@ final class ConstraintValidationService
         }
 
         return $errors;
+    }
+
+    /**
+     * Fail-fast pre-generation check: "au moins N séances dans tel gymnase" is
+     * provably impossible when N exceeds the team's weekly sessions. Surface it as
+     * an ERROR BEFORE generation rather than a silent INFEASIBLE at solve time.
+     * Returns an error string, or null when the rule is fine / not a venue-minimum.
+     */
+    public function venueMinimumError(Constraint $constraint, ?int $teamSessionsPerWeek): ?string
+    {
+        $config = $constraint->getConfig();
+        if (ConstraintFamily::FACILITY !== $constraint->getFamily() || !isset($config['minAtVenueId'])) {
+            return null;
+        }
+
+        $count = isset($config['minAtVenueCount']) ? (int) $config['minAtVenueCount'] : 1;
+        if (null !== $teamSessionsPerWeek && $count > $teamSessionsPerWeek) {
+            return \sprintf('Le minimum de %d séance(s) dans ce gymnase dépasse les %d séance(s)/semaine de l\'équipe — impossible.', $count, $teamSessionsPerWeek);
+        }
+
+        return null;
     }
 
     /**
