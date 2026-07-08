@@ -47,8 +47,12 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::FACILITY:
-                if (!isset($config['venueId']) && !isset($config['targetTag'])) {
-                    $errors[] = 'FACILITY family requires venueId or targetTag in config.';
+                // A FACILITY rule names a VENUE via one of the three keys the ENGINE
+                // actually reads: forcedVenueId (must-be-at, HARD), preferredVenueId
+                // (soft nudge, or forced when HARD) or forbiddenVenueId (avoid). A bare
+                // `venueId` is honored by NO engine branch, so it is not accepted here.
+                if (!isset($config['forcedVenueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId'])) {
+                    $errors[] = 'FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.';
                 }
                 break;
 
@@ -105,32 +109,52 @@ final class ConstraintValidationService
 
     private function checkConflict(Constraint $c1, Constraint $c2): ?string
     {
-        // Same scope target with contradictory rules
+        $config1 = $c1->getConfig();
+        $config2 = $c2->getConfig();
+
+        // Two rules can only contradict if their TARGET SETS overlap. The targetTag
+        // narrows the target: two rules with DIFFERENT non-null tags (e.g. EMB max
+        // 18:00 vs SENIOR min 18:50) apply to disjoint teams → no conflict. But an
+        // UNTAGGED rule (null tag = the whole club) overlaps every tagged rule, so
+        // "overlap" is: same tag, OR at least one side untagged.
+        $tag1 = $config1['targetTag'] ?? null;
+        $tag2 = $config2['targetTag'] ?? null;
+        $targetsOverlap = null === $tag1 || null === $tag2 || $tag1 === $tag2;
+
         if ($c1->getScopeTargetId() === $c2->getScopeTargetId()
             && $c1->getScope() === $c2->getScope()
+            && $targetsOverlap
             && $c1->getFamily() === $c2->getFamily()
             && 'HARD' === $c1->getRuleType()->value
             && 'HARD' === $c2->getRuleType()->value
         ) {
-            $config1 = $c1->getConfig();
-            $config2 = $c2->getConfig();
 
-            // Check for contradictory day constraints
+            // Contradictory day constraints — checked BOTH ways (allowed on one side
+            // forbidden on the other) so the verdict does not depend on array order.
             if (ConstraintFamily::DAY === $c1->getFamily()) {
                 $allowed1 = $config1['allowedDays'] ?? [];
                 $forbidden2 = $config2['forbiddenDays'] ?? [];
+                $allowed2 = $config2['allowedDays'] ?? [];
+                $forbidden1 = $config1['forbiddenDays'] ?? [];
 
-                if (\count(array_intersect($allowed1, $forbidden2)) > 0) {
+                if (\count(array_intersect($allowed1, $forbidden2)) > 0
+                    || \count(array_intersect($allowed2, $forbidden1)) > 0
+                ) {
                     return 'Contradictory day constraints: allowed days overlap with forbidden days.';
                 }
             }
 
-            // Check for contradictory time constraints
+            // Contradictory time constraints — symmetric: a max on either side below
+            // the other side's min is impossible, regardless of iteration order.
             if (ConstraintFamily::TIME === $c1->getFamily()) {
                 $max1 = $config1['maxStartTime'] ?? null;
                 $min2 = $config2['minStartTime'] ?? null;
+                $max2 = $config2['maxStartTime'] ?? null;
+                $min1 = $config1['minStartTime'] ?? null;
 
-                if (null !== $max1 && null !== $min2 && $max1 < $min2) {
+                if ((null !== $max1 && null !== $min2 && $max1 < $min2)
+                    || (null !== $max2 && null !== $min1 && $max2 < $min1)
+                ) {
                     return 'Contradictory time constraints: maxStartTime is less than minStartTime.';
                 }
             }

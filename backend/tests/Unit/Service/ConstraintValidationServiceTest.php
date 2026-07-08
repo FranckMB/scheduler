@@ -114,7 +114,7 @@ final class ConstraintValidationServiceTest extends TestCase
         self::assertContains('DAY family requires allowedDays, forbiddenDays or forcedDays in config.', $errors);
     }
 
-    public function testFacilityFamilyRequiresVenueIdOrTargetTag(): void
+    public function testFacilityFamilyRequiresAVenueKey(): void
     {
         $constraint = new Constraint;
         $constraint->setScope(ConstraintScope::CLUB);
@@ -124,7 +124,32 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('FACILITY family requires venueId or targetTag in config.', $errors);
+        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.', $errors);
+    }
+
+    public function testFacilityFamilyAcceptsTheThreeEngineHonoredKeys(): void
+    {
+        foreach (['forcedVenueId', 'forbiddenVenueId', 'preferredVenueId'] as $key) {
+            $constraint = new Constraint;
+            $constraint->setScope(ConstraintScope::CLUB);
+            $constraint->setFamily(ConstraintFamily::FACILITY);
+            $constraint->setRuleType(ConstraintRuleType::HARD);
+            $constraint->setConfig([$key => 42]);
+
+            self::assertSame([], $this->service->validate($constraint), \sprintf('%s should be a valid FACILITY key', $key));
+        }
+    }
+
+    public function testFacilityFamilyRejectsBareVenueIdWhichTheEngineIgnores(): void
+    {
+        $constraint = new Constraint;
+        $constraint->setScope(ConstraintScope::TEAM);
+        $constraint->setScopeTargetId('team-1');
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['venueId' => 42]);
+
+        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.', $this->service->validate($constraint));
     }
 
     public function testCoachAvailabilityFamilyRequiresCoachIdOrTargetTag(): void

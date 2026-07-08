@@ -4,7 +4,7 @@ import { humanizeConstraintError } from "./constraintErrors";
 
 describe("humanizeConstraintError", () => {
   it("maps a known validator message to French", () => {
-    expect(humanizeConstraintError("FACILITY family requires venueId or targetTag in config.")).toBe("Une contrainte de gymnase doit cibler un gymnase.");
+    expect(humanizeConstraintError("FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.")).toBe("Une contrainte de gymnase doit désigner un gymnase.");
   });
 
   it("maps a contradiction message", () => {
