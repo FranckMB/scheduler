@@ -63,7 +63,7 @@ Charge cognitive pour le gestionnaire lambda :
 - **Lecteurs d'écran** : `aria-label`/`role`/`alt` présents ; emojis porteurs d'info doublés d'un label textuel (`title`/`aria-label`) ; landmarks/titres.
 - **Cibles** : taille minimale des zones cliquables.
 
-> Un défaut **critique confirmé** sur ces axes (ex. information portée par la seule couleur sur un flux critique, flux-clé impossible au clavier, contraste AA échoué sur du texte principal) **plafonne le sous-axe concerné à 60**, comme pour les briques.
+> La notation de ces axes est **extrêmement sévère** (barre = app **simple d'utilisation ET robuste en tout point**) : plafonds durcis, score général = le plus bas des sous-axes — voir Étape 4. Un défaut critique confirmé (couleur seule sur flux critique, flux-clé infaisable au clavier, contraste AA échoué sur texte principal, jargon bloquant) **plafonne son sous-axe à 40**.
 
 ## Étape 3 — Vérification contradictoire (OBLIGATOIRE)
 
@@ -84,11 +84,21 @@ Barème fixe (ne pas le modifier — la comparabilité en dépend) :
 
 Pondérations : **Doc** = exactitude 40 / structure 20 / utilité IA 25 / cycle specs 15. **Besoin** = réalité 40 / adéquation 30 / viabilité 30. **Code par brique** = correction+sécurité 40 / architecture 25 / tests 20 / robustesse 15. Un défaut critique **confirmé** plafonne la brique à 60. Les notes sont un indicateur secondaire — la comparaison inter-éditions se fait sur le registre de findings.
 
-**Score UX (axe ADDITIF — noté HORS du `/100` des briques ci-dessus).** Trois sous-notes indépendantes sur la même échelle de tranches : **UX-Cohérence /100 · UX-Simplicité & Intuitivité /100 · Inclusivité-a11y /100** (plus une moyenne UX indicative). Règles strictes de comparabilité :
+**Score UX (axe ADDITIF — noté HORS du `/100` des briques ci-dessus ; notation EXTRÊMEMENT sévère).** But : prémunir des erreurs au plus tôt pour une app **simple d'utilisation ET robuste en tout point**.
+
+- **Point par point** : trois sous-notes `/100` indépendantes — **UX-Cohérence · UX-Simplicité & Intuitivité · Inclusivité-a11y**.
+- **De manière générale** : le **Score UX global `/100` = le PLUS BAS des trois sous-scores couverts** (jamais une moyenne). « Robuste en tout point » = la chaîne vaut son maillon le plus faible : un seul axe faible tire tout le score UX vers le bas. Un sous-axe `non couvert` n'entre pas dans le min (le signaler).
+- **Barème inversé par défaut (sévérité extrême)** : partir bas et faire *gagner* les points, pas l'inverse. Chaque incohérence, friction ou ambiguïté pour un **gestionnaire lambda** coûte. Grille UX (plus dure que l'échelle générale) :
+  - **90–100** : exemplaire, **zéro** finding UX ≥ moyen, cohérence et redondance d'info sans faille.
+  - **75–89** : solide, uniquement des broutilles mineures **cosmétiques**.
+  - **60–74** : correct mais **≥1 chantier** qui ferait hésiter un gestionnaire.
+  - **< 60** : dès qu'**un seul** défaut ferait perdre, bloquer ou tromper un gestionnaire lambda (ou exclut un utilisateur handicapé).
+- **Plafonds durcis (plus stricts que les briques)** — un finding UX **confirmé** plafonne SON sous-axe : **moyen → 75**, **élevé → 60**, **critique → 40**. Critiques UX typiques : information portée par la **seule couleur** sur un flux critique, flux-clé **infaisable au clavier**, **contraste AA échoué** sur du texte principal, **jargon bloquant** un gestionnaire non technique.
+
+Règles strictes de comparabilité :
 - **Ne PAS re-pondérer** les briques `/100` existantes : leur barème est figé, ces axes s'ajoutent à côté.
 - **Nouvel axe = pas de rétro-notation** : les éditions antérieures qui n'avaient pas ces axes sont marquées `non couvert` en baseline ; la trajectoire UX **démarre à l'édition qui introduit l'axe**. Ne jamais inventer une note UX rétroactive pour une édition passée.
 - Un sous-axe **non couvert** (ex. dynamique sans navigateur ET proxys statiques insuffisants) ne donne PAS de note — comme tout axe.
-- Même sévérité par défaut que le reste : la barre est l'app **commercialisable**, pas le stade courant.
 
 La référence de notation est **l'application commercialisable**, pas le stade de développement courant. Noter contre cette barre en permanence : les notes doivent monter au fil des éditions parce que le code s'améliore, jamais parce que l'audit s'est ramolli.
 
@@ -97,7 +107,7 @@ La référence de notation est **l'application commercialisable**, pas le stade 
 Écrire `specs/audit/AUDIT-<YYYY-MM-DD>-<model-id>.md` :
 
 1. **En-tête** : date, modèle exact, SHA HEAD, tableau de couverture des axes — **inclure les lignes `UX-Cohérence`, `UX-Simplicité/Intuitivité`, `Inclusivité-a11y`** (chacune `couvert` / `partiel` / `non couvert (raison)`).
-2. **Synthèse des notes** (/100, uniquement les axes couverts). Le **score UX** (Cohérence / Simplicité-Intuitivité / Inclusivité-a11y) est présenté dans un **bloc séparé**, explicitement hors du `/100` des briques.
+2. **Synthèse des notes** (/100, uniquement les axes couverts). Le **score UX** est présenté dans un **bloc séparé**, hors du `/100` des briques : les **3 sous-notes `/100`** (Cohérence · Simplicité-Intuitivité · Inclusivité-a11y) **et** le **Score UX général `/100` = le plus bas des sous-axes couverts** (voir Étape 4, notation extrêmement sévère).
 3. **Registre des findings** — LE cœur de la comparaison. Table : `ID | Titre court | Zone | Gravité | Statut vérif (confirmé/réfuté/non vérifié) | Statut vs édition précédente (nouveau/ouvert/corrigé/réfuté)`. Règles d'ID : préfixe zone (`SEC-`, `ENG-`, `BCK-`, `FRT-`, `DOC-`, `DEP-`, `INF-`, `UX-` (générique, hérité), `UXC-` (cohérence), `UXS-` (simplicité/intuitivité), `A11Y-` (inclusivité/accessibilité), `PERF-`, `RGPD-`) + numéro incrémental **jamais réutilisé**. Reprendre les IDs de l'édition précédente pour les findings ouverts ; marquer `corrigé` ceux qui ont disparu (avec preuve).
 4. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
 5. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
@@ -107,7 +117,7 @@ La référence de notation est **l'application commercialisable**, pas le stade 
 ## Règles
 
 - Ne **jamais commiter** le résultat — le fichier reste en working tree, l'utilisateur décide (mémo projet : jamais de merge sans go explicite).
-- **Sévérité par défaut.** La barre de notation est l'application **commercialisable** (cible : mi-2027), jamais le stade de développement du moment. Ne jamais adoucir une note ou une gravité parce que « c'est encore en dev » — l'utilisateur veut voir les angles morts tôt et s'y habituer. Pas de gravité « à terme » : un backup absent est Élevé aujourd'hui, point. Le contexte dev se lit dans la trajectoire du registre (findings corrigés édition après édition), pas dans des notes gonflées.
+- **Sévérité par défaut — extrême, assumée.** La barre de notation est l'application **commercialisable** (cible : mi-2027), jamais le stade de développement du moment. Le rôle de l'audit est de **prémunir des erreurs au plus tôt** pour une app **simple d'utilisation ET robuste en tout point** : dans le doute, noter BAS et flaguer. Ne jamais adoucir une note ou une gravité parce que « c'est encore en dev » — l'utilisateur veut voir les angles morts tôt et s'y habituer. Pas de gravité « à terme » : un backup absent est Élevé aujourd'hui, point. Le contexte dev se lit dans la trajectoire du registre (findings corrigés édition après édition), pas dans des notes gonflées.
 - En cas de doute sur une gravité, prendre la plus haute. Un finding sur-coté se rétrograde à l'édition suivante ; un finding sous-coté devient un incident en prod.
 - Direct et factuel. Un audit qui flatte ne sert à rien ; un audit qui affirme sans vérifier non plus.
 - Exactitude quand même : la sévérité porte sur la notation, pas sur les faits. Ex. données personnelles : périmètre réel = coachs + comptes users (email/tél) ; les noms d'équipes type « U13M1 » sont génériques, pas des données personnelles. Ne pas gonfler un finding au-delà des faits pour paraître sévère.
