@@ -83,12 +83,16 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
             >
               <span className={cn("flex size-5 items-center justify-center rounded-full", isToday ? "bg-accent font-semibold text-accent-foreground" : "")}>{cell.day}</span>
               <span className="flex flex-wrap items-center gap-0.5">
-                {holiday ? <span title={`Vacances — ${holiday.label}`}>🏖</span> : null}
+                {holiday ? (
+                  <span role="img" aria-label={`Vacances — ${holiday.label}`} title={`Vacances — ${holiday.label}`}>
+                    🏖
+                  </span>
+                ) : null}
                 {publicHoliday ? (
                   <span role="img" aria-label={`Férié — ${publicHoliday.label}`} title={`Férié — ${publicHoliday.label}`} className="inline-block size-1.5 rounded-full bg-destructive" />
                 ) : null}
                 {dayEntries.map((e) => (
-                  <span key={e.id} title={e.title}>
+                  <span key={e.id} role="img" aria-label={e.title} title={e.title}>
                     {entryIcon(e)}
                   </span>
                 ))}

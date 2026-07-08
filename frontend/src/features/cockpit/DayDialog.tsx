@@ -156,6 +156,7 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
 
   return (
     <FormShell onBack={onBack}>
+      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional, better than the neutral panel */}
       <input className={fieldClass} placeholder="Titre (AG, tournoi…)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <label className="flex items-center gap-2 text-sm">
@@ -196,6 +197,7 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
 
   return (
     <FormShell onBack={onBack}>
+      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional */}
       <select className={fieldClass} value={venueId} onChange={(e) => setVenueId(e.target.value)} autoFocus>
         <option value="">Salle indisponible…</option>
         {(venues ?? []).map((v) => (
@@ -230,6 +232,7 @@ function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; 
 
   return (
     <FormShell onBack={onBack}>
+      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional */}
       <input className={fieldClass} placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <p className="text-xs text-muted-foreground">Rappel affiché au calendrier (🛑) et au radar — le planning de base reste inchangé, rien à générer.</p>

@@ -1,7 +1,8 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/shared/components/ui/button";
+import { useModalA11y } from "@/shared/lib/useModalA11y";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -32,46 +33,8 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  // Keep the latest onCancel in a ref so the keydown effect depends only on
-  // `open` (an inline onCancel from the parent must not re-bind the listener).
-  const onCancelRef = useRef(onCancel);
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCancelRef.current();
-        return;
-      }
-      if (event.key === "Tab") {
-        const focusables = panelRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        if (!focusables || focusables.length === 0) {
-          return;
-        }
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  // Shared focus-trap + initial focus + focus restoration + Escape (WCAG 2.1.2 / 2.4.3).
+  useModalA11y({ ref: panelRef, onClose: onCancel, active: open });
 
   if (!open) {
     return null;
@@ -82,6 +45,7 @@ export function ConfirmDialog({
       <div className="absolute inset-0 bg-black/50" aria-hidden="true" onClick={onCancel} />
       <div
         ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -95,8 +59,7 @@ export function ConfirmDialog({
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          {/* autoFocus (native, passed through Button's prop spread) puts initial focus on the confirm action. */}
-          <Button autoFocus variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
+          <Button variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

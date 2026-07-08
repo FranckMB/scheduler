@@ -1,24 +1,27 @@
 /**
- * WCAG 2.2 AA guardrail (structural). Renders shared primitives + key screens
- * and asserts axe-core finds no violations. Runs on every `vitest run`, so any
- * frontend change that regresses accessibility fails here.
+ * WCAG 2.2 AA guardrail (structural). Renders shared primitives + the Modal and
+ * asserts axe-core finds no violations. Runs on every `vitest run`, so any
+ * frontend change that regresses accessibility fails here. Component-specific
+ * a11y (MonthCalendar emoji alternatives, WeekGrid venue-as-text) is asserted in
+ * those components' own co-located tests, where the render fixtures already live.
  *
  * jsdom has no layout engine → axe skips colour-contrast (WCAG 1.4.3); that axis
- * is enforced by the Playwright/axe pass added in PR2 alongside the contrast
- * fixes (A11Y-06). The `describe.skip` blocks below are the KNOWN violations from
- * the 2026-07-08 audit — PR2 fixes each, then unskips it and this file becomes a
- * blocking regression net for the norm.
+ * is enforced by the Playwright/axe pass (follow-up) alongside the contrast fixes.
  */
-import { describe, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { axe } from "vitest-axe";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
+import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
 
 import { expectNoA11yViolations } from "./utils";
 
-describe("a11y — shared UI primitives (clean baseline)", () => {
+describe("a11y — shared UI primitives", () => {
   it("Button has no violations", async () => {
     await expectNoA11yViolations(<Button>Enregistrer</Button>);
   });
@@ -48,13 +51,42 @@ describe("a11y — shared UI primitives (clean baseline)", () => {
   });
 });
 
-// --- Known audit violations — unskipped one by one in PR2 as each is fixed. ----
+describe("a11y — Modal focus management (WCAG 2.1.2 / 2.4.3)", () => {
+  it("has no violations, moves focus into the panel, and closes on Escape", async () => {
+    const onClose = vi.fn();
+    render(
+      <Modal label="Boîte de test" title="Titre" onClose={onClose}>
+        <button type="button">Action</button>
+      </Modal>,
+    );
 
-describe.skip("a11y — audit gaps (PR2)", () => {
-  // A11Y-03 / FRT-12/13 / UXC-02: Modal has no focus-trap nor focus restoration.
-  it.todo("Modal traps + restores focus (WCAG 2.4.3)");
-  // A11Y-01: venue distinguished by colour only in the planning grid cells.
-  it.todo("WeekGrid venue cells carry a text label, not colour only (WCAG 1.4.1)");
-  // A11Y-05: MonthCalendar emoji carries info via title only (no role=img+aria-label).
-  it.todo("MonthCalendar info emoji exposes a text alternative (WCAG 1.1.1)");
+    const dialog = screen.getByRole("dialog");
+    // Focus is moved into the dialog on open (neutral panel entry point).
+    expect(dialog).toHaveFocus();
+    // Modal portals to document.body, so scan the whole document.
+    expect(await axe(document.body)).toHaveNoViolations();
+
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("restores focus to the trigger element on close (WCAG 2.4.3)", () => {
+    // The element focused when the modal opens is the one focus returns to on close.
+    const trigger = document.createElement("button");
+    trigger.textContent = "Trigger";
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    const { unmount } = render(
+      <Modal label="Boîte" title="Titre" onClose={() => {}}>
+        <button type="button">Action</button>
+      </Modal>,
+    );
+    expect(screen.getByRole("dialog")).toHaveFocus();
+
+    unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
 });
