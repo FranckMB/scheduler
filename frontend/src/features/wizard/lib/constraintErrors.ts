@@ -9,7 +9,7 @@
 const EXACT: Record<string, string> = {
   "TIME family requires maxStartTime or minStartTime in config.": "Une contrainte d'horaire doit préciser une heure de début minimale ou maximale.",
   "DAY family requires allowedDays, forbiddenDays or forcedDays in config.": "Une contrainte de jour doit préciser au moins un jour (autorisé, interdit ou imposé).",
-  "FACILITY family requires venueId, forbiddenVenueId or preferredVenueId in config.": "Une contrainte de gymnase doit désigner un gymnase.",
+  "FACILITY family requires forcedVenueId, forbiddenVenueId or preferredVenueId in config.": "Une contrainte de gymnase doit désigner un gymnase.",
   "COACH_AVAILABILITY family requires coachId or targetTag in config.": "Une contrainte de disponibilité doit cibler un coach.",
   "FACILITY_CAPACITY family requires maxTeams in config.": "Une contrainte de capacité doit préciser un nombre maximum d'équipes.",
   "LOCK rule type is only valid for TIME or DAY family.": "Le verrouillage n'est possible que sur une contrainte d'horaire ou de jour.",

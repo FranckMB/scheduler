@@ -762,13 +762,21 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $manager->persist($c);
         };
 
-        // Purge des contraintes renommées/retirées par d'anciennes versions de la
-        // fixture (utile en mode append ; un rechargement complet truncate d'abord).
+        // Purge des contraintes renommées/retirées OU dont la config a changé à nom
+        // constant (utile en mode append ; un rechargement complet truncate d'abord).
+        // Sans ça, le helper name-keyed conserverait l'ancienne config (ex. EMB 18h00
+        // au lieu de 17h30, Camus/SM4 en preferred/venueId au lieu de forcedVenueId).
         foreach ([
             'Jeunes - Fin entraînement 19h30',
             'Jeunes - Début maximum 20h15',
             'EMB - Début maximum 19h50',
             'Camus - Réservé loisir exclusivement',
+            // Config modifiée, nom inchangé → à repurger pour un reseed propre.
+            'EMB (U9/U11) - Début au premier créneau (max 17h30)',
+            'SM4 - Jean Vilar obligatoire',
+            'Camus - Réservé Loisir 1 exclusivement',
+            'Camus - Réservé Loisir 2 exclusivement',
+            'Camus - Réservé Loisir 3 exclusivement',
         ] as $retiredName) {
             $stale = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $retiredName]);
             if ($stale instanceof Constraint) {
@@ -797,10 +805,13 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
 
         // --- FACILITY (gymnases imposés / interdits / préférés) ---
         $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
-        $addConstraint('SM4 - Jean Vilar obligatoire', ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['venueId' => $venues['vJeanVilar']->getId()]);
-        // Camus réservé EXCLUSIVEMENT aux Loisir 1/2/3 (HARD venueId, pas un simple nudge).
+        // Venue OBLIGATOIRE (HARD) = forcedVenueId : l'engine ne force la salle que
+        // via forcedVenueId (ou preferredVenueId en HARD), jamais via un `venueId` —
+        // clé qu'aucune branche du parseur ne lit (sinon contrainte silencieuse).
+        $addConstraint('SM4 - Jean Vilar obligatoire', ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vJeanVilar']->getId()]);
+        // Camus réservé EXCLUSIVEMENT aux Loisir 1/2/3 (HARD forcedVenueId, pas un simple nudge).
         foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
-            $addConstraint('Camus - Réservé ' . $loisirName . ' exclusivement', ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['venueId' => $venues['vCamus']->getId()]);
+            $addConstraint('Camus - Réservé ' . $loisirName . ' exclusivement', ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vCamus']->getId()]);
         }
         // Veterans interdits sur Camus/JDR/Jean Vilar/Tonkin/ADN.
         foreach (['vCamus', 'vJdr', 'vJeanVilar', 'vTonkin', 'vAdn'] as $venueVar) {
