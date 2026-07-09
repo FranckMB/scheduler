@@ -130,7 +130,7 @@ export function GenerateStep() {
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
         {periodMode
-          ? "Génère le plan de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
+          ? "Génère le planning de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
           : "Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner."}
       </p>
 
@@ -168,7 +168,7 @@ export function GenerateStep() {
               regenerated (not duplicated → backend 422). Also gated by blockers. */}
           <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && !periodEntry)}>
             <Rocket className="size-4" />
-            {periodMode ? "Générer le plan de période" : "Lancer la génération"}
+            {periodMode ? "Générer le planning de période" : "Lancer la génération"}
           </Button>
         </div>
       )}

@@ -94,10 +94,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);
         return (
-          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "plan généré" : "pas de plan"}`}>
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "planning généré" : "pas de planning"}`}>
             {entry?.overlayScheduleId ? (
               <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
-                Voir le plan
+                Voir le planning
               </Button>
             ) : entry ? (
               <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
@@ -162,7 +162,7 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
       {hasOverlay ? (
         <>
           <Button variant="outline" size="sm" onClick={onView}>
-            Voir le plan
+            Voir le planning
           </Button>
           <Button variant="ghost" size="sm" onClick={onAdapt}>
             Ajuster
