@@ -85,7 +85,7 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
             <>
               {STATUS_LABELS[baseline.status]}
               {baseline.score !== null ? ` · score ${baseline.score}` : ""}
-              {overlayCount > 0 ? ` · ${overlayCount} calendrier${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
+              {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
             </>
           ) : loading ? (
             "Chargement…"
@@ -110,10 +110,10 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
       <ConfirmDialog
         open={confirmEdit}
         destructive={false}
-        title="Modifier le socle ?"
+        title="Modifier le planning principal ?"
         description={
           overlayCount > 0
-            ? `Modifier rouvre l'édition du planning principal et supprimera ${overlayCount} calendrier${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}.`
+            ? `Modifier rouvre l'édition du planning principal et supprimera ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}.`
             : "Modifier rouvre l'édition du planning principal (il repasse en modifiable)."
         }
         confirmLabel="Modifier"
@@ -125,8 +125,8 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
       <ConfirmDialog
         open={confirmDeleteCount !== null}
         destructive
-        title="Supprimer les calendriers secondaires ?"
-        description={`Ceci supprimera ${confirmDeleteCount ?? 0} calendrier${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} secondaire${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        title="Supprimer les plannings secondaires ?"
+        description={`Ceci supprimera ${confirmDeleteCount ?? 0} planning${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} secondaire${(confirmDeleteCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
         confirmLabel="Modifier et supprimer"
         onConfirm={confirmDestructiveEdit}
         onCancel={() => setConfirmDeleteCount(null)}

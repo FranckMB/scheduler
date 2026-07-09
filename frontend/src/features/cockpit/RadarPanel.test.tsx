@@ -68,7 +68,7 @@ describe("RadarPanel", () => {
     renderRadar({ holidays: [holiday] });
 
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
-    expect(screen.getByText(/pas de plan/)).toBeInTheDocument();
+    expect(screen.getByText(/pas de planning/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
     expect(createHolidayMutate).toHaveBeenCalledWith(
@@ -81,15 +81,15 @@ describe("RadarPanel", () => {
     conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }] };
     renderRadar({ entries: [closure({})] });
 
-    expect(screen.getByText(/3 séances à replacer · plan secondaire absent/)).toBeInTheDocument();
+    expect(screen.getByText(/3 séances à replacer · planning secondaire absent/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {
     renderRadar({ entries: [closure({ overlayScheduleId: "ov1" })] });
 
-    expect(screen.getByText("Plan secondaire généré")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Voir le plan" })).toBeInTheDocument();
+    expect(screen.getByText("Planning secondaire généré")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ajuster" })).toBeInTheDocument();
   });
 
@@ -103,9 +103,9 @@ describe("RadarPanel", () => {
 
     expect(screen.getByText("Coupure de Noël")).toBeInTheDocument();
     expect(screen.getByText(/aucun entraînement/)).toBeInTheDocument();
-    // Reminder only: no plan to prepare for a cutoff (no Adapter / Voir le plan).
+    // Reminder only: no plan to prepare for a cutoff (no Adapter / Voir le planning).
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Voir le plan" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voir le planning" })).not.toBeInTheDocument();
   });
 
   it("formats cutoff dates in short French, never raw ISO", () => {

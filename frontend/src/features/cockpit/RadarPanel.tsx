@@ -94,10 +94,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);
         return (
-          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "plan généré" : "pas de plan"}`}>
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "planning généré" : "pas de planning"}`}>
             {entry?.overlayScheduleId ? (
               <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
-                Voir le plan
+                Voir le planning
               </Button>
             ) : entry ? (
               <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
@@ -157,12 +157,12 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
     <RadarCard
       icon={<AlertTriangle className={hasOverlay ? "size-4 text-accent" : "size-4 text-destructive"} />}
       title={entry.title}
-      detail={hasOverlay ? "Plan secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · plan secondaire absent` : "Indisponibilité signalée"}
+      detail={hasOverlay ? "Planning secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent` : "Indisponibilité signalée"}
     >
       {hasOverlay ? (
         <>
           <Button variant="outline" size="sm" onClick={onView}>
-            Voir le plan
+            Voir le planning
           </Button>
           <Button variant="ghost" size="sm" onClick={onAdapt}>
             Ajuster
