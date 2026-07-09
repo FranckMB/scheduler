@@ -164,6 +164,7 @@ final class ReconcileStuckSchedulesCommand extends Command
         $this->hub->publish(new Update(
             \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
             json_encode(['status' => 'failed', 'error' => 'stuck_timeout'], \JSON_THROW_ON_ERROR),
+            private: true,
         ));
     }
 }

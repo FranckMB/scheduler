@@ -38,7 +38,7 @@ final class ScheduleProgressPublisher
             'score' => $schedule->getScore(),
             'unplaced' => $this->countUnplacedTeams($result),
             'warnings' => array_values(\is_array($result['warnings'] ?? null) ? $result['warnings'] : []),
-        ], \JSON_THROW_ON_ERROR)));
+        ], \JSON_THROW_ON_ERROR), private: true));
     }
 
     /**
@@ -68,6 +68,7 @@ final class ScheduleProgressPublisher
         $this->hub->publish(new Update(
             \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
             json_encode(['status' => 'failed', 'error' => $error], \JSON_THROW_ON_ERROR),
+            private: true,
         ));
     }
 

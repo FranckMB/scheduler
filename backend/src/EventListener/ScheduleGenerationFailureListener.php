@@ -77,6 +77,7 @@ final readonly class ScheduleGenerationFailureListener
             $this->hub->publish(new Update(
                 \sprintf('club:%s:schedule:%s', $message->getClubId(), $message->getScheduleId()),
                 json_encode(['status' => 'failed', 'error' => 'generation_failed'], \JSON_THROW_ON_ERROR),
+                private: true,
             ));
         } catch (Throwable $exception) {
             // The unit of work may already be broken (the original failure closed

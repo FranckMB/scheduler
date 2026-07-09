@@ -56,6 +56,7 @@ final readonly class ExportPdfHandler
             $this->hub->publish(new Update(
                 \sprintf('club:%s:schedule:%s', $clubId, $message->getScheduleId()),
                 json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null, 'pngExportUrl' => null], \JSON_THROW_ON_ERROR),
+                private: true,
             ));
 
             return;
@@ -98,6 +99,6 @@ final readonly class ExportPdfHandler
             'pdfExportStatus' => $schedule->getPdfExportStatus(),
             'pdfExportUrl' => $schedule->getPdfExportUrl(),
             'pngExportUrl' => $schedule->getPngExportUrl(),
-        ], \JSON_THROW_ON_ERROR)));
+        ], \JSON_THROW_ON_ERROR), private: true));
     }
 }
