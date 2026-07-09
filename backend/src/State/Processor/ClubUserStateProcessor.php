@@ -19,6 +19,18 @@ class ClubUserStateProcessor extends AbstractStateProcessor
     }
 
     /**
+     * SEC-07 (A5/A6): writing a membership sets `role`/`isActive` — the privilege
+     * fields themselves. Without this gate any active member could POST/PUT
+     * /api/club_users and self-escalate to owner. Legitimate membership flows do
+     * NOT use these operations (creation → AuthController, approval →
+     * MembershipController), so gating them to owner/admin breaks nothing.
+     */
+    protected function requiresManagementRole(): bool
+    {
+        return true;
+    }
+
+    /**
      * @param ClubUserInput $input
      */
     protected function createEntityFromInput(object $input): ClubUser

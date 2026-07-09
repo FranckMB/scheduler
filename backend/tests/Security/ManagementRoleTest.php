@@ -69,6 +69,10 @@ final class ManagementRoleTest extends WebTestCase
         return [
             ['POST', '/api/schedules', '{"name":"t","status":"DRAFT"}'],
             ['POST', '/api/schedule_slot_templates', '{"scheduleId":"' . self::DUMMY_ID . '","teamId":"' . self::DUMMY_ID . '","venueId":"' . self::DUMMY_ID . '","dayOfWeek":1,"startTime":"18:00"}'],
+            // A5/A6: a non-management member must NOT be able to write a membership
+            // (self-escalation to owner via /api/club_users). Guard fires in the
+            // processor before any privilege field is applied.
+            ['POST', '/api/club_users', '{"userId":"' . self::DUMMY_ID . '","role":"owner","isActive":true}'],
         ];
     }
 
