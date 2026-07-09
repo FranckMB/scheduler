@@ -2,6 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
@@ -251,7 +252,7 @@ function VenuesEditor() {
       ) : null}
 
       {null === selected ? (
-        <p className="text-sm text-muted-foreground">Aucun gymnase pour le moment.</p>
+        <EmptyHint>Aucun gymnase pour le moment.</EmptyHint>
       ) : (
         <>
           {/* Selection row — pick WHICH gym to work on (kept visually separate

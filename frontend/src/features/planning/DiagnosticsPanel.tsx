@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Info, XCircle }
 import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { cn } from "@/shared/lib/utils";
 
 import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
@@ -52,7 +53,7 @@ export function DiagnosticsPanel({ diagnostics, slots, lookups, onHighlight }: D
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
         {0 === diagnostics.length ? (
-          <p className="text-sm text-muted-foreground">Aucun diagnostic — le planning est propre.</p>
+          <EmptyHint>Aucun diagnostic — le planning est propre.</EmptyHint>
         ) : (
           <div className="flex flex-col gap-1">
             {groups.map((group) => {

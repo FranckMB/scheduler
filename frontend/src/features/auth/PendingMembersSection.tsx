@@ -1,6 +1,7 @@
 import { Check, X } from "lucide-react";
 
 import { Button } from "@/shared/components/ui/button";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Spinner } from "@/shared/components/ui/spinner";
 
@@ -30,7 +31,7 @@ export function PendingMembersSection() {
   const members = data?.members ?? [];
 
   if (members.length === 0) {
-    return <p className="py-4 text-center text-sm text-muted-foreground">Aucune demande en attente.</p>;
+    return <EmptyHint className="py-4 text-center">Aucune demande en attente.</EmptyHint>;
   }
 
   return (

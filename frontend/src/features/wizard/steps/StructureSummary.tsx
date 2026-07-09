@@ -2,6 +2,7 @@ import { Lock, OctagonX } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AccordionSection } from "@/shared/components/ui/accordion";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
@@ -95,7 +96,7 @@ export function ReadonlyVenues({ calendarEntryId }: { calendarEntryId: string | 
     <div className="space-y-3">
       <LockedBanner title="Gymnases" />
       {0 === venues.length ? (
-        <p className="text-sm text-muted-foreground">Aucun gymnase.</p>
+        <EmptyHint>Aucun gymnase.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
           {venues.map((v) => {
@@ -140,7 +141,7 @@ export function ReadonlyCoaches() {
     <div className="space-y-3">
       <LockedBanner title="Coachs" />
       {0 === coaches.length ? (
-        <p className="text-sm text-muted-foreground">Aucun coach.</p>
+        <EmptyHint>Aucun coach.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1 rounded-md border border-border">
           {orderedCoaches(coaches, coachPlayerIds).map(({ coach: c }) => {

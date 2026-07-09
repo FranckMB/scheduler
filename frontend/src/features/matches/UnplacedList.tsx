@@ -1,4 +1,5 @@
 import { MapPin } from "lucide-react";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 
 import type { Fixture, Team } from "./api";
 
@@ -19,7 +20,7 @@ export function UnplacedList({ fixtures, teams, selectedFixtureId, onSelect }: U
   const unplaced = fixtures.filter(isUnplacedHome).sort((a, b) => a.matchDate.localeCompare(b.matchDate));
 
   if (0 === unplaced.length) {
-    return <p className="text-sm text-muted-foreground">Aucun match domicile à placer.</p>;
+    return <EmptyHint>Aucun match domicile à placer.</EmptyHint>;
   }
 
   return (
