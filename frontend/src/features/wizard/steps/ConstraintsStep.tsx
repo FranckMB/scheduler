@@ -76,6 +76,10 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
   // leaves the list, unless the gym is divisible and a capacity seat remains.
   const effectiveTeamId = teamId || teams[0]?.id || "";
   const reservableSlots = availableReservationSlots(slots, reservations, venueCanSplit, effectiveTeamId);
+  // A previously-picked slot can fall out of the list (team switched, slot filled).
+  // Treat the selection as empty then, so the Select shows the placeholder and the
+  // button disables — never an enabled button that silently does nothing.
+  const slotOffered = "" !== slotId && reservableSlots.some((s) => s.id === slotId);
 
   // Order reservations by TEAM RANK (fanion S → A → B → C → D, then intra-tier
   // order) so the list is scannable instead of server-insertion order. Tiebreak
@@ -104,7 +108,7 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
       <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         <TeamSelect aria-label="Équipe" className="h-8 w-44" teams={teams} tiers={tiers} value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)} />
         <span className="text-xs text-muted-foreground">sur</span>
-        <Select aria-label="Créneau" className="h-8 w-64" value={slotId} onChange={(e) => setSlotId(e.target.value)}>
+        <Select aria-label="Créneau" className="h-8 w-64" value={slotOffered ? slotId : ""} onChange={(e) => setSlotId(e.target.value)}>
           <option value="">— créneau —</option>
           {reservableSlots.map((s) => (
             <option key={s.id} value={s.id}>
@@ -112,7 +116,7 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
             </option>
           ))}
         </Select>
-        <Button size="sm" onClick={add} disabled={"" === slotId || 0 === teams.length || create.isPending}>
+        <Button size="sm" onClick={add} disabled={!slotOffered || 0 === teams.length || create.isPending}>
           <Lock className="size-4" />
           Réserver
         </Button>

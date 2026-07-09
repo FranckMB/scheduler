@@ -32,7 +32,13 @@ export function availableReservationSlots(
     if (teamsOnSlot.has(teamId)) {
       return false;
     }
-    const allowed = true === venueCanSplit.get(slot.venueId) ? slot.capacity : 1;
+    // A non-divisible gym takes one team per slot. When the venue is KNOWN
+    // non-divisible we cap at 1 even if a stale slot still carries capacity>1;
+    // when the venue is not (yet) loaded we trust slot.capacity — the backend
+    // forces it to 1 for non-divisible gyms — so a lagging venues query can't
+    // wrongly hide a legitimate capacity seat.
+    const canSplit = venueCanSplit.get(slot.venueId);
+    const allowed = false === canSplit ? 1 : slot.capacity;
     return teamsOnSlot.size < allowed;
   });
 }

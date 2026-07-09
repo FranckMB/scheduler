@@ -38,6 +38,13 @@ describe("availableReservationSlots", () => {
     expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], NON_SPLIT, "teamB")).toEqual([]);
   });
 
+  it("trusts slot.capacity when the venue is not loaded yet (no wrong hide)", () => {
+    const slots = [slot("s1", "v1", 2, "18:00:00", 2)];
+    // venues query hasn't resolved → empty map; a capacity-2 slot must still
+    // offer its second seat rather than collapse to 1.
+    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], new Map(), "teamB").map((s) => s.id)).toEqual(["s1"]);
+  });
+
   it("matches slot start with seconds against a HH:MM reservation", () => {
     const slots = [slot("s1", "v1", 2, "18:00:00")];
     // reservation stored as HH:MM must still collide with the seconds-form slot
