@@ -17,8 +17,13 @@ const h = vi.hoisted(() => ({
 
 vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: h.list }),
-  useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }] }),
-  usePriorityTiers: () => ({ data: [{ id: 3, label: "B", name: "Moyenne", color: null }] }),
+  useWizardTeams: () => ({
+    data: [
+      { id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
+      { id: "t2", name: "Fanion", sportCategoryId: "cat", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
+    ],
+  }),
+  usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
@@ -298,6 +303,23 @@ describe("ConstraintsStep — Réserver tab (server-backed)", () => {
 
     await user.click(remove);
     expect(h.resDelete).toHaveBeenCalledWith("r1");
+  });
+
+  it("sorts the reservation list by team rank (S/fanion before B), whatever the server order", async () => {
+    // Server order puts the rank-B team first; the list must show rank-S first.
+    h.reservations = [
+      { id: "rB", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 },
+      { id: "rS", calendarEntryId: null, teamId: "t2", venueId: "v1", dayOfWeek: 3, startTime: "18:00", durationMinutes: 90 },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+
+    const rows = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    const iFanion = rows.findIndex((t) => t.includes("Fanion"));
+    const iSM1 = rows.findIndex((t) => t.startsWith("SM1"));
+    expect(iFanion).toBeGreaterThanOrEqual(0);
+    expect(iFanion).toBeLessThan(iSM1); // rank S (Fanion) before rank B (SM1)
   });
 
   it("add → useCreateReservation with the picked slot + base calendarEntryId", async () => {
