@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -280,60 +280,55 @@ describe("ConstraintsStep — edit an existing constraint", () => {
 });
 
 /**
- * Réserver tab is now server-backed (Reservation entity, base/overlay). Locks the
- * fix for the empty tab: it LISTS server reservations and add/remove hit the API.
+ * Réserver tab is now a per-venue slot grid: click a slot → modal to pin/remove
+ * teams (server-backed Reservation entity, base/overlay). The rank-sorted summary
+ * moved to the Récap step. These lock the grid+modal interaction + the team-cap.
  */
-describe("ConstraintsStep — Réserver tab (server-backed)", () => {
+describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
   beforeEach(() => {
     h.resCreate.mockClear();
     h.resDelete.mockClear();
     h.reservations = [];
   });
 
-  it("lists a server reservation and remove → useDeleteReservation", async () => {
+  const openSlot = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]); // the family tab
+    await user.click(screen.getByRole("button", { name: /Gymnase A.*cliquer pour gérer/ })); // the slot in the grid
+  };
+
+  it("clicking a reserved slot opens the modal with a removable team → useDeleteReservation", async () => {
     h.reservations = [{ id: "r1", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 }];
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
 
-    // Open the "Réserver" tab (first button so named — the family-tab).
-    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
-    // The server reservation is rendered as a removable row (not an empty client store).
-    const remove = screen.getByRole("button", { name: "Retirer" });
-    expect(remove).toBeInTheDocument();
-
+    await openSlot(user);
+    const remove = screen.getByRole("button", { name: "Retirer SM1" });
     await user.click(remove);
     expect(h.resDelete).toHaveBeenCalledWith("r1");
   });
 
-  it("sorts the reservation list by team rank (S/fanion before B), whatever the server order", async () => {
-    // Server order puts the rank-B team first; the list must show rank-S first.
+  it("adding a team from the modal → useCreateReservation with the slot payload + base calendarEntryId", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await openSlot(user);
+    // Picker is rank-ordered (Fanion=S before SM1=B); pick the fanion.
+    await user.selectOptions(screen.getByLabelText("Ajouter une équipe"), "t2");
+    expect(h.resCreate).toHaveBeenCalledWith(expect.objectContaining({ teamId: "t2", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, calendarEntryId: null }));
+  });
+
+  it("hides a team that reached its sessionsPerWeek from the picker", async () => {
+    // t2 (Fanion) has 2 sessions and 2 reservations elsewhere → maxed, absent from the picker.
     h.reservations = [
-      { id: "rB", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 },
-      { id: "rS", calendarEntryId: null, teamId: "t2", venueId: "v1", dayOfWeek: 3, startTime: "18:00", durationMinutes: 90 },
+      { id: "ra", calendarEntryId: null, teamId: "t2", venueId: "v1", dayOfWeek: 3, startTime: "18:00", durationMinutes: 90 },
+      { id: "rb", calendarEntryId: null, teamId: "t2", venueId: "v1", dayOfWeek: 4, startTime: "18:00", durationMinutes: 90 },
     ];
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
-    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
 
-    const rows = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
-    const iFanion = rows.findIndex((t) => t.includes("Fanion"));
-    const iSM1 = rows.findIndex((t) => t.startsWith("SM1"));
-    expect(iFanion).toBeGreaterThanOrEqual(0);
-    expect(iFanion).toBeLessThan(iSM1); // rank S (Fanion) before rank B (SM1)
-  });
-
-  it("add → useCreateReservation with the picked slot + base calendarEntryId", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<ConstraintsStep />);
-
-    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
-    await user.selectOptions(screen.getByLabelText("Créneau"), "s1");
-    // The add button is the last "Réserver" (the tab is the first).
-    await user.click(screen.getAllByRole("button", { name: /Réserver/ }).at(-1)!);
-
-    expect(h.resCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ teamId: "t1", venueId: "v1", dayOfWeek: 2, durationMinutes: 120, calendarEntryId: null }),
-      expect.anything(),
-    );
+    await openSlot(user);
+    const picker = screen.getByLabelText("Ajouter une équipe");
+    expect(within(picker).queryByRole("option", { name: "Fanion" })).toBeNull();
+    expect(within(picker).getByRole("option", { name: "SM1" })).toBeInTheDocument();
   });
 });

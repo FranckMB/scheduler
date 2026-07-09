@@ -1,53 +1,76 @@
 import { describe, expect, it } from "vitest";
 
-import type { Reservation, VenueTrainingSlot } from "../api";
-import { availableReservationSlots } from "./reservationSlots";
+import type { PriorityTier, Reservation, Team, VenueTrainingSlot } from "../api";
+import { assignableTeams, effectiveSlotCapacity, reservedTeamsBySlot, teamReservationCount } from "./reservationSlots";
 
 const slot = (id: string, venueId: string, dayOfWeek: number, startTime: string, capacity = 1): VenueTrainingSlot =>
   ({ id, venueId, dayOfWeek, startTime, durationMinutes: 90, capacity }) as VenueTrainingSlot;
 
 const resa = (teamId: string, venueId: string, dayOfWeek: number, startTime: string): Reservation =>
-  ({ id: `${teamId}-${venueId}-${dayOfWeek}`, teamId, venueId, dayOfWeek, startTime, durationMinutes: 90 }) as Reservation;
+  ({ id: `${teamId}-${venueId}-${dayOfWeek}-${startTime}`, teamId, venueId, dayOfWeek, startTime, durationMinutes: 90 }) as Reservation;
+
+const team = (id: string, name: string, priorityTierId: number, sessionsPerWeek: number, tierOrder = 0): Team =>
+  ({ id, name, priorityTierId, tierOrder, sessionsPerWeek, sportCategoryId: "c" }) as Team;
+
+const TIERS: PriorityTier[] = [
+  { id: 1, label: "S", name: "Fanion", color: null },
+  { id: 5, label: "D", name: "Bonus", color: null },
+];
 
 const NON_SPLIT = new Map([["v1", false]]);
 const SPLIT = new Map([["v1", true]]);
 
-describe("availableReservationSlots", () => {
-  it("drops a full capacity-1 slot for other teams (non-divisible gym)", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00")];
-    const reservations = [resa("teamA", "v1", 2, "18:00")];
-    expect(availableReservationSlots(slots, reservations, NON_SPLIT, "teamB").map((s) => s.id)).toEqual([]);
+describe("effectiveSlotCapacity", () => {
+  it("caps a known non-divisible gym at 1, else trusts slot.capacity", () => {
+    expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), NON_SPLIT)).toBe(1);
+    expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), SPLIT)).toBe(2);
+    expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), new Map())).toBe(2); // venue not loaded
+  });
+});
+
+describe("reservedTeamsBySlot / teamReservationCount", () => {
+  it("groups teams per slot and counts per team", () => {
+    const reservations = [resa("a", "v1", 2, "18:00"), resa("b", "v1", 2, "18:00"), resa("a", "v1", 4, "18:00")];
+    expect(reservedTeamsBySlot(reservations).get("v1|2|18:00")).toEqual(["a", "b"]);
+    expect(teamReservationCount(reservations).get("a")).toBe(2);
+    expect(teamReservationCount(reservations).get("b")).toBe(1);
+  });
+});
+
+describe("assignableTeams", () => {
+  const teams = [team("d1", "Alpha", 5, 2), team("s1", "Zoulou", 1, 2)]; // Alpha=D, Zoulou=S(fanion)
+
+  it("orders by rank (fanion first), not alphabetically", () => {
+    expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00"), [], NON_SPLIT).map((t) => t.id)).toEqual(["s1", "d1"]);
   });
 
-  it("keeps a capacity-2 slot for one more team, then drops it when full", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00", 2)];
-    // one team booked → still one seat left for another team
-    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], SPLIT, "teamB").map((s) => s.id)).toEqual(["s1"]);
-    // two distinct teams booked → full
-    const full = [resa("teamA", "v1", 2, "18:00"), resa("teamB", "v1", 2, "18:00")];
-    expect(availableReservationSlots(slots, full, SPLIT, "teamC")).toEqual([]);
+  it("excludes a team already reserved on the slot", () => {
+    const reservations = [resa("s1", "v1", 2, "18:00")];
+    // capacity 1 → slot full after one team → nothing offered
+    expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00", 1), reservations, NON_SPLIT)).toEqual([]);
   });
 
-  it("never offers a slot to a team that already reserved it (even with a free seat)", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00", 2)];
-    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], SPLIT, "teamA")).toEqual([]);
+  it("keeps the free seat of a divisible slot for the OTHER team", () => {
+    const reservations = [resa("s1", "v1", 2, "18:00")];
+    expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00", 2), reservations, SPLIT).map((t) => t.id)).toEqual(["d1"]);
   });
 
-  it("ignores capacity on a non-divisible gym (treated as 1)", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00", 2)];
-    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], NON_SPLIT, "teamB")).toEqual([]);
+  it("drops a team that reached its sessionsPerWeek ceiling — even on a different free slot", () => {
+    // Zoulou (2 sessions) already has 2 reservations elsewhere → gone everywhere.
+    const reservations = [resa("s1", "v1", 3, "18:00"), resa("s1", "v1", 5, "18:00")];
+    expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00"), reservations, NON_SPLIT).map((t) => t.id)).toEqual(["d1"]);
   });
 
-  it("trusts slot.capacity when the venue is not loaded yet (no wrong hide)", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00", 2)];
-    // venues query hasn't resolved → empty map; a capacity-2 slot must still
-    // offer its second seat rather than collapse to 1.
-    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], new Map(), "teamB").map((s) => s.id)).toEqual(["s1"]);
+  it("offers nothing once the slot is full", () => {
+    const reservations = [resa("a", "v1", 2, "18:00"), resa("b", "v1", 2, "18:00")];
+    expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00", 2), reservations, SPLIT)).toEqual([]);
   });
 
-  it("matches slot start with seconds against a HH:MM reservation", () => {
-    const slots = [slot("s1", "v1", 2, "18:00:00")];
-    // reservation stored as HH:MM must still collide with the seconds-form slot
-    expect(availableReservationSlots(slots, [resa("teamA", "v1", 2, "18:00")], NON_SPLIT, "teamB")).toEqual([]);
+  it("matches an ISO/seconds slot start against an HH:MM reservation (prod shape)", () => {
+    // Slots carry an ISO datetime in prod; reservations store HH:MM. They must
+    // collide so a team already pinned isn't re-offered on the same physical slot.
+    const isoSlot = slot("s", "v1", 2, "1970-01-01T20:30:00+00:00", 1);
+    const reservations = [resa("s1", "v1", 2, "20:30")];
+    expect(assignableTeams(teams, TIERS, isoSlot, reservations, NON_SPLIT)).toEqual([]); // slot full via the HH:MM reservation
   });
 });

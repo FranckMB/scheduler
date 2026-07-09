@@ -76,6 +76,12 @@ abstract class AbstractStateProvider implements ProviderInterface
         // A bounded result set (all rows of one parent) bypasses the default 30-item pagination.
         $bounded = $this->applyRequestFilters($qb);
 
+        // Deterministic order on the UUID PK, APPENDED after any subclass ordering so it is
+        // always the final tiebreaker: without it offset pagination is unstable (Postgres
+        // reshuffles rows sharing the subclass sort key between page requests) and
+        // collectionAll's id-dedupe silently drops rows straddling a page boundary.
+        $qb->addOrderBy('e.id', 'ASC');
+
         if ($bounded || !$this->pagination->isEnabled($operation, $context)) {
             return array_map([$this, 'mapEntityToOutput'], $qb->getQuery()->getResult());
         }

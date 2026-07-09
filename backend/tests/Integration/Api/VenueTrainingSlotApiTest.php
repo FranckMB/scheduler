@@ -9,6 +9,8 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
+use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,6 +39,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 
     private string $token;
 
+    /** @return array<string, array{0: int, 1: bool, 2: int}> */
     public static function capacityCases(): array
     {
         return [
@@ -119,6 +122,57 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertFalse($body['canSplit'], 'canSplit=false must persist (uncheck)');
+    }
+
+    public function testPaginationReturnsEveryRowAcrossPages(): void
+    {
+        // >30 rows (paginationItemsPerPage=30) force a 2nd page. Without a STABLE
+        // total order, Postgres reshuffles rows between page requests and rows
+        // straddling the boundary are silently dropped by the client's dedupe-paging
+        // (the real "Matéo's Wednesday slots vanish" bug). The provider now orders on
+        // the UUID PK, so page1 ∪ page2 must return every created slot.
+        $venue = $this->createVenue(false);
+        // Seed 35 slots via the EM (bypasses the per-user API rate limit + the
+        // anti-overlap guard) under the club GUC. CRITICAL: every slot shares the
+        // SAME (dayOfWeek, startTime) so the provider's dayOfWeek+startTime order is
+        // fully tied — the UUID PK tiebreaker is then the ONLY thing that makes
+        // pagination deterministic. Drop the tiebreaker and the 30/5 page split
+        // reshuffles → boundary rows are lost, failing the assertion below.
+        $guc = self::getContainer()->get(TenantConnectionContext::class);
+        $guc->setClubId($this->club->getId());
+        try {
+            for ($i = 0; $i < 35; ++$i) {
+                $slot = (new VenueTrainingSlot)
+                    ->setClubId($this->club->getId())
+                    ->setSeasonId($this->season->getId())
+                    ->setVenueId($venue->getId())
+                    ->setDayOfWeek(1)
+                    ->setStartTime(new DateTimeImmutable('18:00'))
+                    ->setDurationMinutes(90)
+                    ->setCapacity(1);
+                $this->em->persist($slot);
+            }
+            $this->em->flush();
+        } finally {
+            $guc->clear();
+        }
+
+        $ids = [];
+        foreach ([1, 2] as $page) {
+            $this->client->request('GET', '/api/venue_training_slots?page=' . $page, [], [], [
+                'HTTP_X-Club-Id' => $this->club->getId(),
+                'HTTP_X-Season-Id' => $this->season->getId(),
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            ]);
+            $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+            /** @var list<array{id: string}> $members */
+            $members = \is_array($body) && \is_array($body['member'] ?? null) ? $body['member'] : [];
+            foreach ($members as $slot) {
+                $ids[] = $slot['id'];
+            }
+        }
+
+        self::assertCount(35, array_unique($ids), 'every slot must be returned across pages — stable pagination order.');
     }
 
     protected function setUp(): void

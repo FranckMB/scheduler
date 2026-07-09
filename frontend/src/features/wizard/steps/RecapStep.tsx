@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -7,8 +8,10 @@ import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
 import { SectionCountTitle, SummaryRow, TeamTierAccordion, VenueSwatch } from "./StructureSummary";
-import { useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useDeleteReservation, usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+import { groupTeamsByTier } from "@/shared/lib/teamTiers";
+import { dayLabel, hhmm } from "../lib/days";
 
 // Manager-facing labels for the FFBB play levels (mirrors the teams step).
 const LEVEL_LABEL: Record<TeamLevel, string> = {
@@ -46,6 +49,9 @@ export function RecapStep() {
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
+  const { data: reservations = [] } = useReservations(periodEntryId);
+  const { data: tiers = [] } = usePriorityTiers();
+  const deleteReservation = useDeleteReservation();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
@@ -56,6 +62,11 @@ export function RecapStep() {
   const slotsByVenue = countSlotsByVenue(slots);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
+  const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
+  const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
+  const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -135,6 +146,26 @@ export function RecapStep() {
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Contraintes" count={constraints.length} />}>
           {0 === constraints.length ? empty : constraints.map((c) => <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />)}
+        </AccordionSection>
+        <AccordionSection title={<SectionCountTitle label="Réservations" count={reservations.length} />}>
+          {0 === sortedReservations.length
+            ? empty
+            : sortedReservations.map((r) => (
+                <SummaryRow
+                  key={r.id}
+                  label={teamName.get(r.teamId) ?? "?"}
+                  meta={
+                    <span className="flex items-center gap-2">
+                      {`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`}
+                      {/* The recap is the only place that lists EVERY reservation, so it must be
+                          able to remove one whose availability slot no longer exists (orphan). */}
+                      <button type="button" aria-label={`Retirer la réservation de ${teamName.get(r.teamId) ?? "l'équipe"}`} className="text-muted-foreground hover:text-destructive" onClick={() => deleteReservation.mutate(r.id)}>
+                        <Trash2 className="size-4" />
+                      </button>
+                    </span>
+                  }
+                />
+              ))}
         </AccordionSection>
       </div>
 

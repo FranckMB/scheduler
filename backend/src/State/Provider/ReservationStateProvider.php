@@ -30,7 +30,9 @@ class ReservationStateProvider extends AbstractStateProvider
             ->select('e')
             ->from($this->getEntityClass(), 'e')
             ->orderBy('e.dayOfWeek', 'ASC')
-            ->addOrderBy('e.startTime', 'ASC');
+            ->addOrderBy('e.startTime', 'ASC')
+            // UUID PK tiebreaker → stable pagination (see AbstractStateProvider).
+            ->addOrderBy('e.id', 'ASC');
 
         if ($this->pagination->isEnabled($operation, $context)) {
             $qb->setFirstResult($this->pagination->getOffset($operation, $context))

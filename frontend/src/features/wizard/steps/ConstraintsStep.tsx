@@ -6,15 +6,14 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { TeamSelect } from "@/shared/components/ui/team-select";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
-import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, PriorityTier, Team, Venue } from "../api";
-import { DAYS, dayLabel, hhmm } from "../lib/days";
-import { availableReservationSlots } from "../lib/reservationSlots";
-import { useCreateConstraint, useCreateReservation, useDeleteConstraint, useDeleteReservation, usePriorityTiers, useReservations, useUpdateConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
+import { DAYS, dayLabel } from "../lib/days";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+import { ReservationPanel } from "./ReservationPanel";
 
 const FAMILIES: { key: ConstraintFamily; label: string }[] = [
   { key: "TIME", label: "Horaires" },
@@ -52,93 +51,6 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
           {d.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-/** Reserve an existing availability slot for a team (a HARD pin honored at generation).
- *  Server-backed + persistent: reservations survive reloads, are seedable by fixtures,
- *  and are layered base vs period overlay via `calendarEntryId`. */
-function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; calendarEntryId: string | null }) {
-  const { data: slots = [] } = useVenueSlots();
-  const { data: reservations = [] } = useReservations(calendarEntryId);
-  const create = useCreateReservation();
-  const del = useDeleteReservation();
-  const [teamId, setTeamId] = useState("");
-  const [slotId, setSlotId] = useState("");
-
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const venueName = new Map(venues.map((v) => [v.id, v.name]));
-  const venueCanSplit = new Map(venues.map((v) => [v.id, v.canSplit]));
-  const slotLabel = (venueId: string, dayOfWeek: number, startTime: string) => `${venueName.get(venueId) ?? "?"} · ${dayLabel(dayOfWeek)} ${hhmm(startTime)}`;
-
-  // Only offer slots that still have room for the selected team: a booked slot
-  // leaves the list, unless the gym is divisible and a capacity seat remains.
-  const effectiveTeamId = teamId || teams[0]?.id || "";
-  const reservableSlots = availableReservationSlots(slots, reservations, venueCanSplit, effectiveTeamId);
-  // A previously-picked slot can fall out of the list (team switched, slot filled).
-  // Treat the selection as empty then, so the Select shows the placeholder and the
-  // button disables — never an enabled button that silently does nothing.
-  const slotOffered = "" !== slotId && reservableSlots.some((s) => s.id === slotId);
-
-  // Order reservations by TEAM RANK (fanion S → A → B → C → D, then intra-tier
-  // order) so the list is scannable instead of server-insertion order. Tiebreak
-  // by day + time. Unknown teams fall to the end.
-  const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
-  const rankOf = (id: string) => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
-  const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
-
-  const add = () => {
-    const team = teamId || teams[0]?.id;
-    // Guard against a stale selection (e.g. the slot filled up, or the team was
-    // switched) — only a currently-offered slot can be reserved.
-    const slot = reservableSlots.find((s) => s.id === slotId);
-    if (undefined === team || undefined === slot) {
-      return;
-    }
-    create.mutate(
-      { teamId: team, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, calendarEntryId },
-      { onSuccess: () => setSlotId("") },
-    );
-  };
-
-  return (
-    <div>
-      <p className="mb-3 text-xs text-muted-foreground">Fixez une équipe sur un créneau précis : le solveur devra l'y placer (verrou). Enregistré côté serveur et pris en compte à chaque génération.</p>
-      <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <TeamSelect aria-label="Équipe" className="h-8 w-44" teams={teams} tiers={tiers} value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)} />
-        <span className="text-xs text-muted-foreground">sur</span>
-        <Select aria-label="Créneau" className="h-8 w-64" value={slotOffered ? slotId : ""} onChange={(e) => setSlotId(e.target.value)}>
-          <option value="">— créneau —</option>
-          {reservableSlots.map((s) => (
-            <option key={s.id} value={s.id}>
-              {slotLabel(s.venueId, s.dayOfWeek, s.startTime)}
-            </option>
-          ))}
-        </Select>
-        <Button size="sm" onClick={add} disabled={!slotOffered || 0 === teams.length || create.isPending}>
-          <Lock className="size-4" />
-          Réserver
-        </Button>
-      </div>
-
-      {0 === reservations.length ? (
-        <EmptyHint>Aucune réservation. Le solveur reste libre de placer les équipes.</EmptyHint>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {sortedReservations.map((r) => (
-            <li key={r.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
-              <Lock className="size-3.5 text-accent" />
-              <span className="flex-1">
-                {teamName.get(r.teamId) ?? "?"} → {slotLabel(r.venueId, r.dayOfWeek, r.startTime)}
-              </span>
-              <button type="button" aria-label="Retirer" className="text-muted-foreground hover:text-destructive" onClick={() => del.mutate(r.id)}>
-                <Trash2 className="size-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

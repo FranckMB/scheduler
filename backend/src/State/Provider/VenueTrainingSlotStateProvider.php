@@ -54,7 +54,11 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
             }
         }
 
-        $qb->orderBy('e.dayOfWeek', 'ASC');
+        // Deterministic total order: dayOfWeek/startTime are not unique, so add the
+        // UUID PK as a tiebreaker — without it, offset pagination is unstable (rows
+        // in the same dayOfWeek reshuffle between page requests), and collectionAll's
+        // dedupe drops the reshuffled rows straddling a page boundary entirely.
+        $qb->orderBy('e.dayOfWeek', 'ASC')->addOrderBy('e.startTime', 'ASC')->addOrderBy('e.id', 'ASC');
 
         if ($this->pagination->isEnabled($operation, $context)) {
             $offset = $this->pagination->getOffset($operation, $context);
