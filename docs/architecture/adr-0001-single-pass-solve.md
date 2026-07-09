@@ -70,3 +70,23 @@ be read accordingly:
 
 Any future change that relaxes constraints between attempts remains a separate,
 explicit ADR as decided above.
+
+## Amendment (2026-07-10) — generation complexity cap (A10)
+
+The single-pass solve has no relaxation fallback, so an over-large problem simply
+runs the full solver timeout (adaptive 60/180/600 s) and holds the club's single
+generation slot the whole time. To bound this "generation bomb" **without touching
+the solver or its no-relaxation guarantee**, a complexity cap is enforced at two
+boundaries (generous — ~10× a large FFBB club; only a genuine bomb trips them):
+
+- **Backend pre-check** (`GenerationComplexityGuard`, called by
+  `GenerateScheduleController` before dispatch): counts the club/season's teams,
+  venues, availability slots and constraints, and rejects with **422** before the
+  message is ever queued — teams ≤ 200, venues ≤ 50, slots ≤ 1000, constraints
+  ≤ 500, and `teams × venues ≤ 2000` (the dominant CP-SAT model-size driver).
+- **Engine input schema** (`input_schema.py` `max_length` on every request list):
+  defense-in-depth — an oversized payload reaching `/generate` by any path is
+  rejected with 422 before CP-SAT builds.
+
+This is a defensive input bound, not a solver-behaviour change: it neither relaxes
+constraints nor alters the single-pass decision above.

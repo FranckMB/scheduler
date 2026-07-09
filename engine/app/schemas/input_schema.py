@@ -4,6 +4,21 @@ from datetime import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# A10 (DoS "generation bomb" guard): bound every input list so an oversized payload is
+# rejected with 422 at the boundary, before CP-SAT builds the model. Values are generous
+# (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces the
+# same caps plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
+# the defense-in-depth last line. The per-venue slot cap is here; the <=1000 TOTAL across
+# venues is only expressible backend-side.
+MAX_VENUES = 50
+MAX_TEAMS = 200
+MAX_COACHES = 200
+MAX_CONSTRAINTS = 500
+MAX_SLOT_TEMPLATES = 2000
+MAX_PRIORITY_TIERS = 20
+MAX_SLOTS_PER_VENUE = 1000
+MAX_TAGS_PER_TEAM = 50
+
 
 class SerializableModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -27,7 +42,9 @@ class VenueSchema(SerializableModel):
     external_ref: str | None = Field(default=None, alias="externalRef")
     is_active: bool = Field(default=False, alias="isActive")
     parent_venue_id: str | None = Field(default=None, alias="parentVenueId")
-    training_slots: list[VenueTrainingSlotSchema] = Field(default_factory=list, alias="trainingSlots")
+    training_slots: list[VenueTrainingSlotSchema] = Field(
+        default_factory=list, alias="trainingSlots", max_length=MAX_SLOTS_PER_VENUE
+    )
 
 
 class PriorityTierSchema(SerializableModel):
@@ -58,7 +75,7 @@ class TeamSchema(SerializableModel):
     is_active: bool = Field(default=False, alias="isActive")
     parent_team_id: str | None = Field(default=None, alias="parentTeamId")
     ffbb_team_id: str | None = Field(default=None, alias="ffbbTeamId")
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_TEAM)
 
 
 class CoachSchema(SerializableModel):
@@ -132,9 +149,13 @@ class ScheduleInputSchema(SerializableModel):
     schedule_name: str | None = Field(default=None, alias="scheduleName")
     solver_seed: int = Field(default=42, alias="solverSeed")
     solver_timeout_seconds: int = Field(default=650, alias="solverTimeoutSeconds")
-    venues: list[VenueSchema] = Field(default_factory=list)
-    teams: list[TeamSchema] = Field(default_factory=list)
-    coaches: list[CoachSchema] = Field(default_factory=list)
-    constraints: list[ConstraintV2Schema] = Field(default_factory=list)
-    slot_templates: list[ScheduleSlotTemplateSchema] = Field(default_factory=list, alias="slotTemplates")
-    priority_tiers: list[PriorityTierSchema] = Field(default_factory=list, alias="priorityTiers")
+    venues: list[VenueSchema] = Field(default_factory=list, max_length=MAX_VENUES)
+    teams: list[TeamSchema] = Field(default_factory=list, max_length=MAX_TEAMS)
+    coaches: list[CoachSchema] = Field(default_factory=list, max_length=MAX_COACHES)
+    constraints: list[ConstraintV2Schema] = Field(default_factory=list, max_length=MAX_CONSTRAINTS)
+    slot_templates: list[ScheduleSlotTemplateSchema] = Field(
+        default_factory=list, alias="slotTemplates", max_length=MAX_SLOT_TEMPLATES
+    )
+    priority_tiers: list[PriorityTierSchema] = Field(
+        default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
+    )
