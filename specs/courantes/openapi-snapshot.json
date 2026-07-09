@@ -1320,101 +1320,6 @@
                         "explode": true
                     }
                 ]
-            },
-            "post": {
-                "operationId": "api_club_users_post",
-                "tags": [
-                    "ClubUser"
-                ],
-                "responses": {
-                    "201": {
-                        "description": "ClubUser resource created",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.html"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "400": {
-                        "description": "Invalid input",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "422": {
-                        "description": "An error occurred",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Creates a ClubUser resource.",
-                "description": "Creates a ClubUser resource.",
-                "parameters": [],
-                "requestBody": {
-                    "description": "The new ClubUser resource",
-                    "content": {
-                        "application/ld+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        },
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        },
-                        "text/html": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        }
-                    },
-                    "required": true
-                }
             }
         },
         "/api/club_users/{id}": {
@@ -1468,183 +1373,6 @@
                 },
                 "summary": "Retrieves a ClubUser resource.",
                 "description": "Retrieves a ClubUser resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ClubUser identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ]
-            },
-            "put": {
-                "operationId": "api_club_users_id_put",
-                "tags": [
-                    "ClubUser"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ClubUser resource updated",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.html"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "400": {
-                        "description": "Invalid input",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "422": {
-                        "description": "An error occurred",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Replaces the ClubUser resource.",
-                "description": "Replaces the ClubUser resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ClubUser identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ],
-                "requestBody": {
-                    "description": "The updated ClubUser resource",
-                    "content": {
-                        "application/ld+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        },
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        },
-                        "text/html": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClubUser.ClubUserInput"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            },
-            "delete": {
-                "operationId": "api_club_users_id_delete",
-                "tags": [
-                    "ClubUser"
-                ],
-                "responses": {
-                    "204": {
-                        "description": "ClubUser resource deleted"
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Removes the ClubUser resource.",
-                "description": "Removes the ClubUser resource.",
                 "parameters": [
                     {
                         "name": "id",
@@ -4911,6 +4639,289 @@
                         "name": "id",
                         "in": "path",
                         "description": "PriorityTier identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/reservations": {
+            "get": {
+                "operationId": "api_reservations_get_collection",
+                "tags": [
+                    "Reservation"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reservation collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "Reservation.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/Reservation.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Reservation"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Reservation.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of Reservation resources.",
+                "description": "Retrieves the collection of Reservation resources.",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "The collection page number",
+                        "required": false,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        },
+                        "style": "form",
+                        "explode": true
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api_reservations_post",
+                "tags": [
+                    "Reservation"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Reservation resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a Reservation resource.",
+                "description": "Creates a Reservation resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new Reservation resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Reservation.ReservationInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Reservation.ReservationInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Reservation.ReservationInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/reservations/{id}": {
+            "get": {
+                "operationId": "api_reservations_id_get",
+                "tags": [
+                    "Reservation"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reservation resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Reservation.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a Reservation resource.",
+                "description": "Retrieves a Reservation resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Reservation identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "api_reservations_id_delete",
+                "tags": [
+                    "Reservation"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Reservation resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the Reservation resource.",
+                "description": "Removes the Reservation resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Reservation identifier",
                         "required": true,
                         "deprecated": false,
                         "schema": {
@@ -10756,38 +10767,6 @@
                     }
                 }
             },
-            "ClubUser.ClubUserInput": {
-                "type": "object",
-                "required": [
-                    "userId"
-                ],
-                "properties": {
-                    "userId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "role": {
-                        "enum": [
-                            "owner",
-                            "admin",
-                            "editor",
-                            "viewer"
-                        ],
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "isActive": {
-                        "type": [
-                            "boolean",
-                            "null"
-                        ]
-                    }
-                }
-            },
             "ClubUser.html": {
                 "type": "object",
                 "properties": {
@@ -11658,6 +11637,10 @@
                         ]
                     },
                     "scopeTargetId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
@@ -13014,6 +12997,208 @@
                             },
                             "defaultMinSessions": {
                                 "default": 0,
+                                "type": "integer"
+                            }
+                        }
+                    }
+                ]
+            },
+            "Reservation": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "dayOfWeek": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "durationMinutes": {
+                        "default": 90,
+                        "type": "integer"
+                    }
+                }
+            },
+            "Reservation.ReservationInput": {
+                "type": "object",
+                "required": [
+                    "teamId",
+                    "venueId",
+                    "dayOfWeek",
+                    "startTime"
+                ],
+                "properties": {
+                    "teamId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "venueId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOfWeek": {
+                        "minimum": 1,
+                        "maximum": 7,
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "startTime": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "durationMinutes": {
+                        "minimum": 15,
+                        "maximum": 300,
+                        "default": 90,
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "calendarEntryId": {
+                        "description": "NULL = base plan; set = a period overlay.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "Reservation.html": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "dayOfWeek": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "startTime": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "durationMinutes": {
+                        "default": 90,
+                        "type": "integer"
+                    }
+                }
+            },
+            "Reservation.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "calendarEntryId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "teamId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "venueId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "dayOfWeek": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "startTime": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "durationMinutes": {
+                                "default": 90,
                                 "type": "integer"
                             }
                         }
@@ -15696,6 +15881,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "canSplit": {
+                        "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15837,6 +16027,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "canSplit": {
+                        "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15909,6 +16104,11 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "canSplit": {
+                                "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                                "default": false,
+                                "type": "boolean"
                             }
                         }
                     }
@@ -16153,6 +16353,10 @@
         {
             "name": "PriorityTier",
             "description": "Resource 'PriorityTier' operations."
+        },
+        {
+            "name": "Reservation",
+            "description": "Resource 'Reservation' operations."
         },
         {
             "name": "ScheduleDiagnostic",

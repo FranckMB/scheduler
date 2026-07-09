@@ -4,6 +4,144 @@
  */
 
 export interface paths {
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hydrate the authenticated user and its active club context */
+        get: operations["getApiMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the connected user profile (name / e-mail) */
+        patch: operations["patchApiMe"];
+        trace?: never;
+    };
+    "/api/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change the connected user password (current password required) */
+        post: operations["postApiMePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register a user and create or join a club by ARA / FFBB code */
+        post: operations["postApiRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar_entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves the collection of CalendarEntry resources.
+         * @description Retrieves the collection of CalendarEntry resources.
+         */
+        get: operations["api_calendar_entries_get_collection"];
+        put?: never;
+        /**
+         * Creates a CalendarEntry resource.
+         * @description Creates a CalendarEntry resource.
+         */
+        post: operations["api_calendar_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar_entries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves a CalendarEntry resource.
+         * @description Retrieves a CalendarEntry resource.
+         */
+        get: operations["api_calendar_entries_id_get"];
+        /**
+         * Replaces the CalendarEntry resource.
+         * @description Replaces the CalendarEntry resource.
+         */
+        put: operations["api_calendar_entries_id_put"];
+        post?: never;
+        /**
+         * Removes the CalendarEntry resource.
+         * @description Removes the CalendarEntry resource.
+         */
+        delete: operations["api_calendar_entries_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public-holidays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public holidays (jours fériés) applying to the club (display-only, never feeds the solver) */
+        get: operations["getPublicHolidays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/school-holidays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** School holidays of the club academic zone (display feed, read-only) */
+        get: operations["getSchoolHolidays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/clubs": {
         parameters: {
             query?: never;
@@ -17,11 +155,7 @@ export interface paths {
          */
         get: operations["api_clubs_get_collection"];
         put?: never;
-        /**
-         * Creates a Club resource.
-         * @description Creates a Club resource.
-         */
-        post: operations["api_clubs_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -46,11 +180,7 @@ export interface paths {
          */
         put: operations["api_clubs_id_put"];
         post?: never;
-        /**
-         * Removes the Club resource.
-         * @description Removes the Club resource.
-         */
-        delete: operations["api_clubs_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -89,11 +219,7 @@ export interface paths {
          */
         get: operations["api_club_users_get_collection"];
         put?: never;
-        /**
-         * Creates a ClubUser resource.
-         * @description Creates a ClubUser resource.
-         */
-        post: operations["api_club_users_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -112,17 +238,9 @@ export interface paths {
          * @description Retrieves a ClubUser resource.
          */
         get: operations["api_club_users_id_get"];
-        /**
-         * Replaces the ClubUser resource.
-         * @description Replaces the ClubUser resource.
-         */
-        put: operations["api_club_users_id_put"];
+        put?: never;
         post?: never;
-        /**
-         * Removes the ClubUser resource.
-         * @description Removes the ClubUser resource.
-         */
-        delete: operations["api_club_users_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -232,6 +350,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/competitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves the collection of Competition resources.
+         * @description Retrieves the collection of Competition resources.
+         */
+        get: operations["api_competitions_get_collection"];
+        put?: never;
+        /**
+         * Creates a Competition resource.
+         * @description Creates a Competition resource.
+         */
+        post: operations["api_competitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/competitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves a Competition resource.
+         * @description Retrieves a Competition resource.
+         */
+        get: operations["api_competitions_id_get"];
+        /**
+         * Replaces the Competition resource.
+         * @description Replaces the Competition resource.
+         */
+        put: operations["api_competitions_id_put"];
+        post?: never;
+        /**
+         * Removes the Competition resource.
+         * @description Removes the Competition resource.
+         */
+        delete: operations["api_competitions_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/constraints": {
         parameters: {
             query?: never;
@@ -284,6 +454,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves the collection of Fixture resources.
+         * @description Retrieves the collection of Fixture resources.
+         */
+        get: operations["api_fixtures_get_collection"];
+        put?: never;
+        /**
+         * Creates a Fixture resource.
+         * @description Creates a Fixture resource.
+         */
+        post: operations["api_fixtures_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fixtures/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves a Fixture resource.
+         * @description Retrieves a Fixture resource.
+         */
+        get: operations["api_fixtures_id_get"];
+        /**
+         * Replaces the Fixture resource.
+         * @description Replaces the Fixture resource.
+         */
+        put: operations["api_fixtures_id_put"];
+        post?: never;
+        /**
+         * Removes the Fixture resource.
+         * @description Removes the Fixture resource.
+         */
+        delete: operations["api_fixtures_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/login": {
         parameters: {
             query?: never;
@@ -298,6 +520,91 @@ export interface paths {
          * @description Creates a user token.
          */
         post: operations["login_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedule-slots/{id}/manual-edit/constraint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Attach a manual constraint to a schedule slot */
+        post: operations["postManualEditConstraint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedule-slots/{id}/manual-edit/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set the lock level of a schedule slot */
+        post: operations["postManualEditLock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedule-slots/{id}/manual-edit/one-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a one-time (single-occurrence) start-time change to a slot */
+        post: operations["postManualEditOneTime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fixtures/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Same-coach match/training conflict radar (read-only, computed on the fly) */
+        get: operations["getFixtureConflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/league-match-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** League match-kickoff windows inherited by the club (global reference, read-only) */
+        get: operations["getLeagueMatchWindows"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -408,6 +715,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves the collection of Reservation resources.
+         * @description Retrieves the collection of Reservation resources.
+         */
+        get: operations["api_reservations_get_collection"];
+        put?: never;
+        /**
+         * Creates a Reservation resource.
+         * @description Creates a Reservation resource.
+         */
+        post: operations["api_reservations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reservations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieves a Reservation resource.
+         * @description Retrieves a Reservation resource.
+         */
+        get: operations["api_reservations_id_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Removes the Reservation resource.
+         * @description Removes the Reservation resource.
+         */
+        delete: operations["api_reservations_id_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/schedules": {
         parameters: {
             query?: never;
@@ -474,6 +829,26 @@ export interface paths {
          * @description Creates a Schedule resource.
          */
         post: operations["export_pdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedules/{id}/export-xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates a Schedule resource.
+         * @description Creates a Schedule resource.
+         */
+        post: operations["export_xlsx"];
         delete?: never;
         options?: never;
         head?: never;
@@ -656,6 +1031,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/seasons/{id}/transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy the current season entries (venues/teams/coaches/links/permanent constraints) into a fresh N+1 draft */
+        post: operations["transitionSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sports": {
         parameters: {
             query?: never;
@@ -812,6 +1204,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/teams/{id}/fixtures/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import an FBI fixtures export (.xlsx) for this team
+         * @description Multipart upload (field "file"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team · 403 non-management member · 409 archived season or concurrent duplicate import · 400 missing/invalid file or columns.
+         */
+        post: operations["import_fixtures"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/team_coaches": {
         parameters: {
             query?: never;
@@ -944,30 +1356,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Retrieves the collection of User resources.
-         * @description Retrieves the collection of User resources.
-         */
-        get: operations["api_users_get_collection"];
-        put?: never;
-        /**
-         * Creates a User resource.
-         * @description Creates a User resource.
-         */
-        post: operations["api_users_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/users/{id}": {
         parameters: {
             query?: never;
@@ -986,11 +1374,7 @@ export interface paths {
          */
         put: operations["api_users_id_put"];
         post?: never;
-        /**
-         * Removes the User resource.
-         * @description Removes the User resource.
-         */
-        delete: operations["api_users_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1104,6 +1488,98 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CalendarEntry: {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            kind: string;
+            /** @default  */
+            title: string;
+            /** @default  */
+            startDate: string;
+            /** @default  */
+            endDate: string;
+            /** @default false */
+            isDisruptive: boolean;
+            periodType?: string | null;
+            schoolHolidayId?: string | null;
+            /** @default  */
+            status: string;
+            overlayScheduleId?: string | null;
+            createdBy?: string | null;
+        };
+        "CalendarEntry.CalendarEntryInput": {
+            /** @enum {string|null} */
+            kind: "event" | "period" | null;
+            title: string | null;
+            startDate: string | null;
+            endDate: string | null;
+            isDisruptive?: boolean | null;
+            /** @enum {string|null} */
+            periodType?: "closure" | "holiday" | "cutoff" | "mutualisation" | "custom" | null;
+            schoolHolidayId?: string | null;
+            /** @enum {string|null} */
+            status?: "proposed" | "active" | "ignored" | null;
+            createdBy?: string | null;
+        };
+        "CalendarEntry.html": {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            kind: string;
+            /** @default  */
+            title: string;
+            /** @default  */
+            startDate: string;
+            /** @default  */
+            endDate: string;
+            /** @default false */
+            isDisruptive: boolean;
+            periodType?: string | null;
+            schoolHolidayId?: string | null;
+            /** @default  */
+            status: string;
+            overlayScheduleId?: string | null;
+            createdBy?: string | null;
+        };
+        "CalendarEntry.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            kind: string;
+            /** @default  */
+            title: string;
+            /** @default  */
+            startDate: string;
+            /** @default  */
+            endDate: string;
+            /** @default false */
+            isDisruptive: boolean;
+            periodType?: string | null;
+            schoolHolidayId?: string | null;
+            /** @default  */
+            status: string;
+            overlayScheduleId?: string | null;
+            createdBy?: string | null;
+        };
         Club: {
             /** @default  */
             id: string;
@@ -1131,6 +1607,9 @@ export interface components {
             /** @default false */
             onboardingCompleted: boolean;
             ffbbClubCode?: string | null;
+            logoUrl?: string | null;
+            accentColor?: string | null;
+            accentPalette?: string[] | null;
         };
         "Club.ClubInput": {
             name: string | null;
@@ -1141,11 +1620,14 @@ export interface components {
             /** Format: date-time */
             planExpiresAt?: string | null;
             generationCountSeason?: number | null;
-            schoolZone?: string | null;
+            /** @enum {string|null} */
+            schoolZone?: "A" | "B" | "C" | "CORSE" | "GUADELOUPE" | "GUYANE" | "MARTINIQUE" | "MAYOTTE" | "NOUVELLE_CALEDONIE" | "POLYNESIE" | "REUNION" | "SAINT_PIERRE_MIQUELON" | "WALLIS_FUTUNA" | null;
             timezone: string | null;
             locale: string | null;
             onboardingCompleted?: boolean | null;
             ffbbClubCode?: string | null;
+            accentColor?: string | null;
+            accentPalette?: string[] | null;
         };
         "Club.html": {
             /** @default  */
@@ -1174,6 +1656,9 @@ export interface components {
             /** @default false */
             onboardingCompleted: boolean;
             ffbbClubCode?: string | null;
+            logoUrl?: string | null;
+            accentColor?: string | null;
+            accentPalette?: string[] | null;
         };
         "Club.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
             /** @default  */
@@ -1202,6 +1687,9 @@ export interface components {
             /** @default false */
             onboardingCompleted: boolean;
             ffbbClubCode?: string | null;
+            logoUrl?: string | null;
+            accentColor?: string | null;
+            accentPalette?: string[] | null;
         };
         ClubUser: {
             /** @default  */
@@ -1220,12 +1708,6 @@ export interface components {
             joinedAt?: string;
             /** @default false */
             isActive: boolean;
-        };
-        "ClubUser.ClubUserInput": {
-            userId: string | null;
-            /** @enum {string|null} */
-            role?: "owner" | "admin" | "editor" | "viewer" | null;
-            isActive?: boolean | null;
         };
         "ClubUser.html": {
             /** @default  */
@@ -1284,6 +1766,8 @@ export interface components {
             acceptableLateMinutes?: number | null;
             /** @default false */
             isActive: boolean;
+            /** @default false */
+            isEmployee: boolean;
             parentCoachId?: string | null;
         };
         "Coach.CoachInput": {
@@ -1296,6 +1780,7 @@ export interface components {
             maxDaysOverrideConfirmed?: boolean | null;
             acceptableLateMinutes?: number | null;
             isActive?: boolean | null;
+            isEmployee?: boolean | null;
             parentCoachId?: string | null;
         };
         "Coach.html": {
@@ -1319,6 +1804,8 @@ export interface components {
             acceptableLateMinutes?: number | null;
             /** @default false */
             isActive: boolean;
+            /** @default false */
+            isEmployee: boolean;
             parentCoachId?: string | null;
         };
         "Coach.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
@@ -1342,6 +1829,8 @@ export interface components {
             acceptableLateMinutes?: number | null;
             /** @default false */
             isActive: boolean;
+            /** @default false */
+            isEmployee: boolean;
             parentCoachId?: string | null;
         };
         CoachPlayerMembership: {
@@ -1401,6 +1890,75 @@ export interface components {
             /** @default false */
             isActive: boolean;
         };
+        Competition: {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            /** @default  */
+            name: string;
+            /** @default  */
+            competitionType: string;
+            startDate?: string | null;
+            endDate?: string | null;
+        };
+        "Competition.CompetitionInput": {
+            /** Format: uuid */
+            teamId: string | null;
+            name: string | null;
+            /** @enum {string|null} */
+            competitionType: "CHAMPIONSHIP" | "CUP" | "BRASSAGE" | null;
+            startDate?: string | null;
+            endDate?: string | null;
+        };
+        "Competition.html": {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            /** @default  */
+            name: string;
+            /** @default  */
+            competitionType: string;
+            startDate?: string | null;
+            endDate?: string | null;
+        };
+        "Competition.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            /** @default  */
+            name: string;
+            /** @default  */
+            competitionType: string;
+            startDate?: string | null;
+            endDate?: string | null;
+        };
         Constraint: {
             /** @default  */
             id: string;
@@ -1426,16 +1984,20 @@ export interface components {
             createdBy?: string | null;
             source?: string | null;
             sourceOccurrenceId?: string | null;
+            calendarEntryId?: string | null;
             /** @default false */
             isActive: boolean;
             /** @default 0 */
             sortOrder: number;
+            /** @description N→N+1 lineage: source constraint of the season-transition copy. */
+            parentConstraintId?: string | null;
         };
         "Constraint.ConstraintInput": {
             name: string | null;
             description?: string | null;
             /** @enum {string|null} */
             scope: "CLUB" | "TEAM" | "COACH" | "FACILITY" | null;
+            /** Format: uuid */
             scopeTargetId?: string | null;
             /** @enum {string|null} */
             family: "TIME" | "DAY" | "FACILITY" | "COACH_AVAILABILITY" | "FACILITY_CAPACITY" | null;
@@ -1447,6 +2009,8 @@ export interface components {
             createdBy?: string | null;
             source?: string | null;
             sourceOccurrenceId?: string | null;
+            /** @description Set to attach this constraint to a CalendarEntry (period) — excludes it from base generation. */
+            calendarEntryId?: string | null;
             isActive?: boolean | null;
             sortOrder?: number | null;
         };
@@ -1475,10 +2039,13 @@ export interface components {
             createdBy?: string | null;
             source?: string | null;
             sourceOccurrenceId?: string | null;
+            calendarEntryId?: string | null;
             /** @default false */
             isActive: boolean;
             /** @default 0 */
             sortOrder: number;
+            /** @description N→N+1 lineage: source constraint of the season-transition copy. */
+            parentConstraintId?: string | null;
         };
         "Constraint.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
             /** @default  */
@@ -1505,10 +2072,13 @@ export interface components {
             createdBy?: string | null;
             source?: string | null;
             sourceOccurrenceId?: string | null;
+            calendarEntryId?: string | null;
             /** @default false */
             isActive: boolean;
             /** @default 0 */
             sortOrder: number;
+            /** @description N→N+1 lineage: source constraint of the season-transition copy. */
+            parentConstraintId?: string | null;
         };
         /** @description Unprocessable entity */
         ConstraintViolation: {
@@ -1589,6 +2159,103 @@ export interface components {
             /** @description A URI reference that identifies the problem type */
             readonly type?: string;
             readonly description?: string | null;
+        };
+        Fixture: {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            competitionId?: string | null;
+            /** @default  */
+            matchDate: string;
+            /** @default  */
+            homeAway: string;
+            /** @default  */
+            opponentLabel: string;
+            /** @default  */
+            status: string;
+            venueId?: string | null;
+            kickoffTime?: string | null;
+            /** @description FBI match number (import idempotence key) — null for manual entries. */
+            externalRef?: string | null;
+        };
+        "Fixture.FixtureInput": {
+            /** Format: uuid */
+            teamId: string | null;
+            /** Format: uuid */
+            competitionId?: string | null;
+            matchDate: string | null;
+            /** @enum {string|null} */
+            homeAway: "HOME" | "AWAY" | null;
+            opponentLabel: string | null;
+            /** @enum {string|null} */
+            status?: "UNPLACED" | "PLACED" | "SUBMITTED" | "VALIDATED" | null;
+            /** Format: uuid */
+            venueId?: string | null;
+            /** @description HH:MM kickoff (24h, strict range). */
+            kickoffTime?: string | null;
+        };
+        "Fixture.html": {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            competitionId?: string | null;
+            /** @default  */
+            matchDate: string;
+            /** @default  */
+            homeAway: string;
+            /** @default  */
+            opponentLabel: string;
+            /** @default  */
+            status: string;
+            venueId?: string | null;
+            kickoffTime?: string | null;
+            /** @description FBI match number (import idempotence key) — null for manual entries. */
+            externalRef?: string | null;
+        };
+        "Fixture.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            seasonId: string;
+            competitionId?: string | null;
+            /** @default  */
+            matchDate: string;
+            /** @default  */
+            homeAway: string;
+            /** @default  */
+            opponentLabel: string;
+            /** @default  */
+            status: string;
+            venueId?: string | null;
+            kickoffTime?: string | null;
+            /** @description FBI match number (import idempotence key) — null for manual entries. */
+            externalRef?: string | null;
         };
         HydraCollectionBaseSchema: components["schemas"]["HydraCollectionBaseSchemaNoPagination"] & {
             /**
@@ -1793,6 +2460,80 @@ export interface components {
             /** @default 0 */
             defaultMinSessions: number;
         };
+        Reservation: {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            calendarEntryId?: string | null;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            venueId: string;
+            /** @default 0 */
+            dayOfWeek: number;
+            /** Format: date-time */
+            startTime?: string;
+            /** @default 90 */
+            durationMinutes: number;
+        };
+        "Reservation.ReservationInput": {
+            teamId: string | null;
+            venueId: string | null;
+            dayOfWeek: number | null;
+            /** Format: date-time */
+            startTime: string | null;
+            /** @default 90 */
+            durationMinutes: number | null;
+            /** @description NULL = base plan; set = a period overlay. */
+            calendarEntryId?: string | null;
+        };
+        "Reservation.html": {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            calendarEntryId?: string | null;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            venueId: string;
+            /** @default 0 */
+            dayOfWeek: number;
+            /** Format: date-time */
+            startTime?: string;
+            /** @default 90 */
+            durationMinutes: number;
+        };
+        "Reservation.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
+            /** @default  */
+            id: string;
+            /** @default 0 */
+            version: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            calendarEntryId?: string | null;
+            /** @default  */
+            teamId: string;
+            /** @default  */
+            venueId: string;
+            /** @default 0 */
+            dayOfWeek: number;
+            /** Format: date-time */
+            startTime?: string;
+            /** @default 90 */
+            durationMinutes: number;
+        };
         Schedule: {
             /** @default  */
             id: string;
@@ -1805,7 +2546,9 @@ export interface components {
             /** @default  */
             name: string;
             /** @enum {string} */
-            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+            /** @description Non-null → this is a period overlay (palier B), not a season plan. */
+            calendarEntryId?: string | null;
             score?: number | null;
             /** @default 0 */
             solverSeed: number;
@@ -1825,8 +2568,10 @@ export interface components {
         "Schedule.ScheduleInput": {
             name: string | null;
             /** @enum {string|null} */
-            status: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | null;
+            status: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED" | null;
             solverSeed?: number | null;
+            /** @description Set at POST to create this schedule as a period overlay (palier B); ignored on PUT. */
+            calendarEntryId?: string | null;
         };
         "Schedule.html": {
             /** @default  */
@@ -1840,7 +2585,9 @@ export interface components {
             /** @default  */
             name: string;
             /** @enum {string} */
-            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+            /** @description Non-null → this is a period overlay (palier B), not a season plan. */
+            calendarEntryId?: string | null;
             score?: number | null;
             /** @default 0 */
             solverSeed: number;
@@ -1869,7 +2616,9 @@ export interface components {
             /** @default  */
             name: string;
             /** @enum {string} */
-            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
+            status?: "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+            /** @description Non-null → this is a period overlay (palier B), not a season plan. */
+            calendarEntryId?: string | null;
             score?: number | null;
             /** @default 0 */
             solverSeed: number;
@@ -1991,7 +2740,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /**
              * @default NONE
@@ -2014,7 +2763,8 @@ export interface components {
             dayOfWeek?: number | null;
             /** Format: date-time */
             startTime?: string;
-            durationMinutes?: number | null;
+            /** @default 90 */
+            durationMinutes: number | null;
             /** @enum {string|null} */
             lockLevel?: "NONE" | "SOFT" | "HARD" | null;
             temporaryLock?: boolean | null;
@@ -2044,7 +2794,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /**
              * @default NONE
@@ -2079,7 +2829,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /**
              * @default NONE
@@ -2112,6 +2862,7 @@ export interface components {
             /** @default  */
             status: string;
             exportPdfUrl?: string | null;
+            baselineScheduleId?: string | null;
             transitionData?: {
                 [key: string]: string | null;
             };
@@ -2143,6 +2894,7 @@ export interface components {
             /** @default  */
             status: string;
             exportPdfUrl?: string | null;
+            baselineScheduleId?: string | null;
             transitionData?: {
                 [key: string]: string | null;
             };
@@ -2165,6 +2917,7 @@ export interface components {
             /** @default  */
             status: string;
             exportPdfUrl?: string | null;
+            baselineScheduleId?: string | null;
             transitionData?: {
                 [key: string]: string | null;
             };
@@ -2307,10 +3060,14 @@ export interface components {
             sportCategoryId: string;
             /** @default 0 */
             priorityTierId: number;
+            /** @default 0 */
+            tierOrder: number;
             /** @default  */
             name: string;
             /** @enum {string|null} */
             gender?: "M" | "F" | "MIXTE" | null;
+            /** @enum {string|null} */
+            level?: "ELITE" | "REGIONAL" | "NATIONAL" | "DEPARTEMENTAL" | "LOISIR_ADULTE" | "LOISIR_JEUNE" | "HONNEUR" | "PROMOTION" | "PRE_REGION" | null;
             /** @default 0 */
             sessionsPerWeek: number;
             minSessionsOverride?: number | null;
@@ -2323,8 +3080,9 @@ export interface components {
             parentTeamId?: string | null;
         };
         "Team.TeamInput": {
-            sportCategoryId?: string | null;
+            sportCategoryId: string | null;
             priorityTierId?: number | null;
+            tierOrder?: number | null;
             name: string | null;
             /** @enum {string|null} */
             gender?: "M" | "F" | "MIXTE" | null;
@@ -2335,7 +3093,8 @@ export interface components {
             isActive?: boolean | null;
             parentTeamId?: string | null;
             ffbbTeamId?: string | null;
-            level?: string | null;
+            /** @enum {string|null} */
+            level?: "ELITE" | "REGIONAL" | "NATIONAL" | "DEPARTEMENTAL" | "LOISIR_ADULTE" | "LOISIR_JEUNE" | "HONNEUR" | "PROMOTION" | "PRE_REGION" | null;
         };
         "Team.html": {
             /** @default  */
@@ -2350,10 +3109,14 @@ export interface components {
             sportCategoryId: string;
             /** @default 0 */
             priorityTierId: number;
+            /** @default 0 */
+            tierOrder: number;
             /** @default  */
             name: string;
             /** @enum {string|null} */
             gender?: "M" | "F" | "MIXTE" | null;
+            /** @enum {string|null} */
+            level?: "ELITE" | "REGIONAL" | "NATIONAL" | "DEPARTEMENTAL" | "LOISIR_ADULTE" | "LOISIR_JEUNE" | "HONNEUR" | "PROMOTION" | "PRE_REGION" | null;
             /** @default 0 */
             sessionsPerWeek: number;
             minSessionsOverride?: number | null;
@@ -2378,10 +3141,14 @@ export interface components {
             sportCategoryId: string;
             /** @default 0 */
             priorityTierId: number;
+            /** @default 0 */
+            tierOrder: number;
             /** @default  */
             name: string;
             /** @enum {string|null} */
             gender?: "M" | "F" | "MIXTE" | null;
+            /** @enum {string|null} */
+            level?: "ELITE" | "REGIONAL" | "NATIONAL" | "DEPARTEMENTAL" | "LOISIR_ADULTE" | "LOISIR_JEUNE" | "HONNEUR" | "PROMOTION" | "PRE_REGION" | null;
             /** @default 0 */
             sessionsPerWeek: number;
             minSessionsOverride?: number | null;
@@ -2629,6 +3396,11 @@ export interface components {
             /** @default false */
             isActive: boolean;
             parentVenueId?: string | null;
+            /**
+             * @description Divisible court — a slot here can host 2 teams (per-slot capacity).
+             * @default false
+             */
+            canSplit: boolean;
         };
         "Venue.VenueInput": {
             name: string | null;
@@ -2665,6 +3437,11 @@ export interface components {
             /** @default false */
             isActive: boolean;
             parentVenueId?: string | null;
+            /**
+             * @description Divisible court — a slot here can host 2 teams (per-slot capacity).
+             * @default false
+             */
+            canSplit: boolean;
         };
         "Venue.jsonld": components["schemas"]["HydraItemBaseSchema"] & {
             /** @default  */
@@ -2688,6 +3465,11 @@ export interface components {
             /** @default false */
             isActive: boolean;
             parentVenueId?: string | null;
+            /**
+             * @description Divisible court — a slot here can host 2 teams (per-slot capacity).
+             * @default false
+             */
+            canSplit: boolean;
         };
         VenueTrainingSlot: {
             /** @default  */
@@ -2704,7 +3486,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /** @default 1 */
             capacity: number;
@@ -2714,6 +3496,7 @@ export interface components {
             venueId: string | null;
             dayOfWeek: number | null;
             startTime: string | null;
+            /** @default 90 */
             durationMinutes: number | null;
             /** @default 1 */
             capacity: number | null;
@@ -2733,7 +3516,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /** @default 1 */
             capacity: number;
@@ -2753,7 +3536,7 @@ export interface components {
             dayOfWeek: number;
             /** Format: date-time */
             startTime?: string;
-            /** @default 0 */
+            /** @default 90 */
             durationMinutes: number;
             /** @default 1 */
             capacity: number;
@@ -2767,6 +3550,505 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getApiMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated user + its club context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        email?: string;
+                        firstName?: string;
+                        lastName?: string;
+                        /** @enum {string} */
+                        membershipStatus?: "none" | "pending" | "active";
+                        role?: string | null;
+                        club?: {
+                            id?: string;
+                            name?: string;
+                            onboardingCompleted?: boolean;
+                            logoUrl?: string | null;
+                            accentColor?: string | null;
+                            accentColorDark?: string | null;
+                            accentPalette?: string[] | null;
+                        } | null;
+                        baselineScheduleId?: string | null;
+                        hasGenerated?: boolean;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    patchApiMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    firstName?: string;
+                    lastName?: string;
+                    /** Format: email */
+                    email?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        email?: string;
+                        firstName?: string;
+                        lastName?: string;
+                    };
+                };
+            };
+            /** @description Validation error (empty name / invalid email) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description E-mail already in use */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postApiMePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    currentPassword: string;
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Password changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong current password or new password too short */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postApiRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    password: string;
+                    firstName: string;
+                    lastName: string;
+                    /** @description FFBB club code — 3-20 uppercase alphanumeric */
+                    ara: string;
+                    /** @description Required only when the ARA creates a new club (snake_case) */
+                    club_name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Registered — returns a JWT and the membership status */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        token?: string;
+                        /** @enum {string} */
+                        membershipStatus?: "none" | "pending" | "active";
+                        user?: {
+                            id?: string;
+                            email?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Email already registered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many attempts (rate limited) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_calendar_entries_get_collection: {
+        parameters: {
+            query?: {
+                /** @description The collection page number */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CalendarEntry collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["HydraCollectionBaseSchema"] & {
+                        member: components["schemas"]["CalendarEntry.jsonld"][];
+                    };
+                    "application/json": components["schemas"]["CalendarEntry"][];
+                    "text/html": components["schemas"]["CalendarEntry.html"][];
+                };
+            };
+        };
+    };
+    api_calendar_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new CalendarEntry resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+                "application/json": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+                "text/html": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+            };
+        };
+        responses: {
+            /** @description CalendarEntry resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["CalendarEntry.jsonld"];
+                    "application/json": components["schemas"]["CalendarEntry"];
+                    "text/html": components["schemas"]["CalendarEntry.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_calendar_entries_id_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description CalendarEntry identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CalendarEntry resource */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["CalendarEntry.jsonld"];
+                    "application/json": components["schemas"]["CalendarEntry"];
+                    "text/html": components["schemas"]["CalendarEntry.html"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    api_calendar_entries_id_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description CalendarEntry identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The updated CalendarEntry resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+                "application/json": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+                "text/html": components["schemas"]["CalendarEntry.CalendarEntryInput"];
+            };
+        };
+        responses: {
+            /** @description CalendarEntry resource updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["CalendarEntry.jsonld"];
+                    "application/json": components["schemas"]["CalendarEntry"];
+                    "text/html": components["schemas"]["CalendarEntry.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_calendar_entries_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description CalendarEntry identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CalendarEntry resource deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPublicHolidays: {
+        parameters: {
+            query?: {
+                /** @description Window start (YYYY-MM-DD) — defaults to the active season start */
+                from?: string;
+                /** @description Window end (YYYY-MM-DD) — defaults to the active season end */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description NATIONAL public holidays ∪ the club territory extras within the window (zone null → NATIONAL only) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        zone?: string | null;
+                        items?: {
+                            id?: string;
+                            /** Format: date */
+                            date?: string;
+                            label?: string;
+                            national?: boolean;
+                        }[];
+                    };
+                };
+            };
+            /** @description No club in context, invalid from/to, or no window (no active season) — a null zone still returns the NATIONAL fériés (no short-circuit) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized (missing/expired JWT) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getSchoolHolidays: {
+        parameters: {
+            query?: {
+                /** @description Window start (YYYY-MM-DD) — defaults to the active season start */
+                from?: string;
+                /** @description Window end (YYYY-MM-DD) — defaults to the active season end */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description School holidays of the club zone within the window (zone null → empty items) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        zone?: string | null;
+                        items?: {
+                            id?: string;
+                            label?: string;
+                            holidayType?: string;
+                            /** Format: date */
+                            startDate?: string;
+                            /** Format: date */
+                            endDate?: string;
+                            schoolYear?: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No club in context, or (when the club zone is set) invalid from/to or no window (no active season) — a null zone short-circuits to 200 with empty items */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized (missing/expired JWT) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     api_clubs_get_collection: {
         parameters: {
             query?: {
@@ -2790,57 +4072,6 @@ export interface operations {
                     };
                     "application/json": components["schemas"]["Club"][];
                     "text/html": components["schemas"]["Club.html"][];
-                };
-            };
-        };
-    };
-    api_clubs_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new Club resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["Club.ClubInput"];
-                "application/json": components["schemas"]["Club.ClubInput"];
-                "text/html": components["schemas"]["Club.ClubInput"];
-            };
-        };
-        responses: {
-            /** @description Club resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Club.jsonld"];
-                    "application/json": components["schemas"]["Club"];
-                    "text/html": components["schemas"]["Club.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
                 };
             };
         };
@@ -2946,38 +4177,6 @@ export interface operations {
             };
         };
     };
-    api_clubs_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Club identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Club resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     import_teams: {
         parameters: {
             query?: never;
@@ -3059,57 +4258,6 @@ export interface operations {
             };
         };
     };
-    api_club_users_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new ClubUser resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["ClubUser.ClubUserInput"];
-                "application/json": components["schemas"]["ClubUser.ClubUserInput"];
-                "text/html": components["schemas"]["ClubUser.ClubUserInput"];
-            };
-        };
-        responses: {
-            /** @description ClubUser resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ClubUser.jsonld"];
-                    "application/json": components["schemas"]["ClubUser"];
-                    "text/html": components["schemas"]["ClubUser.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
     api_club_users_id_get: {
         parameters: {
             query?: never;
@@ -3132,103 +4280,6 @@ export interface operations {
                     "application/json": components["schemas"]["ClubUser"];
                     "text/html": components["schemas"]["ClubUser.html"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    api_club_users_id_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description ClubUser identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description The updated ClubUser resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["ClubUser.ClubUserInput"];
-                "application/json": components["schemas"]["ClubUser.ClubUserInput"];
-                "text/html": components["schemas"]["ClubUser.ClubUserInput"];
-            };
-        };
-        responses: {
-            /** @description ClubUser resource updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ClubUser.jsonld"];
-                    "application/json": components["schemas"]["ClubUser"];
-                    "text/html": components["schemas"]["ClubUser.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
-    api_club_users_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description ClubUser identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description ClubUser resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Not found */
             404: {
@@ -3665,6 +4716,217 @@ export interface operations {
             };
         };
     };
+    api_competitions_get_collection: {
+        parameters: {
+            query?: {
+                /** @description The collection page number */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Competition collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["HydraCollectionBaseSchema"] & {
+                        member: components["schemas"]["Competition.jsonld"][];
+                    };
+                    "application/json": components["schemas"]["Competition"][];
+                    "text/html": components["schemas"]["Competition.html"][];
+                };
+            };
+        };
+    };
+    api_competitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new Competition resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Competition.CompetitionInput"];
+                "application/json": components["schemas"]["Competition.CompetitionInput"];
+                "text/html": components["schemas"]["Competition.CompetitionInput"];
+            };
+        };
+        responses: {
+            /** @description Competition resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Competition.jsonld"];
+                    "application/json": components["schemas"]["Competition"];
+                    "text/html": components["schemas"]["Competition.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_competitions_id_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Competition identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Competition resource */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Competition.jsonld"];
+                    "application/json": components["schemas"]["Competition"];
+                    "text/html": components["schemas"]["Competition.html"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    api_competitions_id_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Competition identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The updated Competition resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Competition.CompetitionInput"];
+                "application/json": components["schemas"]["Competition.CompetitionInput"];
+                "text/html": components["schemas"]["Competition.CompetitionInput"];
+            };
+        };
+        responses: {
+            /** @description Competition resource updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Competition.jsonld"];
+                    "application/json": components["schemas"]["Competition"];
+                    "text/html": components["schemas"]["Competition.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_competitions_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Competition identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Competition resource deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     api_constraints_get_collection: {
         parameters: {
             query?: {
@@ -3876,6 +5138,217 @@ export interface operations {
             };
         };
     };
+    api_fixtures_get_collection: {
+        parameters: {
+            query?: {
+                /** @description The collection page number */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixture collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["HydraCollectionBaseSchema"] & {
+                        member: components["schemas"]["Fixture.jsonld"][];
+                    };
+                    "application/json": components["schemas"]["Fixture"][];
+                    "text/html": components["schemas"]["Fixture.html"][];
+                };
+            };
+        };
+    };
+    api_fixtures_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new Fixture resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Fixture.FixtureInput"];
+                "application/json": components["schemas"]["Fixture.FixtureInput"];
+                "text/html": components["schemas"]["Fixture.FixtureInput"];
+            };
+        };
+        responses: {
+            /** @description Fixture resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Fixture.jsonld"];
+                    "application/json": components["schemas"]["Fixture"];
+                    "text/html": components["schemas"]["Fixture.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_fixtures_id_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Fixture identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixture resource */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Fixture.jsonld"];
+                    "application/json": components["schemas"]["Fixture"];
+                    "text/html": components["schemas"]["Fixture.html"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    api_fixtures_id_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Fixture identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The updated Fixture resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Fixture.FixtureInput"];
+                "application/json": components["schemas"]["Fixture.FixtureInput"];
+                "text/html": components["schemas"]["Fixture.FixtureInput"];
+            };
+        };
+        responses: {
+            /** @description Fixture resource updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Fixture.jsonld"];
+                    "application/json": components["schemas"]["Fixture"];
+                    "text/html": components["schemas"]["Fixture.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_fixtures_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Fixture identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixture resource deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     login_check_post: {
         parameters: {
             query?: never;
@@ -3903,6 +5376,264 @@ export interface operations {
                         readonly token: string;
                     };
                 };
+            };
+        };
+    };
+    postManualEditConstraint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    type: string;
+                    reason?: string;
+                    createdBy?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Constraint created — returns its id */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message?: string;
+                        constraintId?: string;
+                    };
+                };
+            };
+            /** @description Missing/invalid field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Slot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Schedule is validated (read-only) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postManualEditLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    lockLevel: "NONE" | "SOFT" | "HARD";
+                };
+            };
+        };
+        responses: {
+            /** @description Lock applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message?: string;
+                    };
+                };
+            };
+            /** @description Missing/invalid lockLevel */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Slot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Schedule is validated (read-only) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postManualEditOneTime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @example 18:30 */
+                    startTime?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description One-time update applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message?: string;
+                    };
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Slot not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict (validated schedule or overlapping slot) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getFixtureConflicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Same-coach time-occupancy conflicts (match↔match and match↔training) recomputed live for the current club/season */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        clubId?: string;
+                        seasonId?: string | null;
+                        conflicts?: {
+                            /** @enum {string} */
+                            type?: "MATCH_MATCH" | "MATCH_TRAINING";
+                            coachId?: string;
+                            /**
+                             * Format: date-time
+                             * @description Overlap segment start
+                             */
+                            start?: string;
+                            /**
+                             * Format: date-time
+                             * @description Overlap segment end
+                             */
+                            end?: string;
+                            /** @description MATCH_MATCH: first fixture */
+                            left?: Record<string, never> | null;
+                            /** @description MATCH_MATCH: second fixture */
+                            right?: Record<string, never> | null;
+                            /** @description MATCH_TRAINING: the match */
+                            fixture?: Record<string, never> | null;
+                            /** @description MATCH_TRAINING: the training slot */
+                            training?: Record<string, never> | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description No club in context */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized (missing/expired JWT) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getLeagueMatchWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Federation match-kickoff windows inherited by the club (league envelope, AURA default) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        league?: string;
+                        items?: {
+                            id?: string;
+                            league?: string;
+                            category?: string;
+                            level?: string;
+                            gender?: string | null;
+                            dayOfWeek?: number;
+                            kickoffMin?: string;
+                            kickoffMax?: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No club in context */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized (missing/expired JWT) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -4328,6 +6059,152 @@ export interface operations {
             };
         };
     };
+    api_reservations_get_collection: {
+        parameters: {
+            query?: {
+                /** @description The collection page number */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reservation collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["HydraCollectionBaseSchema"] & {
+                        member: components["schemas"]["Reservation.jsonld"][];
+                    };
+                    "application/json": components["schemas"]["Reservation"][];
+                    "text/html": components["schemas"]["Reservation.html"][];
+                };
+            };
+        };
+    };
+    api_reservations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The new Reservation resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Reservation.ReservationInput"];
+                "application/json": components["schemas"]["Reservation.ReservationInput"];
+                "text/html": components["schemas"]["Reservation.ReservationInput"];
+            };
+        };
+        responses: {
+            /** @description Reservation resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Reservation.jsonld"];
+                    "application/json": components["schemas"]["Reservation"];
+                    "text/html": components["schemas"]["Reservation.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    api_reservations_id_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Reservation identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reservation resource */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Reservation.jsonld"];
+                    "application/json": components["schemas"]["Reservation"];
+                    "text/html": components["schemas"]["Reservation.html"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    api_reservations_id_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Reservation identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reservation resource deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     api_schedules_get_collection: {
         parameters: {
             query?: {
@@ -4540,6 +6417,60 @@ export interface operations {
         };
     };
     export_pdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Schedule identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The new Schedule resource */
+        requestBody: {
+            content: {
+                "application/ld+json": components["schemas"]["Schedule.ScheduleInput"];
+                "application/json": components["schemas"]["Schedule.ScheduleInput"];
+                "text/html": components["schemas"]["Schedule.ScheduleInput"];
+            };
+        };
+        responses: {
+            /** @description Schedule resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Schedule.jsonld"];
+                    "application/json": components["schemas"]["Schedule"];
+                    "text/html": components["schemas"]["Schedule.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
+    export_xlsx: {
         parameters: {
             query?: never;
             header?: never;
@@ -5273,6 +7204,67 @@ export interface operations {
             };
         };
     };
+    transitionSeason: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Source season id (must be the current season) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description N+1 draft season created from the source season entries (never the generated plan) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        seasonId?: string;
+                        name?: string;
+                        /** Format: date */
+                        startDate?: string;
+                        /** Format: date */
+                        endDate?: string;
+                        counts?: {
+                            [key: string]: number;
+                        };
+                    };
+                };
+            };
+            /** @description No club in context */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Management role required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Season not found (or another club's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source is not the current season, or a next season already exists (body carries existingSeasonId) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     api_sports_get_collection: {
         parameters: {
             query?: {
@@ -5906,6 +7898,61 @@ export interface operations {
             };
         };
     };
+    import_fixtures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team identifier */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The new Team resource */
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Team resource created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Team.jsonld"];
+                    "application/json": components["schemas"]["Team"];
+                    "text/html": components["schemas"]["Team.html"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["Error.jsonld"];
+                    "application/problem+json": components["schemas"]["Error"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An error occurred */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
+                    "application/problem+json": components["schemas"]["ConstraintViolation"];
+                    "application/json": components["schemas"]["ConstraintViolation"];
+                };
+            };
+        };
+    };
     api_team_coaches_get_collection: {
         parameters: {
             query?: {
@@ -6243,84 +8290,6 @@ export interface operations {
             };
         };
     };
-    api_users_get_collection: {
-        parameters: {
-            query?: {
-                /** @description The collection page number */
-                page?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description User collection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["HydraCollectionBaseSchema"] & {
-                        member: components["schemas"]["User.jsonld"][];
-                    };
-                    "application/json": components["schemas"]["User"][];
-                    "text/html": components["schemas"]["User.html"][];
-                };
-            };
-        };
-    };
-    api_users_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new User resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["User.UserInput"];
-                "application/json": components["schemas"]["User.UserInput"];
-                "text/html": components["schemas"]["User.UserInput"];
-            };
-        };
-        responses: {
-            /** @description User resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["User.jsonld"];
-                    "application/json": components["schemas"]["User"];
-                    "text/html": components["schemas"]["User.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
     api_users_id_get: {
         parameters: {
             query?: never;
@@ -6418,38 +8387,6 @@ export interface operations {
                     "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
                     "application/problem+json": components["schemas"]["ConstraintViolation"];
                     "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
-    api_users_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description User identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description User resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

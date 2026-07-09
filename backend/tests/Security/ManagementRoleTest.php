@@ -69,10 +69,25 @@ final class ManagementRoleTest extends WebTestCase
         return [
             ['POST', '/api/schedules', '{"name":"t","status":"DRAFT"}'],
             ['POST', '/api/schedule_slot_templates', '{"scheduleId":"' . self::DUMMY_ID . '","teamId":"' . self::DUMMY_ID . '","venueId":"' . self::DUMMY_ID . '","dayOfWeek":1,"startTime":"18:00"}'],
-            // A5/A6: a non-management member must NOT be able to write a membership
-            // (self-escalation to owner via /api/club_users). Guard fires in the
-            // processor before any privilege field is applied.
-            ['POST', '/api/club_users', '{"userId":"' . self::DUMMY_ID . '","role":"owner","isActive":true}'],
+        ];
+    }
+
+    /**
+     * A5/A6: membership writes are REMOVED from the ClubUser API entirely (only
+     * GetCollection/Get remain) — closing self-escalation (POST role=owner),
+     * last-owner demotion (PUT isActive=false) and approval-bypass at once.
+     * Legitimate flows use AuthController (create) + MembershipController
+     * (approve). Every write verb must therefore be 405 Method Not Allowed, for
+     * a management member too (it is not a permission gate but a missing route).
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    public static function clubUserWriteVerbs(): array
+    {
+        return [
+            ['POST', '/api/club_users'],
+            ['PUT', '/api/club_users/' . self::DUMMY_ID],
+            ['DELETE', '/api/club_users/' . self::DUMMY_ID],
         ];
     }
 
@@ -108,6 +123,19 @@ final class ManagementRoleTest extends WebTestCase
         ], $body);
 
         self::assertResponseStatusCodeSame(403, \sprintf('%s %s must be management-only', $method, $url));
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('clubUserWriteVerbs')]
+    public function testClubUserWritesAreRemoved(string $method, string $url): void
+    {
+        // Even a management member gets 405 — the write routes no longer exist.
+        [$adminToken] = $this->register('MGF');
+        $this->client->request($method, $url, [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"userId":"' . self::DUMMY_ID . '","role":"owner","isActive":true}');
+
+        self::assertResponseStatusCodeSame(405, \sprintf('%s %s must be method-not-allowed (write removed)', $method, $url));
     }
 
     public function testScheduleCannotBeCreatedWithNonDraftStatus(): void
