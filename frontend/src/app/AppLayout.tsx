@@ -56,7 +56,11 @@ export function AppLayout() {
             {null !== data?.socleValidatedAt ? (
               <NavItem to="/matchs">Matchs</NavItem>
             ) : (
-              <span className="cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-muted-foreground/40" title="Validez le planning principal pour débloquer les matchs">
+              <span
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-md px-3 py-1.5 text-sm text-muted-foreground/40"
+                title="Validez le planning principal pour débloquer les matchs"
+              >
                 Matchs
               </span>
             )}

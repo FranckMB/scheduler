@@ -43,8 +43,12 @@
   --border: oklch(0.31 0.01 260);
   --input: oklch(0.31 0.01 260);
 
-  --accent: oklch(0.62 0.16 255);
-  --accent-foreground: oklch(0.15 0.01 260);
+  /* Brighter accent (dark themes lift accents anyway): `text-accent` links gain
+     contrast on the dark bg, and the button pairs it with a dark foreground so
+     both roles clear AA — a mid-blue (0.62) capped the button near 3.6:1 with
+     any single foreground (A11Y-06, WCAG 1.4.3). */
+  --accent: oklch(0.72 0.15 255);
+  --accent-foreground: oklch(0.17 0.02 260);
 
   --destructive: oklch(0.62 0.21 27);
 

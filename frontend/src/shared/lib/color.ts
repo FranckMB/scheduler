@@ -33,7 +33,11 @@ export function luminance(hex: string): number {
 
 /** AA-ish foreground (near-black or white) to place text on top of `hex`. */
 export function readableForeground(hex: string): string {
-  return luminance(hex) > 0.42 ? "#0b0b0c" : "#ffffff";
+  // Pick the foreground that clears WCAG AA (4.5:1) on `hex`. Pure black and
+  // white cross over at luminance ≈ 0.179 (both ≥ 4.58:1 there), so a 0.18 split
+  // keeps EVERY accent AA. The old 0.42 threshold handed white to mid-tone
+  // accents (lum ~0.24) at only ~3.5:1 — the club-accent form of A11Y-06.
+  return luminance(hex) > 0.18 ? "#000000" : "#ffffff";
 }
 
 /** Mix a colour toward white (amount 0..1) — used to lift a dark accent in dark mode. */

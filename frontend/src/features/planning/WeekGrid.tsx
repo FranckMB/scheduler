@@ -129,7 +129,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             >
               <span className="flex w-full items-center gap-1 font-medium">
                 <span className="truncate">{cell.primaryLabel}</span>
-                {cell.roleTag ? <span className="shrink-0 rounded-sm bg-accent/20 px-1 text-[9px] text-accent-foreground">{cell.roleTag}</span> : null}
+                {cell.roleTag ? <span className="shrink-0 rounded-sm bg-accent/20 px-1 text-[10px] text-accent-foreground">{cell.roleTag}</span> : null}
                 {cell.locked ? <Lock className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
               <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
