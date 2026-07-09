@@ -2,7 +2,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
-import { END_MIN, gridTemplateColumns, START_MIN, STEP, WEEK } from "../lib/weekGrid";
+import { END_MIN, gridTemplateColumns, ROW_H, START_MIN, STEP, WEEK } from "../lib/weekGrid";
 
 interface Props {
   venue: Venue;
@@ -31,7 +31,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
   const gridStart = slots.length > 0 ? Math.floor(Math.min(...startMins) / 60) * 60 : START_MIN;
   const gridEnd = slots.length > 0 ? Math.ceil(Math.max(...endMins) / 60) * 60 : END_MIN;
   const gridRows = Array.from({ length: Math.max(1, (gridEnd - gridStart) / STEP) }, (_, i) => gridStart + i * STEP);
-  const gridTemplateRows = `1.5rem repeat(${gridRows.length}, 11px)`;
+  const gridTemplateRows = `1.5rem repeat(${gridRows.length}, ${ROW_H}px)`;
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">

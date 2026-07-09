@@ -26,7 +26,11 @@ class ConstraintStateProvider extends AbstractStateProvider
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('e')
-            ->from($this->getEntityClass(), 'e');
+            ->from($this->getEntityClass(), 'e')
+            // UUID PK order → stable offset pagination (see AbstractStateProvider): an
+            // unordered collection reshuffles rows between page requests and collectionAll
+            // silently drops boundary rows.
+            ->orderBy('e.id', 'ASC');
 
         if ($this->pagination->isEnabled($operation, $context)) {
             $offset = $this->pagination->getOffset($operation, $context);

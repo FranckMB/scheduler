@@ -132,29 +132,25 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         // (the real "Matéo's Wednesday slots vanish" bug). The provider now orders on
         // the UUID PK, so page1 ∪ page2 must return every created slot.
         $venue = $this->createVenue(false);
-        // Seed 35 slots via the EM (bypasses the per-user API rate limit) under the
-        // club GUC (RLS WITH CHECK). Adjacent 90-min slots, 6 times × 6 days.
+        // Seed 35 slots via the EM (bypasses the per-user API rate limit + the
+        // anti-overlap guard) under the club GUC. CRITICAL: every slot shares the
+        // SAME (dayOfWeek, startTime) so the provider's dayOfWeek+startTime order is
+        // fully tied — the UUID PK tiebreaker is then the ONLY thing that makes
+        // pagination deterministic. Drop the tiebreaker and the 30/5 page split
+        // reshuffles → boundary rows are lost, failing the assertion below.
         $guc = self::getContainer()->get(TenantConnectionContext::class);
         $guc->setClubId($this->club->getId());
         try {
-            $times = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'];
-            $created = 0;
-            foreach (range(1, 6) as $day) {
-                foreach ($times as $start) {
-                    if ($created >= 35) {
-                        break 2;
-                    }
-                    $slot = (new VenueTrainingSlot)
-                        ->setClubId($this->club->getId())
-                        ->setSeasonId($this->season->getId())
-                        ->setVenueId($venue->getId())
-                        ->setDayOfWeek($day)
-                        ->setStartTime(new DateTimeImmutable($start))
-                        ->setDurationMinutes(90)
-                        ->setCapacity(1);
-                    $this->em->persist($slot);
-                    ++$created;
-                }
+            for ($i = 0; $i < 35; ++$i) {
+                $slot = (new VenueTrainingSlot)
+                    ->setClubId($this->club->getId())
+                    ->setSeasonId($this->season->getId())
+                    ->setVenueId($venue->getId())
+                    ->setDayOfWeek(1)
+                    ->setStartTime(new DateTimeImmutable('18:00'))
+                    ->setDurationMinutes(90)
+                    ->setCapacity(1);
+                $this->em->persist($slot);
             }
             $this->em->flush();
         } finally {
