@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
@@ -48,29 +49,30 @@ export function pickLandingScheduleId(schedules: LandingSchedule[], baselineSche
 
 function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: boolean; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Valider le planning">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            {hasAlerts ? <AlertTriangle className="size-5 text-warning" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
-            <CardTitle>Valider ce planning ?</CardTitle>
-          </div>
-          <CardDescription>
-            {hasAlerts
-              ? "Ce planning présente des alertes du solveur (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
-              : "Le planning passera en lecture seule (« Validé »). Vous pourrez le rouvrir pour le modifier."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
-            Annuler
-          </Button>
-          <Button size="sm" onClick={onConfirm} disabled={busy}>
-            Valider
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+    <Modal
+      label="Valider le planning"
+      title={
+        <span className="flex items-center gap-2">
+          {hasAlerts ? <AlertTriangle className="size-5 text-warning" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
+          Valider ce planning ?
+        </span>
+      }
+      onClose={onCancel}
+    >
+      <p className="mt-2 text-sm text-muted-foreground">
+        {hasAlerts
+          ? "Ce planning présente des alertes du solveur (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
+          : "Le planning passera en lecture seule (« Validé »). Vous pourrez le rouvrir pour le modifier."}
+      </p>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
+          Annuler
+        </Button>
+        <Button size="sm" onClick={onConfirm} disabled={busy}>
+          Valider
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
