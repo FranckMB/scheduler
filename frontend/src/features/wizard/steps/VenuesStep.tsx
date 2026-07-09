@@ -41,21 +41,50 @@ function CapacitySelect({ value, onChange, canSplit, className }: { value: numbe
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 /** Colour swatch + free hex field; both apply immediately, no Enter needed. */
-function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string) => void }) {
+export function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string) => void }) {
   const current = venue.color ?? "#666666";
   const [hex, setHex] = useState(current);
   // The native colour picker fires onChange CONTINUOUSLY while dragging — persisting
   // a PUT per step races the Doctrine @Version lock ("optimistic lock failed"). Keep
   // the live preview immediate (setHex) but debounce the write to the settled colour.
+  // On unmount (leaving the step, switching gyms) we FLUSH the pending colour so a
+  // last-second edit is never dropped. onApply is read through a ref to avoid a
+  // stale closure.
   const applyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => (applyTimer.current ? clearTimeout(applyTimer.current) : undefined), []);
+  const pending = useRef<string | null>(null);
+  const onApplyRef = useRef(onApply);
+  useEffect(() => {
+    onApplyRef.current = onApply;
+  }, [onApply]);
+  // Reflect an EXTERNAL colour change (refetch, concurrent update) in the field —
+  // but only when the user is not mid-edit (no pending write), so it never
+  // clobbers what is being typed.
+  useEffect(() => {
+    if (null === pending.current) {
+      setHex(venue.color ?? "#666666");
+    }
+  }, [venue.color]);
+
+  const flush = () => {
+    if (null !== applyTimer.current) {
+      clearTimeout(applyTimer.current);
+      applyTimer.current = null;
+    }
+    if (null !== pending.current) {
+      onApplyRef.current(pending.current);
+      pending.current = null;
+    }
+  };
+  useEffect(() => flush, []);
+
   const commit = (value: string) => {
     setHex(value);
     if (HEX_RE.test(value)) {
+      pending.current = value;
       if (null !== applyTimer.current) {
         clearTimeout(applyTimer.current);
       }
-      applyTimer.current = setTimeout(() => onApply(value), 300);
+      applyTimer.current = setTimeout(flush, 300);
     }
   };
   return (
