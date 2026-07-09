@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, PriorityTier, Team, Venue } from "../api";
 import { DAYS, dayLabel, hhmm } from "../lib/days";
+import { availableReservationSlots } from "../lib/reservationSlots";
 import { useCreateConstraint, useCreateReservation, useDeleteConstraint, useDeleteReservation, usePriorityTiers, useReservations, useUpdateConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
@@ -68,7 +69,17 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  const venueCanSplit = new Map(venues.map((v) => [v.id, v.canSplit]));
   const slotLabel = (venueId: string, dayOfWeek: number, startTime: string) => `${venueName.get(venueId) ?? "?"} · ${dayLabel(dayOfWeek)} ${hhmm(startTime)}`;
+
+  // Only offer slots that still have room for the selected team: a booked slot
+  // leaves the list, unless the gym is divisible and a capacity seat remains.
+  const effectiveTeamId = teamId || teams[0]?.id || "";
+  const reservableSlots = availableReservationSlots(slots, reservations, venueCanSplit, effectiveTeamId);
+  // A previously-picked slot can fall out of the list (team switched, slot filled).
+  // Treat the selection as empty then, so the Select shows the placeholder and the
+  // button disables — never an enabled button that silently does nothing.
+  const slotOffered = "" !== slotId && reservableSlots.some((s) => s.id === slotId);
 
   // Order reservations by TEAM RANK (fanion S → A → B → C → D, then intra-tier
   // order) so the list is scannable instead of server-insertion order. Tiebreak
@@ -79,7 +90,9 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
 
   const add = () => {
     const team = teamId || teams[0]?.id;
-    const slot = slots.find((s) => s.id === slotId);
+    // Guard against a stale selection (e.g. the slot filled up, or the team was
+    // switched) — only a currently-offered slot can be reserved.
+    const slot = reservableSlots.find((s) => s.id === slotId);
     if (undefined === team || undefined === slot) {
       return;
     }
@@ -95,15 +108,15 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
       <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         <TeamSelect aria-label="Équipe" className="h-8 w-44" teams={teams} tiers={tiers} value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)} />
         <span className="text-xs text-muted-foreground">sur</span>
-        <Select aria-label="Créneau" className="h-8 w-64" value={slotId} onChange={(e) => setSlotId(e.target.value)}>
+        <Select aria-label="Créneau" className="h-8 w-64" value={slotOffered ? slotId : ""} onChange={(e) => setSlotId(e.target.value)}>
           <option value="">— créneau —</option>
-          {slots.map((s) => (
+          {reservableSlots.map((s) => (
             <option key={s.id} value={s.id}>
               {slotLabel(s.venueId, s.dayOfWeek, s.startTime)}
             </option>
           ))}
         </Select>
-        <Button size="sm" onClick={add} disabled={"" === slotId || 0 === teams.length || create.isPending}>
+        <Button size="sm" onClick={add} disabled={!slotOffered || 0 === teams.length || create.isPending}>
           <Lock className="size-4" />
           Réserver
         </Button>
