@@ -1,6 +1,8 @@
 import { Lock } from "lucide-react";
 import { type UIEvent, useRef } from "react";
 
+import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
+import { tint } from "@/shared/lib/color";
 import { cn } from "@/shared/lib/utils";
 
 import type { GridModel } from "./lib/grid";
@@ -9,13 +11,6 @@ const ROW_HEIGHT = 16; // px per 15-min step (1h = 64px)
 const HEADER_ROW = "1.75rem";
 
 /** hex colour → subtle translucent fill; non-hex falls back to no tint. */
-function tint(color: string | null): string | undefined {
-  if (null !== color && /^#[0-9a-f]{6}$/i.test(color)) {
-    return `${color}22`;
-  }
-  return undefined;
-}
-
 interface WeekGridProps {
   model: GridModel;
   selectedSlotId: string | null;
@@ -81,7 +76,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             style={{ gridColumn: 2 + i, gridRow: 2, ...freezeY }}
             title={column.label}
           >
-            {null !== column.color ? <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: column.color }} /> : null}
+            {null !== column.color ? <VenueSwatch color={column.color} /> : null}
             <span className="truncate">{column.label}</span>
           </div>
         ))}
