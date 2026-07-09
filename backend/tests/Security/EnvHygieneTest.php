@@ -43,11 +43,15 @@ final class EnvHygieneTest extends TestCase
     public function testProdProfileOnlyTurnsDebugOffAndCommitsNoSecretValue(): void
     {
         $lines = self::assignments('/.env.prod');
-        self::assertNotEmpty($lines, 'backend/.env.prod must exist and set APP_DEBUG=0.');
-        // Every active line must be exactly APP_DEBUG=0 — any other KEY=value would
-        // be a committed secret (DATABASE_URL/CORS/MAILER embed credentials too).
+        self::assertContains('APP_DEBUG=0', $lines, 'backend/.env.prod must set APP_DEBUG=0.');
+        // No secret-bearing key may carry a value here (DATABASE_URL/CORS/MAILER
+        // embed credentials too). Non-secret prod flags stay allowed.
         foreach ($lines as $line) {
-            self::assertSame('APP_DEBUG=0', $line, \sprintf('backend/.env.prod must only set APP_DEBUG=0 (no committed secrets); found: %s', $line));
+            self::assertDoesNotMatchRegularExpression(
+                '/^(APP_SECRET|JWT_PASSPHRASE|MERCURE_JWT_SECRET|POSTGRES_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|CORS_ALLOW_ORIGIN|MAILER_DSN)=/',
+                $line,
+                \sprintf('backend/.env.prod must not commit a secret value; found: %s', $line),
+            );
         }
     }
 
@@ -63,7 +67,7 @@ final class EnvHygieneTest extends TestCase
     public function testBaseEnvSecretsStayRecognizableDevDefaults(): void
     {
         // The base .env ships functional dev secrets; they MUST carry a dev marker
-        // so ProdSecretGuardListener rejects them if they leak into a prod boot.
+        // so ProdSecretGuard rejects them if they leak into a prod boot.
         $base = (string) file_get_contents(self::BACKEND . '/.env');
         foreach (['APP_SECRET', 'JWT_PASSPHRASE', 'MERCURE_JWT_SECRET'] as $key) {
             self::assertSame(1, preg_match('/^' . $key . '=(\S+)/m', $base, $m), \sprintf('base .env must define %s.', $key));
@@ -73,12 +77,10 @@ final class EnvHygieneTest extends TestCase
 
     public function testTheLeakedSecretNeverComesBackInATrackedFile(): void
     {
-        // Only TRACKED committed files — a developer's git-ignored *.local is theirs.
-        foreach (glob(self::BACKEND . '/.env*') ?: [] as $file) {
-            if (str_ends_with($file, '.local')) {
-                continue;
-            }
-            self::assertStringNotContainsString(self::LEAKED_SECRET, (string) file_get_contents($file), \sprintf('The once-committed APP_SECRET must not reappear in %s.', $file));
+        // Explicit list of TRACKED committed env files (a disk glob would also scan
+        // a developer's git-ignored .env.local / .env.*.local and mislabel it).
+        foreach (['/.env', '/.env.dev', '/.env.test', '/.env.prod', '/.env.dist'] as $file) {
+            self::assertStringNotContainsString(self::LEAKED_SECRET, (string) file_get_contents(self::BACKEND . $file), \sprintf('The once-committed APP_SECRET must not reappear in backend%s.', $file));
         }
     }
 }
