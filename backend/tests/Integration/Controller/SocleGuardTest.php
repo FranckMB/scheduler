@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Controller;
 
+use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -20,6 +21,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class SocleGuardTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private KernelBrowser $client;
 
     public function testCreatingAMatchIsRefusedWhileTheSocleIsNotValidated(): void
@@ -58,9 +61,8 @@ final class SocleGuardTest extends WebTestCase
             'firstName' => 'S', 'lastName' => 'Ocle', 'ara' => strtoupper($suffix), 'club_name' => 'Club Socle',
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
+        self::assertNotSame('', $token, 'verification must return a token');
 
         return $token;
     }

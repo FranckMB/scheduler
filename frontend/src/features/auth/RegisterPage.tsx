@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
@@ -13,10 +13,10 @@ import { AuthLayout } from "./AuthLayout";
 import { useRegister } from "./queries";
 
 export function RegisterPage() {
-  const navigate = useNavigate();
   const register = useRegister();
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", ara: "", club_name: "" });
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -30,8 +30,8 @@ export function RegisterPage() {
       return;
     }
     try {
-      const result = await register.mutateAsync({ ...form, ara: form.ara.toUpperCase() });
-      navigate(result.membershipStatus === "pending" ? "/waiting" : "/", { replace: true });
+      await register.mutateAsync({ ...form, ara: form.ara.toUpperCase() });
+      setSent(true);
     } catch (err) {
       setError(await apiErrorMessage(err));
     }
@@ -47,6 +47,11 @@ export function RegisterPage() {
         </>
       }
     >
+      {sent ? (
+        <p className="text-sm text-muted-foreground">
+          Un email de confirmation vient d'être envoyé à <span className="text-foreground">{form.email}</span>. Ouvrez le lien qu'il contient pour activer votre compte. Pensez à vérifier vos spams.
+        </p>
+      ) : (
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
@@ -82,6 +87,7 @@ export function RegisterPage() {
           Créer le compte
         </Button>
       </form>
+      )}
     </AuthLayout>
   );
 }

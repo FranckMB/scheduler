@@ -1,7 +1,11 @@
-Last verified @ feat/export-planning 2026-07-08
+Last verified @ feat/register-email-verification 2026-07-09
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **62 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **65 paths.**
 Changements récents :
+- **Inscription vérifiée par email (A3, 2026-07-09)** : `/api/register` passe d'un `201`+JWT à un
+  **`202` générique** (anti-énumération : réponse identique pour un email neuf ou déjà inscrit, aucun
+  token) ; nouvelle route custom `POST /api/register/verify` (`AuthController`, ajoutée à
+  `CustomRoutesOpenApiFactory`) qui consomme le token du lien email et émet le JWT.
 - **Export planning (2026-07-08)** : `POST /api/schedules/{id}/export-xlsx` (opération API Platform
   custom sur `ScheduleResource`, patron `export-pdf`) — export Excel synchrone (téléchargement direct).
   `export-pdf` accepte désormais un `venueId` optionnel (périmètre tous gymnases / un gymnase).

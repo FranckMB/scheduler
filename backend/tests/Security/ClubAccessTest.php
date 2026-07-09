@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -22,6 +23,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ClubAccessTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private KernelBrowser $client;
 
     public function testCollectionReturnsOnlyOwnClubs(): void
@@ -199,9 +202,8 @@ final class ClubAccessTest extends WebTestCase
             'firstName' => 'C', 'lastName' => 'Access', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
+        self::assertNotSame('', $token, 'verification must return a token');
 
         $me = $this->get('/api/me', $token);
 

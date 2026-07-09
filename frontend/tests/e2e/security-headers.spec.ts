@@ -1,6 +1,6 @@
 import { expect, test, type ConsoleMessage } from "@playwright/test";
 
-import { uniqueAra } from "./support";
+import { registerAndVerify, uniqueAra } from "./support";
 
 /**
  * A17 — security response headers on the SPA, plus a live check that the CSP
@@ -40,14 +40,7 @@ test("CSP does not break the app across login → register → wizard → club",
   await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
 
   const ara = uniqueAra("CSP");
-  await page.goto("/register");
-  await page.getByLabel("Prénom").fill("Csp");
-  await page.getByLabel("Nom", { exact: true }).fill("Test");
-  await page.getByLabel("Email", { exact: true }).fill(`csp-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
-  await page.getByLabel(/code ara/i).fill(ara);
-  await page.getByLabel(/nom du club/i).fill("CSP Club");
-  await page.getByRole("button", { name: /créer le compte/i }).click();
+  await registerAndVerify(page, { email: `csp-${ara}@e2e.fr`, ara, firstName: "Csp", lastName: "Test", clubName: "CSP Club" });
 
   // Reaching the wizard proves scripts ran, styles applied and /api XHR passed
   // the connect-src policy — the paths a too-strict CSP would break.

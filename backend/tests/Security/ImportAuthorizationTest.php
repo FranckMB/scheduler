@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -22,6 +23,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ImportAuthorizationTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private KernelBrowser $client;
 
     public function testImportOnForeignClubReturns404(): void
@@ -119,9 +122,8 @@ final class ImportAuthorizationTest extends WebTestCase
             'firstName' => 'I', 'lastName' => 'Import', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
+        self::assertNotSame('', $token, 'verification must return a token');
 
         $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         $me = json_decode((string) $this->client->getResponse()->getContent(), true);

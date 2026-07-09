@@ -1,17 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { uniqueAra } from "./support";
+import { registerAndVerify, uniqueAra } from "./support";
 
 async function registerClub(page: import("@playwright/test").Page): Promise<void> {
   const ara = uniqueAra("E2ES");
-  await page.goto("/register");
-  await page.getByLabel("Prénom").fill("Sonia");
-  await page.getByLabel("Nom", { exact: true }).fill("Saison");
-  await page.getByLabel("Email", { exact: true }).fill(`season-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
-  await page.getByLabel(/code ara/i).fill(ara);
-  await page.getByLabel(/nom du club/i).fill("E2E Saison Club");
-  await page.getByRole("button", { name: /créer le compte/i }).click();
+  await registerAndVerify(page, { email: `season-${ara}@e2e.fr`, ara, firstName: "Sonia", lastName: "Saison", clubName: "E2E Saison Club" });
 }
 
 test("just subscribed: one season, no next-season draft yet, work-loop gate", async ({ page }) => {

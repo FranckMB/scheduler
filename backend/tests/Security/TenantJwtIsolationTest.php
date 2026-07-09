@@ -11,6 +11,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Tests\TenantGucTrait;
+use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -29,6 +30,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 final class TenantJwtIsolationTest extends WebTestCase
 {
     use TenantGucTrait;
+    use VerifiesRegistration;
 
     private static int $ip = 0;
 
@@ -72,7 +74,7 @@ final class TenantJwtIsolationTest extends WebTestCase
             'firstName' => 'B', 'lastName' => 'Jwt', 'ara' => strtoupper($ara), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        return json_decode((string) $this->client->getResponse()->getContent(), true)['token'] ?? '';
+        return $this->verifyRegistration($this->client, strtolower($ara) . '@test.fr');
     }
 
     private function seedClubWithTeam(): Club

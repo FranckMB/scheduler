@@ -28,11 +28,17 @@ export function useLogin() {
   });
 }
 
+/** Register no longer authenticates (A3): success just means "check your email".
+ *  The token is issued by useVerifyEmail once the emailed link is followed. */
 export function useRegister() {
+  return useMutation({ mutationFn: authApi.register });
+}
+
+export function useVerifyEmail() {
   const setToken = useAuthStore((state) => state.setToken);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: authApi.register,
+    mutationFn: authApi.verifyEmail,
     onSuccess: (data) => {
       setToken(data.token);
       void queryClient.invalidateQueries({ queryKey: ["me"] });

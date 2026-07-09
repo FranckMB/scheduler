@@ -9,6 +9,11 @@ framework:
             policy: 'sliding_window'
             limit: 5
             interval: '15 minutes'
+        # Per-IP bound on the email-verification consume endpoint (anti token brute-force).
+        auth_register_verify:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '15 minutes'
         # SEC-11: global throttle on the authenticated API, keyed PER USER (JWT),
         # applied by ApiRateLimitSubscriber on ^/api. 300/min = 5 req/s — well
         # above legitimate use (the frontend polls a schedule every few seconds)
@@ -28,6 +33,10 @@ when@dev:
     framework:
         rate_limiter:
             auth_register:
+                policy: 'sliding_window'
+                limit: 100
+                interval: '15 minutes'
+            auth_register_verify:
                 policy: 'sliding_window'
                 limit: 100
                 interval: '15 minutes'

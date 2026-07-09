@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
+use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
 use App\Service\SchoolZoneResolver;
@@ -27,10 +28,13 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\String\Slugger\AsciiSlugger;
+use Throwable;
 
 final class AuthController extends AbstractController
 {
@@ -48,6 +52,10 @@ final class AuthController extends AbstractController
         private readonly SeasonResolver $seasonResolver,
         private readonly ClockInterface $clock,
         private readonly PasswordPolicy $passwordPolicy,
+        private readonly MailerInterface $mailer,
+        private readonly EmailVerifier $emailVerifier,
+        private readonly RateLimiterFactory $authRegisterVerifyLimiter,
+        private readonly string $frontendBaseUrl,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -70,6 +78,11 @@ final class AuthController extends AbstractController
         $ara = isset($data['ara']) && \is_string($data['ara']) ? strtoupper(trim($data['ara'])) : '';
         $clubName = isset($data['club_name']) && \is_string($data['club_name']) ? trim($data['club_name']) : '';
 
+        // Validation below is HOISTED above the email lookup and depends only on the
+        // submitted payload (or the ARA — public FFBB data), NEVER on whether the
+        // email exists. A differing 400 would otherwise be an account-enumeration
+        // oracle (A3). The success path returns an identical 202 for a fresh or an
+        // already-registered email — existence is signalled only out-of-band by mail.
         if ('' === $email || !filter_var($email, \FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'A valid email is required'], 400);
         }
@@ -83,54 +96,92 @@ final class AuthController extends AbstractController
             return $this->json(['error' => 'ARA must be 3-20 uppercase alphanumeric characters'], 400);
         }
 
-        if (null !== $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email])) {
-            return $this->json(['error' => 'Email already registered'], 409);
-        }
-
+        $email = strtolower($email);
         $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
 
-        // RLS: the register endpoint is anonymous, so no tenant GUC is set by the
-        // listener. The WITH CHECK policies would reject the ClubUser/Season/…
-        // inserts below without it — set it as soon as the club id is known, and
-        // always clear it afterwards (finally: this connection serves other
-        // requests in tests / long-running contexts).
+        // club_name is required to CREATE a club. Keyed on the ARA (public), not the
+        // email → still enumeration-safe: the 400 never depends on account existence.
+        if (null === $existingClub && '' === $clubName) {
+            return $this->json(['error' => 'Club name is required to create a new club'], 400);
+        }
+
+        $existingUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
+        if (null !== $existingUser) {
+            // Already registered: create NOTHING. Spend an equivalent password hash so
+            // this branch's latency matches the create branch (no timing oracle), then
+            // send an out-of-band "you already have an account" mail. Same 202 below.
+            $this->passwordHasher->hashPassword($existingUser, $password);
+            $this->sendAccountExistsEmail($existingUser->getEmail());
+
+            return $this->verificationPendingResponse();
+        }
+
+        // Fresh email: create the UNVERIFIED account only. User is a global entity (no
+        // club_id) so no tenant GUC is needed here — the club + seed are deferred to
+        // /api/register/verify, so an unverified (possibly fake) registration never
+        // materialises a tenant nor squats an ARA. The pending club intent (ffbb code
+        // + name) rides on the verification token until then.
+        $rawToken = '';
+        $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $clubName, &$rawToken): void {
+            $user = $this->createUser($email, $password, $firstName, $lastName);
+            $rawToken = $this->emailVerifier->generateToken($user, $ara, '' === $clubName ? null : $clubName);
+        });
+
+        $this->sendVerificationEmail($request, $email, $rawToken);
+
+        return $this->verificationPendingResponse();
+    }
+
+    #[Route('/api/register/verify', name: 'api_register_verify', methods: ['POST'])]
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        if (!$this->authRegisterVerifyLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
+            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+        }
+
+        $data = json_decode((string) $request->getContent(), true);
+        $rawToken = \is_array($data) && isset($data['token']) && \is_string($data['token']) ? $data['token'] : '';
+
+        $token = $this->emailVerifier->resolve($rawToken);
+        if (null === $token) {
+            return $this->json(['error' => 'Invalid or expired verification token'], 400);
+        }
+
+        $user = $token->getUser();
+        $ara = $token->getAra();
+        $clubName = $token->getClubName();
+        // Re-resolve the club at verify time (not register time): if the ARA was created
+        // by someone else in the meantime, this account correctly joins as pending.
+        $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
+
+        // Materialise the tenant now. Club-scoped inserts need the RLS GUC; set it once
+        // the club id is known, always clear afterwards (finally).
+        $status = 'pending';
         try {
-            if (null !== $existingClub) {
-                // Join an existing club: pending membership, awaits admin approval (no club data access yet).
-                $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $existingClub): void {
+            $this->entityManager->wrapInTransaction(function () use ($user, $ara, $clubName, $existingClub, $token, &$status): void {
+                $user->setEmailVerifiedAt($this->clock->now());
+                if (null !== $existingClub) {
                     $this->tenantConnectionContext->setClubId($existingClub->getId());
-                    $user = $this->createUser($email, $password, $firstName, $lastName);
                     $this->createMembership($existingClub->getId(), $user->getId(), false);
-                });
-                $status = 'pending';
-            } else {
-                // New club: creator becomes active admin, seed season + sport + categories.
-                if ('' === $clubName) {
-                    return $this->json(['error' => 'Club name is required to create a new club'], 400);
-                }
-                $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $clubName): void {
-                    $user = $this->createUser($email, $password, $firstName, $lastName);
-                    $club = $this->createClub($clubName, $ara);
+                    $status = 'pending';
+                } else {
+                    $club = $this->createClub($clubName ?? $ara, $ara);
                     $this->tenantConnectionContext->setClubId($club->getId());
                     $this->createMembership($club->getId(), $user->getId(), true);
                     $this->seedNewClub($club);
-                });
-                $status = 'active';
-            }
+                    $status = 'active';
+                }
+                $this->emailVerifier->consume($token);
+            });
         } finally {
             $this->tenantConnectionContext->clear();
-        }
-
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
-        if (null === $user) {
-            return $this->json(['error' => 'Registration failed'], 500);
         }
 
         return $this->json([
             'token' => $this->jwtManager->create($user),
             'membershipStatus' => $status,
             'user' => ['id' => $user->getId(), 'email' => $user->getEmail()],
-        ], 201);
+        ]);
     }
 
     #[Route('/api/me', name: 'api_me', methods: ['GET'])]
@@ -299,6 +350,50 @@ final class AuthController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['status' => 'ok']);
+    }
+
+    /**
+     * The single, identical response for every register outcome (fresh email, taken
+     * email, join or create) — byte-for-byte, so nothing distinguishes the branches.
+     */
+    private function verificationPendingResponse(): JsonResponse
+    {
+        return $this->json(['status' => 'verification_pending'], 202);
+    }
+
+    private function sendVerificationEmail(Request $request, string $email, string $rawToken): void
+    {
+        // FRONTEND_BASE_URL points at the browser-facing origin; fall back to the
+        // request host in dev/e2e (single origin via the Vite proxy). Prod sets it.
+        $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
+        $link = $base . '/verify-email/' . $rawToken;
+
+        // Swallow send failures: a 500 on this branch only would itself leak account
+        // state (mirror PasswordController::forgot).
+        try {
+            $this->mailer->send(
+                (new Email)
+                    ->from('no-reply@clubscheduler.app')
+                    ->to($email)
+                    ->subject('Confirmez votre adresse e-mail ClubScheduler')
+                    ->text("Bienvenue sur ClubScheduler !\n\nPour activer votre compte, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 24 heures."),
+            );
+        } catch (Throwable) {
+        }
+    }
+
+    private function sendAccountExistsEmail(string $email): void
+    {
+        try {
+            $this->mailer->send(
+                (new Email)
+                    ->from('no-reply@clubscheduler.app')
+                    ->to($email)
+                    ->subject('Tentative d’inscription sur ClubScheduler')
+                    ->text("Une inscription vient d’être tentée avec cette adresse, mais un compte existe déjà.\n\nConnectez-vous, ou réinitialisez votre mot de passe si vous l’avez oublié."),
+            );
+        } catch (Throwable) {
+        }
     }
 
     private function createUser(string $email, string $password, string $firstName, string $lastName): User

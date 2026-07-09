@@ -16,6 +16,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
+use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -34,6 +35,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 final class ResetSeasonControllerTest extends WebTestCase
 {
     use TenantGucTrait;
+    use VerifiesRegistration;
 
     private KernelBrowser $client;
 
@@ -222,9 +224,8 @@ final class ResetSeasonControllerTest extends WebTestCase
             'firstName' => 'R', 'lastName' => 'Reset', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
+        self::assertNotSame('', $token, 'verification must return a token');
 
         $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         $me = json_decode((string) $this->client->getResponse()->getContent(), true);

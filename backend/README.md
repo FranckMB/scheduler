@@ -83,7 +83,9 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 
 | Route | Méthode | Description |
 |-------|---------|-------------|
-| `/api/register`, `/api/me` | POST/GET | Inscription (club ARA/pending) + profil JWT (`AuthController`) |
+| `/api/register` | POST | Inscription — compte non vérifié, **202 générique** (anti-énumération A3, aucun token) ; envoie un lien de vérification par email (`AuthController`) |
+| `/api/register/verify` | POST | Consomme le token du lien email → vérifie le compte, crée/rejoint le club, **émet le JWT** (login effectif) |
+| `/api/me` | GET/PATCH | Profil JWT + contexte club (`AuthController`) |
 | `/api/constraints/validate` | POST | Gate pré-solveur : valide les contraintes + détecte les conflits (200/422) |
 | `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}` | POST | Ajustements manuels de créneau (boucle de travail) |
 

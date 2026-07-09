@@ -6,17 +6,38 @@
 set -euo pipefail
 
 API="${API_BASE:-http://localhost:8080/api}"
+MAILPIT="${MAILPIT_BASE:-http://localhost:8025}"
 GREEN=$'\033[0;32m'; RED=$'\033[0;31m'; BLUE=$'\033[0;34m'; NC=$'\033[0m'
 ok()   { printf '%bPASS:%b %s\n' "$GREEN" "$NC" "$1"; }
 die()  { printf '%bFAIL:%b %s\n' "$RED" "$NC" "$1" >&2; exit 1; }
 info() { printf '%b==>%b %s\n' "$BLUE" "$NC" "$1"; }
 
 ARA="ONB$(date +%s)"
-info "register new club $ARA"
-TOKEN=$(curl -s -X POST "$API/register" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"onb-$ARA@smoke.fr\",\"password\":\"password123\",\"firstName\":\"On\",\"lastName\":\"Board\",\"ara\":\"$ARA\",\"club_name\":\"Onb $ARA\"}" \
+EMAIL="onb-$ARA@smoke.fr"
+# A3: register defers everything to email verification — it returns a neutral 202
+# (no token, no club yet). The club + JWT are materialised only by /register/verify,
+# whose raw token arrives by email → pulled back out of Mailpit here.
+info "register new club $ARA (deferred verification)"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/register" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"firstName\":\"On\",\"lastName\":\"Board\",\"ara\":\"$ARA\",\"club_name\":\"Onb $ARA\"}")
+[[ "$CODE" == "202" ]] || die "register returned $CODE (expected 202)"
+
+info "pull the verification link from Mailpit"
+RAW=""
+for i in $(seq 1 20); do
+  MSGID=$(curl -s "$MAILPIT/api/v1/search?query=to:$EMAIL" | python3 -c 'import sys,json;m=json.load(sys.stdin).get("messages",[]);print(m[0]["ID"] if m else "")')
+  if [[ -n "$MSGID" ]]; then
+    RAW=$(curl -s "$MAILPIT/api/v1/message/$MSGID" | python3 -c 'import sys,json,re;t=json.load(sys.stdin).get("Text","");m=re.search(r"verify-email/([a-f0-9]{64})",t);print(m.group(1) if m else "")')
+    [[ -n "$RAW" ]] && break
+  fi
+  sleep 1
+done
+[[ -n "$RAW" ]] || die "no verification email/token found in Mailpit"
+
+info "verify email → materialise club + obtain JWT"
+TOKEN=$(curl -s -X POST "$API/register/verify" -H 'Content-Type: application/json' -d "{\"token\":\"$RAW\"}" \
   | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')
-[[ -n "$TOKEN" ]] || die "register did not return a token"
+[[ -n "$TOKEN" ]] || die "verify did not return a token"
 H=(-H "Authorization: Bearer $TOKEN")
 JC=(-H "Content-Type: application/json")
 

@@ -6,6 +6,7 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\ResetPasswordRequest;
 use App\Entity\User;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -80,6 +81,13 @@ final class PasswordResetTest extends WebTestCase
             'email' => $email, 'password' => 'Password123!',
             'firstName' => 'Reset', 'lastName' => 'User', 'ara' => $ara, 'club_name' => "Club {$ara}",
         ], \JSON_THROW_ON_ERROR));
+
+        // Register no longer verifies (A3): mark the account verified so the reset flow's
+        // final login is not blocked by the email-verification gate. The reset feature is
+        // independent of club materialisation, so no need to drive /register/verify here.
+        $user = $this->em->getRepository(User::class)->findOneBy(['email' => strtolower($email)]);
+        $user?->setEmailVerifiedAt(new DateTimeImmutable);
+        $this->em->flush();
     }
 
     private function postJson(string $path, array $body): void

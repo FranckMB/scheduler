@@ -7,6 +7,7 @@ namespace App\Tests\Integration\Api;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Tests\TenantGucTrait;
+use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -23,6 +24,7 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 final class ImportFixturesApiTest extends WebTestCase
 {
     use TenantGucTrait;
+    use VerifiesRegistration;
 
     private KernelBrowser $client;
 
@@ -117,7 +119,7 @@ final class ImportFixturesApiTest extends WebTestCase
             'email' => $suffix . '@test.fr', 'password' => 'Password123!',
             'firstName' => 'F', 'lastName' => 'Bi', 'ara' => strtoupper($suffix), 'club_name' => $clubName,
         ], \JSON_THROW_ON_ERROR));
-        $token = json_decode((string) $this->client->getResponse()->getContent(), true)['token'] ?? '';
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
         self::assertNotSame('', $token);
 
         $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);

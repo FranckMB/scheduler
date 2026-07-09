@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -17,6 +18,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ProfileEndpointsTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private KernelBrowser $client;
 
     public function testUpdateProfileNameIsReflectedByMe(): void
@@ -128,9 +131,8 @@ final class ProfileEndpointsTest extends WebTestCase
             'firstName' => 'P', 'lastName' => 'Rofile', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $email);
+        self::assertNotSame('', $token, 'verification must return a token');
 
         return [$token, $email];
     }

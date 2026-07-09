@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -16,6 +17,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class MembershipApprovalTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private static int $ipCounter = 0;
 
     private KernelBrowser $client;
@@ -112,17 +115,21 @@ final class MembershipApprovalTest extends WebTestCase
 
     private function owner(string $ara): string
     {
-        return $this->register([
+        $this->register([
             'email' => "owner-{$ara}@club.fr", 'password' => 'Password123!',
             'firstName' => 'Owner', 'lastName' => 'Admin', 'ara' => $ara, 'club_name' => "Club {$ara}",
-        ])['token'];
+        ]);
+
+        return $this->verifyRegistration($this->client, "owner-{$ara}@club.fr");
     }
 
     private function joiner(string $ara, string $email): string
     {
-        return $this->register([
+        $this->register([
             'email' => $email, 'password' => 'Password123!',
             'firstName' => 'Join', 'lastName' => 'Er', 'ara' => $ara, 'club_name' => 'x',
-        ])['token'];
+        ]);
+
+        return $this->verifyRegistration($this->client, $email);
     }
 }
