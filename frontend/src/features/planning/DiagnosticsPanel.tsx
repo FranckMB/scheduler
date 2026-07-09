@@ -10,9 +10,9 @@ import { concernedSlots, type Lookups } from "./lib/grid";
 
 const SEVERITY: Record<DiagnosticSeverity, { icon: typeof Info; className: string; label: string }> = {
   ERROR: { icon: XCircle, className: "text-destructive", label: "Erreurs" },
-  WARNING: { icon: AlertTriangle, className: "text-amber-500", label: "Alertes" },
+  WARNING: { icon: AlertTriangle, className: "text-warning", label: "Alertes" },
   INFO: { icon: Info, className: "text-muted-foreground", label: "Infos" },
-  SUCCESS: { icon: CheckCircle2, className: "text-emerald-500", label: "OK" },
+  SUCCESS: { icon: CheckCircle2, className: "text-success", label: "OK" },
 };
 
 const ORDER: DiagnosticSeverity[] = ["ERROR", "WARNING", "INFO", "SUCCESS"];

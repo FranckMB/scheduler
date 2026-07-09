@@ -41,7 +41,7 @@ function EnvelopeHint({ envelope, kickoff }: { envelope: EnvelopeResult; kickoff
   }
   const ok = isInEnvelope(envelope, kickoff);
   return (
-    <p className={`flex items-center gap-1 text-xs ${ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+    <p className={`flex items-center gap-1 text-xs ${ok ? "text-success" : "text-warning"}`}>
       {ok ? <Check className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
       {ok ? "Dans la fenêtre autorisée par la ligue" : "Hors fenêtre autorisée (jour ou heure)"}
     </p>

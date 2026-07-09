@@ -41,21 +41,21 @@ export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps)
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="size-4 text-amber-500" />
+          <AlertTriangle className="size-4 text-warning" />
           Radar de conflits
-          {conflicts.length > 0 ? <span className="rounded-full bg-amber-500/15 px-2 text-xs text-amber-600 dark:text-amber-400">{conflicts.length}</span> : null}
+          {conflicts.length > 0 ? <span className="rounded-full bg-warning/15 px-2 text-xs text-warning">{conflicts.length}</span> : null}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {0 === conflicts.length ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ShieldCheck className="size-4 text-emerald-500" />
+            <ShieldCheck className="size-4 text-success" />
             Aucun conflit détecté.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
             {conflicts.map((conflict, index) => (
-              <li key={`${conflict.type}-${conflict.coachId}-${index}`} className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+              <li key={`${conflict.type}-${conflict.coachId}-${index}`} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
                 <p className="font-medium">{coachName(coaches, conflict.coachId)}</p>
                 <p className="text-muted-foreground">{conflictSummary(conflict, teams)}</p>
                 <p className="text-xs text-muted-foreground">
