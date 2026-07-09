@@ -90,3 +90,16 @@ export function nextVenueColor(usedColors: readonly (string | null)[]): string {
   const free = VENUE_PALETTE.find((c) => !used.has(c.toLowerCase()));
   return free ?? VENUE_PALETTE[used.size % VENUE_PALETTE.length];
 }
+
+/**
+ * A very light background wash of a venue's hex colour (~13% alpha) for grid
+ * cells. Non-hex / null colours return undefined so the caller falls back to a
+ * neutral token. Single home shared by the planning + matches grids (was
+ * duplicated verbatim in WeekGrid/WeekendGrid).
+ */
+export function tint(color: string | null): string | undefined {
+  if (null !== color && /^#[0-9a-f]{6}$/i.test(color)) {
+    return `${color}22`;
+  }
+  return undefined;
+}

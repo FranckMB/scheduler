@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
+import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { nextVenueColor } from "@/shared/lib/color";
 import { formatDuration } from "@/shared/lib/duration";
 import { toast } from "@/shared/stores/toastStore";
@@ -278,7 +279,7 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
-            <span aria-hidden className="size-4 shrink-0 rounded-full border border-input" style={{ backgroundColor: selected.color ?? "#666666" }} />
+            <VenueSwatch color={selected.color ?? "#666666"} className="size-4 border border-input" />
           </div>
 
           {/* Edit card — properties of the SELECTED gym (distinct block). */}
