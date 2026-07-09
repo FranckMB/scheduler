@@ -75,7 +75,7 @@ jobs:
           tools: composer:v2
       - name: Composer audit
         working-directory: backend
-        run: composer audit --no-interaction --abandoned=ignore
+        run: composer audit --locked --no-interaction --abandoned=ignore
 
       # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
       # misfiled under devDependencies still ships to browsers), gated at high+ so an
