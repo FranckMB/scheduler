@@ -80,10 +80,13 @@ fixtures: APP_ENV = dev
 fixtures:
 	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction
 	$(EXECROOT) rm -rf ./var/generate/*
-	# Backfill the vacances reference data (global, non-tenant) so the seeded
-	# club's school zone actually shows holidays — offline JSON, deterministic.
-	# Last so a seed hiccup never skips the cleanup above.
+	# Backfill the holiday reference data (global, non-tenant) so the seeded club's
+	# school zone actually shows holidays — offline JSON, deterministic. Last so a
+	# seed hiccup never skips the cleanup above. BOTH school holidays (vacances
+	# scolaires) AND public holidays (jours fériés — 14 juillet, etc.), else the
+	# cockpit calendar shows an empty summer.
 	$(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm php bin/console app:school-holidays:seed --no-interaction
+	$(FIG) exec -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) php-fpm php bin/console app:public-holidays:seed --no-interaction
 
 .PHONY: phpstan ## Run PHPStan
 phpstan:
