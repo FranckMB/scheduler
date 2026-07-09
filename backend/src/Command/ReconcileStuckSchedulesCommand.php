@@ -9,6 +9,7 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
+use App\Mercure\ClubTopicUpdate;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -19,7 +20,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Mercure\HubInterface;
-use Symfony\Component\Mercure\Update;
 
 /**
  * BCK-01 watchdog. A schedule left in PENDING/GENERATING past a deadline is a
@@ -161,7 +161,7 @@ final class ReconcileStuckSchedulesCommand extends Command
 
     private function publishFailure(string $clubId, string $scheduleId): void
     {
-        $this->hub->publish(new Update(
+        $this->hub->publish(ClubTopicUpdate::private(
             \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
             json_encode(['status' => 'failed', 'error' => 'stuck_timeout'], \JSON_THROW_ON_ERROR),
         ));
