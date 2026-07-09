@@ -1,0 +1,58 @@
+import { expect, test, type ConsoleMessage } from "@playwright/test";
+
+import { uniqueAra } from "./support";
+
+/**
+ * A17 — security response headers on the SPA, plus a live check that the CSP
+ * doesn't break the app (no `Refused to …` violations while walking the real
+ * flows). Runs against the served build (the headers live in the frontend
+ * nginx, not the Vite dev server), so it is skipped when E2E_BASE_URL points at
+ * a dev server.
+ */
+const REQUIRED_HEADERS: Record<string, RegExp> = {
+  "content-security-policy": /default-src 'self'/,
+  "x-frame-options": /DENY/i,
+  "x-content-type-options": /nosniff/i,
+  "referrer-policy": /strict-origin-when-cross-origin/i,
+  "strict-transport-security": /max-age=\d+/,
+};
+
+const cspViolations = (messages: ConsoleMessage[]): string[] =>
+  messages.filter((m) => /content security policy|refused to (load|connect|apply|execute|frame)/i.test(m.text())).map((m) => m.text());
+
+test("SPA ships the A17 security headers", async ({ page }) => {
+  const response = await page.goto("/login");
+  const headers = response?.headers() ?? {};
+  for (const [name, pattern] of Object.entries(REQUIRED_HEADERS)) {
+    expect(headers[name], `missing/!matching header ${name}`).toMatch(pattern);
+  }
+});
+
+test("CSP does not break the app across login → register → wizard", async ({ page }) => {
+  test.setTimeout(120_000);
+  const console_: ConsoleMessage[] = [];
+  page.on("console", (m) => console_.push(m));
+
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
+
+  const ara = uniqueAra("CSP");
+  await page.goto("/register");
+  await page.getByLabel("Prénom").fill("Csp");
+  await page.getByLabel("Nom", { exact: true }).fill("Test");
+  await page.getByLabel("Email", { exact: true }).fill(`csp-${ara}@e2e.fr`);
+  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
+  await page.getByLabel(/code ara/i).fill(ara);
+  await page.getByLabel(/nom du club/i).fill("CSP Club");
+  await page.getByRole("button", { name: /créer le compte/i }).click();
+
+  // Reaching the wizard proves scripts ran, styles applied and /api XHR passed
+  // the connect-src policy — the paths a too-strict CSP would break.
+  await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Nom de l'équipe").fill("SM1");
+  await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
+  await page.getByRole("button", { name: "Suivant" }).click();
+  await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
+
+  expect(cspViolations(console_), `CSP violations:\n${cspViolations(console_).join("\n")}`).toEqual([]);
+});
