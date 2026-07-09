@@ -44,12 +44,6 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # A18: fail on a known-vulnerable PRODUCTION dependency (dev-only advisories,
-      # which never ship to users, are excluded to avoid noise).
-      - name: npm audit (prod deps)
-        working-directory: frontend
-        run: npm audit --omit=dev
-
       - name: Lint
         working-directory: frontend
         run: npm run lint
@@ -61,6 +55,52 @@ jobs:
       - name: Unit tests (Vitest)
         working-directory: frontend
         run: npx vitest run
+
+  # A18: blocking dependency-vulnerability audits, deliberately isolated in their OWN
+  # job (no `needs`, and NOT a dependency of build-docker). A newly-disclosed advisory
+  # against an unchanged package therefore reds only THIS check — which requires human
+  # triage (bump the dep, or explicitly ignore the advisory) — without gating the image
+  # build or the functional jobs on a commit that changed nothing.
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # PHP — reads composer.lock, no vendor install needed. --abandoned=ignore: an
+      # abandoned package is not a vulnerability (Composer 2.7+ would fail on it by default).
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+      - name: Composer audit
+        working-directory: backend
+        run: composer audit --no-interaction --abandoned=ignore
+
+      # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
+      # misfiled under devDependencies still ships to browsers), gated at high+ so an
+      # unfixable low/moderate advisory doesn't block every unrelated PR.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      # Python — install the engine's declared deps into an isolated venv and audit THAT
+      # site-packages via a pipx-run pip-audit, so installing the tool can never perturb
+      # (upgrade) the pinned set it is meant to check.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: pip-audit
+        working-directory: engine
+        run: |
+          python -m venv .audit-venv
+          .audit-venv/bin/pip install --quiet '.[dev]'
+          pipx run pip-audit --path "$(echo .audit-venv/lib/python*/site-packages)"
 
   phpstan:
     name: PHPStan
@@ -78,11 +118,6 @@ jobs:
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
-
-      # A18: fail the build on a known-vulnerable Composer dependency (blocking gate,
-      # complements Dependabot which only opens PRs).
-      - name: Composer audit
-        run: docker compose exec -T php-fpm composer audit --no-interaction
 
       - name: Run PHPStan
         run: docker compose exec -T php-fpm composer phpstan
@@ -196,11 +231,6 @@ jobs:
 
       - name: Run mypy
         run: docker compose run --rm engine mypy
-
-      # A18: fail on a known-vulnerable Python dependency (the local, non-PyPI
-      # engine package is auto-skipped — not a failure).
-      - name: pip-audit
-        run: docker compose run --rm engine sh -lc 'pip install --quiet pip-audit && pip-audit'
 
   engine-perf:
     name: Engine Perf Gate
