@@ -12,7 +12,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import build_schedule
-from app.schemas.input_schema import MAX_TEAMS, MAX_VENUES, ScheduleInputSchema
+from app.schemas.input_schema import (
+    MAX_SLOTS_TOTAL,
+    MAX_TEAMS,
+    MAX_VENUES,
+    ScheduleInputSchema,
+)
 
 
 def _team(i: int) -> dict[str, object]:
@@ -48,6 +53,17 @@ class TestInputLimits:
     def test_venues_over_cap_rejected(self) -> None:
         with pytest.raises(ValidationError):
             ScheduleInputSchema.model_validate(_payload(venues=[_venue(i) for i in range(MAX_VENUES + 1)]))
+
+    def test_total_slots_over_cap_rejected(self) -> None:
+        # Per-venue caps alone would let this through; the total-slots model_validator catches it.
+        slot = {"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}
+        venues = [
+            {"id": f"v{i}", "name": f"V{i}", "trainingSlots": [slot] * 300}
+            for i in range(11)  # 11 x 300 = 3300 > 3000, each venue's 300 < per-venue cap
+        ]
+        assert MAX_SLOTS_TOTAL < 11 * 300
+        with pytest.raises(ValidationError):
+            ScheduleInputSchema.model_validate(_payload(venues=venues))
 
     def test_at_cap_payload_still_solves(self) -> None:
         # A max-teams / no-venue payload validates and solves instantly (all unplaced),

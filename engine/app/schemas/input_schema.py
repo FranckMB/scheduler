@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import time
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # A10 (DoS "generation bomb" guard): bound every input list so an oversized payload is
 # rejected with 422 at the boundary, before CP-SAT builds the model. Values are generous
 # (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces the
 # same caps plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
-# the defense-in-depth last line. The per-venue slot cap is here; the <=1000 TOTAL across
-# venues is only expressible backend-side.
+# the defense-in-depth last line. Availability slots are bounded BOTH per-venue and in
+# total (a model_validator sums across venues, so 50 venues x 1000 can't smuggle 50k slots).
 MAX_VENUES = 50
 MAX_TEAMS = 200
 MAX_COACHES = 200
@@ -17,6 +17,7 @@ MAX_CONSTRAINTS = 500
 MAX_SLOT_TEMPLATES = 2000
 MAX_PRIORITY_TIERS = 20
 MAX_SLOTS_PER_VENUE = 1000
+MAX_SLOTS_TOTAL = 3000
 MAX_TAGS_PER_TEAM = 50
 
 
@@ -159,3 +160,11 @@ class ScheduleInputSchema(SerializableModel):
     priority_tiers: list[PriorityTierSchema] = Field(
         default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
     )
+
+    @model_validator(mode="after")
+    def _bound_total_slots(self) -> ScheduleInputSchema:
+        # Per-venue max_length alone would let 50 venues x 1000 smuggle 50k slots to CP-SAT.
+        total_slots = sum(len(v.training_slots) for v in self.venues)
+        if total_slots > MAX_SLOTS_TOTAL:
+            raise ValueError(f"too many availability slots: {total_slots} (max {MAX_SLOTS_TOTAL})")
+        return self

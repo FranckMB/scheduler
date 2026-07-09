@@ -81,12 +81,18 @@ boundaries (generous — ~10× a large FFBB club; only a genuine bomb trips them
 
 - **Backend pre-check** (`GenerationComplexityGuard`, called by
   `GenerateScheduleController` before dispatch): counts the club/season's teams,
-  venues, availability slots and constraints, and rejects with **422** before the
-  message is ever queued — teams ≤ 200, venues ≤ 50, slots ≤ 1000, constraints
-  ≤ 500, and `teams × venues ≤ 2000` (the dominant CP-SAT model-size driver).
-- **Engine input schema** (`input_schema.py` `max_length` on every request list):
+  venues, coaches, availability slots and **permanent** constraints (the exact set
+  the base-plan payload carries — dated overlay rows are excluded), and rejects
+  with **422** before the message is ever queued — teams ≤ 200, venues ≤ 50,
+  coaches ≤ 200, slots ≤ 3000, constraints ≤ 500, and `teams × venues ≤ 2000` (the
+  dominant CP-SAT model-size driver).
+- **Engine input schema** (`input_schema.py` `max_length` on every request list,
+  plus a `model_validator` bounding the TOTAL availability slots across venues):
   defense-in-depth — an oversized payload reaching `/generate` by any path is
-  rejected with 422 before CP-SAT builds.
+  rejected with 422 before CP-SAT builds. Dimensions the backend does not count
+  (slot_templates, priority_tiers, per-team tags) are bounded here only; they
+  reject instantly at validation, so the generation lock is released in
+  milliseconds — not a DoS.
 
 This is a defensive input bound, not a solver-behaviour change: it neither relaxes
 constraints nor alters the single-pass decision above.

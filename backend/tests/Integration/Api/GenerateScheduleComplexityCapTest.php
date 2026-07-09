@@ -61,10 +61,14 @@ final class GenerateScheduleComplexityCapTest extends WebTestCase
         self::assertSame('venues', $body['cap']);
         self::assertSame(GenerationComplexityGuard::MAX_VENUES + 1, $body['count']);
 
-        // Bomb never queued: status stays DRAFT (no PENDING, no dispatch).
+        // Bomb never queued: the controller returned before setStatus(PENDING) + the
+        // onboarding-completion flag + flush + dispatch (all sequential), so BOTH the
+        // schedule status AND the club's onboarding flag are untouched.
         $this->em->clear();
         $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
         self::assertSame(ScheduleStatus::DRAFT, $reloaded?->getStatus());
+        $reloadedClub = $this->em->getRepository(Club::class)->find($club->getId());
+        self::assertFalse($reloadedClub?->getOnboardingCompleted(), 'no dispatch: onboarding flag stayed false');
     }
 
     protected function setUp(): void
@@ -87,7 +91,9 @@ final class GenerateScheduleComplexityCapTest extends WebTestCase
         $club->setSlug('club-' . $tag . '-' . $uid);
         $club->setTimezone('Europe/Paris');
         $club->setLocale('fr');
-        $club->setOnboardingCompleted(true);
+        // false so the reject-path assertion can prove the controller returned BEFORE the
+        // setStatus(PENDING) + onboarding-completion + flush + dispatch block (all sequential).
+        $club->setOnboardingCompleted(false);
         $club->setFfbbClubCode($tag . strtoupper(substr(md5($uid), 0, 8)));
         $this->em->persist($club);
 

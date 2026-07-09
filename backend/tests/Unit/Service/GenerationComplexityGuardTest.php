@@ -11,20 +11,21 @@ use PHPUnit\Framework\TestCase;
 /**
  * A10: the complexity guard bounds the club/season problem before a generation is
  * queued. Each cap is checked in isolation over the pure evaluation (no DB seeding).
+ * Signature: evaluate(teams, venues, coaches, slots, constraints).
  */
 #[Group('phase1')]
 final class GenerationComplexityGuardTest extends TestCase
 {
     public function testWithinAllLimitsReturnsNull(): void
     {
-        self::assertNull(GenerationComplexityGuard::evaluate(teams: 40, venues: 8, slots: 300, constraints: 50));
+        self::assertNull(GenerationComplexityGuard::evaluate(40, 8, 30, 300, 50));
     }
 
     public function testTeamsCapTripsFirst(): void
     {
         self::assertSame(
             ['cap' => 'teams', 'count' => 201, 'limit' => 200],
-            GenerationComplexityGuard::evaluate(teams: 201, venues: 8, slots: 0, constraints: 0),
+            GenerationComplexityGuard::evaluate(201, 8, 0, 0, 0),
         );
     }
 
@@ -32,15 +33,23 @@ final class GenerationComplexityGuardTest extends TestCase
     {
         self::assertSame(
             ['cap' => 'venues', 'count' => 51, 'limit' => 50],
-            GenerationComplexityGuard::evaluate(teams: 10, venues: 51, slots: 0, constraints: 0),
+            GenerationComplexityGuard::evaluate(10, 51, 0, 0, 0),
+        );
+    }
+
+    public function testCoachesCap(): void
+    {
+        self::assertSame(
+            ['cap' => 'coaches', 'count' => 201, 'limit' => 200],
+            GenerationComplexityGuard::evaluate(10, 10, 201, 0, 0),
         );
     }
 
     public function testAvailabilitySlotsCap(): void
     {
         self::assertSame(
-            ['cap' => 'availability_slots', 'count' => 1001, 'limit' => 1000],
-            GenerationComplexityGuard::evaluate(teams: 10, venues: 10, slots: 1001, constraints: 0),
+            ['cap' => 'availability_slots', 'count' => 3001, 'limit' => 3000],
+            GenerationComplexityGuard::evaluate(10, 10, 0, 3001, 0),
         );
     }
 
@@ -48,7 +57,7 @@ final class GenerationComplexityGuardTest extends TestCase
     {
         self::assertSame(
             ['cap' => 'constraints', 'count' => 501, 'limit' => 500],
-            GenerationComplexityGuard::evaluate(teams: 10, venues: 10, slots: 100, constraints: 501),
+            GenerationComplexityGuard::evaluate(10, 10, 0, 100, 501),
         );
     }
 
@@ -57,7 +66,7 @@ final class GenerationComplexityGuardTest extends TestCase
         // 45 x 45 = 2025 > 2000, yet 45 < 200 teams and 45 < 50 venues.
         self::assertSame(
             ['cap' => 'teams_x_venues', 'count' => 2025, 'limit' => 2000],
-            GenerationComplexityGuard::evaluate(teams: 45, venues: 45, slots: 0, constraints: 0),
+            GenerationComplexityGuard::evaluate(45, 45, 0, 0, 0),
         );
     }
 }
