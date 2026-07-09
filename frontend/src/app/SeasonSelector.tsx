@@ -112,8 +112,8 @@ export function SeasonSelector() {
       <Menu
         label="Saison de travail"
         trigger={
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CalendarRange className="size-4" />
+          <span className="flex items-center gap-1.5 whitespace-nowrap text-sm text-muted-foreground">
+            <CalendarRange className="size-4 shrink-0" />
             {selected.name}
           </span>
         }

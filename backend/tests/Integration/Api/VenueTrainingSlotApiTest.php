@@ -12,6 +12,7 @@ use App\Entity\Venue;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -34,6 +35,8 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 
     private Season $season;
 
+    private string $token;
+
     public static function capacityCases(): array
     {
         return [
@@ -52,6 +55,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 
         $this->client->request('POST', '/api/venue_training_slots', [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
             'venueId' => $venue->getId(),
@@ -62,6 +66,59 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseStatusCodeSame($expectedStatusCode);
+    }
+
+    public function testOverlappingSlotIsRejected(): void
+    {
+        $venue = $this->createVenue(false);
+        $this->postSlot($venue->getId(), 1, '17:00', 90); // 17:00–18:30
+
+        // 16:30–18:00 overlaps the 17:00–18:30 window on the same day/venue.
+        $this->postSlot($venue->getId(), 1, '16:30', 90);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testAdjacentSlotsDoNotOverlap(): void
+    {
+        $venue = $this->createVenue(false);
+        $this->postSlot($venue->getId(), 1, '17:00', 90); // 17:00–18:30
+
+        // 18:30 start is back-to-back, not overlapping → accepted.
+        $this->postSlot($venue->getId(), 1, '18:30', 60);
+        self::assertResponseStatusCodeSame(201);
+
+        // A different weekday never conflicts.
+        $this->postSlot($venue->getId(), 2, '17:00', 90);
+        self::assertResponseStatusCodeSame(201);
+    }
+
+    public function testCanSplitPersistsOnVenueUpdate(): void
+    {
+        // Regression: the venue update processor silently dropped canSplit, so
+        // toggling "terrain divisible" never persisted (no per-slot capacity, no
+        // court splitting at solve time).
+        $venue = $this->createVenue(false);
+
+        $this->client->request('PUT', '/api/venues/' . $venue->getId(), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => $venue->getName(), 'source' => 'manual', 'canSplit' => true], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($body['canSplit'], 'canSplit=true must persist through a venue update');
+
+        // And un-checking must persist too (false !== null guard).
+        $this->client->request('PUT', '/api/venues/' . $venue->getId(), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => $venue->getName(), 'source' => 'manual', 'canSplit' => false], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($body['canSplit'], 'canSplit=false must persist (uncheck)');
     }
 
     protected function setUp(): void
@@ -76,7 +133,24 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $this->createClubUser($this->club, $this->user);
         $this->season = $this->createSeason($this->club);
 
-        $this->client->loginUser($this->user);
+        // Stateless JWT firewall → every request carries a Bearer (loginUser only
+        // authenticates the first request; the overlap tests fire several).
+        $this->token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->user);
+    }
+
+    private function postSlot(string $venueId, int $day, string $start, int $duration): void
+    {
+        $this->client->request('POST', '/api/venue_training_slots', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'venueId' => $venueId,
+            'dayOfWeek' => $day,
+            'startTime' => $start,
+            'durationMinutes' => $duration,
+            'capacity' => 1,
+        ], \JSON_THROW_ON_ERROR));
     }
 
     private function createClub(): Club

@@ -51,6 +51,9 @@ class VenueStateProcessor extends AbstractStateProcessor
         if (null !== $input->parentVenueId) {
             $entity->setParentVenueId($input->parentVenueId);
         }
+        if (null !== $input->canSplit) {
+            $entity->setCanSplit($input->canSplit);
+        }
 
         return $entity;
     }
@@ -87,6 +90,13 @@ class VenueStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->parentVenueId) {
             $entity->setParentVenueId($input->parentVenueId);
+        }
+        // canSplit was silently dropped on update → toggling "terrain divisible"
+        // never persisted, so the per-slot capacity control never appeared and the
+        // solver never split the court. A false value must persist (uncheck), so
+        // guard on `null !==`, not truthiness.
+        if (null !== $input->canSplit) {
+            $entity->setCanSplit($input->canSplit);
         }
     }
 

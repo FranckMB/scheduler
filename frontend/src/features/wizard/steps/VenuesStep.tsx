@@ -1,16 +1,18 @@
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
+import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
 import { nextVenueColor } from "@/shared/lib/color";
 import { formatDuration } from "@/shared/lib/duration";
-
+import { toast } from "@/shared/stores/toastStore";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, hhmm } from "../lib/days";
+import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { ReadonlyVenues } from "./StructureSummary";
@@ -20,11 +22,11 @@ const DURATIONS = [60, 75, 90, 105, 120];
 const WEEK = DAYS.filter((d) => d.n <= 6);
 const CAP_HINT = "Nombre d'équipes pouvant s'entraîner en même temps sur ce créneau (2 = terrain coupé en deux).";
 
-/** Capacity select shared by the editor and the "à poser" toolbar. Only a
- * splittable gym can host 2 teams; otherwise the whole court is used. */
+/** Capacity picker — only a divisible gym can host 2 teams. On a non-divisible
+ * gym there is no choice (always 1 team), so the control disappears entirely. */
 function CapacitySelect({ value, onChange, canSplit, className }: { value: number; onChange: (n: number) => void; canSplit: boolean; className?: string }) {
   if (!canSplit) {
-    return <span className={`inline-flex items-center rounded-md border border-input bg-muted/40 px-2 text-xs text-muted-foreground ${className ?? ""}`}>1 équipe (terrain entier)</span>;
+    return null;
   }
   return (
     <Select aria-label="Capacité" title={CAP_HINT} className={className} value={value} onChange={(e) => onChange(Number(e.target.value))}>
@@ -60,56 +62,82 @@ function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string)
   );
 }
 
-function SlotEditor({ slot, canSplit, onClose }: { slot: VenueTrainingSlot; canSplit: boolean; onClose: () => void }) {
+function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTrainingSlot; canSplit: boolean; otherSlots: VenueTrainingSlot[]; onClose: () => void }) {
   const update = useUpdateSlot();
   const del = useDeleteSlot();
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
   const [capacity, setCapacity] = useState(slot.capacity);
-  // Clicking a cell opens this editor below the grid — scroll it into view so
-  // the user sees it without hunting (the grid can push it off-screen).
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   const save = () => {
-    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } });
-    onClose();
+    // Never let an edit overlap another slot of the same gym/day (self excluded).
+    const conflict = findSlotConflict(otherSlots, day, time, duration);
+    if (null !== conflict) {
+      setError(conflictMessage(conflict));
+      return;
+    }
+    // Close ONLY once the write succeeds. If the backend rejects it (e.g. a stale
+    // cache let a now-overlapping edit slip past the client check, caught by the
+    // server backstop), keep the modal open so the edit is not silently lost and
+    // the user can adjust — the global mutation net surfaces the error toast.
+    // Otherwise a rejected edit would look saved (modal already gone).
+    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } }, { onSuccess: onClose });
   };
 
   return (
-    <div ref={rootRef} className="mt-3 rounded-lg border border-accent/40 bg-card p-3">
-      <div className="mb-2 text-xs font-medium">Modification du créneau</div>
-      <div className="flex flex-wrap items-end gap-2">
-        <Select aria-label="Jour" className="h-8 w-24" value={day} onChange={(e) => setDay(Number(e.target.value))}>
-          {WEEK.map((d) => (
-            <option key={d.n} value={d.n}>
-              {d.label}
-            </option>
-          ))}
-        </Select>
-        <Input aria-label="Début" type="time" className="h-8 w-28" value={time} onChange={(e) => setTime(e.target.value)} />
-        <Select aria-label="Durée" className="h-8 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
-          {DURATIONS.map((d) => (
-            <option key={d} value={d}>
-              {formatDuration(d)}
-            </option>
-          ))}
-        </Select>
-        <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="h-8 w-52" />
-        <Button size="icon" className="size-8" onClick={save} disabled={update.isPending} title="Enregistrer" aria-label="Enregistrer">
-          <Check className="size-4" />
-        </Button>
-        <Button size="icon" variant="ghost" className="size-8 text-destructive" onClick={() => (del.mutate(slot.id), onClose())} title="Supprimer" aria-label="Supprimer">
+    <Modal label="Modifier le créneau" title="Modifier le créneau" onClose={onClose}>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-xs text-muted-foreground">
+          Jour
+          <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
+            {WEEK.map((d) => (
+              <option key={d.n} value={d.n}>
+                {d.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Début
+          <Input aria-label="Début" type="time" className="mt-0.5 h-9 w-28" value={time} onChange={(e) => (setTime(e.target.value), setError(null))} />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Durée
+          <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
+            {DURATIONS.map((d) => (
+              <option key={d} value={d}>
+                {formatDuration(d)}
+              </option>
+            ))}
+          </Select>
+        </label>
+        {canSplit ? (
+          <div className="text-xs text-muted-foreground">
+            {/* CapacitySelect's inner <select> carries aria-label="Capacité". */}
+            <span>Capacité</span>
+            <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="mt-0.5 block h-9 w-52" />
+          </div>
+        ) : null}
+      </div>
+
+      {null !== error ? (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" className="text-destructive" onClick={() => (del.mutate(slot.id), onClose())}>
           <Trash2 className="size-4" />
+          Supprimer
         </Button>
-        <Button size="icon" variant="ghost" className="size-8" aria-label="Fermer" title="Fermer" onClick={onClose}>
-          <X className="size-4" />
+        <Button onClick={save} disabled={update.isPending}>
+          Enregistrer
         </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -135,7 +163,6 @@ function VenuesEditor() {
   const nameRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
-  const [capacity, setCapacity] = useState(1);
   const [venueName, setVenueName] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
   // Capture the venue at click time — the dropdown selection may change before
@@ -149,6 +176,7 @@ function VenuesEditor() {
   // Fall back to the first venue when the selected id isn't in the list yet
   // (just-created, list refetching) so the panel never flashes "no venue".
   const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0] ?? null;
+  const venueSlots = null === selected ? [] : slots.filter((s) => s.venueId === selected.id);
 
   // Drop pending colours that the refetched venue list now carries.
   useEffect(() => {
@@ -280,7 +308,8 @@ function VenuesEditor() {
             </div>
           </div>
 
-          {/* Slot-placement toolbar — the size of the next slot dropped on the grid. */}
+          {/* Slot-placement toolbar — only the duration of the next dropped slot.
+              Capacity is set per-slot in the edit panel (a new slot is always 1). */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">À poser :</span>
             <Select aria-label="Durée à poser" className="h-9 w-24" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
@@ -290,18 +319,27 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
-            <CapacitySelect value={capacity} onChange={setCapacity} canSplit={selected.canSplit} className="h-9 w-52" />
           </div>
 
           <VenueAvailabilityGrid
             venue={selected}
-            slots={slots.filter((s) => s.venueId === selected.id)}
+            slots={venueSlots}
             selectedSlotId={editingSlot?.id ?? null}
-            onAdd={(dayOfWeek, startTime) => addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity: selected.canSplit ? capacity : 1 })}
+            onAdd={(dayOfWeek, startTime) => {
+              // Forbid dropping a slot that overlaps an existing one (same gym/day).
+              const conflict = findSlotConflict(venueSlots, dayOfWeek, startTime, duration);
+              if (null !== conflict) {
+                toast.error(conflictMessage(conflict));
+                return;
+              }
+              addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity: 1 });
+            }}
             onSelect={(slot) => setEditingSlot(slot)}
           />
 
-          {null !== editingSlot ? <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} onClose={() => setEditingSlot(null)} /> : null}
+          {null !== editingSlot ? (
+            <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} otherSlots={venueSlots.filter((s) => s.id !== editingSlot.id)} onClose={() => setEditingSlot(null)} />
+          ) : null}
         </>
       )}
 

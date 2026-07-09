@@ -2,20 +2,15 @@ import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, hhmm } from "../lib/days";
+import { DAYS, fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
 
 const START_MIN = 8 * 60; // 08:00
 const END_MIN = 22 * 60; // 22:00
-const STEP = 30;
-const ROW_H = 16; // px per 30 min
+const STEP = 15; // 15-minute graduation (slots start/last on quarter-hours)
+const ROW_H = 11; // px per 15 min (~44px/hour)
 const WEEK = DAYS.filter((d) => d.n <= 6); // Lun-Sam
 
 const rows = Array.from({ length: (END_MIN - START_MIN) / STEP }, (_, i) => START_MIN + i * STEP);
-const fmt = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-const startMinutes = (t: string) => {
-  const [h, m] = hhmm(t).split(":");
-  return Number(h) * 60 + Number(m);
-};
 
 interface Props {
   venue: Venue;
@@ -76,10 +71,14 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
               onClick={() => onSelect(slot)}
               title={`${hhmm(slot.startTime)} · ${formatDuration(slot.durationMinutes)} · cap ${slot.capacity} — cliquer pour modifier`}
               className={cn(
-                "z-10 m-px flex items-start overflow-hidden rounded border-l-4 px-1 text-left text-[10px] leading-tight hover:ring-1 hover:ring-accent",
+                // Full border + OPAQUE fill so a slot is always clearly bounded —
+                // the old semi-transparent var(--muted) fill was identical to the
+                // empty cells' hover:bg-muted, so hovering the grid made slots
+                // "vanish" into the highlighted cells (reliability bug).
+                "z-10 m-px flex items-start overflow-hidden rounded border border-border border-l-4 px-1 text-left text-[10px] font-medium leading-tight hover:ring-1 hover:ring-accent",
                 slot.id === selectedSlotId ? "ring-2 ring-accent" : "",
               )}
-              style={{ gridColumn: 2 + di, gridRow: `${startRow} / span ${span}`, borderLeftColor: color, backgroundColor: color.startsWith("#") ? `${color}33` : "var(--muted)" }}
+              style={{ gridColumn: 2 + di, gridRow: `${startRow} / span ${span}`, borderLeftColor: color, backgroundColor: `color-mix(in oklch, ${color} 30%, var(--card))` }}
             >
               {hhmm(slot.startTime)}
               {slot.capacity > 1 ? ` ·${slot.capacity}` : ""}

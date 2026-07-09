@@ -13,3 +13,12 @@ export const dayLabel = (n: number): string => DAYS.find((d) => d.n === n)?.labe
 
 /** First HH:MM of a time-ish string ("18:00:00", "1970-01-01T18:00:00+00:00", "18:00"). */
 export const hhmm = (time: string): string => time.match(/(\d{2}):(\d{2})/)?.[0] ?? time;
+
+/** Minutes since midnight for a time-ish string (single source for the grid + overlap). */
+export const toMinutes = (time: string): number => {
+  const [h, m] = hhmm(time).split(":").map(Number);
+  return h * 60 + m;
+};
+
+/** Minutes since midnight back to "HH:MM". */
+export const fmtMinutes = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
