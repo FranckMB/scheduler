@@ -18,12 +18,16 @@ class ReservationInput
     #[Groups(['write'])]
     public ?string $venueId = null;
 
+    #[Assert\NotNull]
     #[Assert\Range(min: 1, max: 7)]
     #[Groups(['write'])]
     public ?int $dayOfWeek = null;
 
+    // Nullable + NotNull so an omitted startTime is a clean 422, not a 500 from
+    // reading an uninitialized typed property.
+    #[Assert\NotNull]
     #[Groups(['write'])]
-    public DateTimeImmutable $startTime;
+    public ?DateTimeImmutable $startTime = null;
 
     #[Assert\Range(min: 15, max: 300)]
     #[Groups(['write'])]

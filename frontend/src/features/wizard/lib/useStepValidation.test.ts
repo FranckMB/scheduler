@@ -1,8 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Team, Venue, VenueTrainingSlot } from "../api";
-import type { Reservation } from "../store";
+import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { computeReservationWarnings, useStepValidation } from "./useStepValidation";
 import { useWizardStore } from "../store";
 
@@ -44,6 +43,7 @@ const slot = (venueId: string, dayOfWeek: number, startTime: string, capacity: n
 
 const reservation = (id: string, teamId: string, venueId: string, dayOfWeek: number, startTime: string): Reservation => ({
   id,
+  calendarEntryId: null,
   teamId,
   venueId,
   dayOfWeek,
@@ -102,7 +102,7 @@ describe("computeReservationWarnings (W6)", () => {
 });
 
 describe("useStepValidation — venue slot rule is skipped in period mode", () => {
-  afterEach(() => useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams", reservations: [] }));
+  afterEach(() => useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams" }));
 
   it("flags a gym without a slot in base (season) mode", () => {
     useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "venues" });

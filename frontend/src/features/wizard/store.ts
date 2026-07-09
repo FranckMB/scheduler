@@ -3,24 +3,16 @@ import { persist } from "zustand/middleware";
 
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 
-/** A slot reserved for a team before generation, applied as a HARD lock at launch. */
-export interface Reservation {
-  id: string;
-  teamId: string;
-  venueId: string;
-  dayOfWeek: number;
-  startTime: string;
-  durationMinutes: number;
-}
-
 /** "season" = base plan (onboarding/libre); "period" = overlay of a CalendarEntry (palier B). */
 export type WizardMode = "season" | "period";
+
+// Reservations moved to server-backed queries (Reservation entity, base/overlay) —
+// they are NO LONGER client state. See useReservations / ReservationPanel.
 
 interface WizardState {
   stepId: WizardStepId;
   /** Furthest step index reached via "Suivant" — gates forward nav in guided mode. */
   maxIndex: number;
-  reservations: Reservation[];
   mode: WizardMode;
   /** The period being adapted in "period" mode; null in "season" mode. */
   calendarEntryId: string | null;
@@ -29,9 +21,6 @@ interface WizardState {
   jumpTo: (id: WizardStepId) => void;
   next: () => void;
   prev: () => void;
-  addReservation: (r: Omit<Reservation, "id">) => void;
-  removeReservation: (id: string) => void;
-  clearReservations: () => void;
   /** Enter period mode for a calendar entry — lands on Contraintes (structure is inherited). */
   startPeriodMode: (calendarEntryId: string) => void;
   /** Back to base-plan mode. */
@@ -45,7 +34,6 @@ export const useWizardStore = create<WizardState>()(
     (set) => ({
       stepId: "teams",
       maxIndex: 0,
-      reservations: [],
       mode: "season",
       calendarEntryId: null,
       setStep: (stepId) => set({ stepId }),
@@ -60,21 +48,18 @@ export const useWizardStore = create<WizardState>()(
           const i = indexOf(state.stepId);
           return { stepId: WIZARD_STEPS[Math.max(i - 1, 0)].id };
         }),
-      addReservation: (r) => set((state) => ({ reservations: [...state.reservations, { ...r, id: crypto.randomUUID() }] })),
-      removeReservation: (id) => set((state) => ({ reservations: state.reservations.filter((x) => x.id !== id) })),
-      clearReservations: () => set({ reservations: [] }),
-      startPeriodMode: (calendarEntryId) => set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1, reservations: [] }),
-      exitPeriodMode: () => set({ mode: "season", calendarEntryId: null, stepId: "teams", reservations: [] }),
+      startPeriodMode: (calendarEntryId) => set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1 }),
+      exitPeriodMode: () => set({ mode: "season", calendarEntryId: null, stepId: "teams" }),
     }),
     {
       name: "cs-wizard",
-      version: 3,
+      version: 4,
       migrate: (persistedState) => {
+        // v4 dropped the client `reservations` slice (moved server-side).
         const prev = (null !== persistedState && "object" === typeof persistedState ? persistedState : {}) as Partial<WizardState>;
         return {
           stepId: prev.stepId ?? "teams",
           maxIndex: prev.maxIndex ?? 0,
-          reservations: prev.reservations ?? [],
           mode: prev.mode ?? "season",
           calendarEntryId: prev.calendarEntryId ?? null,
         } as WizardState;

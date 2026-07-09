@@ -1,6 +1,6 @@
-import type { Team, Venue, VenueTrainingSlot } from "../api";
+import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
-import { type Reservation, useWizardStore } from "../store";
+import { useWizardStore } from "../store";
 import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 

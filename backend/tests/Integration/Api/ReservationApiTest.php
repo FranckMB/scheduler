@@ -54,6 +54,36 @@ final class ReservationApiTest extends WebTestCase
         self::assertCount(0, $this->members());
     }
 
+    public function testDeletingReservationPurgesItsMaterialisedHardTemplate(): void
+    {
+        // A reservation gets echoed HARD and materialised by ScheduleResultImporter
+        // as a durable ScheduleSlotTemplate. Deleting the reservation must undo the
+        // pin — else findBaseSlotTemplates re-injects it forever.
+        $start = new DateTimeImmutable('20:30');
+        $reservation = (new \App\Entity\Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId('22222222-2222-4222-8222-222222222222')
+            ->setDayOfWeek(2)->setStartTime($start)->setDurationMinutes(120);
+        $template = (new \App\Entity\ScheduleSlotTemplate)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setScheduleId($this->season->getId())
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId('22222222-2222-4222-8222-222222222222')
+            ->setDayOfWeek(2)->setStartTime($start)->setDurationMinutes(120)
+            ->setLockLevel(\App\Enum\LockLevel::HARD);
+        $this->em->persist($reservation);
+        $this->em->persist($template);
+        $this->em->flush();
+        $templateId = $template->getId();
+
+        $this->client->request('DELETE', '/api/reservations/' . $reservation->getId(), [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(\App\Entity\ScheduleSlotTemplate::class)->find($templateId), 'the materialised HARD pin must be purged with the reservation');
+    }
+
     public function testOverlayReservationIsScopedToItsEntry(): void
     {
         $this->post('33333333-3333-4333-8333-333333333333');
