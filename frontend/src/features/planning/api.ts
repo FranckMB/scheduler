@@ -111,6 +111,10 @@ export interface Team {
   id: string;
   name: string;
   sportCategoryId: string;
+  /** Priority tier (1=S…5=D) + manual order within it — drives the canonical
+   *  team ordering (see shared/lib/teamTiers). Exposed by TeamResource. */
+  priorityTierId: number;
+  tierOrder: number;
 }
 
 export interface Venue {

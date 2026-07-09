@@ -1,3 +1,5 @@
+import { compareTeamsByRank } from "@/shared/lib/teamTiers";
+
 import type { Coach, Slot, Team, Venue } from "../api";
 import type { ViewMode } from "../store";
 
@@ -123,10 +125,31 @@ export interface GridResource {
   label: string;
 }
 
+/**
+ * Canonical order for a view's resources (filter picker AND grid sub-columns):
+ * teams by RANK (priority tier id asc = S…D, then manual tierOrder, then name —
+ * same rule as shared/lib/teamTiers), every other view alphabetical. One place
+ * so the team selector and the equipe grid stay in the order managers expect.
+ */
+function resourceComparator(viewMode: ViewMode, lookups: Lookups): (a: GridResource, b: GridResource) => number {
+  if ("equipe" !== viewMode) {
+    return (a, b) => a.label.localeCompare(b.label, "fr");
+  }
+  return (a, b) => {
+    const ta = lookups.teams.get(a.id);
+    const tb = lookups.teams.get(b.id);
+    // A team absent from the lookup (shouldn't happen) sorts last, by label.
+    if (undefined === ta || undefined === tb) {
+      return (undefined === ta ? 1 : 0) - (undefined === tb ? 1 : 0) || a.label.localeCompare(b.label, "fr");
+    }
+    return compareTeamsByRank(ta, tb);
+  };
+}
+
 /** Distinct resources present across the schedule for the current view (for the filter picker). */
 export function availableResources(slots: Slot[], viewMode: ViewMode, lookups: Lookups): GridResource[] {
   const ids = [...new Set(slots.flatMap((s) => resourceKeysForSlot(s, viewMode, lookups)))];
-  return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort(resourceComparator(viewMode, lookups));
 }
 
 export interface GridColumn {
@@ -267,9 +290,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       continue; // hide days with no slot
     }
     const idSet = new Set(daySlots.flatMap((s) => keysFor(s)));
-    const resourceIds = [...idSet]
-      .map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) }))
-      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+    const resourceIds = [...idSet].map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort(resourceComparator(viewMode, lookups));
 
     dayGroups.push({ day: day.n, label: day.label, startColumn: cssColumn, span: resourceIds.length });
     for (const { id, label } of resourceIds) {

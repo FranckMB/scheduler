@@ -7,7 +7,7 @@ import { buildGrid, type Lookups } from "./lib/grid";
 import { WeekGrid } from "./WeekGrid";
 
 const lookups: Lookups = {
-  teams: new Map<string, Team>([["t1", { id: "t1", name: "U11", sportCategoryId: "c" }]]),
+  teams: new Map<string, Team>([["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }]]),
   venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
   coaches: new Map<string, Coach>(),
   teamCoach: new Map<string, string>(),
