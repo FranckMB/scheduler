@@ -1,5 +1,5 @@
 import type { Team, Venue, VenueTrainingSlot } from "../api";
-import { useConstraintValidation, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { type Reservation, useWizardStore } from "../store";
 import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
@@ -84,12 +84,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const { data: coaches = [] } = coachesQuery;
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
-  const reservations = useWizardStore((s) => s.reservations);
   // Period (secondary planning) mode — keyed on the mode itself, NOT the entry id:
   // a period with a not-yet-resolved calendarEntryId is still period mode, and the
   // slots there are inherited & read-only regardless.
   const periodMode = useWizardStore((s) => "period" === s.mode);
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  // Reservations are server-backed now (base vs period overlay), not the client store.
+  const { data: reservations = [] } = useReservations(periodEntryId);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.

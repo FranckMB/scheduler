@@ -25,7 +25,7 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export function GenerateStep() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
-  const { reservations, clearReservations, mode, calendarEntryId } = useWizardStore();
+  const { clearReservations, mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
@@ -112,11 +112,10 @@ export function GenerateStep() {
         periodMode
           ? {
               name: periodEntry?.title ?? "Plan de période",
-              reservations,
               calendarEntryId: calendarEntryId ?? undefined,
               existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
             }
-          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}`, reservations },
+          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
       );
       setScheduleId(id);
     } catch {

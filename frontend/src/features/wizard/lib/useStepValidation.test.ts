@@ -16,6 +16,7 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
   useConstraintValidation: () => ({ data: undefined, isLoading: false }),
+  useReservations: () => ({ data: [] }),
 }));
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({

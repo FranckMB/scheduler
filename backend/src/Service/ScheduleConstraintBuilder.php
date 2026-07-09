@@ -9,6 +9,7 @@ use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
@@ -126,6 +127,8 @@ final class ScheduleConstraintBuilder
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $solverSeed,
             constraints: $constraints,
+            // Base-plan reservations (calendarEntryId IS NULL) — durable HARD pins.
+            reservations: $em->getRepository(Reservation::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -199,6 +202,9 @@ final class ScheduleConstraintBuilder
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $schedule->getSolverSeed(),
             constraints: $constraints,
+            // Overlay reservations: this period's own pins (base ones don't leak in,
+            // mirroring how HOLIDAY overlays use only dated constraints).
+            reservations: $em->getRepository(Reservation::class)->findBy(['calendarEntryId' => $entry->getId()], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -266,6 +272,7 @@ final class ScheduleConstraintBuilder
      * @param array<ScheduleSlotTemplate>  $slotTemplates
      * @param array<PriorityTier>          $priorityTiers
      * @param array<Constraint>            $constraints
+     * @param array<Reservation>           $reservations           persistent team→slot HARD pins (base/overlay)
      *
      * @return array<string, mixed>
      */
@@ -281,12 +288,24 @@ final class ScheduleConstraintBuilder
         array $priorityTiers = [],
         int $solverSeed = self::DEFAULT_SOLVER_SEED,
         array $constraints = [],
+        array $reservations = [],
     ): array {
         $serializedConstraints = array_merge(
             $this->serializeTeamCoachConstraints($teamCoaches),
             $this->serializeCoachPlayerMembershipConstraints($coachPlayerMemberships),
             $this->serializePriorityTierConstraints($priorityTiers),
             $this->serializeUnifiedConstraints($constraints, $seasonId, $clubId, $teams),
+        );
+
+        // Reservations feed the SAME engine `slotTemplates` payload (HARD pins) —
+        // they are just sourced from the durable Reservation entity instead of the
+        // ephemeral, schedule-bound ScheduleSlotTemplate.
+        $serializedSlots = array_merge(
+            array_filter(
+                array_map($this->serializeSlotTemplate(...), $slotTemplates),
+                static fn (?array $slotTemplate): bool => null !== $slotTemplate,
+            ),
+            array_map($this->serializeReservation(...), $reservations),
         );
 
         return [
@@ -299,10 +318,7 @@ final class ScheduleConstraintBuilder
             'teams' => array_map(fn (Team $team): array => $this->serializeTeam($team, $seasonId), $teams),
             'coaches' => array_map($this->serializeCoach(...), $coaches),
             'constraints' => $serializedConstraints,
-            'slotTemplates' => array_values(array_filter(
-                array_map($this->serializeSlotTemplate(...), $slotTemplates),
-                static fn (?array $slotTemplate): bool => null !== $slotTemplate,
-            )),
+            'slotTemplates' => array_values($serializedSlots),
         ];
     }
 
@@ -522,6 +538,31 @@ final class ScheduleConstraintBuilder
             'temporaryLockFor' => $slotTemplate->getTemporaryLockFor(),
             'temporaryMinSessionsOverride' => $slotTemplate->getTemporaryMinSessionsOverride(),
             'pendingConstraintSuggestion' => $pendingConstraintSuggestion,
+        ];
+    }
+
+    /**
+     * A Reservation is a HARD team→slot pin — same engine payload shape as a
+     * HARD ScheduleSlotTemplate, minus the work-loop fields (temporary locks,
+     * pending suggestions) which reservations never carry.
+     *
+     * @return array<string, mixed>
+     */
+    private function serializeReservation(Reservation $reservation): array
+    {
+        return [
+            'id' => $reservation->getId(),
+            'teamId' => $reservation->getTeamId(),
+            'venueId' => $reservation->getVenueId(),
+            'coachId' => null,
+            'dayOfWeek' => $reservation->getDayOfWeek(),
+            'startTime' => $this->formatTime($reservation->getStartTime()),
+            'durationMinutes' => $reservation->getDurationMinutes(),
+            'lockLevel' => LockLevel::HARD->value,
+            'temporaryLock' => false,
+            'temporaryLockFor' => null,
+            'temporaryMinSessionsOverride' => null,
+            'pendingConstraintSuggestion' => null,
         ];
     }
 

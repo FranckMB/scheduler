@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType, PriorityTier, Team, Venue } from "../api";
 import { DAYS, dayLabel, hhmm } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useCreateReservation, useDeleteConstraint, useDeleteReservation, usePriorityTiers, useReservations, useUpdateConstraint, useVenueSlots, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 
 const FAMILIES: { key: ConstraintFamily; label: string }[] = [
@@ -54,10 +54,14 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
   );
 }
 
-/** Reserve an existing availability slot for a team (applied as a HARD lock at generation). */
-function ReservationPanel({ teams, tiers, venues }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[] }) {
+/** Reserve an existing availability slot for a team (a HARD pin honored at generation).
+ *  Server-backed + persistent: reservations survive reloads, are seedable by fixtures,
+ *  and are layered base vs period overlay via `calendarEntryId`. */
+function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; calendarEntryId: string | null }) {
   const { data: slots = [] } = useVenueSlots();
-  const { reservations, addReservation, removeReservation } = useWizardStore();
+  const { data: reservations = [] } = useReservations(calendarEntryId);
+  const create = useCreateReservation();
+  const del = useDeleteReservation();
   const [teamId, setTeamId] = useState("");
   const [slotId, setSlotId] = useState("");
 
@@ -71,12 +75,15 @@ function ReservationPanel({ teams, tiers, venues }: { teams: Team[]; tiers: Prio
     if (undefined === team || undefined === slot) {
       return;
     }
-    addReservation({ teamId: team, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, durationMinutes: slot.durationMinutes });
+    create.mutate(
+      { teamId: team, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, calendarEntryId },
+      { onSuccess: () => setSlotId("") },
+    );
   };
 
   return (
     <div>
-      <p className="mb-3 text-xs text-muted-foreground">Fixez une équipe sur un créneau précis : le solveur devra l'y placer (verrou). Appliqué au lancement de la génération.</p>
+      <p className="mb-3 text-xs text-muted-foreground">Fixez une équipe sur un créneau précis : le solveur devra l'y placer (verrou). Enregistré côté serveur et pris en compte à chaque génération.</p>
       <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         <TeamSelect aria-label="Équipe" className="h-8 w-44" teams={teams} tiers={tiers} value={teamId || teams[0]?.id || ""} onChange={(e) => setTeamId(e.target.value)} />
         <span className="text-xs text-muted-foreground">sur</span>
@@ -88,7 +95,7 @@ function ReservationPanel({ teams, tiers, venues }: { teams: Team[]; tiers: Prio
             </option>
           ))}
         </Select>
-        <Button size="sm" onClick={add} disabled={"" === slotId || 0 === teams.length}>
+        <Button size="sm" onClick={add} disabled={"" === slotId || 0 === teams.length || create.isPending}>
           <Lock className="size-4" />
           Réserver
         </Button>
@@ -104,7 +111,7 @@ function ReservationPanel({ teams, tiers, venues }: { teams: Team[]; tiers: Prio
               <span className="flex-1">
                 {teamName.get(r.teamId) ?? "?"} → {slotLabel(r.venueId, r.dayOfWeek, r.startTime)}
               </span>
-              <button type="button" aria-label="Retirer" className="text-muted-foreground hover:text-destructive" onClick={() => removeReservation(r.id)}>
+              <button type="button" aria-label="Retirer" className="text-muted-foreground hover:text-destructive" onClick={() => del.mutate(r.id)}>
                 <Trash2 className="size-4" />
               </button>
             </li>
@@ -409,7 +416,7 @@ export function ConstraintsStep() {
       </div>
 
       {"reserve" === mode ? (
-        <ReservationPanel teams={teams} tiers={tiers} venues={venues} />
+        <ReservationPanel teams={teams} tiers={tiers} venues={venues} calendarEntryId={periodEntryId} />
       ) : (
         <>
           {/* Per-family add form */}

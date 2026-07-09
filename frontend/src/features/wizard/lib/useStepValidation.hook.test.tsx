@@ -17,6 +17,7 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => q([]),
   useWizardCoachPlayers: () => q([]),
   useConstraintValidation: () => q(undefined),
+  useReservations: () => q([]),
 }));
 vi.mock("../store", () => ({
   useWizardStore: (selector: (s: unknown) => unknown) => selector({ reservations: [], mode: "season", calendarEntryId: null }),
