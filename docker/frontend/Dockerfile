@@ -11,6 +11,8 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/frontend/security-headers.conf /etc/nginx/snippets/security-headers.conf
+COPY docker/frontend/csp.conf /etc/nginx/snippets/csp.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
