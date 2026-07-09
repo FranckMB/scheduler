@@ -21,8 +21,8 @@ function slot(over: Partial<Slot>): Slot {
 
 const lookups: Lookups = {
   teams: new Map<string, Team>([
-    ["t1", { id: "t1", name: "U11", sportCategoryId: "cat1" }],
-    ["t2", { id: "t2", name: "U13", sportCategoryId: "cat1" }],
+    ["t1", { id: "t1", name: "U11", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0 }],
+    ["t2", { id: "t2", name: "U13", sportCategoryId: "cat1", priorityTierId: 2, tierOrder: 0 }],
   ]),
   venues: new Map<string, Venue>([
     ["v1", { id: "v1", name: "Alpha", color: "#ff0000" }],
@@ -191,6 +191,24 @@ describe("availableResources", () => {
       { id: "v1", label: "Alpha" },
       { id: "v2", label: "Beta" },
     ]);
+  });
+
+  it("orders TEAMS by rank (tier), not alphabetically", () => {
+    const ranked: Lookups = {
+      ...lookups,
+      teams: new Map<string, Team>([
+        ["t1", { id: "t1", name: "Alpha", sportCategoryId: "c", priorityTierId: 5, tierOrder: 0 }], // D
+        ["t2", { id: "t2", name: "Zoulou", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }], // S (fanion)
+      ]),
+    };
+    const slots = [slot({ teamId: "t1" }), slot({ teamId: "t2" })];
+    // Zoulou is the fanion (S) → first, even though "Alpha" sorts first alphabetically.
+    expect(availableResources(slots, "equipe", ranked).map((r) => r.id)).toEqual(["t2", "t1"]);
+  });
+
+  it("keeps COACHES alphabetical", () => {
+    const slots = [slot({ coachId: "c9" }), slot({ coachId: "c1" })];
+    expect(availableResources(slots, "coach", lookups).map((r) => r.label)).toEqual(["Jean Paul", "Team Coach"]);
   });
 });
 

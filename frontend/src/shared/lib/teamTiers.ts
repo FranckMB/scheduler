@@ -36,6 +36,16 @@ export interface TeamTierGroup<T extends TeamLike> {
 /** Label of an "unranked" bucket, used when a team's tier is not loaded/known. */
 export const ORPHAN_TIER_LABEL = "Autres";
 
+/**
+ * THE canonical team comparator: priority tier id asc (1=S…5=D), then the
+ * manager's manual tierOrder, then name. Any selector/grid that lists teams
+ * flat (no tier headers) sorts with this so the order matches the tiered view
+ * everywhere — coaches/venues stay alphabetical, teams go by rank.
+ */
+export function compareTeamsByRank(a: TeamLike, b: TeamLike): number {
+  return a.priorityTierId - b.priorityTierId || a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr");
+}
+
 /** "S · Fanion" — the label of a tier group (optgroup / zone header). */
 export const tierGroupLabel = (tier: TierLike | null): string =>
   null === tier ? ORPHAN_TIER_LABEL : `${tier.label} · ${TIER_MEANING[tier.label] ?? tier.name}`;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupTeamsByTier, type TeamLike, tierGroupLabel, type TierLike } from "./teamTiers";
+import { compareTeamsByRank, groupTeamsByTier, type TeamLike, tierGroupLabel, type TierLike } from "./teamTiers";
 
 const tiers: TierLike[] = [
   { id: 1, label: "S", name: "Fanion" },
@@ -11,6 +11,13 @@ const tiers: TierLike[] = [
 ];
 
 const team = (id: string, name: string, priorityTierId: number, tierOrder: number): TeamLike => ({ id, name, priorityTierId, tierOrder });
+
+describe("compareTeamsByRank", () => {
+  it("orders by tier (S→D), then tierOrder, then name — beating alphabetical", () => {
+    const teams = [team("d", "Alpha", 5, 0), team("s1", "Zoulou", 1, 1), team("s0", "Yankee", 1, 0)];
+    expect([...teams].sort(compareTeamsByRank).map((t) => t.name)).toEqual(["Yankee", "Zoulou", "Alpha"]);
+  });
+});
 
 describe("groupTeamsByTier", () => {
   it("groups by tier in importance order (S→D), then tierOrder within a tier", () => {
