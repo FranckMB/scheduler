@@ -5,25 +5,21 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use ApiPlatform\Metadata\Put;
-use App\Dto\ClubUserInput;
 use App\Entity\ClubUser;
-use App\State\Processor\ClubUserStateProcessor;
 use App\State\Provider\ClubUserStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// READ-ONLY by design (A5/A6): membership WRITES are removed here. Creation goes
+// through AuthController (register/join → pending) and role/approval through the
+// audited MembershipController; exposing generic POST/PUT/DELETE let a management
+// member fabricate memberships or demote the last owner, bypassing that flow.
 #[ApiResource(shortName: 'ClubUser', operations: [
     new GetCollection,
     new Get,
-    new Post,
-    new Put,
-    new Delete,
-], input: ClubUserInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubUserStateProvider::class, processor: ClubUserStateProcessor::class)]
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: ClubUserStateProvider::class)]
 class ClubUserResource
 {
     #[Groups(['read'])]
