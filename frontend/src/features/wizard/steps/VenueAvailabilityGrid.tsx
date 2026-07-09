@@ -2,15 +2,8 @@ import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
-
-const START_MIN = 8 * 60; // 08:00
-const END_MIN = 22 * 60; // 22:00
-const STEP = 15; // 15-minute graduation (slots start/last on quarter-hours)
-const ROW_H = 11; // px per 15 min (~44px/hour)
-const WEEK = DAYS.filter((d) => d.n <= 6); // Lun-Sam
-
-const rows = Array.from({ length: (END_MIN - START_MIN) / STEP }, (_, i) => START_MIN + i * STEP);
+import { fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
+import { gridTemplateColumns, gridTemplateRows, rows, START_MIN, STEP, WEEK } from "../lib/weekGrid";
 
 interface Props {
   venue: Venue;
@@ -22,8 +15,6 @@ interface Props {
 
 export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onSelect }: Props) {
   const color = venue.color ?? "var(--accent)";
-  const gridTemplateColumns = `3rem repeat(${WEEK.length}, minmax(3rem, 1fr))`;
-  const gridTemplateRows = `1.5rem repeat(${rows.length}, ${ROW_H}px)`;
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
