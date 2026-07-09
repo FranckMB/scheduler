@@ -107,6 +107,30 @@ export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api
 export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
 
+/** A persistent team→slot HARD pin (base plan or a period overlay). Server-backed. */
+export interface Reservation {
+  id: string;
+  calendarEntryId: string | null;
+  teamId: string;
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+}
+
+export interface ReservationPayload {
+  teamId: string;
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  calendarEntryId?: string | null;
+}
+
+export const listReservations = (params?: Record<string, string>): Promise<Reservation[]> => collectionAll<Reservation>("reservations", params);
+export const createReservation = (body: ReservationPayload): Promise<Reservation> => api.post("reservations", { json: body }).json();
+export const deleteReservation = (id: string): Promise<void> => api.delete(`reservations/${id}`).then(() => undefined);
+
 // --- Coaches + links (W3) ---
 
 export type TeamCoachRole = "MAIN" | "ASSISTANT";

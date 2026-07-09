@@ -10,6 +10,7 @@ use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Reservation;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Sport;
@@ -885,26 +886,29 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['team' => $teams['Mercredi Shark U9-U11'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '09:30', 'duration' => 75, 'lock' => LockLevel::HARD],
         ];
 
+        // These are pre-generation RESERVATIONS (durable HARD team→slot pins), not
+        // schedule-bound templates: base plan → calendarEntryId NULL. The generation
+        // pipeline reads them into the engine's slotTemplates payload, and the
+        // wizard "Réserver" tab lists them from the server.
         foreach ($additionalSlots as $slotData) {
             $startTime = new DateTimeImmutable($slotData['startTime']);
-            $existingSlot = $manager->getRepository(ScheduleSlotTemplate::class)->findOneBy([
+            $existing = $manager->getRepository(Reservation::class)->findOneBy([
                 'teamId' => $slotData['team']->getId(),
                 'venueId' => $venues[$slotData['venue']]->getId(),
                 'dayOfWeek' => $slotData['day'],
                 'startTime' => $startTime,
             ]);
-            if (!$existingSlot instanceof ScheduleSlotTemplate) {
-                $slot = new ScheduleSlotTemplate;
-                $slot->setClubId($club->getId());
-                $slot->setSeasonId($season->getId());
-                $slot->setScheduleId($season->getId());
-                $slot->setTeamId($slotData['team']->getId());
-                $slot->setVenueId($venues[$slotData['venue']]->getId());
-                $slot->setDayOfWeek($slotData['day']);
-                $slot->setStartTime($startTime);
-                $slot->setDurationMinutes($slotData['duration']);
-                $slot->setLockLevel($slotData['lock']);
-                $manager->persist($slot);
+            if (!$existing instanceof Reservation) {
+                $reservation = new Reservation;
+                $reservation->setClubId($club->getId());
+                $reservation->setSeasonId($season->getId());
+                $reservation->setCalendarEntryId(null);
+                $reservation->setTeamId($slotData['team']->getId());
+                $reservation->setVenueId($venues[$slotData['venue']]->getId());
+                $reservation->setDayOfWeek($slotData['day']);
+                $reservation->setStartTime($startTime);
+                $reservation->setDurationMinutes($slotData['duration']);
+                $manager->persist($reservation);
             }
         }
 

@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { CoachPayload, ConstraintPayload, SlotPayload, TeamCoachRole, TeamPayload, VenuePayload } from "./api";
 import * as wizardApi from "./api";
-import type { Reservation } from "./store";
 
 export function useWizardTeams() {
   return useQuery({ queryKey: ["wizard", "teams"], queryFn: wizardApi.listTeams, staleTime: 30_000 });
@@ -197,6 +196,31 @@ export function useWizardConstraints(calendarEntryId?: string | null) {
   });
 }
 
+/** Server-backed reservations (team→slot HARD pins), scoped base vs period overlay. */
+export function useReservations(calendarEntryId?: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "reservations", calendarEntryId ?? "base"],
+    queryFn: () => wizardApi.listReservations(calendarEntryId ? { calendarEntryId } : undefined),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateReservation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: wizardApi.ReservationPayload) => wizardApi.createReservation(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "reservations"] }),
+  });
+}
+
+export function useDeleteReservation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteReservation(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "reservations"] }),
+  });
+}
+
 export function useWizardTeamTags() {
   return useQuery({ queryKey: ["wizard", "team_tags"], queryFn: wizardApi.listTeamTags, staleTime: 30_000 });
 }
@@ -250,37 +274,26 @@ export function useScheduleStatus(id: string | null) {
 }
 
 /**
- * Create a fresh schedule, pin the wizard's reserved slots as HARD locks, then
- * queue its generation; resolves to the schedule id.
+ * Create a fresh schedule then queue its generation; resolves to the schedule id.
+ * Reservations are NO LONGER materialised here — they are persisted server-side
+ * (Reservation entity) and gathered by the backend at build time (base/overlay),
+ * so they survive reloads and are seedable by fixtures.
  */
 export function useLaunchGeneration() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       name,
-      reservations,
       calendarEntryId,
       existingScheduleId,
     }: {
       name: string;
-      reservations: Reservation[];
       calendarEntryId?: string;
       existingScheduleId?: string;
     }) => {
       // Period mode reuses the entry's existing overlay schedule (regenerate);
       // otherwise create a fresh schedule (base plan, or first overlay).
       const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(name, calendarEntryId)).id;
-      for (const r of reservations) {
-        await wizardApi.createSlotTemplate({
-          scheduleId,
-          teamId: r.teamId,
-          venueId: r.venueId,
-          dayOfWeek: r.dayOfWeek,
-          startTime: r.startTime,
-          durationMinutes: r.durationMinutes,
-          lockLevel: "HARD",
-        });
-      }
       await wizardApi.generateSchedule(scheduleId);
       return scheduleId;
     },

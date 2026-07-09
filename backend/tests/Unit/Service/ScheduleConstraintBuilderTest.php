@@ -234,6 +234,33 @@ final class ScheduleConstraintBuilderTest extends TestCase
         self::assertSame('COACH', $serialized[0]['scope']);
     }
 
+    public function testReservationsAreSerializedIntoSlotTemplatesAsHardPins(): void
+    {
+        $reservation = (new \App\Entity\Reservation)
+            ->setClubId('club-1')
+            ->setSeasonId('season-1')
+            ->setCalendarEntryId(null)
+            ->setTeamId('team-sm1')
+            ->setVenueId('venue-mateo')
+            ->setDayOfWeek(2)
+            ->setStartTime(new DateTimeImmutable('20:30'))
+            ->setDurationMinutes(120);
+
+        $payload = $this->builder->buildPayload(
+            clubId: 'club-1',
+            seasonId: 'season-1',
+            reservations: [$reservation],
+        );
+
+        self::assertCount(1, $payload['slotTemplates']);
+        $slot = $payload['slotTemplates'][0];
+        self::assertSame('team-sm1', $slot['teamId']);
+        self::assertSame('venue-mateo', $slot['venueId']);
+        self::assertSame(2, $slot['dayOfWeek']);
+        self::assertSame('20:30:00', $slot['startTime']);
+        self::assertSame('HARD', $slot['lockLevel'], 'a reservation is a HARD pin the engine must honor');
+    }
+
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);

@@ -4,7 +4,7 @@ import { useWizardStore } from "./store";
 
 describe("wizard store — period mode", () => {
   beforeEach(() => {
-    useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams", reservations: [] });
+    useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams" });
   });
 
   it("startPeriodMode enters period mode on the Contraintes step", () => {
@@ -13,7 +13,6 @@ describe("wizard store — period mode", () => {
     expect(s.mode).toBe("period");
     expect(s.calendarEntryId).toBe("entry-1");
     expect(s.stepId).toBe("constraints");
-    expect(s.reservations).toEqual([]);
   });
 
   it("exitPeriodMode returns to season mode", () => {

@@ -25,7 +25,7 @@ const TIMEOUT_MS = 5 * 60 * 1000;
 export function GenerateStep() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
-  const { reservations, clearReservations, mode, calendarEntryId } = useWizardStore();
+  const { mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
@@ -80,7 +80,6 @@ export function GenerateStep() {
       return;
     }
     settled.current = true;
-    clearReservations();
     // Point the embedded planning at THIS run's schedule (not a stale overlay a
     // "Voir le plan" click may have left selected in the planning store).
     if (null !== scheduleId) {
@@ -95,7 +94,7 @@ export function GenerateStep() {
       setScheduleId(null);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     }
-  }, [hasCompleted, periodMode, scheduleId, clearReservations, setSelectedScheduleId, queryClient]);
+  }, [hasCompleted, periodMode, scheduleId, setSelectedScheduleId, queryClient]);
 
   const launching = launch.isPending;
   const failed = !launching && !showPlanning && (launch.isError || "FAILED" === status || timedOut);
@@ -112,11 +111,10 @@ export function GenerateStep() {
         periodMode
           ? {
               name: periodEntry?.title ?? "Plan de période",
-              reservations,
               calendarEntryId: calendarEntryId ?? undefined,
               existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
             }
-          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}`, reservations },
+          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
       );
       setScheduleId(id);
     } catch {
