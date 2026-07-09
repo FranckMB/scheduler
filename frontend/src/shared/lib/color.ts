@@ -98,7 +98,9 @@ export function nextVenueColor(usedColors: readonly (string | null)[]): string {
  * duplicated verbatim in WeekGrid/WeekendGrid).
  */
 export function tint(color: string | null): string | undefined {
-  if (null !== color && /^#[0-9a-f]{6}$/i.test(color)) {
+  // Reuse the module's canonical hex validation (parseHex/HEX) rather than a
+  // third inline regex — one source of truth for "what counts as a hex colour".
+  if (null !== color && null !== parseHex(color)) {
     return `${color}22`;
   }
   return undefined;
