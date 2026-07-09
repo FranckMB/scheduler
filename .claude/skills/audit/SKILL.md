@@ -116,7 +116,7 @@ Axe **dédié et systématique** : « l'app est-elle protégée contre les attaq
 
 Le **détail méthodo par vecteur** (comment vérifier chaque famille) suit ; chaque attaque `A{n}` s'y rattache.
 
-Pour **chaque vecteur** ci-dessous : protection **présente / partielle / absente / non vérifiée**, et où (`fichier:ligne`). Adapter au stack (Symfony/API Platform · React · FastAPI/OR-Tools · JWT · Mercure · Redis · Postgres RLS · Docker).
+Pour **chaque vecteur** ci-dessous : verdict **protégé / partiel / absent / non vérifié** (même vocabulaire que la liste d'attaques et le tableau de posture), et où (`fichier:ligne`). Adapter au stack (Symfony/API Platform · React · FastAPI/OR-Tools · JWT · Mercure · Redis · Postgres RLS · Docker).
 
 1. **Injection** — SQLi : Doctrine en paramètres liés partout, **zéro** DQL/SQL concaténé avec de l'input (y compris le GUC `app.club_id` via `bindValue`) ; commande/OS (`exec`, `shell_exec`, `proc_open`, `os.system` côté engine) ; **XSS** front : `dangerouslySetInnerHTML`, injection dans `href`/`src`, HTML non échappé ; injection de log/header.
 2. **Auth & session** — JWT : algo fixé (pas de `none`/`HS↔RS` confusion), expiration courte, clé hors repo ; **anti-brute-force sur le login** (throttle + éventuel lockout) ; **énumération d'emails** (réponses/latences uniformes register/login/reset) ; token de reset (usage unique, TTL) ; politique de mot de passe ; pas d'auto-login après register sans garde.
@@ -176,11 +176,11 @@ La référence de notation est **l'application commercialisable**, pas le stade 
 1. **En-tête** : date, modèle exact, SHA HEAD, tableau de couverture des axes — **inclure les lignes `UX-Cohérence`, `UX-Simplicité/Intuitivité`, `Inclusivité-a11y`** et **`Cybersécurité — surface d'attaque`** (chacune `couvert` / `partiel` / `non couvert (raison)`).
 2. **Synthèse des notes** (/100, uniquement les axes couverts). Le **score UX** est présenté dans un **bloc séparé**, hors du `/100` des briques : les **3 sous-notes `/100`** (Cohérence · Simplicité-Intuitivité · Inclusivité-a11y) **et** le **Score UX général `/100` = le plus bas des sous-axes couverts** (voir Étape 4, notation extrêmement sévère).
 3. **Registre des findings** — LE cœur de la comparaison. Table : `ID | Titre court | Zone | Gravité | Statut vérif (confirmé/réfuté/non vérifié) | Statut vs édition précédente (nouveau/ouvert/corrigé/réfuté)`. Règles d'ID : préfixe zone (`SEC-`, `ENG-`, `BCK-`, `FRT-`, `DOC-`, `DEP-`, `INF-`, `ALIGN-` (scission/angle mort d'alignement contraintes 3 couches, Étape 2 quater), `UX-` (générique, hérité), `UXC-` (cohérence), `UXS-` (simplicité/intuitivité), `A11Y-` (inclusivité/accessibilité), `PERF-`, `RGPD-`) + numéro incrémental **jamais réutilisé**. Reprendre les IDs de l'édition précédente pour les findings ouverts ; marquer `corrigé` ceux qui ont disparu (avec preuve).
-3 bis. **Tableau de posture cybersécurité** (Étape 2 quinquies) — **une ligne par attaque nommée `A1`…`A{n}`** de la liste « attaques les plus probables pour ClubScheduler » : `attaque | verdict (protégé / partiel / absent / non vérifié) | preuve fichier:ligne | SEC- associé s'il y a défaut`. La liste se parcourt **intégralement** (aucune attaque omise ; une non regardée = `non vérifié`, pas absente du tableau). C'est **le** livrable « suis-je protégé contre les attaques ? » ; il se compare d'une édition à l'autre par les IDs `A{n}`, exactement comme le registre par les `SEC-`.
-4. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **cybersécurité (surface d'attaque, Étape 2 quinquies)**, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
-5. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
-6. **Features intéressantes à développer** (ratio valeur/effort, tenant compte de l'état réel).
-7. **Annexe méthodologie** : ce qui a été exécuté vs statique, findings contre-vérifiés, limites.
+4. **Tableau de posture cybersécurité** (Étape 2 quinquies) — **une ligne par attaque nommée `A1`…`A{n}`** de la liste « attaques les plus probables pour ClubScheduler » : `attaque | verdict (protégé / partiel / absent / non vérifié) | preuve fichier:ligne | SEC- associé s'il y a défaut`. La liste se parcourt **intégralement** (aucune attaque omise ; une non regardée = `non vérifié`, pas absente du tableau). C'est **le** livrable « suis-je protégé contre les attaques ? » ; il se compare d'une édition à l'autre par les IDs `A{n}`, exactement comme le registre par les `SEC-` (une édition antérieure sans cet axe = baseline `non couvert`, pas de rétro-notation).
+5. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **cybersécurité (surface d'attaque, Étape 2 quinquies)**, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
+6. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
+7. **Features intéressantes à développer** (ratio valeur/effort, tenant compte de l'état réel).
+8. **Annexe méthodologie** : ce qui a été exécuté vs statique, findings contre-vérifiés, limites.
 
 ## Règles
 
