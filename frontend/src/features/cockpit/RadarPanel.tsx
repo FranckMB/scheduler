@@ -157,7 +157,7 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
     <RadarCard
       icon={<AlertTriangle className={hasOverlay ? "size-4 text-accent" : "size-4 text-destructive"} />}
       title={entry.title}
-      detail={hasOverlay ? "Plan secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · plan secondaire absent` : "Indisponibilité signalée"}
+      detail={hasOverlay ? "Planning secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent` : "Indisponibilité signalée"}
     >
       {hasOverlay ? (
         <>

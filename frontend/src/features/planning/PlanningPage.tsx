@@ -311,8 +311,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       <ConfirmDialog
         open={reopenOverlayCount !== null}
         destructive
-        title="Rouvrir le socle ?"
-        description={`Rouvrir ce planning principal supprimera ${reopenOverlayCount ?? 0} calendrier${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        title="Rouvrir le planning principal ?"
+        description={`Rouvrir ce planning principal supprimera ${reopenOverlayCount ?? 0} planning${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
         confirmLabel="Rouvrir et supprimer"
         onConfirm={() => reopen(true)}
         onCancel={() => setReopenOverlayCount(null)}

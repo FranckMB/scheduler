@@ -46,7 +46,7 @@ describe("BaselineBanner — destructive reopen", () => {
     renderBanner();
     await userEvent.click(screen.getByRole("button", { name: "Modifier…" }));
     await userEvent.click(screen.getByRole("button", { name: "Modifier" }));
-    expect(screen.getByText(/supprimera 2 calendriers secondaires/i)).toBeInTheDocument();
+    expect(screen.getByText(/supprimera 2 plannings secondaires/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Modifier et supprimer" }));
     expect(reopenMutate).toHaveBeenLastCalledWith({ id: "b1", confirmDeleteOverlays: true }, expect.anything());

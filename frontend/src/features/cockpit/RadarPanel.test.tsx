@@ -81,14 +81,14 @@ describe("RadarPanel", () => {
     conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }] };
     renderRadar({ entries: [closure({})] });
 
-    expect(screen.getByText(/3 séances à replacer · plan secondaire absent/)).toBeInTheDocument();
+    expect(screen.getByText(/3 séances à replacer · planning secondaire absent/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {
     renderRadar({ entries: [closure({ overlayScheduleId: "ov1" })] });
 
-    expect(screen.getByText("Plan secondaire généré")).toBeInTheDocument();
+    expect(screen.getByText("Planning secondaire généré")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Voir le plan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ajuster" })).toBeInTheDocument();
   });

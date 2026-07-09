@@ -130,7 +130,7 @@ export function GenerateStep() {
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
         {periodMode
-          ? "Génère le plan de cette période (overlay). Il surcharge le planning principal sur la fenêtre, sans toucher au socle."
+          ? "Génère le plan de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
           : "Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner."}
       </p>
 
@@ -160,7 +160,7 @@ export function GenerateStep() {
           </p>
           {isFirstOverlay ? (
             <p className="max-w-sm rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-muted-foreground">
-              Premier calendrier secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les calendriers secondaires (après confirmation).
+              Premier planning secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les plannings secondaires (après confirmation).
             </p>
           ) : null}
           <BlockerList blockers={blockers} className="max-w-md text-left" />
