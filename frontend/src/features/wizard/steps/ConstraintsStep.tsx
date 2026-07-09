@@ -70,6 +70,13 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
   const slotLabel = (venueId: string, dayOfWeek: number, startTime: string) => `${venueName.get(venueId) ?? "?"} · ${dayLabel(dayOfWeek)} ${hhmm(startTime)}`;
 
+  // Order reservations by TEAM RANK (fanion S → A → B → C → D, then intra-tier
+  // order) so the list is scannable instead of server-insertion order. Tiebreak
+  // by day + time. Unknown teams fall to the end.
+  const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
+  const rankOf = (id: string) => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
+  const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
+
   const add = () => {
     const team = teamId || teams[0]?.id;
     const slot = slots.find((s) => s.id === slotId);
@@ -106,7 +113,7 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
         <EmptyHint>Aucune réservation. Le solveur reste libre de placer les équipes.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
-          {reservations.map((r) => (
+          {sortedReservations.map((r) => (
             <li key={r.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
               <Lock className="size-3.5 text-accent" />
               <span className="flex-1">
