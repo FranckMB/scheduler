@@ -26,6 +26,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private RequestStack $requestStack,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Service\SocleGuard $socleGuard,
+        private readonly \App\Service\GenerationComplexityGuard $complexityGuard,
     ) {}
 
     public function __invoke(string $id): JsonResponse
@@ -56,6 +57,25 @@ final class GenerateScheduleController extends AbstractController implements Sea
         // always allowed — that is how the socle gets created in the first place.
         if (null !== $schedule->getCalendarEntryId()) {
             $this->socleGuard->assertValidated($schedule->getSeasonId());
+        }
+
+        // A10: reject an over-complex problem BEFORE queuing it, so a "generation bomb"
+        // never dispatches, never reaches the engine, and never holds the club's single
+        // generation slot for the whole solver timeout. Status is left untouched (no
+        // PENDING, no onboarding completion, no flush) on rejection.
+        $violation = $this->complexityGuard->firstViolation($schedule->getClubId(), $schedule->getSeasonId());
+        if (null !== $violation) {
+            return $this->json([
+                'error' => \sprintf(
+                    'Generation blocked: too many %s (%d, limit %d). Reduce the season data before generating.',
+                    $violation['cap'],
+                    $violation['count'],
+                    $violation['limit'],
+                ),
+                'cap' => $violation['cap'],
+                'count' => $violation['count'],
+                'limit' => $violation['limit'],
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $schedule->setStatus(ScheduleStatus::PENDING);
