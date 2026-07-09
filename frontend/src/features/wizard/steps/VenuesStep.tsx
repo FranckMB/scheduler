@@ -78,8 +78,12 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
       setError(conflictMessage(conflict));
       return;
     }
-    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } });
-    onClose();
+    // Close ONLY once the write succeeds. If the backend rejects it (e.g. a stale
+    // cache let a now-overlapping edit slip past the client check, caught by the
+    // server backstop), keep the modal open so the edit is not silently lost and
+    // the user can adjust — the global mutation net surfaces the error toast.
+    // Otherwise a rejected edit would look saved (modal already gone).
+    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } }, { onSuccess: onClose });
   };
 
   return (

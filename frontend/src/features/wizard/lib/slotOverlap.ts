@@ -1,16 +1,5 @@
 import type { VenueTrainingSlot } from "../api";
-import { DAYS, hhmm } from "./days";
-
-const WEEK = DAYS.filter((d) => d.n <= 6);
-
-const dayLabel = (n: number) => WEEK.find((d) => d.n === n)?.label ?? String(n);
-
-export const toMinutes = (t: string): number => {
-  const [h, m] = hhmm(t).split(":").map(Number);
-  return h * 60 + m;
-};
-
-const fmtMinutes = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+import { dayLabel, fmtMinutes, hhmm, toMinutes } from "./days";
 
 /**
  * Overlap guard (same gym): two slots on the SAME weekday may never share any

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { VenueTrainingSlot } from "../api";
-import { conflictMessage, findSlotConflict, toMinutes } from "./slotOverlap";
+import { toMinutes } from "./days";
+import { conflictMessage, findSlotConflict } from "./slotOverlap";
 
 const slot = (over: Partial<VenueTrainingSlot>): VenueTrainingSlot =>
   ({ id: "s", venueId: "v", dayOfWeek: 1, startTime: "17:00", durationMinutes: 90, capacity: 1, ...over }) as VenueTrainingSlot;

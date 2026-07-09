@@ -2,7 +2,7 @@ import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, hhmm } from "../lib/days";
+import { DAYS, fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
 
 const START_MIN = 8 * 60; // 08:00
 const END_MIN = 22 * 60; // 22:00
@@ -11,11 +11,6 @@ const ROW_H = 16; // px per 30 min
 const WEEK = DAYS.filter((d) => d.n <= 6); // Lun-Sam
 
 const rows = Array.from({ length: (END_MIN - START_MIN) / STEP }, (_, i) => START_MIN + i * STEP);
-const fmt = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-const startMinutes = (t: string) => {
-  const [h, m] = hhmm(t).split(":");
-  return Number(h) * 60 + Number(m);
-};
 
 interface Props {
   venue: Venue;
