@@ -44,6 +44,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # A18: fail on a known-vulnerable PRODUCTION dependency (dev-only advisories,
+      # which never ship to users, are excluded to avoid noise).
+      - name: npm audit (prod deps)
+        working-directory: frontend
+        run: npm audit --omit=dev
+
       - name: Lint
         working-directory: frontend
         run: npm run lint
@@ -72,6 +78,11 @@ jobs:
 
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
+
+      # A18: fail the build on a known-vulnerable Composer dependency (blocking gate,
+      # complements Dependabot which only opens PRs).
+      - name: Composer audit
+        run: docker compose exec -T php-fpm composer audit --no-interaction
 
       - name: Run PHPStan
         run: docker compose exec -T php-fpm composer phpstan
@@ -185,6 +196,11 @@ jobs:
 
       - name: Run mypy
         run: docker compose run --rm engine mypy
+
+      # A18: fail on a known-vulnerable Python dependency (the local, non-PyPI
+      # engine package is auto-skipped — not a failure).
+      - name: pip-audit
+        run: docker compose run --rm engine sh -lc 'pip install --quiet pip-audit && pip-audit'
 
   engine-perf:
     name: Engine Perf Gate
