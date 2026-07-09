@@ -584,6 +584,10 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 'firstName' => $coachData['firstName'],
             ]);
             if ($existing instanceof Coach) {
+                // Keep an already-seeded coach in sync with the data (e.g. a
+                // last name added later) — append mode reuses the row, so
+                // without this the rename would never reach the DB.
+                $existing->setLastName($coachData['lastName']);
                 $coaches[$key] = $existing;
             } else {
                 $coach = new Coach;
@@ -680,6 +684,18 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['coach' => $coachCharlie, 'team' => $teams['U9F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachCharlie, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
         ];
+
+        // Purge existing team-coach links (club/season) before recreating, so an
+        // append-mode reseed can't leave a stale assignment behind when a coach
+        // moves between teams — mirrors the VenueTrainingSlot purge above.
+        $existingLinks = $manager->getRepository(TeamCoach::class)->findBy([
+            'clubId' => $club->getId(),
+            'seasonId' => $season->getId(),
+        ]);
+        foreach ($existingLinks as $existingLink) {
+            $manager->remove($existingLink);
+        }
+        $manager->flush();
 
         foreach ($newTeamCoachLinks as $link) {
             $existing = $manager->getRepository(TeamCoach::class)->findOneBy([
