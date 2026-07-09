@@ -2,9 +2,9 @@ import { cn } from "@/shared/lib/utils";
 import { useToastStore, type ToastVariant } from "@/shared/stores/toastStore";
 
 const ACCENT: Record<ToastVariant, string> = {
-  error: "border-l-red-500",
-  success: "border-l-emerald-500",
-  info: "border-l-[var(--accent)]",
+  error: "border-l-destructive",
+  success: "border-l-success",
+  info: "border-l-accent",
 };
 
 /**
