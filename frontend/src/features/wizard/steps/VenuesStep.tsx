@@ -44,10 +44,18 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string) => void }) {
   const current = venue.color ?? "#666666";
   const [hex, setHex] = useState(current);
+  // The native colour picker fires onChange CONTINUOUSLY while dragging — persisting
+  // a PUT per step races the Doctrine @Version lock ("optimistic lock failed"). Keep
+  // the live preview immediate (setHex) but debounce the write to the settled colour.
+  const applyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => (applyTimer.current ? clearTimeout(applyTimer.current) : undefined), []);
   const commit = (value: string) => {
     setHex(value);
     if (HEX_RE.test(value)) {
-      onApply(value);
+      if (null !== applyTimer.current) {
+        clearTimeout(applyTimer.current);
+      }
+      applyTimer.current = setTimeout(() => onApply(value), 300);
     }
   };
   return (
