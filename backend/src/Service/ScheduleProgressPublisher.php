@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Schedule;
+use App\Mercure\ClubTopicUpdate;
 use LogicException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mercure\HubInterface;
-use Symfony\Component\Mercure\Update;
 use Throwable;
 
 /**
@@ -33,12 +33,12 @@ final class ScheduleProgressPublisher
             throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 
-        $this->hub->publish(new Update($topic, json_encode([
+        $this->hub->publish(ClubTopicUpdate::private($topic, json_encode([
             'status' => $schedule->getStatus(),
             'score' => $schedule->getScore(),
             'unplaced' => $this->countUnplacedTeams($result),
             'warnings' => array_values(\is_array($result['warnings'] ?? null) ? $result['warnings'] : []),
-        ], \JSON_THROW_ON_ERROR), private: true));
+        ], \JSON_THROW_ON_ERROR)));
     }
 
     /**
@@ -65,10 +65,9 @@ final class ScheduleProgressPublisher
      */
     public function publishTerminalFailure(string $clubId, string $scheduleId, string $error): void
     {
-        $this->hub->publish(new Update(
+        $this->hub->publish(ClubTopicUpdate::private(
             \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
             json_encode(['status' => 'failed', 'error' => $error], \JSON_THROW_ON_ERROR),
-            private: true,
         ));
     }
 

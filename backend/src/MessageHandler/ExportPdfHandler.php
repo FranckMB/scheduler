@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Entity\Schedule;
+use App\Mercure\ClubTopicUpdate;
 use App\Message\ExportPdfMessage;
 use App\Service\PdfGenerator;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
 use Symfony\Component\Mercure\HubInterface;
-use Symfony\Component\Mercure\Update;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Throwable;
 
@@ -53,10 +53,9 @@ final readonly class ExportPdfHandler
             // Under RLS an invisible schedule (deleted, or claimed by another
             // club) must not leave the frontend spinning on pdfExportStatus —
             // publish a failure on the requesting club's topic.
-            $this->hub->publish(new Update(
+            $this->hub->publish(ClubTopicUpdate::private(
                 \sprintf('club:%s:schedule:%s', $clubId, $message->getScheduleId()),
                 json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null, 'pngExportUrl' => null], \JSON_THROW_ON_ERROR),
-                private: true,
             ));
 
             return;
@@ -95,10 +94,10 @@ final readonly class ExportPdfHandler
             throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 
-        $this->hub->publish(new Update($topic, json_encode([
+        $this->hub->publish(ClubTopicUpdate::private($topic, json_encode([
             'pdfExportStatus' => $schedule->getPdfExportStatus(),
             'pdfExportUrl' => $schedule->getPdfExportUrl(),
             'pngExportUrl' => $schedule->getPngExportUrl(),
-        ], \JSON_THROW_ON_ERROR), private: true));
+        ], \JSON_THROW_ON_ERROR)));
     }
 }

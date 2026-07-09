@@ -8,13 +8,13 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
+use App\Mercure\ClubTopicUpdate;
 use App\Message\GenerateScheduleMessage;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Mercure\HubInterface;
-use Symfony\Component\Mercure\Update;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Throwable;
 
@@ -74,10 +74,9 @@ final readonly class ScheduleGenerationFailureListener
             );
             $this->entityManager->flush();
 
-            $this->hub->publish(new Update(
+            $this->hub->publish(ClubTopicUpdate::private(
                 \sprintf('club:%s:schedule:%s', $message->getClubId(), $message->getScheduleId()),
                 json_encode(['status' => 'failed', 'error' => 'generation_failed'], \JSON_THROW_ON_ERROR),
-                private: true,
             ));
         } catch (Throwable $exception) {
             // The unit of work may already be broken (the original failure closed
