@@ -26,7 +26,11 @@ final class SeedPublicHolidaysCommandTest extends KernelTestCase
         $tester->execute([]);
         $tester->assertCommandIsSuccessful();
         $firstCount = $this->rowCount($em);
-        self::assertGreaterThan(0, $firstCount);
+        // Exact total (11 national fériés × 3 years) — a dropped holiday or a whole
+        // deleted year keeps rowCount > 0 but fails this, catching the "missing férié"
+        // regression the seed exists to prevent.
+        self::assertSame(33, $firstCount);
+        self::assertSame(11, $this->rowCountForYear($em, 2026), 'expected 11 national fériés in 2026');
 
         // Bastille Day (the summer férié the calendar was missing) must be present.
         $bastille = $em->getRepository(PublicHoliday::class)->findOneBy(['zone' => PublicHoliday::NATIONAL, 'date' => new DateTimeImmutable('2026-07-14')]);
@@ -42,5 +46,13 @@ final class SeedPublicHolidaysCommandTest extends KernelTestCase
     private function rowCount(EntityManagerInterface $em): int
     {
         return (int) $em->createQuery('SELECT COUNT(h.id) FROM ' . PublicHoliday::class . ' h')->getSingleScalarResult();
+    }
+
+    private function rowCountForYear(EntityManagerInterface $em, int $year): int
+    {
+        return (int) $em->createQuery('SELECT COUNT(h.id) FROM ' . PublicHoliday::class . ' h WHERE h.date >= :from AND h.date <= :to')
+            ->setParameter('from', new DateTimeImmutable(\sprintf('%d-01-01', $year)))
+            ->setParameter('to', new DateTimeImmutable(\sprintf('%d-12-31', $year)))
+            ->getSingleScalarResult();
     }
 }

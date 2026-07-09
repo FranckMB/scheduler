@@ -87,7 +87,15 @@ final class SeedPublicHolidaysCommand extends Command
 
         $this->entityManager->flush();
 
-        $io->success(\sprintf('Public holidays seeded: %d created, %d updated%s.', $created, $updated, $skipped > 0 ? \sprintf(', %d skipped', $skipped) : ''));
+        // Fail LOUD on a malformed row (typo'd date/empty label) — else a broken JSON
+        // edit seeds a calendar silently missing a férié while `make fixtures` stays green.
+        if ($skipped > 0) {
+            $io->warning(\sprintf('%d malformed row(s) skipped.', $skipped));
+
+            return Command::FAILURE;
+        }
+
+        $io->success(\sprintf('Public holidays seeded: %d created, %d updated.', $created, $updated));
 
         return Command::SUCCESS;
     }
@@ -98,8 +106,14 @@ final class SeedPublicHolidaysCommand extends Command
             return null;
         }
 
+        // getLastErrors catches format-valid but calendar-invalid dates ("2028-02-31")
+        // that createFromFormat rolls over instead of rejecting.
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (false === $date || (false !== $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
 
-        return false === $date ? null : $date;
+        return $date;
     }
 }
