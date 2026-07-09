@@ -92,6 +92,35 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
+    public function testCanSplitPersistsOnVenueUpdate(): void
+    {
+        // Regression: the venue update processor silently dropped canSplit, so
+        // toggling "terrain divisible" never persisted (no per-slot capacity, no
+        // court splitting at solve time).
+        $venue = $this->createVenue(false);
+
+        $this->client->request('PUT', '/api/venues/' . $venue->getId(), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => $venue->getName(), 'source' => 'manual', 'canSplit' => true], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($body['canSplit'], 'canSplit=true must persist through a venue update');
+
+        // And un-checking must persist too (false !== null guard).
+        $this->client->request('PUT', '/api/venues/' . $venue->getId(), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => $venue->getName(), 'source' => 'manual', 'canSplit' => false], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($body['canSplit'], 'canSplit=false must persist (uncheck)');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

@@ -6,8 +6,8 @@ import { DAYS, fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib
 
 const START_MIN = 8 * 60; // 08:00
 const END_MIN = 22 * 60; // 22:00
-const STEP = 30;
-const ROW_H = 16; // px per 30 min
+const STEP = 15; // 15-minute graduation (slots start/last on quarter-hours)
+const ROW_H = 11; // px per 15 min (~44px/hour)
 const WEEK = DAYS.filter((d) => d.n <= 6); // Lun-Sam
 
 const rows = Array.from({ length: (END_MIN - START_MIN) / STEP }, (_, i) => START_MIN + i * STEP);

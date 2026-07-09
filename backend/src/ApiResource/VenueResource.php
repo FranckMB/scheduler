@@ -70,6 +70,10 @@ class VenueResource
     #[Groups(['read'])]
     public ?string $parentVenueId = null;
 
+    /** Divisible court — a slot here can host 2 teams (per-slot capacity). */
+    #[Groups(['read'])]
+    public bool $canSplit = false;
+
     public static function fromEntity(Venue $entity): self
     {
         $dto = new self;
@@ -86,6 +90,7 @@ class VenueResource
         $dto->externalRef = $entity->getExternalRef();
         $dto->isActive = $entity->getIsActive();
         $dto->parentVenueId = $entity->getParentVenueId();
+        $dto->canSplit = $entity->getCanSplit();
 
         return $dto;
     }
