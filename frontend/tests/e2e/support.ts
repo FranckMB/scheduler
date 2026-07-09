@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 
+import { THEME_STORAGE_KEY } from "../../src/shared/stores/themeStore";
+
 /** Unique ARA per run — the dev DB is not rolled back between e2e runs. */
 export function uniqueAra(prefix: string): string {
   const rand = Math.floor(Math.random() * 1_000_000).toString(36);
@@ -28,10 +30,13 @@ export async function expectNoContrastViolations(page: Page, label: string): Pro
  * `transition-colors` mid-flight briefly reads intermediate, sub-AA values.
  */
 export async function forceTheme(page: Page, mode: "dark" | "light"): Promise<void> {
-  await page.addInitScript((m) => {
-    window.localStorage.setItem("cs-theme", JSON.stringify({ state: { mode: m, accent: null }, version: 1 }));
-    const style = document.createElement("style");
-    style.textContent = "*,*::before,*::after{transition:none!important;animation:none!important}";
-    document.documentElement.appendChild(style);
-  }, mode);
+  await page.addInitScript(
+    ({ key, m }) => {
+      window.localStorage.setItem(key, JSON.stringify({ state: { mode: m, accent: null }, version: 1 }));
+      const style = document.createElement("style");
+      style.textContent = "*,*::before,*::after{transition:none!important;animation:none!important}";
+      document.documentElement.appendChild(style);
+    },
+    { key: THEME_STORAGE_KEY, m: mode },
+  );
 }
