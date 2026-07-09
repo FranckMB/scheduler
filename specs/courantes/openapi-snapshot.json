@@ -211,8 +211,84 @@
                     "Auth"
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Registered \u2014 returns a JWT and the membership status",
+                    "202": {
+                        "description": "Verification pending — an email was sent (identical for a fresh or an already-registered address)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "verification_pending"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error"
+                    },
+                    "429": {
+                        "description": "Too many attempts (rate limited)"
+                    }
+                },
+                "summary": "Register a user (creates an unverified account; sends an email-verification link)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "email",
+                                    "password",
+                                    "firstName",
+                                    "lastName",
+                                    "ara"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "minLength": 8
+                                    },
+                                    "firstName": {
+                                        "type": "string"
+                                    },
+                                    "lastName": {
+                                        "type": "string"
+                                    },
+                                    "ara": {
+                                        "type": "string",
+                                        "description": "FFBB club code — 3-20 uppercase alphanumeric"
+                                    },
+                                    "club_name": {
+                                        "type": "string",
+                                        "description": "Required only when the ARA creates a new club (snake_case)"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/register/verify": {
+            "post": {
+                "operationId": "postApiRegisterVerify",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Verified — materialises the club and returns a JWT (effective login)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -246,50 +322,25 @@
                         }
                     },
                     "400": {
-                        "description": "Validation error"
-                    },
-                    "409": {
-                        "description": "Email already registered"
+                        "description": "Invalid or expired verification token"
                     },
                     "429": {
                         "description": "Too many attempts (rate limited)"
                     }
                 },
-                "summary": "Register a user and create or join a club by ARA / FFBB code",
+                "summary": "Consume an email-verification token: verify the account, create/join its club, and log in",
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "required": [
-                                    "email",
-                                    "password",
-                                    "firstName",
-                                    "lastName",
-                                    "ara"
+                                    "token"
                                 ],
                                 "properties": {
-                                    "email": {
+                                    "token": {
                                         "type": "string",
-                                        "format": "email"
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "minLength": 8
-                                    },
-                                    "firstName": {
-                                        "type": "string"
-                                    },
-                                    "lastName": {
-                                        "type": "string"
-                                    },
-                                    "ara": {
-                                        "type": "string",
-                                        "description": "FFBB club code \u2014 3-20 uppercase alphanumeric"
-                                    },
-                                    "club_name": {
-                                        "type": "string",
-                                        "description": "Required only when the ARA creates a new club (snake_case)"
+                                        "description": "The raw token from the verification email link"
                                     }
                                 }
                             }
@@ -719,7 +770,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "NATIONAL public holidays \u222a the club territory extras within the window (zone null \u2192 NATIONAL only)",
+                        "description": "NATIONAL public holidays ∪ the club territory extras within the window (zone null → NATIONAL only)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -756,13 +807,13 @@
                         }
                     },
                     "400": {
-                        "description": "No club in context, invalid from/to, or no window (no active season) \u2014 a null zone still returns the NATIONAL f\u00e9ri\u00e9s (no short-circuit)"
+                        "description": "No club in context, invalid from/to, or no window (no active season) — a null zone still returns the NATIONAL fériés (no short-circuit)"
                     },
                     "401": {
                         "description": "Unauthorized (missing/expired JWT)"
                     }
                 },
-                "summary": "Public holidays (jours f\u00e9ri\u00e9s) applying to the club (display-only, never feeds the solver)",
+                "summary": "Public holidays (jours fériés) applying to the club (display-only, never feeds the solver)",
                 "parameters": [
                     {
                         "name": "from",
@@ -772,7 +823,7 @@
                             "type": "string",
                             "format": "date"
                         },
-                        "description": "Window start (YYYY-MM-DD) \u2014 defaults to the active season start"
+                        "description": "Window start (YYYY-MM-DD) — defaults to the active season start"
                     },
                     {
                         "name": "to",
@@ -782,7 +833,7 @@
                             "type": "string",
                             "format": "date"
                         },
-                        "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
+                        "description": "Window end (YYYY-MM-DD) — defaults to the active season end"
                     }
                 ]
             }
@@ -795,7 +846,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "School holidays of the club zone within the window (zone null \u2192 empty items)",
+                        "description": "School holidays of the club zone within the window (zone null → empty items)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -839,7 +890,7 @@
                         }
                     },
                     "400": {
-                        "description": "No club in context, or (when the club zone is set) invalid from/to or no window (no active season) \u2014 a null zone short-circuits to 200 with empty items"
+                        "description": "No club in context, or (when the club zone is set) invalid from/to or no window (no active season) — a null zone short-circuits to 200 with empty items"
                     },
                     "401": {
                         "description": "Unauthorized (missing/expired JWT)"
@@ -855,7 +906,7 @@
                             "type": "string",
                             "format": "date"
                         },
-                        "description": "Window start (YYYY-MM-DD) \u2014 defaults to the active season start"
+                        "description": "Window start (YYYY-MM-DD) — defaults to the active season start"
                     },
                     {
                         "name": "to",
@@ -865,7 +916,7 @@
                             "type": "string",
                             "format": "date"
                         },
-                        "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
+                        "description": "Window end (YYYY-MM-DD) — defaults to the active season end"
                     }
                 ]
             }
@@ -3514,7 +3565,7 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Constraint created \u2014 returns its id",
+                        "description": "Constraint created — returns its id",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -3685,7 +3736,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Same-coach time-occupancy conflicts (match\u2194match and match\u2194training) recomputed live for the current club/season",
+                        "description": "Same-coach time-occupancy conflicts (match↔match and match↔training) recomputed live for the current club/season",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -8264,7 +8315,7 @@
                     }
                 },
                 "summary": "Import an FBI fixtures export (.xlsx) for this team",
-                "description": "Multipart upload (field \"file\"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team \u00b7 403 non-management member \u00b7 409 archived season or concurrent duplicate import \u00b7 400 missing/invalid file or columns.",
+                "description": "Multipart upload (field \"file\"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team · 403 non-management member · 409 archived season or concurrent duplicate import · 400 missing/invalid file or columns.",
                 "parameters": [
                     {
                         "name": "id",
@@ -11595,7 +11646,7 @@
                         "type": "integer"
                     },
                     "parentConstraintId": {
-                        "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                        "description": "N→N+1 lineage: source constraint of the season-transition copy.",
                         "type": [
                             "string",
                             "null"
@@ -11702,7 +11753,7 @@
                         ]
                     },
                     "calendarEntryId": {
-                        "description": "Set to attach this constraint to a CalendarEntry (period) \u2014 excludes it from base generation.",
+                        "description": "Set to attach this constraint to a CalendarEntry (period) — excludes it from base generation.",
                         "type": [
                             "string",
                             "null"
@@ -11811,7 +11862,7 @@
                         "type": "integer"
                     },
                     "parentConstraintId": {
-                        "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                        "description": "N→N+1 lineage: source constraint of the season-transition copy.",
                         "type": [
                             "string",
                             "null"
@@ -11913,7 +11964,7 @@
                                 "type": "integer"
                             },
                             "parentConstraintId": {
-                                "description": "N\u2192N+1 lineage: source constraint of the season-transition copy.",
+                                "description": "N→N+1 lineage: source constraint of the season-transition copy.",
                                 "type": [
                                     "string",
                                     "null"
@@ -12230,7 +12281,7 @@
                         ]
                     },
                     "externalRef": {
-                        "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
+                        "description": "FBI match number (import idempotence key) — null for manual entries.",
                         "type": [
                             "string",
                             "null"
@@ -12386,7 +12437,7 @@
                         ]
                     },
                     "externalRef": {
-                        "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
+                        "description": "FBI match number (import idempotence key) — null for manual entries.",
                         "type": [
                             "string",
                             "null"
@@ -12461,7 +12512,7 @@
                                 ]
                             },
                             "externalRef": {
-                                "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
+                                "description": "FBI match number (import idempotence key) — null for manual entries.",
                                 "type": [
                                     "string",
                                     "null"
@@ -13240,7 +13291,7 @@
                         ]
                     },
                     "calendarEntryId": {
-                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                        "description": "Non-null → this is a period overlay (palier B), not a season plan.",
                         "type": [
                             "string",
                             "null"
@@ -13407,7 +13458,7 @@
                         ]
                     },
                     "calendarEntryId": {
-                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                        "description": "Non-null → this is a period overlay (palier B), not a season plan.",
                         "type": [
                             "string",
                             "null"
@@ -13537,7 +13588,7 @@
                                 ]
                             },
                             "calendarEntryId": {
-                                "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                                "description": "Non-null → this is a period overlay (palier B), not a season plan.",
                                 "type": [
                                     "string",
                                     "null"
@@ -15883,7 +15934,7 @@
                         ]
                     },
                     "canSplit": {
-                        "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                        "description": "Divisible court — a slot here can host 2 teams (per-slot capacity).",
                         "default": false,
                         "type": "boolean"
                     }
@@ -16029,7 +16080,7 @@
                         ]
                     },
                     "canSplit": {
-                        "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                        "description": "Divisible court — a slot here can host 2 teams (per-slot capacity).",
                         "default": false,
                         "type": "boolean"
                     }
@@ -16106,7 +16157,7 @@
                                 ]
                             },
                             "canSplit": {
-                                "description": "Divisible court \u2014 a slot here can host 2 teams (per-slot capacity).",
+                                "description": "Divisible court — a slot here can host 2 teams (per-slot capacity).",
                                 "default": false,
                                 "type": "boolean"
                             }

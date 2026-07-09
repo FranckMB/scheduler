@@ -9,6 +9,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\Venue;
 use App\Service\TenantConnectionContext;
+use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -24,6 +25,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class CollectionPaginationTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private KernelBrowser $client;
 
     public function testCollectionExposesRealTotalItemsNotPageSize(): void
@@ -125,9 +128,8 @@ final class CollectionPaginationTest extends WebTestCase
             'firstName' => 'P', 'lastName' => 'Ag', 'ara' => strtoupper($suffix), 'club_name' => 'Pag Club',
         ], \JSON_THROW_ON_ERROR));
 
-        $reg = json_decode((string) $this->client->getResponse()->getContent(), true);
-        $token = $reg['token'] ?? '';
-        self::assertNotSame('', $token, 'registration must return a token');
+        $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
+        self::assertNotSame('', $token, 'verification must return a token');
 
         $me = $this->get('/api/me', $token);
 

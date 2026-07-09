@@ -41,22 +41,19 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'postApiRegister',
             tags: ['Auth'],
             responses: [
-                '201' => $this->jsonResponse('Registered — returns a JWT and the membership status', [
+                // A3: never authenticates and never reveals account existence — an identical
+                // 202 for a fresh or an already-registered email. The JWT is issued only by
+                // /api/register/verify once the emailed link is followed.
+                '202' => $this->jsonResponse('Verification pending — an email was sent (identical for a fresh or an already-registered address)', [
                     'type' => 'object',
                     'properties' => [
-                        'token' => ['type' => 'string'],
-                        'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
-                        'user' => ['type' => 'object', 'properties' => [
-                            'id' => ['type' => 'string'],
-                            'email' => ['type' => 'string'],
-                        ]],
+                        'status' => ['type' => 'string', 'enum' => ['verification_pending']],
                     ],
                 ]),
                 '400' => new Response('Validation error'),
-                '409' => new Response('Email already registered'),
                 '429' => new Response('Too many attempts (rate limited)'),
             ],
-            summary: 'Register a user and create or join a club by ARA / FFBB code',
+            summary: 'Register a user (creates an unverified account; sends an email-verification link)',
             requestBody: $this->jsonBody([
                 'type' => 'object',
                 'required' => ['email', 'password', 'firstName', 'lastName', 'ara'],
@@ -67,6 +64,34 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'lastName' => ['type' => 'string'],
                     'ara' => ['type' => 'string', 'description' => 'FFBB club code — 3-20 uppercase alphanumeric'],
                     'club_name' => ['type' => 'string', 'description' => 'Required only when the ARA creates a new club (snake_case)'],
+                ],
+            ]),
+        )));
+
+        $paths->addPath('/api/register/verify', new PathItem(post: new Operation(
+            operationId: 'postApiRegisterVerify',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Verified — materialises the club and returns a JWT (effective login)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'token' => ['type' => 'string'],
+                        'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
+                        'user' => ['type' => 'object', 'properties' => [
+                            'id' => ['type' => 'string'],
+                            'email' => ['type' => 'string'],
+                        ]],
+                    ],
+                ]),
+                '400' => new Response('Invalid or expired verification token'),
+                '429' => new Response('Too many attempts (rate limited)'),
+            ],
+            summary: 'Consume an email-verification token: verify the account, create/join its club, and log in',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'required' => ['token'],
+                'properties' => [
+                    'token' => ['type' => 'string', 'description' => 'The raw token from the verification email link'],
                 ],
             ]),
         )));

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { uniqueAra } from "./support";
+import { registerAndVerify, uniqueAra } from "./support";
 
 /**
  * THE end-to-end journey (audit P0.2, FRT-05): a fresh club walks the whole
@@ -12,16 +12,9 @@ import { uniqueAra } from "./support";
 test("full journey: wizard → generation → validated planning → cockpit", async ({ page }) => {
   test.setTimeout(240_000); // includes a real solve (small instance, seconds)
 
-  // --- Register a fresh club → onboarding wizard.
+  // --- Register a fresh club + verify by email → onboarding wizard.
   const ara = uniqueAra("E2EF");
-  await page.goto("/register");
-  await page.getByLabel("Prénom").fill("Flo");
-  await page.getByLabel("Nom", { exact: true }).fill("Journey");
-  await page.getByLabel("Email", { exact: true }).fill(`journey-${ara}@e2e.fr`);
-  await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
-  await page.getByLabel(/code ara/i).fill(ara);
-  await page.getByLabel(/nom du club/i).fill("E2E Journey Club");
-  await page.getByRole("button", { name: /créer le compte/i }).click();
+  await registerAndVerify(page, { email: `journey-${ara}@e2e.fr`, ara, firstName: "Flo", lastName: "Journey", clubName: "E2E Journey Club" });
   await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
 
   // --- Step 1 · team (defaults: first category, 2 sessions/week).

@@ -6,6 +6,7 @@ import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
+import { VerifyEmailPage } from "@/features/auth/VerifyEmailPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
 import { ClubPage } from "@/features/club/ClubPage";
 import { CockpitPage } from "@/features/cockpit/CockpitPage";
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
   { path: "/register", element: <RegisterPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password/:token", element: <ResetPasswordPage /> },
+  { path: "/verify-email/:token", element: <VerifyEmailPage /> },
   { path: "/waiting", element: <WaitingApprovalPage /> },
   {
     element: <AuthGuard />,

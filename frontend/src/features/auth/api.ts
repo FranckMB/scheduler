@@ -59,7 +59,14 @@ export interface RegisterPayload {
   club_name: string;
 }
 
+/** Register never authenticates: it returns an identical neutral 202 for a fresh
+ *  or an already-registered email (A3 anti-enumeration). The JWT is issued only by
+ *  verifyEmail once the emailed link is followed. */
 export interface RegisterResponse {
+  status: string;
+}
+
+export interface VerifyEmailResponse {
   token: string;
   membershipStatus: MembershipStatus;
   user: { id: string; email: string };
@@ -79,6 +86,10 @@ export function login(body: { email: string; password: string }): Promise<{ toke
 
 export function register(body: RegisterPayload): Promise<RegisterResponse> {
   return api.post("register", { json: body }).json();
+}
+
+export function verifyEmail(token: string): Promise<VerifyEmailResponse> {
+  return api.post("register/verify", { json: { token } }).json();
 }
 
 export function getMe(): Promise<MeResponse> {

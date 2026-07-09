@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoContrastViolations, forceTheme, uniqueAra } from "./support";
+import { expectNoContrastViolations, forceTheme, registerAndVerify, uniqueAra } from "./support";
 
 /**
  * WCAG 2.2 AA colour-contrast (1.4.3) on the real rendered app — the axis jsdom
@@ -30,14 +30,7 @@ for (const mode of MODES) {
     await forceTheme(page, mode);
 
     const ara = uniqueAra("A11Y");
-    await page.goto("/register");
-    await page.getByLabel("Prénom").fill("A11y");
-    await page.getByLabel("Nom", { exact: true }).fill("Contrast");
-    await page.getByLabel("Email", { exact: true }).fill(`a11y-${ara}@e2e.fr`);
-    await page.getByLabel("Mot de passe", { exact: true }).fill("Password123!");
-    await page.getByLabel(/code ara/i).fill(ara);
-    await page.getByLabel(/nom du club/i).fill("A11y Club");
-    await page.getByRole("button", { name: /créer le compte/i }).click();
+    await registerAndVerify(page, { email: `a11y-${ara}@e2e.fr`, ara, firstName: "A11y", lastName: "Contrast", clubName: "A11y Club" });
     await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
 
     await expectNoContrastViolations(page, `wizard · équipes (${mode})`);

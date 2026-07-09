@@ -233,7 +233,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $user->setEmail('mara.mb@bccl.fr');
             $user->setFirstName('Mara');
             $user->setLastName('Mb');
-            $user->setEmailVerifiedAt(null);
+            // Seeded accounts are pre-verified so dev/e2e/demo login works (the login
+            // gate rejects emailVerifiedAt = null).
+            $user->setEmailVerifiedAt(new DateTimeImmutable);
             $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'maraboubccl'));
             $manager->persist($user);
         }
@@ -979,7 +981,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $user->setEmail('n.eblin@gmail.com');
             $user->setFirstName('N\'Gnima');
             $user->setLastName('EBLIN');
-            $user->setEmailVerifiedAt(null);
+            $user->setEmailVerifiedAt(new DateTimeImmutable);
             $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'jennifer'));
             $manager->persist($user);
             $manager->flush();

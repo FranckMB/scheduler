@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -20,6 +21,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class OnboardingFlowTest extends WebTestCase
 {
+    use VerifiesRegistration;
+
     private static int $ip = 0;
 
     private KernelBrowser $client;
@@ -91,7 +94,7 @@ final class OnboardingFlowTest extends WebTestCase
             'firstName' => 'On', 'lastName' => 'Board', 'ara' => strtoupper($ara), 'club_name' => 'Club ' . $ara,
         ], \JSON_THROW_ON_ERROR));
 
-        return json_decode((string) $this->client->getResponse()->getContent(), true)['token'] ?? '';
+        return $this->verifyRegistration($this->client, strtolower($ara) . '@test.fr');
     }
 
     /**
