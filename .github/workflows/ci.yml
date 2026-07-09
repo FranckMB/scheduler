@@ -56,6 +56,57 @@ jobs:
         working-directory: frontend
         run: npx vitest run
 
+  # A18: blocking dependency-vulnerability audits, deliberately isolated in their OWN
+  # job (no `needs`, and NOT a dependency of build-docker). A newly-disclosed advisory
+  # against an unchanged package therefore reds only THIS check — which requires human
+  # triage (bump the dep, or explicitly ignore the advisory) — without gating the image
+  # build or the functional jobs on a commit that changed nothing.
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # PHP — reads composer.lock, no vendor install needed. --abandoned=ignore: an
+      # abandoned package is not a vulnerability (Composer 2.7+ would fail on it by default).
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+      - name: Composer audit
+        working-directory: backend
+        run: composer audit --locked --no-interaction --abandoned=ignore
+
+      # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
+      # misfiled under devDependencies still ships to browsers), gated at high+ so an
+      # unfixable low/moderate advisory doesn't block every unrelated PR.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      # Python — audit the ENGINE IMAGE's actual installed versions (what ships), not a
+      # fresh unpinned resolve. `pip freeze` omits pip/setuptools tooling by default, and
+      # auditing the frozen list via an isolated pipx-run pip-audit means the tool never
+      # perturbs (upgrades) the set it is meant to check. The local non-PyPI package is stripped.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: pip-audit
+        run: |
+          docker compose build engine
+          docker compose run --rm --no-deps engine pip freeze | grep -vE '^(-e |clubscheduler-engine)' > engine-deps.txt
+          pipx run pip-audit --requirement engine-deps.txt
+
   phpstan:
     name: PHPStan
     runs-on: ubuntu-latest
