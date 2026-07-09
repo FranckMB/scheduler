@@ -2,7 +2,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
-import { gridTemplateColumns, gridTemplateRows, rows, START_MIN, STEP, WEEK } from "../lib/weekGrid";
+import { END_MIN, gridTemplateColumns, START_MIN, STEP, WEEK } from "../lib/weekGrid";
 
 interface Props {
   venue: Venue;
@@ -23,6 +23,16 @@ interface Props {
 export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capacityOf, onSelectSlot }: Props) {
   const color = venue.color ?? "var(--accent)";
 
+  // Dynamic vertical range: only the hours that actually hold slots for THIS
+  // venue (Réserver-only — the Gymnases grid keeps the fixed 08–22 for creation).
+  // Rounded to the hour; falls back to the fixed range when the venue has none.
+  const startMins = slots.map((s) => startMinutes(s.startTime));
+  const endMins = slots.map((s) => startMinutes(s.startTime) + s.durationMinutes);
+  const gridStart = slots.length > 0 ? Math.floor(Math.min(...startMins) / 60) * 60 : START_MIN;
+  const gridEnd = slots.length > 0 ? Math.ceil(Math.max(...endMins) / 60) * 60 : END_MIN;
+  const gridRows = Array.from({ length: Math.max(1, (gridEnd - gridStart) / STEP) }, (_, i) => gridStart + i * STEP);
+  const gridTemplateRows = `1.5rem repeat(${gridRows.length}, 11px)`;
+
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
@@ -34,7 +44,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
         ))}
 
         {/* Time gutter — label on the hour */}
-        {rows.map((m, i) => (
+        {gridRows.map((m, i) => (
           <div key={`t${m}`} className="border-r border-border pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
             {0 === m % 60 ? fmt(m) : ""}
           </div>
@@ -42,7 +52,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
 
         {/* Inert grid lines — no create-on-click here (unlike the Gymnases grid). */}
         {WEEK.map((d, di) =>
-          rows.map((m, ri) => <div key={`g${d.n}-${m}`} className={cn("border-l border-t border-border/40", 0 === m % 60 ? "border-t-border/70" : "")} style={{ gridColumn: 2 + di, gridRow: 2 + ri }} aria-hidden="true" />),
+          gridRows.map((m, ri) => <div key={`g${d.n}-${m}`} className={cn("border-l border-t border-border/40", 0 === m % 60 ? "border-t-border/70" : "")} style={{ gridColumn: 2 + di, gridRow: 2 + ri }} aria-hidden="true" />),
         )}
 
         {/* Slots */}
@@ -51,7 +61,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
           if (di < 0) {
             return null;
           }
-          const startRow = 2 + Math.round((startMinutes(slot.startTime) - START_MIN) / STEP);
+          const startRow = 2 + Math.round((startMinutes(slot.startTime) - gridStart) / STEP);
           const span = Math.max(1, Math.round(slot.durationMinutes / STEP));
           const teams = reservedTeams.get(slotKeyOf(slot)) ?? [];
           const capacity = capacityOf(slot);

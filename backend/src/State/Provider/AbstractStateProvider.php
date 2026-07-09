@@ -70,7 +70,11 @@ abstract class AbstractStateProvider implements ProviderInterface
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('e')
-            ->from($this->getEntityClass(), 'e');
+            ->from($this->getEntityClass(), 'e')
+            // Deterministic order on the UUID PK so offset pagination is STABLE: without
+            // it Postgres reshuffles rows between page requests and collectionAll's
+            // dedupe silently drops rows straddling a page boundary (>30-row collections).
+            ->orderBy('e.id', 'ASC');
 
         // Subclasses may bound the collection from request query params (e.g. ?scheduleId=).
         // A bounded result set (all rows of one parent) bypasses the default 30-item pagination.

@@ -65,4 +65,12 @@ describe("assignableTeams", () => {
     const reservations = [resa("a", "v1", 2, "18:00"), resa("b", "v1", 2, "18:00")];
     expect(assignableTeams(teams, TIERS, slot("s", "v1", 2, "18:00", 2), reservations, SPLIT)).toEqual([]);
   });
+
+  it("matches an ISO/seconds slot start against an HH:MM reservation (prod shape)", () => {
+    // Slots carry an ISO datetime in prod; reservations store HH:MM. They must
+    // collide so a team already pinned isn't re-offered on the same physical slot.
+    const isoSlot = slot("s", "v1", 2, "1970-01-01T20:30:00+00:00", 1);
+    const reservations = [resa("s1", "v1", 2, "20:30")];
+    expect(assignableTeams(teams, TIERS, isoSlot, reservations, NON_SPLIT)).toEqual([]); // slot full via the HH:MM reservation
+  });
 });

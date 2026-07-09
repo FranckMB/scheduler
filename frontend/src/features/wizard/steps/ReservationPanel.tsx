@@ -43,7 +43,15 @@ export function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { te
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Gymnase</span>
         <VenueSwatch color={selected.color} />
-        <Select aria-label="Gymnase" className="h-8 w-48" value={selected.id} onChange={(e) => setVenueId(e.target.value)}>
+        <Select
+          aria-label="Gymnase"
+          className="h-8 w-48"
+          value={selected.id}
+          onChange={(e) => {
+            setActiveSlot(null); // never leave a modal open on a slot from the previous venue
+            setVenueId(e.target.value);
+          }}
+        >
           {venues.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}

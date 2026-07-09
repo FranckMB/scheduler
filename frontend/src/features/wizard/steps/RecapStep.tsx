@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -7,7 +8,7 @@ import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
 import { SectionCountTitle, SummaryRow, TeamTierAccordion, VenueSwatch } from "./StructureSummary";
-import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useDeleteReservation, usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -50,6 +51,7 @@ export function RecapStep() {
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: reservations = [] } = useReservations(periodEntryId);
   const { data: tiers = [] } = usePriorityTiers();
+  const deleteReservation = useDeleteReservation();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
@@ -149,7 +151,20 @@ export function RecapStep() {
           {0 === sortedReservations.length
             ? empty
             : sortedReservations.map((r) => (
-                <SummaryRow key={r.id} label={teamName.get(r.teamId) ?? "?"} meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`} />
+                <SummaryRow
+                  key={r.id}
+                  label={teamName.get(r.teamId) ?? "?"}
+                  meta={
+                    <span className="flex items-center gap-2">
+                      {`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`}
+                      {/* The recap is the only place that lists EVERY reservation, so it must be
+                          able to remove one whose availability slot no longer exists (orphan). */}
+                      <button type="button" aria-label={`Retirer la réservation de ${teamName.get(r.teamId) ?? "l'équipe"}`} className="text-muted-foreground hover:text-destructive" onClick={() => deleteReservation.mutate(r.id)}>
+                        <Trash2 className="size-4" />
+                      </button>
+                    </span>
+                  }
+                />
               ))}
         </AccordionSection>
       </div>
