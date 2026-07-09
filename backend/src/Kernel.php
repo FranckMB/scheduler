@@ -20,8 +20,6 @@ class Kernel extends BaseKernel
     {
         parent::boot();
 
-        if ('prod' === $this->environment) {
-            ProdSecretGuard::assert($_SERVER + $_ENV);
-        }
+        ProdSecretGuard::assertForEnvironment($this->environment, $_SERVER + $_ENV, $this->getProjectDir() . '/.env');
     }
 }

@@ -10,60 +10,83 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 /**
- * A16: the prod boot guard must reject a committed dev secret on any guarded key
- * (crypto secrets AND DB DSNs), and never false-trip on a legitimate value.
+ * A16: the prod boot guard must reject a runtime secret that still equals the
+ * value committed in .env (crypto secrets AND DB DSNs), on every entrypoint via
+ * the environment gate, and never false-trip a genuinely overridden value.
  */
 #[Group('phase1')]
 final class ProdSecretGuardTest extends TestCase
 {
-    public function testRejectsTheCommittedDevAppSecret(): void
+    private string $envFile;
+
+    public function testProdRejectsANonOverriddenCommittedSecret(): void
     {
-        $vars = ['APP_SECRET' => 'change-me-in-dev'] + $this->realSecrets();
+        $vars = ['APP_SECRET' => 'change-me-in-dev'] + $this->overridden();
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessageMatches('/APP_SECRET.*committed development secret/');
-        ProdSecretGuard::assert($vars);
+        $this->expectExceptionMessageMatches('/APP_SECRET.*committed in backend\/\.env/');
+        ProdSecretGuard::assertForEnvironment('prod', $vars, $this->envFile);
     }
 
-    public function testRejectsADevDbPasswordEmbeddedInTheDsn(): void
+    public function testProdRejectsANonOverriddenDbDsn(): void
     {
-        $vars = $this->realSecrets();
-        $vars['DATABASE_ADMIN_URL'] = 'postgresql://clubscheduler:clubscheduler_dev_password@db:5432/prod';
+        $vars = $this->overridden();
+        $vars['DATABASE_ADMIN_URL'] = 'postgresql://admin:committed_admin_pw@postgres:5432/db';
         $this->expectException(RuntimeException::class);
-        ProdSecretGuard::assert($vars);
+        ProdSecretGuard::assertForEnvironment('prod', $vars, $this->envFile);
     }
 
-    public function testRejectsTheDevMercureSecret(): void
+    public function testProdPassesWhenEverySecretIsOverridden(): void
     {
-        $vars = $this->realSecrets();
-        $vars['MERCURE_JWT_SECRET'] = 'clubscheduler_dev_mercure_hs256_secret_change_me';
-        $this->expectException(RuntimeException::class);
-        ProdSecretGuard::assert($vars);
-    }
-
-    public function testPassesWithFullyOverriddenRealSecrets(): void
-    {
-        ProdSecretGuard::assert($this->realSecrets());
+        ProdSecretGuard::assertForEnvironment('prod', $this->overridden(), $this->envFile);
         $this->addToAssertionCount(1);
     }
 
-    public function testDoesNotFalseTripOnALegitimateSecretThatMerelyLooksSecure(): void
+    public function testNonProdEnvironmentIsNeverGuarded(): void
     {
-        // "secure" is a substring of the dev marker "insecure" — a value-based
-        // marker match would wrongly reject this; exact committed-string match does not.
-        $vars = $this->realSecrets();
-        $vars['APP_SECRET'] = 'a-perfectly-secure-random-value';
-        ProdSecretGuard::assert($vars);
+        // dev/test legitimately run on the committed values.
+        ProdSecretGuard::assertForEnvironment('dev', ['APP_SECRET' => 'change-me-in-dev'] + $this->overridden(), $this->envFile);
         $this->addToAssertionCount(1);
     }
 
-    /** @return array<string, string> */
-    private function realSecrets(): array
+    public function testFallsBackToGetenvForTheRuntimeValue(): void
+    {
+        putenv('APP_SECRET=change-me-in-dev');
+        $vars = $this->overridden();
+        unset($vars['APP_SECRET']); // absent from the array → must be read via getenv()
+        try {
+            $this->expectException(RuntimeException::class);
+            ProdSecretGuard::assertForEnvironment('prod', $vars, $this->envFile);
+        } finally {
+            putenv('APP_SECRET');
+        }
+    }
+
+    protected function setUp(): void
+    {
+        $this->envFile = (string) tempnam(sys_get_temp_dir(), 'env');
+        file_put_contents($this->envFile, <<<'ENV'
+            # committed dev defaults
+            APP_SECRET=change-me-in-dev
+            JWT_PASSPHRASE=committed_dev_passphrase
+            MERCURE_JWT_SECRET=committed_dev_mercure
+            DATABASE_URL="postgresql://app_user:committed_dev_pw@postgres:5432/db"
+            DATABASE_ADMIN_URL="postgresql://admin:committed_admin_pw@postgres:5432/db"
+            ENV);
+    }
+
+    protected function tearDown(): void
+    {
+        @unlink($this->envFile);
+    }
+
+    /** @return array<string, string> — every guarded key overridden to a real prod value */
+    private function overridden(): array
     {
         return [
             'APP_SECRET' => 'Zx9RealRandomAppSecret',
             'JWT_PASSPHRASE' => 'Qw8RealPassphrase',
             'MERCURE_JWT_SECRET' => 'Rt7RealMercureSecret',
-            'DATABASE_URL' => 'postgresql://app:Str0ngProdPass@db:5432/prod',
+            'DATABASE_URL' => 'postgresql://app_user:Str0ngProdPass@db:5432/prod',
             'DATABASE_ADMIN_URL' => 'postgresql://admin:An0therProdPass@db:5432/prod',
         ];
     }
