@@ -11,7 +11,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -32,9 +32,9 @@ jobs:
     name: Frontend (build + unit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -65,7 +65,7 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -85,7 +85,7 @@ jobs:
       # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
       # misfiled under devDependencies still ships to browsers), gated at high+ so an
       # unfixable low/moderate advisory doesn't block every unrelated PR.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -98,7 +98,7 @@ jobs:
       # fresh unpinned resolve. `pip freeze` omits pip/setuptools tooling by default, and
       # auditing the frozen list via an isolated pipx-run pip-audit means the tool never
       # perturbs (upgrades) the set it is meant to check. The local non-PyPI package is stripped.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: pip-audit
@@ -111,7 +111,7 @@ jobs:
     name: PHPStan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, phpstan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -192,7 +192,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: blocking-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -218,7 +218,7 @@ jobs:
     name: Engine Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -246,7 +246,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: engine-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -264,7 +264,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: blocking-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
@@ -308,7 +308,7 @@ jobs:
       - name: Start messenger worker
         run: docker compose up -d --wait messenger-worker
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -338,7 +338,7 @@ jobs:
 
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: frontend/test-results/
@@ -349,7 +349,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [blocking-tests, engine-tests]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare .env
         run: |
