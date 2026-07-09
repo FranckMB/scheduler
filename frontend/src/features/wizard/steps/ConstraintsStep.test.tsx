@@ -6,7 +6,14 @@ import { renderWithProviders } from "@/test/utils";
 
 import type { Constraint } from "../api";
 
-const h = vi.hoisted(() => ({ createMut: vi.fn(), updateMut: vi.fn(), list: [] as Constraint[] }));
+const h = vi.hoisted(() => ({
+  createMut: vi.fn(),
+  updateMut: vi.fn(),
+  list: [] as Constraint[],
+  resCreate: vi.fn(),
+  resDelete: vi.fn(),
+  reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
+}));
 
 vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: h.list }),
@@ -15,10 +22,13 @@ vi.mock("../queries", () => ({
   useWizardTeamTags: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
-  useVenueSlots: () => ({ data: [] }),
+  useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
   useCreateConstraint: () => ({ mutate: h.createMut, isPending: false }),
   useUpdateConstraint: () => ({ mutate: h.updateMut, isPending: false }),
   useDeleteConstraint: () => ({ mutate: vi.fn() }),
+  useReservations: () => ({ data: h.reservations }),
+  useCreateReservation: () => ({ mutate: h.resCreate, isPending: false }),
+  useDeleteReservation: () => ({ mutate: h.resDelete }),
 }));
 
 import { ConstraintsStep } from "./ConstraintsStep";
@@ -261,5 +271,47 @@ describe("ConstraintsStep — edit an existing constraint", () => {
     const arg = h.updateMut.mock.calls[0][0] as { body: Constraint };
     expect(arg.body.config).toEqual({ allowedDays: [5] });
     expect(arg.body.config).not.toHaveProperty("forcedDays");
+  });
+});
+
+/**
+ * Réserver tab is now server-backed (Reservation entity, base/overlay). Locks the
+ * fix for the empty tab: it LISTS server reservations and add/remove hit the API.
+ */
+describe("ConstraintsStep — Réserver tab (server-backed)", () => {
+  beforeEach(() => {
+    h.resCreate.mockClear();
+    h.resDelete.mockClear();
+    h.reservations = [];
+  });
+
+  it("lists a server reservation and remove → useDeleteReservation", async () => {
+    h.reservations = [{ id: "r1", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 }];
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    // Open the "Réserver" tab (first button so named — the family-tab).
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    // The server reservation is rendered as a removable row (not an empty client store).
+    const remove = screen.getByRole("button", { name: "Retirer" });
+    expect(remove).toBeInTheDocument();
+
+    await user.click(remove);
+    expect(h.resDelete).toHaveBeenCalledWith("r1");
+  });
+
+  it("add → useCreateReservation with the picked slot + base calendarEntryId", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Créneau"), "s1");
+    // The add button is the last "Réserver" (the tab is the first).
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ }).at(-1)!);
+
+    expect(h.resCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: "t1", venueId: "v1", dayOfWeek: 2, durationMinutes: 120, calendarEntryId: null }),
+      expect.anything(),
+    );
   });
 });
