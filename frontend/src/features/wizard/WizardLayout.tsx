@@ -234,7 +234,7 @@ export function WizardPage() {
               </p>
             ))}
         {validation.warnings.map((warning) => (
-          <p key={warning} className="mt-3 flex items-center gap-2 text-sm text-amber-500">
+          <p key={warning} className="mt-3 flex items-center gap-2 text-sm text-warning">
             <AlertTriangle className="size-4 shrink-0" />
             {warning}
           </p>

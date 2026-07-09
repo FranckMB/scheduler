@@ -132,7 +132,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         </Button>
       </div>
       {bonusCompetitionWarning && (
-        <p role="alert" className="ml-8 mt-1 text-xs text-amber-500">
+        <p role="alert" className="ml-8 mt-1 text-xs text-warning">
           Équipe en compétition classée Bonus (D) — elle passera en dernier ; vérifiez le rang.
         </p>
       )}

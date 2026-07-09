@@ -141,7 +141,7 @@ export function RecapStep() {
       {blockers.length > 0 ? (
         <BlockerList blockers={blockers} className="mb-4" />
       ) : (
-        <p className="text-sm text-emerald-500">Tout est prêt. Utilisez « Continuer vers la génération » en bas pour lancer.</p>
+        <p className="text-sm text-success">Tout est prêt. Utilisez « Continuer vers la génération » en bas pour lancer.</p>
       )}
     </div>
   );

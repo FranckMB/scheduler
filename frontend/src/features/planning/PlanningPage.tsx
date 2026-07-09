@@ -52,7 +52,7 @@ function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: b
       <Card className="w-full max-w-md">
         <CardHeader>
           <div className="flex items-center gap-2">
-            {hasAlerts ? <AlertTriangle className="size-5 text-amber-500" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
+            {hasAlerts ? <AlertTriangle className="size-5 text-warning" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
             <CardTitle>Valider ce planning ?</CardTitle>
           </div>
           <CardDescription>

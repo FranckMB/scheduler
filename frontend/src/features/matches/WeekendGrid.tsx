@@ -86,7 +86,7 @@ export function WeekendGrid({ model }: WeekendGridProps) {
             title={`${cell.teamLabel} vs ${cell.opponentLabel} · ${cell.venueLabel} · ${cell.footprintLabel}`}
             className={cn(
               "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight",
-              cell.outOfEnvelope ? "ring-1 ring-amber-500" : "",
+              cell.outOfEnvelope ? "ring-1 ring-warning" : "",
             )}
             style={{
               gridColumn: cell.gridColumn,
@@ -100,7 +100,7 @@ export function WeekendGrid({ model }: WeekendGridProps) {
           >
             <span className="flex w-full items-center gap-1 font-medium">
               <span className="truncate">{cell.teamLabel}</span>
-              {cell.outOfEnvelope ? <AlertTriangle className="ml-auto size-3 shrink-0 text-amber-500" /> : null}
+              {cell.outOfEnvelope ? <AlertTriangle className="ml-auto size-3 shrink-0 text-warning" /> : null}
             </span>
             <span className="truncate text-[10px] text-muted-foreground">
               {cell.kickoffLabel} · {cell.opponentLabel}

@@ -25,6 +25,11 @@
   --accent-foreground: oklch(0.99 0 0);
 
   --destructive: oklch(0.58 0.22 27);
+
+  /* semantic status (warning = amber-ish, success = emerald-ish) — themable */
+  --warning: oklch(0.68 0.16 62);
+  --success: oklch(0.6 0.14 160);
+
   --ring: var(--accent);
 }
 
@@ -42,6 +47,10 @@
   --accent-foreground: oklch(0.15 0.01 260);
 
   --destructive: oklch(0.62 0.21 27);
+
+  --warning: oklch(0.83 0.15 78);
+  --success: oklch(0.76 0.16 163);
+
   --ring: var(--accent);
 }
 
@@ -57,6 +66,8 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
   --color-ring: var(--ring);
 
   --radius-sm: calc(var(--radius) - 4px);
