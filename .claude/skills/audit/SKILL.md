@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Audit complet du projet ClubScheduler (doc, besoin, code par brique, sécurité, supply chain, infra, UX — cohérence / simplicité-intuitivité / inclusivité-a11y) avec notes /100, barème fixe, score UX additif noté à part, registre de findings à ID stables et résultat horodaté dans specs/audit/. À invoquer via /audit pour produire une édition comparable aux précédentes.
+description: Audit complet du projet ClubScheduler (doc, besoin, code par brique, sécurité, cybersécurité — surface d'attaque/protection contre les attaques, supply chain, infra, UX — cohérence / simplicité-intuitivité / inclusivité-a11y) avec notes /100, barème fixe, score UX additif noté à part, registre de findings à ID stables et résultat horodaté dans specs/audit/. À invoquer via /audit pour produire une édition comparable aux précédentes.
 ---
 
 # Audit ClubScheduler — protocole reproductible
@@ -83,6 +83,55 @@ Pour **chaque ligne** de la table d'alignement (chaque clé de `config` + chaque
 
 **Vérification** : les scissions confirmées se re-vérifient à la main (Étape 3). Le verrou automatique existant (`constraint_matrix.py` + test) ne couvre QUE l'offre wizard↔engine des cellules **offertes** — il ne voit ni la couche backend ni les angles morts ; ne pas s'y fier pour cette étape.
 
+## Étape 2 quinquies — Cybersécurité : surface d'attaque & protections (OBLIGATOIRE)
+
+Axe **dédié et systématique** : « l'app est-elle protégée contre les attaques ? ». La sécurité était jusqu'ici éparse (tenant/RLS en Backend, supply-chain/secrets/Mercure en Étape 2) ; ici on la traque **vecteur par vecteur**, du point de vue d'un **attaquant** (anonyme OU utilisateur authentifié malveillant). **Non destructif** : lecture de code + config uniquement — **aucun test offensif actif** (pas de fuzzing, pas de brute-force réel, pas d'exploit). Findings préfixe **`SEC-`**.
+
+### Liste des attaques les plus probables pour ClubScheduler (à verdicter une par une)
+
+**Colonne vertébrale de l'axe.** Cette liste est **fermée et stable** (comme le registre de findings) : on la parcourt **intégralement** à chaque édition, chaque ligne reçoit un verdict `protégé / partiel / absent / non vérifié` + preuve `fichier:ligne` + `SEC-` si défaut. C'est un **SaaS multi-tenant** (Symfony/API Platform · React SPA · FastAPI/OR-Tools · JWT · Mercure · Redis · Postgres RLS · upload logo · futur import FFBB) — la liste reflète **sa** surface réelle, pas une checklist générique. Ne pas retirer une ligne parce qu'elle « semble couverte » : la vérifier et l'écrire.
+
+| # | Attaque (nommée, concrète) | Protection attendue | Vecteur |
+|---|---|---|---|
+| A1 | **Accès cross-tenant** — un gestionnaire du club X lit/écrit les données du club Y (forcer `X-Club-Id`/`X-Season-Id`, IDOR sur un UUID d'une autre org) | Résolution tenant serveur (JWT), RLS `FORCE` sur `club_id`, header espoofé → 403 | Autorisation/IDOR |
+| A2 | **Brute-force / credential stuffing** sur `/login` (password spray sur emails devinés) | Rate-limit + éventuel lockout, latence/réponse uniforme | Auth · Rate-limit |
+| A3 | **Énumération de comptes** — register/login/reset révèlent si un email existe (réponse ou timing) | Réponses & latences uniformes, message générique | Auth |
+| A4 | **Falsification de JWT** — `alg:none`, secret faible, token expiré accepté, confusion HS/RS | Algo fixé, clé forte hors repo, exp courte, vérif signature | Auth |
+| A5 | **Escalade de privilège** — un membre non-management déclenche une écriture cockpit/gestion | Gate rôle management (SEC-07) sur toutes les écritures sensibles | Autorisation |
+| A6 | **Mass assignment / over-posting** — poser `clubId`/`role`/`isActive` via le payload d'un DTO | Champs sensibles non bindables, fixés serveur (processors) | Autorisation |
+| A7 | **Injection SQL** — via un champ libre ou le GUC `app.club_id` | Doctrine paramétré partout, GUC en `bindValue`, zéro concat | Injection |
+| A8 | **XSS stockée/reflétée** — nom d'équipe/club/coach rendu en HTML, **SVG de logo** exécutable | Échappement React par défaut, pas de `dangerouslySetInnerHTML`, SVG rejeté/assaini | Injection |
+| A9 | **CSRF** — écriture déclenchée via un cookie envoyé automatiquement | Auth par `Bearer` (pas de cookie ambiant d'écriture) — à **vérifier** | CSRF |
+| A10 | **DoS par bombe de génération** — payload énorme (équipes×gymnases) qui épuise le solveur | Bornes de taille de payload + complexité, timeout solveur | Rate-limit/DoS |
+| A11 | **Spam de routes anonymes** — register/reset en masse (email bombing) | Rate-limit sur les routes non authentifiées | Rate-limit/DoS |
+| A12 | **SSRF** — URL de logo / futur import FFBB pointée vers un service interne | URL sortante fixe (engine) ; fetch externe borné (pas de redirection vers IP interne, taille/MIME) | SSRF |
+| A13 | **Abus d'upload (logo)** — MIME spoofé, fichier géant, SVG, chemin devinable | Validation MIME réelle + taille + type, stockage/serve sûrs | Upload |
+| A14 | **Fuite Mercure** — abonnement anonyme ou à un topic d'un autre club (SSE cross-club) | Hub non-anonyme, JWT d'abo scoping le topic `club:{id}:…` | Autorisation |
+| A15 | **Exposition de secrets** — clés JWT/DB/Mercure ou `.env` trackés dans git | `git ls-files` propre, secrets hors repo | Secrets |
+| A16 | **Fuite via erreurs verboses** — stack trace / `APP_DEBUG=1` / PII dans les logs en prod | `APP_DEBUG=0`, pages d'erreur génériques, logs sans secret/PII | Exposition · Logs |
+| A17 | **Clickjacking / absence d'en-têtes** — pas de CSP/HSTS/X-Frame-Options | En-têtes de sécurité posés, CORS restreint | Exposition |
+| A18 | **Exploitation d'une dépendance vulnérable** (CVE connue sur un composant exposé) | Supply-chain propre (Étape 2), pas de CVE non traitée | Dépendances |
+
+> Si le stack évolue (nouveau vecteur : websockets tiers, paiement, API publique…), **ajouter une ligne** (numéro `A{n}` jamais réutilisé) plutôt que d'en réécrire une — même discipline d'ID stable que le registre.
+
+Le **détail méthodo par vecteur** (comment vérifier chaque famille) suit ; chaque attaque `A{n}` s'y rattache.
+
+Pour **chaque vecteur** ci-dessous : verdict **protégé / partiel / absent / non vérifié** (même vocabulaire que la liste d'attaques et le tableau de posture), et où (`fichier:ligne`). Adapter au stack (Symfony/API Platform · React · FastAPI/OR-Tools · JWT · Mercure · Redis · Postgres RLS · Docker).
+
+1. **Injection** — SQLi : Doctrine en paramètres liés partout, **zéro** DQL/SQL concaténé avec de l'input (y compris le GUC `app.club_id` via `bindValue`) ; commande/OS (`exec`, `shell_exec`, `proc_open`, `os.system` côté engine) ; **XSS** front : `dangerouslySetInnerHTML`, injection dans `href`/`src`, HTML non échappé ; injection de log/header.
+2. **Auth & session** — JWT : algo fixé (pas de `none`/`HS↔RS` confusion), expiration courte, clé hors repo ; **anti-brute-force sur le login** (throttle + éventuel lockout) ; **énumération d'emails** (réponses/latences uniformes register/login/reset) ; token de reset (usage unique, TTL) ; politique de mot de passe ; pas d'auto-login après register sans garde.
+3. **Autorisation / IDOR / escalade** — franchissement club/saison **sous angle attaque** (forcer `X-Club-Id`/`X-Season-Id`, IDOR sur un UUID d'entité d'un autre club), escalade de rôle (SEC-07 gate management), opération API Platform exposée sans `security`.
+4. **CSRF** — recenser toute mutation qui s'appuie sur un **cookie envoyé automatiquement** ; SPA + JWT `Bearer` = risque faible **si** aucun cookie de session ambiant n'autorise une écriture — le **vérifier**, ne pas le supposer.
+5. **Rate-limiting / DoS** — throttle API par utilisateur (SEC-11) et sur les routes anonymes (login/register/reset) ; **taille max de payload** (upload logo, payload de génération) ; **borne de complexité de génération** (bombe combinatoire → solveur) ; timeout solveur ; abus Mercure (abonnements) ; épuisement Redis (locks).
+6. **SSRF / requêtes sortantes** — backend→engine sur URL **fixe** (jamais dérivée d'input) ; fetch de logo / futur **import FFBB** : URL externe contrôlée par l'utilisateur ? suivit de redirections ? plage IP interne atteignable ? taille/MIME bornés ?
+7. **Exposition & en-têtes** — en-têtes de sécurité (**CSP**, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) ; **CORS** (origines autorisées, `*` interdit avec credentials) ; `APP_DEBUG=0` + pas de stack trace en prod ; doc API/Swagger non exposée publiquement en prod.
+8. **Upload de fichiers** (logo) — validation **MIME réelle** (pas seulement l'extension), taille bornée, **SVG rejeté ou assaini** (XSS), chemin de stockage non devinable, route de service en `Content-Type` sûr + `Content-Disposition`.
+9. **Secrets & config** — clés JWT/DB/Mercure hors repo (`git ls-files`), `.env*` non tracké, **aucun credential par défaut en prod**, `APP_ENV=prod`.
+10. **Dépendances vulnérables** — croiser avec la supply-chain (Étape 2) : CVE connue sur un composant exposé = `SEC-`/`DEP-`.
+11. **Journalisation & détection** — échecs d'auth tracés, **aucun secret/PII dans les logs**, corrélation minimale (qui a fait quoi).
+
+**Synthèse obligatoire** : produire le **tableau de posture par vecteur** (voir Étape 5) — c'est le livrable qui « informe sur la protection contre les attaques ». Un vecteur **critique absent sur un flux critique** (login sans throttle, SQLi, XSS stockée, IDOR inter-club) = `SEC-` **Élevé minimum**, contre-vérifié en Étape 3.
+
 ## Étape 3 — Vérification contradictoire (OBLIGATOIRE)
 
 Chaque finding **critique ou élevé** doit être contre-vérifié à la main avant publication : lire les fichiers/lignes cités, chercher la preuve inverse. Issues possibles : `confirmé` / `réfuté` / `non vérifié`. Un finding réfuté reste dans le rapport, barré, avec la preuve de réfutation — c'est ce qui rend l'audit digne de confiance. Ne publie JAMAIS un finding critique non vérifié sans le marquer `non vérifié`.
@@ -124,13 +173,14 @@ La référence de notation est **l'application commercialisable**, pas le stade 
 
 Écrire `specs/audit/AUDIT-<YYYY-MM-DD>-<model-id>.md` :
 
-1. **En-tête** : date, modèle exact, SHA HEAD, tableau de couverture des axes — **inclure les lignes `UX-Cohérence`, `UX-Simplicité/Intuitivité`, `Inclusivité-a11y`** (chacune `couvert` / `partiel` / `non couvert (raison)`).
+1. **En-tête** : date, modèle exact, SHA HEAD, tableau de couverture des axes — **inclure les lignes `UX-Cohérence`, `UX-Simplicité/Intuitivité`, `Inclusivité-a11y`** et **`Cybersécurité — surface d'attaque`** (chacune `couvert` / `partiel` / `non couvert (raison)`).
 2. **Synthèse des notes** (/100, uniquement les axes couverts). Le **score UX** est présenté dans un **bloc séparé**, hors du `/100` des briques : les **3 sous-notes `/100`** (Cohérence · Simplicité-Intuitivité · Inclusivité-a11y) **et** le **Score UX général `/100` = le plus bas des sous-axes couverts** (voir Étape 4, notation extrêmement sévère).
 3. **Registre des findings** — LE cœur de la comparaison. Table : `ID | Titre court | Zone | Gravité | Statut vérif (confirmé/réfuté/non vérifié) | Statut vs édition précédente (nouveau/ouvert/corrigé/réfuté)`. Règles d'ID : préfixe zone (`SEC-`, `ENG-`, `BCK-`, `FRT-`, `DOC-`, `DEP-`, `INF-`, `ALIGN-` (scission/angle mort d'alignement contraintes 3 couches, Étape 2 quater), `UX-` (générique, hérité), `UXC-` (cohérence), `UXS-` (simplicité/intuitivité), `A11Y-` (inclusivité/accessibilité), `PERF-`, `RGPD-`) + numéro incrémental **jamais réutilisé**. Reprendre les IDs de l'édition précédente pour les findings ouverts ; marquer `corrigé` ceux qui ont disparu (avec preuve).
-4. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
-5. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
-6. **Features intéressantes à développer** (ratio valeur/effort, tenant compte de l'état réel).
-7. **Annexe méthodologie** : ce qui a été exécuté vs statique, findings contre-vérifiés, limites.
+4. **Tableau de posture cybersécurité** (Étape 2 quinquies) — **une ligne par attaque nommée `A1`…`A{n}`** de la liste « attaques les plus probables pour ClubScheduler » : `attaque | verdict (protégé / partiel / absent / non vérifié) | preuve fichier:ligne | SEC- associé s'il y a défaut`. La liste se parcourt **intégralement** (aucune attaque omise ; une non regardée = `non vérifié`, pas absente du tableau). C'est **le** livrable « suis-je protégé contre les attaques ? » ; il se compare d'une édition à l'autre par les IDs `A{n}`, exactement comme le registre par les `SEC-` (une édition antérieure sans cet axe = baseline `non couvert`, pas de rétro-notation).
+5. **Détail par critère** : doc, besoin, chaque brique, supply chain, infra, RGPD, **cybersécurité (surface d'attaque, Étape 2 quinquies)**, **UX (cohérence / simplicité-intuitivité / inclusivité-a11y)** — forces, faiblesses avec `fichier:ligne`.
+6. **Avis global + axes d'amélioration priorisés** (P0/P1/P2).
+7. **Features intéressantes à développer** (ratio valeur/effort, tenant compte de l'état réel).
+8. **Annexe méthodologie** : ce qui a été exécuté vs statique, findings contre-vérifiés, limites.
 
 ## Règles
 
