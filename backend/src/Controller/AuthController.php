@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\EmailVerificationToken;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
@@ -22,6 +23,7 @@ use App\Service\TenantConnectionContext;
 use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -105,13 +107,36 @@ final class AuthController extends AbstractController
             return $this->json(['error' => 'Club name is required to create a new club'], 400);
         }
 
+        // Intent captured at register time: a club NAME rides on the token ONLY when this
+        // registration creates a club (new ARA). A join (existing ARA) stores null, so
+        // verify can never silently promote a would-be pending member to admin if the
+        // target club has since vanished.
+        $intentClubName = null === $existingClub ? $clubName : null;
+
         $existingUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
         if (null !== $existingUser) {
-            // Already registered: create NOTHING. Spend an equivalent password hash so
-            // this branch's latency matches the create branch (no timing oracle), then
-            // send an out-of-band "you already have an account" mail. Same 202 below.
-            $this->passwordHasher->hashPassword($existingUser, $password);
-            $this->sendAccountExistsEmail($existingUser->getEmail());
+            if (null === $existingUser->getEmailVerifiedAt()) {
+                // Re-registration of an UNVERIFIED account = recovery: the first email was
+                // lost/expired and neither login nor reset can activate it. Refresh the
+                // credentials + club intent and resend a fresh verification link. Same 202.
+                $existingUser->setPasswordHash($this->passwordHasher->hashPassword($existingUser, $password));
+                $existingUser->setFirstName($firstName);
+                $existingUser->setLastName($lastName);
+                $rawToken = $this->emailVerifier->generateToken($existingUser, $ara, $intentClubName);
+                $this->entityManager->flush();
+                $this->sendVerificationEmail($request, $existingUser->getEmail(), $rawToken);
+            } else {
+                // Verified account: reveal nothing in the response. Spend an equivalent
+                // password hash (timing) and send an out-of-band "you already have an
+                // account" mail directing to login/reset.
+                // Accepted residual: this branch skips the DB writes the create/recover
+                // paths perform, so a fine-grained timing probe could still distinguish a
+                // *verified* account. Bounded by the per-IP register rate limiter
+                // (5/15min in prod) — network jitter dwarfs the sub-ms DB delta; not worth
+                // faking writes for. The response body/status stay identical.
+                $this->passwordHasher->hashPassword($existingUser, $password);
+                $this->sendAccountExistsEmail($existingUser->getEmail());
+            }
 
             return $this->verificationPendingResponse();
         }
@@ -122,9 +147,9 @@ final class AuthController extends AbstractController
         // materialises a tenant nor squats an ARA. The pending club intent (ffbb code
         // + name) rides on the verification token until then.
         $rawToken = '';
-        $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $clubName, &$rawToken): void {
+        $this->entityManager->wrapInTransaction(function () use ($email, $password, $firstName, $lastName, $ara, $intentClubName, &$rawToken): void {
             $user = $this->createUser($email, $password, $firstName, $lastName);
-            $rawToken = $this->emailVerifier->generateToken($user, $ara, '' === $clubName ? null : $clubName);
+            $rawToken = $this->emailVerifier->generateToken($user, $ara, $intentClubName);
         });
 
         $this->sendVerificationEmail($request, $email, $rawToken);
@@ -147,25 +172,44 @@ final class AuthController extends AbstractController
             return $this->json(['error' => 'Invalid or expired verification token'], 400);
         }
 
-        $user = $token->getUser();
+        $tokenId = (int) $token->getId();
+        $userId = $token->getUser()->getId();
         $ara = $token->getAra();
-        $clubName = $token->getClubName();
-        // Re-resolve the club at verify time (not register time): if the ARA was created
-        // by someone else in the meantime, this account correctly joins as pending.
-        $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
+        // Non-null club name ⟺ this token was a CREATE (new ARA at register). A join
+        // stores null; if its target club has since vanished, do NOT silently create a
+        // club and make the user its admin — that would escalate above the join intent.
+        $intentClubName = $token->getClubName();
+        if (null === $intentClubName && null === $this->clubRepository->findOneBy(['ffbbClubCode' => $ara])) {
+            return $this->json(['error' => 'The club to join no longer exists'], 409);
+        }
 
         // Materialise the tenant now. Club-scoped inserts need the RLS GUC; set it once
         // the club id is known, always clear afterwards (finally).
         $status = 'pending';
         try {
-            $this->entityManager->wrapInTransaction(function () use ($user, $ara, $clubName, $existingClub, $token, &$status): void {
+            $this->entityManager->wrapInTransaction(function () use ($tokenId, $userId, $ara, $intentClubName, &$status): void {
+                // Serialize concurrent verifies of the SAME token (double-click / retry /
+                // two tabs): the winner holds the write lock and consumes the row; a loser
+                // then re-reads null and only resolves the (already-created) status — no
+                // duplicate club/membership.
+                $token = $this->entityManager->find(EmailVerificationToken::class, $tokenId, LockMode::PESSIMISTIC_WRITE);
+                if (null === $token) {
+                    $membership = $this->clubUserRepository->findOneBy(['userId' => $userId]);
+                    $status = null !== $membership && $membership->getIsActive() ? 'active' : 'pending';
+
+                    return;
+                }
+
+                $user = $token->getUser();
                 $user->setEmailVerifiedAt($this->clock->now());
+                // Re-resolve under the lock: the ARA may have been created since the outer read.
+                $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
                 if (null !== $existingClub) {
                     $this->tenantConnectionContext->setClubId($existingClub->getId());
                     $this->createMembership($existingClub->getId(), $user->getId(), false);
                     $status = 'pending';
                 } else {
-                    $club = $this->createClub($clubName ?? $ara, $ara);
+                    $club = $this->createClub($intentClubName ?? $ara, $ara);
                     $this->tenantConnectionContext->setClubId($club->getId());
                     $this->createMembership($club->getId(), $user->getId(), true);
                     $this->seedNewClub($club);
@@ -175,6 +219,11 @@ final class AuthController extends AbstractController
             });
         } finally {
             $this->tenantConnectionContext->clear();
+        }
+
+        $user = $this->entityManager->getRepository(User::class)->find($userId);
+        if (null === $user) {
+            return $this->json(['error' => 'Verification failed'], 500);
         }
 
         return $this->json([

@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\EmailVerificationToken;
 use App\Entity\User;
+use App\Service\EmailVerifier;
 use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -144,6 +145,71 @@ final class AuthFlowTest extends WebTestCase
         $this->postJson('/api/register/verify', ['token' => 'not-a-real-token']);
 
         self::assertResponseStatusCodeSame(400);
+    }
+
+    /**
+     * Recovery: re-registering an UNVERIFIED account (first email lost) must resend a
+     * verification link, not dead-end into login/reset (both blocked while unverified).
+     * The account stays verifiable and, once verified, logs in.
+     */
+    public function testUnverifiedReRegistrationStaysVerifiable(): void
+    {
+        $payload = [
+            'email' => 'resend@club.fr', 'password' => 'Password123!',
+            'firstName' => 'Re', 'lastName' => 'Send', 'ara' => 'RESEND1', 'club_name' => 'Resend Club',
+        ];
+        [$first] = $this->register($payload);
+        [$second] = $this->register($payload);
+
+        self::assertSame(202, $first);
+        self::assertSame(202, $second);
+        self::assertSame(1, $this->em->getRepository(User::class)->count(['email' => 'resend@club.fr']), 'no duplicate account');
+
+        // Still verifiable → login works (no dead-end).
+        $token = $this->verifyRegistration($this->client, 'resend@club.fr');
+        self::assertNotEmpty($token);
+        [$loginStatus] = $this->login('resend@club.fr', 'Password123!');
+        self::assertSame(200, $loginStatus);
+    }
+
+    /** A verification token is single-use: replaying it after a successful verify → 400, no duplicate membership. */
+    public function testVerifyTokenIsSingleUse(): void
+    {
+        $this->register([
+            'email' => 'single@club.fr', 'password' => 'Password123!',
+            'firstName' => 'Si', 'lastName' => 'Ngle', 'ara' => 'SINGLE1', 'club_name' => 'Single Club',
+        ]);
+        $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'single@club.fr']);
+        $raw = self::getContainer()->get(EmailVerifier::class)->generateToken($user, 'SINGLE1', 'Single Club');
+        $this->em->flush();
+
+        $this->postJson('/api/register/verify', ['token' => $raw]);
+        self::assertResponseIsSuccessful();
+        $this->postJson('/api/register/verify', ['token' => $raw]);
+        self::assertResponseStatusCodeSame(400);
+
+        self::assertCount(1, $this->em->getRepository(ClubUser::class)->findBy(['userId' => $user->getId()]), 'exactly one membership');
+    }
+
+    /**
+     * A JOIN-intent token (no club name stored) whose target club no longer exists must
+     * be rejected — never silently create a club and promote the user to admin.
+     */
+    public function testVerifyRejectsJoinIntentWhenClubMissing(): void
+    {
+        $this->register([
+            'email' => 'ghost@club.fr', 'password' => 'Password123!',
+            'firstName' => 'Gh', 'lastName' => 'Ost', 'ara' => 'GHOST1', 'club_name' => 'Ghost Club',
+        ]);
+        $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'ghost@club.fr']);
+        // Mint a JOIN-intent token (clubName = null) for an ARA that has no club.
+        $raw = self::getContainer()->get(EmailVerifier::class)->generateToken($user, 'NOCLUB9', null);
+        $this->em->flush();
+
+        $this->postJson('/api/register/verify', ['token' => $raw]);
+        self::assertResponseStatusCodeSame(409);
+        self::assertNull($this->em->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'NOCLUB9']), 'no club created');
+        self::assertCount(0, $this->em->getRepository(ClubUser::class)->findBy(['userId' => $user->getId()]), 'no membership');
     }
 
     public function testRegisterRequiresFirstAndLastName(): void
