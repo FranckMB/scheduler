@@ -5,6 +5,7 @@ import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
@@ -506,7 +507,7 @@ function TeamsEditor() {
           ) : null}
 
           {0 === teams.length ? (
-            <p className="text-sm text-muted-foreground">Aucune équipe pour le moment.</p>
+            <EmptyHint>Aucune équipe pour le moment.</EmptyHint>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">

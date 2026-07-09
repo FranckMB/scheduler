@@ -2,6 +2,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { TeamSelect } from "@/shared/components/ui/team-select";
@@ -201,7 +202,7 @@ function CoachesEditor() {
       ) : null}
 
       {0 === coaches.length ? (
-        <p className="text-sm text-muted-foreground">Aucun coach pour le moment.</p>
+        <EmptyHint>Aucun coach pour le moment.</EmptyHint>
       ) : (
         <div className="flex flex-col gap-3">
           {coaches.map((coach) => (

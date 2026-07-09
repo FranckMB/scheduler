@@ -2,6 +2,7 @@ import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -102,7 +103,7 @@ function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Te
       </div>
 
       {0 === reservations.length ? (
-        <p className="text-sm text-muted-foreground">Aucune réservation. Le solveur reste libre de placer les équipes.</p>
+        <EmptyHint>Aucune réservation. Le solveur reste libre de placer les équipes.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
           {reservations.map((r) => (
@@ -527,7 +528,7 @@ export function ConstraintsStep() {
 
       {/* List for the active family */}
       {0 === list.length ? (
-        <p className="text-sm text-muted-foreground">Aucune contrainte dans cette famille.</p>
+        <EmptyHint>Aucune contrainte dans cette famille.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
           {list.map((c: Constraint) => (
