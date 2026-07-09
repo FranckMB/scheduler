@@ -101,6 +101,15 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         if (null === $club->getLeague()) {
             $club->setLeague($this->leagueResolver->resolveFromFfbbCode(self::BCCL_FFBB_CODE));
         }
+        // Club accent = the logo red, in both themes (accentForMode lifts it for
+        // legibility on dark surfaces). Only-fill-when-empty so a manual PATCH
+        // survives a re-run, like schoolZone/league above.
+        if (null === $club->getAccentColor()) {
+            $club->setAccentColor('#E53935');
+        }
+        if (null === $club->getAccentColorDark()) {
+            $club->setAccentColorDark('#E53935');
+        }
         $manager->flush();
 
         $clubId = $club->getId();
@@ -247,16 +256,17 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // ============================================================
         // SECTION 2 — VENUES
         // ============================================================
+        // [name, var, color (hex), canSplit] — Matéo + JDR are divisible gyms.
         $venuesData = [
-            ['name' => 'Armand', 'var' => 'vArmand'],
-            ['name' => 'ADN', 'var' => 'vAdn'],
-            ['name' => 'Debarros', 'var' => 'vDebarros'],
-            ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe'],
-            ['name' => 'Jean Vilar', 'var' => 'vJeanVilar'],
-            ['name' => 'Tonkin', 'var' => 'vTonkin'],
-            ['name' => 'JDR', 'var' => 'vJdr'],
-            ['name' => 'Matéo', 'var' => 'vMateo'],
-            ['name' => 'Camus', 'var' => 'vCamus'],
+            ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => false],
+            ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => false],
+            ['name' => 'Debarros', 'var' => 'vDebarros', 'color' => '#2E7D32', 'canSplit' => false],
+            ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe', 'color' => '#66BB6A', 'canSplit' => false],
+            ['name' => 'Jean Vilar', 'var' => 'vJeanVilar', 'color' => '#1A237E', 'canSplit' => false],
+            ['name' => 'Tonkin', 'var' => 'vTonkin', 'color' => '#FB8C00', 'canSplit' => false],
+            ['name' => 'JDR', 'var' => 'vJdr', 'color' => '#F8BBD0', 'canSplit' => true],
+            ['name' => 'Matéo', 'var' => 'vMateo', 'color' => '#E53935', 'canSplit' => true],
+            ['name' => 'Camus', 'var' => 'vCamus', 'color' => '#8E24AA', 'canSplit' => false],
         ];
 
         $venues = [];
@@ -266,7 +276,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 'name' => $vd['name'],
             ]);
             if ($existing instanceof Venue) {
-                $venues[$vd['var']] = $existing;
+                $venue = $existing;
             } else {
                 $venue = new Venue;
                 $venue->setClubId($club->getId());
@@ -275,8 +285,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $venue->setSource('fixture');
                 $venue->setIsActive(true);
                 $manager->persist($venue);
-                $venues[$vd['var']] = $venue;
             }
+            // Identity colour + divisibility (seeded, re-applied on re-run).
+            $venue->setColor($vd['color']);
+            $venue->setCanSplit($vd['canSplit']);
+            $venues[$vd['var']] = $venue;
         }
         $manager->flush();
 
@@ -512,6 +525,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $u18m1 = $teams['U18M1'];
         $u18m2 = $teams['U18M2'];
         $u18f1 = $teams['U18F1'];
+        $u18f2 = $teams['U18F2'];
         $u18f3 = $teams['U18F3'];
         $u15m1 = $teams['U15M1'];
         $u15m2 = $teams['U15M2'];
@@ -535,9 +549,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // SECTION 5 — NEW COACHES
         // ============================================================
         $newCoachesData = [
-            ['firstName' => 'Maxime', 'lastName' => ''],
+            ['firstName' => 'Maxime', 'lastName' => 'Dionnet'],
             ['firstName' => 'Mara', 'lastName' => ''],
-            ['firstName' => 'Emerick', 'lastName' => ''],
+            ['firstName' => 'Emerick', 'lastName' => 'Creantor'],
             ['firstName' => 'Nico', 'lastName' => 'Patin'],
             ['firstName' => 'Enzo', 'lastName' => ''],
             ['firstName' => 'Thomas', 'lastName' => ''],
@@ -570,6 +584,10 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 'firstName' => $coachData['firstName'],
             ]);
             if ($existing instanceof Coach) {
+                // Keep an already-seeded coach in sync with the data (e.g. a
+                // last name added later) — append mode reuses the row, so
+                // without this the rename would never reach the DB.
+                $existing->setLastName($coachData['lastName']);
                 $coaches[$key] = $existing;
             } else {
                 $coach = new Coach;
@@ -586,9 +604,9 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
 
         // Extract typed coach references for PHPStan level 8
         /** @var array<string, Coach> $coaches */
-        $coachMaxime = $coaches['Maxime'];
+        $coachMaxime = $coaches['Maxime Dionnet'];
         $coachMara = $coaches['Mara'];
-        $coachEmerick = $coaches['Emerick'];
+        $coachEmerick = $coaches['Emerick Creantor'];
         $coachNicoPatin = $coaches['Nico Patin'];
         $coachEnzo = $coaches['Enzo'];
         $coachThomas = $coaches['Thomas'];
@@ -635,7 +653,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['coach' => $coachThomas, 'team' => $u21m1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMarlon, 'team' => $u21m2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachNicolasBarilleau, 'team' => $u18m1, 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachInes, 'team' => $u18m2, 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachInes, 'team' => $u18f2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachEnzo, 'team' => $u18f1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachFlorian, 'team' => $u18f3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachThomas, 'team' => $u15m1, 'role' => TeamCoachRole::MAIN],
@@ -666,6 +684,18 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['coach' => $coachCharlie, 'team' => $teams['U9F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachCharlie, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
         ];
+
+        // Purge existing team-coach links (club/season) before recreating, so an
+        // append-mode reseed can't leave a stale assignment behind when a coach
+        // moves between teams — mirrors the VenueTrainingSlot purge above.
+        $existingLinks = $manager->getRepository(TeamCoach::class)->findBy([
+            'clubId' => $club->getId(),
+            'seasonId' => $season->getId(),
+        ]);
+        foreach ($existingLinks as $existingLink) {
+            $manager->remove($existingLink);
+        }
+        $manager->flush();
 
         foreach ($newTeamCoachLinks as $link) {
             $existing = $manager->getRepository(TeamCoach::class)->findOneBy([
@@ -858,8 +888,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['team' => $sm1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             // SF1
-            ['team' => $sf1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $sf1, 'venue' => 'vDebarros', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $sf1, 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $sf1, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             // Loisir Feminine
             ['team' => $loisirFeminine, 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             // 3x3
