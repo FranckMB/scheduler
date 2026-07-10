@@ -5,25 +5,20 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use ApiPlatform\Metadata\Put;
-use App\Dto\SportInput;
 use App\Entity\Sport;
-use App\State\Processor\SportStateProcessor;
 use App\State\Provider\SportStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// SEC-14: read-only over the tenant API. Sport is a GLOBAL reference table (no club_id);
+// clubs consume it, they don't edit it. Seeded via fixtures / register's seedNewClub (EM,
+// not the API). Any edit belongs to a super-admin/ops surface, never the tenant API.
 #[ApiResource(shortName: 'Sport', operations: [
     new GetCollection,
     new Get,
-    new Post,
-    new Put,
-    new Delete,
-], input: SportInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: SportStateProvider::class, processor: SportStateProcessor::class)]
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: SportStateProvider::class)]
 class SportResource
 {
     #[Groups(['read'])]

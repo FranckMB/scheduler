@@ -5,25 +5,21 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use ApiPlatform\Metadata\Put;
-use App\Dto\PriorityTierInput;
 use App\Entity\PriorityTier;
-use App\State\Processor\PriorityTierStateProcessor;
 use App\State\Provider\PriorityTierStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// SEC-14: read-only over the tenant API. PriorityTier is a GLOBAL reference table (no
+// club_id) read by the solver for EVERY club (ScheduleConstraintBuilder::findBy([])),
+// so a write here would tamper with all tenants' generations. Seeded via fixtures;
+// any future edit belongs to a super-admin/ops surface, never the tenant API.
 #[ApiResource(shortName: 'PriorityTier', operations: [
     new GetCollection,
     new Get,
-    new Post,
-    new Put,
-    new Delete,
-], input: PriorityTierInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PriorityTierStateProvider::class, processor: PriorityTierStateProcessor::class)]
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: PriorityTierStateProvider::class)]
 class PriorityTierResource
 {
     #[Groups(['read'])]
