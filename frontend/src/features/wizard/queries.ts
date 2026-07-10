@@ -225,6 +225,10 @@ export function useWizardTeamTags() {
   return useQuery({ queryKey: ["wizard", "team_tags"], queryFn: wizardApi.listTeamTags, staleTime: 30_000 });
 }
 
+export function useWizardTeamTagAssignments() {
+  return useQuery({ queryKey: ["wizard", "team_tag_assignments"], queryFn: wizardApi.listTeamTagAssignments, staleTime: 30_000 });
+}
+
 export function useCreateConstraint() {
   const queryClient = useQueryClient();
   return useMutation({
