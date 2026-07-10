@@ -99,9 +99,13 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           />
         ))}
 
-        {/* Slots — overlapping ones share the column in side-by-side lanes */}
-        {cells.map((cell) => {
-          const highlighting = highlightSlotIds && highlightSlotIds.size > 0;
+        {/* Slots — overlapping ones share the column in side-by-side lanes.
+            Only dim when the highlight set actually matches a visible cell — else
+            a highlight of empty-slot ids left over from the gymnase view would dim
+            the ENTIRE coach/equipe grid (their ids never match). */}
+        {(() => {
+          const highlighting = null != highlightSlotIds && highlightSlotIds.size > 0 && cells.some((c) => highlightSlotIds.has(c.slotId));
+          return cells.map((cell) => {
           const dimmed = highlighting && !highlightSlotIds.has(cell.slotId);
           // Empty slots = defined venue windows the solver left unfilled. Muted,
           // dashed, labelled "vide", not selectable — but still highlightable so a
@@ -163,7 +167,8 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
               <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
             </button>
           );
-        })}
+          });
+        })()}
       </div>
     </div>
   );

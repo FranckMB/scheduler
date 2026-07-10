@@ -250,7 +250,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const emptySlots = useMemo(() => computeEmptySlots(trainingSlots, slots, validScheduleId ?? ""), [trainingSlots, slots, validScheduleId]);
   const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
 
-  const resourceGroups = useMemo(() => availableResourceGroups(slots, viewMode, lookups, tiers), [slots, viewMode, lookups, tiers]);
+  // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY
+  // empty slots still appears in the ResourceFilter picker — otherwise focusVenue
+  // could filter to a venue the picker cannot show/clear.
+  const resourceGroups = useMemo(() => availableResourceGroups(gridSlots, viewMode, lookups, tiers), [gridSlots, viewMode, lookups, tiers]);
   const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
