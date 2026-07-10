@@ -24,6 +24,7 @@ final readonly class ScheduleExportData
      * @param array<string, string>      $teamCategories teamId → category name
      * @param array<string, VenueInfo>   $venues
      * @param array<string, string>      $coachNames
+     * @param list<ExportEmptyWindow>    $emptySlots     defined-but-unfilled venue windows
      */
     public function __construct(
         public array $slots,
@@ -31,5 +32,6 @@ final readonly class ScheduleExportData
         public array $teamCategories,
         public array $venues,
         public array $coachNames,
+        public array $emptySlots = [],
     ) {}
 }
