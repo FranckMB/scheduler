@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/shared/stores/toastStore";
 
-import type { AppearancePayload } from "./api";
+import type { AppearancePayload, ClubInfoPayload } from "./api";
 import * as clubApi from "./api";
 
 /** Save the club accent; refetch /me so the theme re-applies live. */
@@ -11,6 +11,19 @@ export function useUpdateAppearance() {
   return useMutation({
     mutationFn: (body: AppearancePayload) => clubApi.updateAppearance(body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+/** Save the FFBB club info; refetch /me so the club section re-renders. */
+export function useUpdateClubInfo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ClubInfoPayload) => clubApi.updateClubInfo(body),
+    onSuccess: () => {
+      toast.success("Informations du club enregistrées.");
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: () => toast.error("L'enregistrement des informations du club a échoué."),
   });
 }
 

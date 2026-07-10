@@ -57,7 +57,7 @@ layouts (`src/app/router.tsx`).
 | `/planning` | **Boucle de travail planning** (`PlanningPage`, ex-`/`) : grille `WeekGrid`, toolbar (**sélecteur de versions** « V3 — 10 juil. 14:32 » — planning-versions D1 : versions non renommables, suppression d'une version de travail avec confirmation, ARCHIVED masquées ; régénérer, valider — archive les sœurs et fixe la baseline —, rouvrir, planning principal ★), **nom du planning éditable au header** (`Season.planningName`), bandeau divergence structure, diagnostics, détail créneau | Required | `AppLayout` |
 | `/matchs` | **Module matchs** (`MatchesPage`) : placement des rencontres domicile (grille week-end), radar de conflits coach/joueur, import FBI (`ImportFbiDialog`) | Required | `AppLayout` |
 | `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `onboardingCompleted === false`) | Required | `AppLayout` |
-| `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
+| `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette), **section « Informations du club »** (champs FFBB — voir ci-dessous, admin) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
 
 > Toute URL authentifiée inconnue (dont l'ancienne `/pending-members`) redirige vers `/` (catch-all `router.tsx`).
@@ -272,6 +272,21 @@ Le gestionnaire ne voit jamais le concept de `club_id` ou `season_id`. Le fronte
 - « Rouvrir » (`POST /api/schedules/{id}/reopen`) ramène en `COMPLETED` (rééditable).
 - « Définir principal » (`POST /api/schedules/{id}/set-baseline`) marque le planning ★ de la
   saison (affiché dans le sélecteur ; `baselineScheduleId` vient de `/api/me`).
+
+### 6.6 ter Informations du club (fiche FFBB — lot B)
+
+La route `/club` expose une section **« Informations du club »** (admin uniquement, `AccordionSection`)
+qui édite les métadonnées FFBB du club, regroupées : **Identité** (code FFBB + ligue + zone de vacances
+en lecture — auto-dérivés à l'onboarding ; code comité éditable), **Contact**, **Correspondant**,
+**Président**, **Salle principale**. Un bouton « Enregistrer » envoie un `PATCH /api/club/info`
+(management-gated SEC-07) qui met à jour **uniquement les champs présents** dans le body (partiel ;
+`''` réinitialise à `null`), valide les emails et les longueurs (`422` sinon), puis invalide `["me"]`.
+Les valeurs sont lues depuis le bloc `club` de `/api/me`. Saisie **manuelle** aujourd'hui ; l'autofill
+depuis la fiche FFBB est prévu en lot C.
+
+> **RGPD (minimisation).** Président et correspondant sont des **contacts professionnels** (données
+> publiques de la fiche FFBB : nom, téléphone, email). **Aucune adresse de domicile** n'est stockée —
+> seule l'adresse du club et de la salle principale (lieux publics) le sont. Voir `docs/technical-debt.md`.
 
 ### 6.7 Optimistic updates pour édition manuelle
 

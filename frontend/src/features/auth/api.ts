@@ -26,6 +26,20 @@ export interface MeResponse {
     accentColorDark: string | null;
     accentPalette: string[] | null;
     schoolZone: string | null;
+    league: string | null;
+    ffbbClubCode: string | null;
+    committeeCode: string | null;
+    contactPhone: string | null;
+    contactEmail: string | null;
+    address: string | null;
+    correspondentName: string | null;
+    correspondentPhone: string | null;
+    correspondentEmail: string | null;
+    presidentName: string | null;
+    presidentPhone: string | null;
+    presidentEmail: string | null;
+    mainVenueName: string | null;
+    mainVenueAddress: string | null;
   } | null;
   /** Gates of the SELECTED season (X-Season-Id), else the current one. */
   baselineScheduleId: string | null;
