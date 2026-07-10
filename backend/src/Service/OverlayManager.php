@@ -97,5 +97,8 @@ final class OverlayManager
         foreach ($this->entityManager->getRepository(ConstraintConflict::class)->findBy(['scheduleId' => $scheduleId]) as $conflict) {
             $this->entityManager->remove($conflict);
         }
+        foreach ($this->entityManager->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $scheduleId]) as $snapshot) {
+            $this->entityManager->remove($snapshot);
+        }
     }
 }

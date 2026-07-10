@@ -66,6 +66,7 @@ final class SeasonDataPurger
 
         foreach ([
             ScheduleDiagnostic::class,
+            \App\Entity\ScheduleStructureSnapshot::class,
             ScheduleSlotTemplate::class,
             Constraint::class,
             TeamCoach::class,

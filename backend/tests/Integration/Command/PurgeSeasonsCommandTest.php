@@ -63,6 +63,8 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         self::assertNull($this->em->getRepository(Season::class)->find($old->getId()));
         self::assertCount(0, $this->em->getRepository(Team::class)->findBy(['seasonId' => $old->getId()]));
         self::assertCount(0, $this->em->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $old->getId()]));
+        // planning-versions D2: the structure photos die with their season.
+        self::assertCount(0, $this->em->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['seasonId' => $old->getId()]));
         // current, N-1 and the future draft survive.
         self::assertNotNull($this->em->getRepository(Season::class)->find($past->getId()));
         self::assertNotNull($this->em->getRepository(Season::class)->find($current->getId()));
