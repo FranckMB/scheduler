@@ -6,7 +6,7 @@ import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"]): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null });
+const schedule = (status: Schedule["status"]): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12 });
 
 function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
   return render(
@@ -21,6 +21,7 @@ function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
       onReopen={noop}
       onSetBaseline={noop}
       onDelete={noop}
+      onRegenerateFrom={noop}
       isGenerating={false}
       actionBusy={false}
       baselineScheduleId={baselineScheduleId}
@@ -32,7 +33,7 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   it("offers Valider + a Régénérer button on a completed schedule", () => {
     renderToolbar(schedule("COMPLETED"));
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /régénérer/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Régénérer" })).toBeInTheDocument();
     expect(screen.getByText("Terminé")).toBeInTheDocument();
   });
 
@@ -40,7 +41,9 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     renderToolbar(schedule("VALIDATED"));
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
     expect(screen.getByText("Validé")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /régénérer/i })).not.toBeInTheDocument();
+    // The plain "Régénérer" (current structure) is hidden on a read-only version;
+    // "Régénérer aux conditions" (restore this version's structure) may still show.
+    expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
   });
 
   it("marks the baseline schedule as « Planning principal »", () => {
@@ -57,6 +60,11 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   it("offers Supprimer on a plain work version, but not on the baseline", () => {
     renderToolbar(schedule("COMPLETED"), "other");
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
+  });
+
+  it("offers « Régénérer aux conditions » on a finished version that has a structure photo", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.getByRole("button", { name: /régénérer aux conditions/i })).toBeInTheDocument();
   });
 
   it("hides Supprimer on the baseline and on a validated version", () => {

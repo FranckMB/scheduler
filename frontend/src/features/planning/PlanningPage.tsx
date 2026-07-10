@@ -17,7 +17,7 @@ import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -147,6 +147,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const reopenMutation = useReopenSchedule();
   const setBaselineMutation = useSetBaseline();
   const deleteMutation = useDeleteSchedule();
+  const regenerateFromMutation = useRegenerateFromVersion();
+  const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
   const renamePlanning = useRenamePlanning();
   const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
   const [validateOpen, setValidateOpen] = useState(false);
@@ -334,6 +336,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onReopen={() => reopen()}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
+              onRegenerateFrom={() => setRegenerateFromOpen(true)}
               baselineScheduleId={baselineScheduleId}
             />
             <div className="ml-auto flex items-center gap-2">
@@ -423,6 +426,27 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         destructive
         onConfirm={() => validate(true)}
         onCancel={() => setValidateOverlayCount(null)}
+      />
+
+      <ConfirmDialog
+        open={regenerateFromOpen}
+        title="Régénérer aux conditions de cette version ?"
+        description={
+          "number" === typeof selectedSchedule?.generatedTeamCount ? (
+            <>
+              La structure actuelle ({teams.length} équipe{teams.length > 1 ? "s" : ""}) sera remplacée par celle de cette version ({selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""}), puis un nouveau planning sera généré. Les données de structure actuelles seront écrasées.
+            </>
+          ) : null
+        }
+        confirmLabel="Régénérer"
+        destructive
+        onConfirm={() => {
+          if (null !== validScheduleId) {
+            regenerateFromMutation.mutate(validScheduleId, { onSuccess: (created) => setSelectedScheduleId(created.id) });
+          }
+          setRegenerateFromOpen(false);
+        }}
+        onCancel={() => setRegenerateFromOpen(false)}
       />
     </div>
   );

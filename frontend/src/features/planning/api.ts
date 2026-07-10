@@ -233,6 +233,12 @@ export const renameSchedule = (id: string, name: string, status: ScheduleStatus)
 /** Delete a work version (server refuses baseline / VALIDATED / in-flight with 409). */
 export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedules/${id}`).then(() => undefined);
 
+/**
+ * planning-versions D3: restore this version's structure photo and queue a
+ * fresh generation → a new linear version. Returns the new schedule id.
+ */
+export const regenerateFromVersion = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate-from`).json();
+
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. calendarEntryId → every
 // `null === calendarEntryId` overlay check silently fails (UX-02 journey
