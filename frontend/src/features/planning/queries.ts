@@ -249,3 +249,14 @@ export function useRegenerateFromVersion() {
     onError: () => toast.error("La régénération aux conditions de cette version a échoué."),
   });
 }
+
+export function useRegenerate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => planningApi.regenerate(id),
+    // A NEW version row appears — refresh the version list (the current structure
+    // is unchanged, so no need to refetch the reference families).
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: () => toast.error("La régénération a échoué."),
+  });
+}

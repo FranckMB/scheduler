@@ -249,6 +249,9 @@ export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedul
  * fresh generation → a new linear version. Returns the new schedule id.
  */
 export const regenerateFromVersion = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate-from`).json();
+/** planning-versions: the plain "Régénérer" creates a NEW linear version (V2…)
+ *  from the current structure, carrying the version's HARD-locked slots. */
+export const regenerate = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate`).json();
 
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. calendarEntryId → every

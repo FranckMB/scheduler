@@ -44,6 +44,7 @@ final class ManagementRoleTest extends WebTestCase
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/validate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/reopen'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/set-baseline'],
+            ['POST', '/api/schedules/' . self::DUMMY_ID . '/regenerate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/generate'],
             ['POST', '/api/teams/reorder'],
             ['PATCH', '/api/club/appearance'],

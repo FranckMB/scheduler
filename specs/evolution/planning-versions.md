@@ -48,6 +48,9 @@ Hors périmètre (PR dédiées ultérieures) : **versions d'overlay** (lever la 
 - Wipe préserve : schedules/versions, calendrier (entries, contraintes datées, réservations d'overlay). Gardes inchangées.
 - **Reporté en D4** (design produit) : « Travailler sur cette version » (restauration pour édition manuelle) + savepoint auto de l'état vivant.
 
+### D3bis — « Régénérer » (simple) crée une nouvelle version *(fait — 2026-07-11)*
+Décision 6, **clause 2** (« une régénération normale → V linéaire ») : elle était **décidée mais jamais implémentée** — le « Régénérer » simple régénérait **en place** (`GenerateScheduleController` réutilise le schedule courant, écrase ses créneaux), donc aucune V2 n'apparaissait. Corrigé : `POST /api/schedules/{id}/regenerate` (`RegenerateController`, management-gated) crée une **nouvelle ligne `Schedule` PENDING** avec la **structure actuelle** (pas de restauration de photo, contrairement à D3), **reporte les créneaux verrouillés HARD** de la version source (le solveur les re-fixe, comme la régé en place), puis `GenerateScheduleMessage` → nouvelle version linéaire (V2, V3…). Le front bascule sur la nouvelle version. Gardes : overlay/VALIDATED/DRAFT/in-flight refusés (409), complexité (A10). La 1re génération (DRAFT) reste le chemin en place du wizard.
+
 ## 5. Invariants (à tester à chaque palier)
 
 1. Les **overlays ne sont jamais** archivés/supprimés/restaurés par le mécanisme versions.
