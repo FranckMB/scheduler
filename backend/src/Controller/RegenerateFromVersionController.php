@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
+use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\StructureRestorer;
 use DateTimeImmutable;
@@ -38,6 +39,8 @@ final class RegenerateFromVersionController extends AbstractController implement
         private readonly StructureRestorer $structureRestorer,
     ) {}
 
+    private const IN_FLIGHT = [ScheduleStatus::PENDING, ScheduleStatus::GENERATING];
+
     #[Route('/api/schedules/{id}/regenerate-from', name: 'api_schedule_regenerate_from', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse
     {
@@ -63,24 +66,69 @@ final class RegenerateFromVersionController extends AbstractController implement
             return $this->json(['error' => 'Only a season version can be regenerated from.'], Response::HTTP_CONFLICT);
         }
 
-        // Restore the version's structure (409 inside if it has no photo), then
-        // spin a brand-new version on the restored structure.
-        $this->structureRestorer->restore($source);
+        // Only a FINISHED, non-locked version's conditions can be replayed: a
+        // VALIDATED plan is read-only (D1 model archives its siblings), an
+        // ARCHIVED one is never resurrected, and a DRAFT/FAILED/in-flight one
+        // has no meaningful structure to restore.
+        if (ScheduleStatus::COMPLETED !== $source->getStatus()) {
+            return $this->json(['error' => 'Seule une version terminée peut être régénérée (rouvrez un planning validé d\'abord).'], Response::HTTP_CONFLICT);
+        }
 
+        // The restore wipes the club structure — refuse while ANY version of the
+        // season is still solving, or its import would land slots referencing
+        // teams/venues the wipe just deleted (the ClubGenerationLock only
+        // serialises solves, it does not guard this destructive write).
+        $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
+            'clubId' => $source->getClubId(),
+            'seasonId' => $source->getSeasonId(),
+            'status' => self::IN_FLIGHT,
+        ]);
+        if ($inFlight > 0) {
+            return $this->json(['error' => 'Une génération est en cours — attendez sa fin avant de régénérer aux conditions d\'une version.'], Response::HTTP_CONFLICT);
+        }
+
+        // Read the photo (409 if none) and reject an over-complex restored
+        // problem BEFORE any destructive change (A10, same caps as the normal
+        // generation path — the direct dispatch would otherwise bypass it).
+        $data = $this->structureRestorer->readSnapshot($source);
+        $violation = GenerationComplexityGuard::evaluate(
+            teams: \count($data['Team'] ?? []),
+            venues: \count($data['Venue'] ?? []),
+            coaches: \count($data['Coach'] ?? []),
+            slots: \count($data['VenueTrainingSlot'] ?? []),
+            constraints: \count($data['Constraint'] ?? []),
+        );
+        if (null !== $violation) {
+            return $this->json([
+                'error' => \sprintf('Génération bloquée : trop de %s (%d, limite %d).', $violation['cap'], $violation['count'], $violation['limit']),
+                'cap' => $violation['cap'], 'count' => $violation['count'], 'limit' => $violation['limit'],
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // ATOMIC: the destructive restore + the new PENDING version commit
+        // together — a failure never leaves the structure wiped with no version
+        // to show for it. PENDING (not DRAFT) so the frontend polls it and it
+        // is guarded in-flight (no concurrent delete/validate).
         $newSchedule = (new Schedule)
             ->setClubId($source->getClubId())
             ->setSeasonId($source->getSeasonId())
             ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
-            ->setStatus(ScheduleStatus::DRAFT);
-        $this->entityManager->persist($newSchedule);
-        $this->entityManager->flush();
+            ->setStatus(ScheduleStatus::PENDING);
+        $this->entityManager->wrapInTransaction(function () use ($source, $data, $newSchedule): void {
+            $this->structureRestorer->apply($source->getClubId(), $source->getSeasonId(), $data);
+            $this->entityManager->persist($newSchedule);
+            $this->entityManager->flush();
+        });
 
+        // After commit: a dispatch failure only strands a PENDING schedule the
+        // stuck-schedule watchdog reconciles — the structure is already safely
+        // restored with its version (same trade-off as GenerateScheduleController).
         $this->messageBus->dispatch(new GenerateScheduleMessage(
             scheduleId: $newSchedule->getId(),
             clubId: $newSchedule->getClubId(),
         ));
 
-        return $this->json(['id' => $newSchedule->getId(), 'status' => ScheduleStatus::DRAFT->value], Response::HTTP_ACCEPTED);
+        return $this->json(['id' => $newSchedule->getId(), 'status' => ScheduleStatus::PENDING->value], Response::HTTP_ACCEPTED);
     }
 
     private function resolveCurrentClubId(): ?string

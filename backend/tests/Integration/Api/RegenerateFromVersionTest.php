@@ -59,6 +59,34 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['seasonId' => $this->season->getId()]));
         $schedules = $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $this->season->getId(), 'calendarEntryId' => null]);
         self::assertCount(2, $schedules, 'the source version plus the newly queued one');
+        $queued = array_values(array_filter($schedules, static fn ($sc) => $sc->getId() !== $v1->getId()))[0];
+        self::assertSame(ScheduleStatus::PENDING, $queued->getStatus(), 'the new version is PENDING so the UI polls it and it is guarded in-flight');
+    }
+
+    public function testRegenerateFromANonCompletedSourceIsRefused(): void
+    {
+        // A VALIDATED (read-only) version's conditions cannot be replayed —
+        // reopen it first (D1 model archives siblings on validate).
+        $v1 = $this->makeSchedule(ScheduleStatus::VALIDATED, null);
+        $this->em->flush();
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testRegenerateFromBlockedWhileASiblingIsGenerating(): void
+    {
+        $this->persistTeam('SM1');
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->makeSchedule(ScheduleStatus::GENERATING, null); // a sibling mid-solve
+        $this->em->flush();
+        self::getContainer()->get(StructureSnapshotter::class)->store($v1, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+        self::assertResponseStatusCodeSame(409);
+        // Nothing wiped while a sibling solves.
+        $this->em->clear();
+        self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['seasonId' => $this->season->getId()]));
     }
 
     public function testRegenerateFromAVersionWithoutPhotoIsRefused(): void

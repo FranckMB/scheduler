@@ -69,7 +69,7 @@ final class StructureRestorerTest extends KernelTestCase
         self::assertCount(2, $this->em->getRepository(Team::class)->findBy(['seasonId' => $season->getId()]));
 
         // Restore V1's conditions.
-        $this->restorer->restore($v1);
+        $this->restorer->apply($club->getId(), $season->getId(), $this->restorer->readSnapshot($v1));
         $this->em->clear();
 
         // Back to state A: exactly SM1 (with its ORIGINAL id), the two added teams gone.
@@ -87,14 +87,19 @@ final class StructureRestorerTest extends KernelTestCase
     {
         [$club, $season] = $this->seedClubSeason();
         $this->persistTeam($club, $season, 'SM1');
+        // A venue that IS part of the photo — its dated closure must survive.
+        $venue = (new Venue)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Gym')->setSource('manual');
+        $this->em->persist($venue);
+        $this->em->flush();
         $v1 = $this->makeSchedule($club, $season);
         $entry = (new CalendarEntry)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
             ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
         $this->em->persist($entry);
-        // A dated (calendar) constraint — must survive the structure restore.
+        // A dated closure on a venue present in the photo — a legit calendar row
+        // that must survive the structure restore (only DANGLING refs are purged).
         $dated = (new Constraint)->setClubId($club->getId())->setSeasonId($season->getId())
-            ->setName('Fermeture')->setScope(ConstraintScope::FACILITY)->setScopeTargetId('22222222-2222-4222-8222-222222222222')
+            ->setName('Fermeture')->setScope(ConstraintScope::FACILITY)->setScopeTargetId($venue->getId())
             ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig([])
             ->setCalendarEntryId($entry->getId());
         $this->em->persist($dated);
@@ -102,7 +107,7 @@ final class StructureRestorerTest extends KernelTestCase
         $this->em->flush();
         $this->snapshotter->store($v1, $this->snapshotter->serialize($club->getId(), $season->getId()));
 
-        $this->restorer->restore($v1);
+        $this->restorer->apply($club->getId(), $season->getId(), $this->restorer->readSnapshot($v1));
         $this->em->clear();
 
         // Calendar entry, its dated constraint, and BOTH version rows survive.
@@ -110,6 +115,37 @@ final class StructureRestorerTest extends KernelTestCase
         self::assertNotNull($this->em->getRepository(Constraint::class)->find($dated->getId()), 'a dated constraint is calendar, not structure');
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($v1->getId()));
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($v2->getId()));
+    }
+
+    public function testRestorePurgesDatedRefsToEntitiesAbsentFromThePhoto(): void
+    {
+        [$club, $season] = $this->seedClubSeason();
+        // Photo A: no team. Capture on V1.
+        $v1 = $this->makeSchedule($club, $season);
+        $this->em->flush();
+        $this->snapshotter->store($v1, $this->snapshotter->serialize($club->getId(), $season->getId()));
+
+        // Later: a team is created + a dated constraint targets it.
+        $entry = (new CalendarEntry)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setTitle('P')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $newTeam = $this->persistTeam($club, $season, 'PostSnap');
+        $this->em->flush();
+        $ghost = (new Constraint)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setName('Ghost')->setScope(ConstraintScope::TEAM)->setScopeTargetId($newTeam->getId())
+            ->setFamily(ConstraintFamily::DAY)->setRuleType(ConstraintRuleType::HARD)->setConfig([])
+            ->setCalendarEntryId($entry->getId());
+        $this->em->persist($ghost);
+        $this->em->flush();
+        $ghostId = $ghost->getId();
+
+        // Restore V1 (team gone) → the dated constraint that targeted it is a
+        // ghost and gets purged; the calendar entry itself stays.
+        $this->restorer->apply($club->getId(), $season->getId(), $this->restorer->readSnapshot($v1));
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Constraint::class)->find($ghostId), 'a dated constraint targeting a now-absent team is purged');
+        self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()));
     }
 
     protected function setUp(): void

@@ -68,8 +68,10 @@ export function PlanningToolbar({
   // Deletable = a plain work version: never the baseline (anchors the season),
   // never VALIDATED (read-only), never mid-solve, never an overlay.
   const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
-  // "Regenerate under this version's conditions" needs its D2 structure photo.
-  const canRegenerateFrom = null !== selected && isFinished && !isOverlay && "number" === typeof selected.generatedTeamCount;
+  // "Regenerate under this version's conditions" is offered only on a finished,
+  // non-locked COMPLETED version (a VALIDATED one is read-only — reopen first;
+  // the backend refuses it anyway). generatedTeamCount signals a generated plan.
+  const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && "number" === typeof selected.generatedTeamCount;
 
   return (
     <>

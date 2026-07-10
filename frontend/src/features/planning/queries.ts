@@ -235,9 +235,13 @@ export function useRegenerateFromVersion() {
     mutationFn: (id: string) => planningApi.regenerateFromVersion(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      // The structure changed under the restore — refresh the wizard entities.
+      // The restore replaced the WHOLE structure — refresh every cached family
+      // (wizard + the planning reference lists, all staleTime 300 s).
       void queryClient.invalidateQueries({ queryKey: ["wizard"] });
-      void queryClient.invalidateQueries({ queryKey: ["teams"] });
+      for (const key of ["teams", "venues", "coaches", "categories", "priority_tiers"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
     },
+    onError: () => toast.error("La régénération aux conditions de cette version a échoué."),
   });
 }

@@ -58,8 +58,14 @@ final class StructureRestorer
         private readonly EntityManagerInterface $entityManager,
     ) {}
 
-    /** @throws ConflictHttpException when the source version has no captured photo (pre-D2) */
-    public function restore(Schedule $source): void
+    /**
+     * The version's captured structure photo (D2).
+     *
+     * @throws ConflictHttpException when the source has no photo (pre-D2)
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function readSnapshot(Schedule $source): array
     {
         $snapshot = $this->entityManager->getRepository(ScheduleStructureSnapshot::class)
             ->findOneBy(['scheduleId' => $source->getId()]);
@@ -67,25 +73,73 @@ final class StructureRestorer
             throw new ConflictHttpException('Cette version n\'a pas de photo de structure (générée avant l\'historique) — impossible de restaurer ses conditions.');
         }
 
-        $clubId = $source->getClubId();
-        $seasonId = $source->getSeasonId();
-        $data = $snapshot->getData();
+        return $snapshot->getData();
+    }
 
-        $this->entityManager->wrapInTransaction(function () use ($clubId, $seasonId, $data): void {
-            $this->disableTenantFilters($this->entityManager);
-            $this->wipeStructure($clubId, $seasonId);
-            // Bulk DQL DELETE removes the rows but leaves the (now-stale) objects
-            // in the identity map — re-inserting the SAME ids would then raise an
-            // identity collision. Detach everything first.
-            $this->entityManager->clear();
+    /**
+     * Replace the current permanent structure with the photo. NO transaction of
+     * its own — the caller wraps this AND the new-version creation in one
+     * transaction so the destructive wipe is never committed without a version
+     * to show for it.
+     *
+     * @param array<string, list<array<string, mixed>>> $data
+     */
+    public function apply(string $clubId, string $seasonId, array $data): void
+    {
+        $this->disableTenantFilters($this->entityManager);
+        $this->wipeStructure($clubId, $seasonId);
+        // Bulk DQL DELETE removes the rows but leaves the (now-stale) objects in
+        // the identity map — re-inserting the SAME ids would raise an identity
+        // collision. Detach everything first.
+        $this->entityManager->clear();
 
-            foreach (self::FAMILY_CLASS as $family => $entityClass) {
-                foreach ($data[$family] ?? [] as $rowData) {
-                    $this->entityManager->persist($this->hydrate($entityClass, $rowData));
-                }
+        foreach (self::FAMILY_CLASS as $family => $entityClass) {
+            foreach ($data[$family] ?? [] as $rowData) {
+                $this->entityManager->persist($this->hydrate($entityClass, $rowData));
             }
-            $this->entityManager->flush();
-        });
+        }
+        $this->entityManager->flush();
+
+        // A dated (calendar) constraint / overlay reservation created for an
+        // entity that did NOT exist at the photo's moment now dangles (its
+        // target is gone) — clean those ghosts, like the E1 cascade would.
+        $this->purgeDanglingCalendarRefs($clubId, $seasonId);
+        $this->entityManager->flush();
+    }
+
+    private function purgeDanglingCalendarRefs(string $clubId, string $seasonId): void
+    {
+        // Two-step (SELECT ids → DELETE … WHERE id IN): a DQL DELETE with a
+        // correlated subquery on the reserved-word `constraint` table emits
+        // invalid SQL (the target has no alias to correlate against). SELECT
+        // supports the alias, so resolve the ids first.
+        $deadConstraintIds = $this->entityManager->createQuery(
+            'SELECT c.id FROM App\Entity\Constraint c WHERE c.clubId = :c AND c.seasonId = :s AND c.calendarEntryId IS NOT NULL AND ('
+            . '(c.scope = :team AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = c.scopeTargetId)) '
+            . 'OR (c.scope = :coach AND NOT EXISTS (SELECT 1 FROM App\Entity\Coach co WHERE co.id = c.scopeTargetId)) '
+            . 'OR (c.scope = :facility AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = c.scopeTargetId)))',
+        )
+            ->setParameter('c', $clubId)->setParameter('s', $seasonId)
+            ->setParameter('team', \App\Enum\ConstraintScope::TEAM)
+            ->setParameter('coach', \App\Enum\ConstraintScope::COACH)
+            ->setParameter('facility', \App\Enum\ConstraintScope::FACILITY)
+            ->getSingleColumnResult();
+        if ([] !== $deadConstraintIds) {
+            $this->entityManager->createQuery('DELETE App\Entity\Constraint c WHERE c.id IN (:ids)')
+                ->setParameter('ids', $deadConstraintIds)->execute();
+        }
+
+        $deadReservationIds = $this->entityManager->createQuery(
+            'SELECT r.id FROM App\Entity\Reservation r WHERE r.clubId = :c AND r.seasonId = :s AND r.calendarEntryId IS NOT NULL AND ('
+            . 'NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = r.teamId) '
+            . 'OR NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = r.venueId))',
+        )
+            ->setParameter('c', $clubId)->setParameter('s', $seasonId)
+            ->getSingleColumnResult();
+        if ([] !== $deadReservationIds) {
+            $this->entityManager->createQuery('DELETE App\Entity\Reservation r WHERE r.id IN (:ids)')
+                ->setParameter('ids', $deadReservationIds)->execute();
+        }
     }
 
     /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
