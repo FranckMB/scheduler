@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
 
-import type { GridResource } from "./lib/grid";
+import type { GridResourceGroup } from "./lib/grid";
 import type { ViewMode } from "./store";
 
 const LABELS: Record<ViewMode, string> = {
@@ -14,21 +14,25 @@ const LABELS: Record<ViewMode, string> = {
 
 interface ResourceFilterProps {
   viewMode: ViewMode;
-  resources: GridResource[];
+  /** Grouped resources — equipe view carries rank headers, other views one flat null-label group. */
+  groups: GridResourceGroup[];
   selected: string[];
   onToggle: (id: string) => void;
   onClear: () => void;
 }
 
-export function ResourceFilter({ viewMode, resources, selected, onToggle, onClear }: ResourceFilterProps) {
+export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }: ResourceFilterProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  if (0 === resources.length) {
+  if (groups.every((g) => 0 === g.resources.length)) {
     return null;
   }
 
-  const filtered = resources.filter((resource) => resource.label.toLowerCase().includes(query.trim().toLowerCase()));
+  const needle = query.trim().toLowerCase();
+  const filteredGroups = groups
+    .map((g) => ({ ...g, resources: g.resources.filter((r) => r.label.toLowerCase().includes(needle)) }))
+    .filter((g) => g.resources.length > 0);
   const count = selected.length;
   const summary = 0 === count ? "tous" : `${count} sélectionné${count > 1 ? "s" : ""}`;
 
@@ -66,22 +70,31 @@ export function ResourceFilter({ viewMode, resources, selected, onToggle, onClea
                   </button>
                 </li>
               ) : null}
-              {filtered.map((resource) => {
-                const active = selected.includes(resource.id);
-                return (
-                  <li key={resource.id}>
-                    <button
-                      type="button"
-                      onClick={() => onToggle(resource.id)}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
-                    >
-                      <Check className={cn("size-4 shrink-0 text-accent", active ? "" : "invisible")} />
-                      <span className="truncate">{resource.label}</span>
-                    </button>
-                  </li>
-                );
-              })}
-              {0 === filtered.length ? <li className="px-2 py-1 text-xs text-muted-foreground">Aucun résultat</li> : null}
+              {filteredGroups.map((group, gi) => (
+                <li key={group.label ?? `flat-${gi}`}>
+                  {null !== group.label ? (
+                    <p className="px-2 pb-0.5 pt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                  ) : null}
+                  <ul>
+                    {group.resources.map((resource) => {
+                      const active = selected.includes(resource.id);
+                      return (
+                        <li key={resource.id}>
+                          <button
+                            type="button"
+                            onClick={() => onToggle(resource.id)}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                          >
+                            <Check className={cn("size-4 shrink-0 text-accent", active ? "" : "invisible")} />
+                            <span className="truncate">{resource.label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
+              {0 === filteredGroups.length ? <li className="px-2 py-1 text-xs text-muted-foreground">Aucun résultat</li> : null}
             </ul>
           </div>
         </>

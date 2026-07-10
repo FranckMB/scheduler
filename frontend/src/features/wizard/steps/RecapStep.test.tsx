@@ -1,10 +1,10 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-const h = { reservations: [] as Array<Record<string, unknown>>, resDelete: vi.fn() };
+const h = { reservations: [] as Array<Record<string, unknown>> };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({
@@ -26,25 +26,18 @@ vi.mock("../queries", () => ({
       { id: 3, label: "B", name: "Moyenne", color: null },
     ],
   }),
-  useDeleteReservation: () => ({ mutate: h.resDelete }),
 }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [] }) }));
 vi.mock("../store", () => ({ useWizardStore: (sel: (s: { mode: string; calendarEntryId: string | null }) => unknown) => sel({ mode: "season", calendarEntryId: null }) }));
 
 import { RecapStep } from "./RecapStep";
 
-/**
- * The Réservations accordion is the ONLY UI that lists EVERY reservation, so it
- * must rank-sort them (fanion S → D) and let a manager remove an orphaned one
- * (whose availability slot was deleted, hence absent from the Réserver grid).
- */
-describe("RecapStep — Réservations accordion", () => {
+describe("RecapStep — read-only summary", () => {
   beforeEach(() => {
-    h.resDelete.mockClear();
     h.reservations = [];
   });
 
-  it("lists reservations by team rank (fanion before B) and removes one → useDeleteReservation", async () => {
+  it("lists reservations by team rank (fanion before B) with NO delete button (read-only)", async () => {
     // Server order puts the rank-B team first; the accordion must show rank-S first.
     h.reservations = [
       { id: "rB", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 },
@@ -55,13 +48,27 @@ describe("RecapStep — Réservations accordion", () => {
 
     await user.click(screen.getByRole("button", { name: /Réservations/ }));
 
-    const removeLabels = screen.getAllByRole("button", { name: /Retirer la réservation de/ }).map((b) => b.getAttribute("aria-label") ?? "");
-    const iFanion = removeLabels.findIndex((l) => l.includes("Fanion"));
-    const iSM1 = removeLabels.findIndex((l) => l.includes("SM1"));
-    expect(iFanion).toBeGreaterThanOrEqual(0);
-    expect(iFanion).toBeLessThan(iSM1); // rank S (Fanion) before rank B (SM1)
+    // Rank order: the Fanion (S) row precedes the SM1 (B) row in the DOM.
+    const rows = screen.getAllByText(/^(Fanion|SM1)$/).map((el) => el.textContent);
+    expect(rows.indexOf("Fanion")).toBeLessThan(rows.indexOf("SM1"));
 
-    await user.click(screen.getByRole("button", { name: /Retirer la réservation de Fanion/ }));
-    expect(h.resDelete).toHaveBeenCalledWith("rS");
+    // Read-only strict: the recap exposes no destructive action.
+    expect(screen.queryByRole("button", { name: /Retirer la réservation/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the team tiers open by default (ranks visible at first glance)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RecapStep />);
+
+    // Open the outer "Équipes" accordion; the tier groups inside must be OPEN
+    // (their team rows visible) with their rank labels shown, S before B.
+    const equipesHeaders = screen.getAllByRole("button", { name: /Équipes/ });
+    await user.click(equipesHeaders[0]);
+
+    const sHeader = screen.getByRole("button", { name: /S · Fanion/ });
+    expect(sHeader).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /B · Moyenne/ })).toBeInTheDocument();
+    // defaultOpen: the S tier's team row is already visible without a click.
+    expect(within(sHeader.parentElement as HTMLElement).getByText("Fanion")).toBeInTheDocument();
   });
 });

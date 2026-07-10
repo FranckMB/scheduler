@@ -1,4 +1,3 @@
-import { Trash2 } from "lucide-react";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -10,7 +9,7 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { useDeleteReservation, usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -53,7 +52,6 @@ export function RecapStep() {
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: reservations = [] } = useReservations(periodEntryId);
   const { data: tiers = [] } = usePriorityTiers();
-  const deleteReservation = useDeleteReservation();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
@@ -95,7 +93,9 @@ export function RecapStep() {
           ) : (
             <TeamTierAccordion
               teams={teams}
-              defaultOpen={false}
+              // Tiers open by default: the ranks (S · Fanion → D · Bonus) must be
+              // visible at first glance — collapsed inner accordions read as an
+              // unsorted flat list to the manager.
               renderRow={(t) => {
                 const coach = mainCoachName(t.id);
                 return (
@@ -156,16 +156,7 @@ export function RecapStep() {
                 <SummaryRow
                   key={r.id}
                   label={teamName.get(r.teamId) ?? "?"}
-                  meta={
-                    <span className="flex items-center gap-2">
-                      {`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`}
-                      {/* The recap is the only place that lists EVERY reservation, so it must be
-                          able to remove one whose availability slot no longer exists (orphan). */}
-                      <button type="button" aria-label={`Retirer la réservation de ${teamName.get(r.teamId) ?? "l'équipe"}`} className="text-muted-foreground hover:text-destructive" onClick={() => deleteReservation.mutate(r.id)}>
-                        <Trash2 className="size-4" />
-                      </button>
-                    </span>
-                  }
+                  meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`}
                 />
               ))}
         </AccordionSection>
