@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Service;
 
 use App\Entity\Club;
+use App\Entity\Coach;
 use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\TeamCoach;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Enum\TeamCoachRole;
 use App\Service\StructureSnapshotter;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -57,13 +61,26 @@ final class StructureSnapshotterTest extends KernelTestCase
             ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(2)->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)
             ->setCalendarEntryId('44444444-4444-4444-8444-444444444444');
-        foreach ([$team, $venue, $permanent, $dated, $overlayReservation] as $e) {
+        $baseReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
+            ->setDayOfWeek(4)->setStartTime(new DateTimeImmutable('20:30'))->setDurationMinutes(120);
+        $slot = (new VenueTrainingSlot)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setVenueId('22222222-2222-4222-8222-222222222222')->setDayOfWeek(2)
+            ->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)->setCapacity(1);
+        $coach = (new Coach)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setFirstName('Jean')->setLastName('Coach');
+        foreach ([$team, $venue, $permanent, $dated, $overlayReservation, $baseReservation, $slot, $coach] as $e) {
             $this->em->persist($e);
         }
+        $this->em->flush();
+        $link = (new TeamCoach)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId($team->getId())->setCoachId($coach->getId())
+            ->setRole(TeamCoachRole::MAIN)->setIsRequired(false);
+        $this->em->persist($link);
         $schedule = $this->makeSchedule($club, $season);
         $this->em->flush();
 
-        $this->snapshotter->capture($schedule);
+        $this->snapshotter->store($schedule, $this->snapshotter->serialize($club->getId(), $season->getId()));
 
         $snapshot = $this->em->getRepository(ScheduleStructureSnapshot::class)->findOneBy(['scheduleId' => $schedule->getId()]);
         self::assertInstanceOf(ScheduleStructureSnapshot::class, $snapshot);
@@ -81,8 +98,17 @@ final class StructureSnapshotterTest extends KernelTestCase
         self::assertSame('SM1 mardi', $data['Constraint'][0]['name']);
         self::assertSame('TEAM', $data['Constraint'][0]['scope'], 'enum serialized as backed value');
         self::assertSame(['days' => [2]], $data['Constraint'][0]['config']);
-        // The overlay reservation is calendar too — excluded.
-        self::assertCount(0, $data['Reservation']);
+        // The overlay reservation is calendar — excluded; the BASE one is kept.
+        self::assertCount(1, $data['Reservation']);
+        self::assertSame(4, $data['Reservation'][0]['dayOfWeek']);
+        // Positive coverage of the remaining families (the D3 restore depends
+        // on every one of them actually loading).
+        self::assertCount(1, $data['VenueTrainingSlot']);
+        self::assertSame(90, $data['VenueTrainingSlot'][0]['durationMinutes']);
+        self::assertCount(1, $data['Coach']);
+        self::assertSame('Jean', $data['Coach'][0]['firstName']);
+        self::assertCount(1, $data['TeamCoach']);
+        self::assertSame('MAIN', $data['TeamCoach'][0]['role']);
     }
 
     public function testCaptureReplacesThePhotoOnRegeneration(): void
@@ -95,10 +121,11 @@ final class StructureSnapshotterTest extends KernelTestCase
         $this->em->persist($team);
         $this->em->flush();
 
-        $this->snapshotter->capture($schedule);
+        $this->snapshotter->store($schedule, $this->snapshotter->serialize($club->getId(), $season->getId()));
         $team->setName('Après');
         $this->em->flush();
-        $this->snapshotter->capture($schedule);
+        $this->snapshotter->store($schedule, $this->snapshotter->serialize($club->getId(), $season->getId()));
+        $this->em->clear();
 
         $rows = $this->em->getRepository(ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $schedule->getId()]);
         self::assertCount(1, $rows, 'one photo per version — replaced, never duplicated');

@@ -40,7 +40,7 @@ Hors périmètre (PR dédiées ultérieures) : **versions d'overlay** (lever la 
 
 ### D2 — snapshot structurel *(fait — 2026-07-10)*
 - Table `schedule_structure_snapshot` (unique par schedule, RLS FORCE) — json par famille : SportCategory, Team, Venue, VenueTrainingSlot, Coach, TeamCoach, CoachPlayerMembership, Constraint permanentes, Reservation base, TeamTagAssignment. Sérialisation générique ClassMetadata (dates ATOM, enums value).
-- Écrite par `GenerateScheduleHandler` après le freeze (plans de saison, non-fatal). Remplacée à chaque régénération ; purgée avec les artifacts du schedule et par `SeasonDataPurger`. Aucun UI. ~35 kB pour un gros club (fixture BCCL). Purgée avec le schedule (cascade artifacts) et par `SeasonDataPurger`.
+- Écrite par `GenerateScheduleHandler` après le freeze (plans de saison, non-fatal). Écrite seulement si le solve aboutit (COMPLETED) — un échec n'écrase jamais la photo du plan encore affiché. Aucun UI. ~35 kB pour un gros club (fixture BCCL). Purgée avec le schedule (cascade artifacts) et par `SeasonDataPurger`.
 
 ### D3 — restauration + lignée *(PR dédiée)*
 - **« Travailler sur cette version »** : savepoint auto (snapshot structurel de l'état courant, sans solve — Schedule « structure seule » ou entrée snapshot dédiée) → restauration **transactionnelle** de la structure depuis le snapshot (remplacement par saison ; les entités disparues suivent la **cascade E1** — fixtures d'une équipe supprimée incluses) → confirmation d'impact chiffrée.

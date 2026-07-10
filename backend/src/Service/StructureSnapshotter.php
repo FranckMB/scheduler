@@ -9,7 +9,6 @@ use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
-use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
@@ -17,6 +16,7 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use BackedEnum;
+use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -29,10 +29,18 @@ use Doctrine\ORM\EntityManagerInterface;
  * payload (engine vocabulary — targetTag expanded, venue_closed rewritten…),
  * lossy for the backend entities (coach links, reservations, tiers).
  *
+ * Two-phase by design (code-review D2):
+ * - `serialize()` runs PRE-solve (pure read, consistent with the frozen
+ *   payload; a failure cannot poison the EntityManager — nothing is written);
+ * - `store()` runs only AFTER the solve COMPLETED, as a direct DBAL
+ *   `INSERT … ON CONFLICT DO UPDATE`: no UnitOfWork flush (a failure cannot
+ *   close the EM mid-generation), idempotent under a concurrent duplicate
+ *   (lost Redis lock), and a FAILED regeneration never overwrites the photo
+ *   of the still-visible plan.
+ *
  * Serialization is GENERIC via Doctrine ClassMetadata (field name → column
- * value), so it stays faithful column by column and survives schema evolution
- * with zero per-entity code. Normalisation: DateTime → ATOM, BackedEnum →
- * value, arrays as-is.
+ * value), faithful column by column, zero per-entity code. Normalisation:
+ * DateTime → ATOM, BackedEnum → value, arrays as-is.
  */
 final class StructureSnapshotter
 {
@@ -58,12 +66,13 @@ final class StructureSnapshotter
         private readonly EntityManagerInterface $entityManager,
     ) {}
 
-    /** Capture (or replace) the structure photo attached to this schedule version. */
-    public function capture(Schedule $schedule): void
+    /**
+     * Pure read — serialize the structure that is about to feed the solver.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function serialize(string $clubId, string $seasonId): array
     {
-        $clubId = $schedule->getClubId();
-        $seasonId = $schedule->getSeasonId();
-
         $data = [];
         foreach (self::FAMILIES as $entityClass) {
             $data[$this->familyKey($entityClass)] = array_map(
@@ -72,17 +81,31 @@ final class StructureSnapshotter
             );
         }
 
-        $snapshot = $this->entityManager->getRepository(ScheduleStructureSnapshot::class)
-            ->findOneBy(['scheduleId' => $schedule->getId()]);
-        if (!$snapshot instanceof ScheduleStructureSnapshot) {
-            $snapshot = (new ScheduleStructureSnapshot)
-                ->setClubId($clubId)
-                ->setSeasonId($seasonId)
-                ->setScheduleId($schedule->getId());
-            $this->entityManager->persist($snapshot);
-        }
-        $snapshot->setData($data);
-        $this->entityManager->flush();
+        return $data;
+    }
+
+    /**
+     * Persist the photo attached to this schedule version — direct DBAL upsert,
+     * deliberately OUTSIDE the ORM UnitOfWork (see class docblock).
+     *
+     * @param array<string, list<array<string, mixed>>> $data
+     */
+    public function store(Schedule $schedule, array $data): void
+    {
+        $now = new DateTimeImmutable;
+        $this->entityManager->getConnection()->executeStatement(
+            'INSERT INTO schedule_structure_snapshot (id, created_at, updated_at, club_id, season_id, schedule_id, data)
+             VALUES (:id, :now, :now, :clubId, :seasonId, :scheduleId, :data)
+             ON CONFLICT (schedule_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at',
+            [
+                'id' => $this->newUuid(),
+                'now' => $now->format(\DATE_ATOM),
+                'clubId' => $schedule->getClubId(),
+                'seasonId' => $schedule->getSeasonId(),
+                'scheduleId' => $schedule->getId(),
+                'data' => json_encode($data, \JSON_THROW_ON_ERROR),
+            ],
+        );
     }
 
     /**
@@ -130,5 +153,14 @@ final class StructureSnapshotter
         $pos = strrpos($entityClass, '\\');
 
         return false === $pos ? $entityClass : substr($entityClass, $pos + 1);
+    }
+
+    private function newUuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }
 }
