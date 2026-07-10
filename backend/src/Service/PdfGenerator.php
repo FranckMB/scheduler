@@ -128,7 +128,9 @@ class PdfGenerator
             $startStep = intdiv($this->minutesOf($slot->getStartTime()) - $startMin, self::STEP_MINUTES);
             $byColStep[$key][$startStep][] = $slot;
         }
-        // Empty windows indexed the same way (one per bucket — rendered as `vide`).
+        // Empty windows indexed by col+start step. Only one per (col, step) — two
+        // unfilled windows starting in the same 15-min step (e.g. a split court)
+        // collapse to a single `vide` cell (MVP, mirrors the capacity note above).
         $emptyByColStep = [];
         foreach ($data->emptySlots as $window) {
             $key = $window->dayOfWeek . '|' . $window->venueId;
@@ -177,7 +179,14 @@ class PdfGenerator
                     // duration; otherwise a blank gap.
                     $window = $emptyByColStep[$colKey][$step] ?? null;
                     if (null !== $window) {
-                        $span = max(1, (int) ceil($window->durationMinutes / self::STEP_MINUTES));
+                        // Grow the `vide` cell over its duration but NEVER across an
+                        // already-covered step or a real placement below it — a rowspan
+                        // that covered a placement's step would skip (drop) that cell.
+                        $maxSpan = max(1, (int) ceil($window->durationMinutes / self::STEP_MINUTES));
+                        $span = 1;
+                        while ($span < $maxSpan && !isset($covered[$colIndex][$step + $span]) && [] === ($byColStep[$colKey][$step + $span] ?? [])) {
+                            ++$span;
+                        }
                         for ($k = 1; $k < $span; ++$k) {
                             $covered[$colIndex][$step + $k] = true;
                         }
