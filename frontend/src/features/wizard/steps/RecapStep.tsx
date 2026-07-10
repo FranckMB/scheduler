@@ -123,7 +123,7 @@ export function RecapStep() {
                   key={v.id}
                   label={
                     <span className="flex items-center gap-2">
-                      <VenueSwatch color={v.color} className="size-3 border border-border" />
+                      <VenueSwatch color={v.color ?? "transparent"} className="size-3 border border-border" />
                       {v.name}
                     </span>
                   }

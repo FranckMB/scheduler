@@ -42,7 +42,7 @@ export function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { te
 
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Gymnase</span>
-        <VenueSwatch color={selected.color} className="size-3 border border-border" />
+        <VenueSwatch color={selected.color ?? "transparent"} className="size-3 border border-border" />
         <Select
           aria-label="Gymnase"
           className="h-8 w-48"

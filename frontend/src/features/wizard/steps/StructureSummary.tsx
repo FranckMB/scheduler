@@ -105,7 +105,7 @@ export function ReadonlyVenues({ calendarEntryId }: { calendarEntryId: string | 
                   isClosed ? "border-destructive/50 bg-destructive/10" : "border-border bg-card",
                 )}
               >
-                <VenueSwatch color={v.color} className="size-3 border border-border" />
+                <VenueSwatch color={v.color ?? "transparent"} className="size-3 border border-border" />
                 <span className={cn("flex-1", isClosed && "text-destructive line-through")}>{v.name}</span>
                 {isClosed ? (
                   <span className="flex items-center gap-1 text-xs font-semibold text-destructive">

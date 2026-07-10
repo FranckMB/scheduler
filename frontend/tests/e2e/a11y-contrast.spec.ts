@@ -107,33 +107,52 @@ for (const mode of MODES) {
 
 /**
  * Keyboard reachability + visible focus on the public forms (WCAG 2.1.1 / 2.4.7):
- * Tab from the top must land on every control and end on the primary action, and
- * the focused control must carry a visible focus ring — no keyboard trap, nothing
- * reachable only by mouse.
+ * tabbing from the top reaches the email + password fields and the NAMED submit
+ * control, and each focused control gains a FOCUS-INDUCED ring — an outline, or a
+ * box-shadow that DIFFERS from the control's resting shadow. Comparing against the
+ * resting style is deliberate: an input carries a permanent `shadow-sm`, so a
+ * "boxShadow !== none" check would pass even if the real focus ring were removed.
  */
-test("keyboard — login form is fully reachable with a visible focus ring", async ({ page }) => {
+test("keyboard — login form is reachable with a focus-induced ring", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
 
-  const reached: string[] = [];
+  // Snapshot each focusable's RESTING outline/shadow (nothing focused yet), keyed
+  // by a data-idx we stamp on it, so the walk can prove the ring appeared on focus.
+  const resting: { idx: number; outlineW: number; shadow: string }[] = await page.evaluate(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>("input, button, a[href], select, textarea, [tabindex]"));
+    return els.map((el, i) => {
+      el.dataset.kbIdx = String(i);
+      const s = getComputedStyle(el);
+      return { idx: i, outlineW: parseFloat(s.outlineWidth) || 0, shadow: s.boxShadow };
+    });
+  });
+
+  const reached: { key: string; name: string }[] = [];
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press("Tab");
     const info = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
       if (!el || el === document.body) return null;
       const s = getComputedStyle(el);
-      // A focus ring shows as an outline OR a ring box-shadow (Tailwind ring-*).
-      const hasRing = (s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0) || s.boxShadow !== "none";
-      return { tag: el.tagName.toLowerCase(), type: (el as HTMLInputElement).type ?? "", label: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "", hasRing };
+      return {
+        idx: el.dataset.kbIdx ?? null,
+        tag: el.tagName.toLowerCase(),
+        type: (el as HTMLInputElement).type ?? "",
+        name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "",
+        outlineShown: s.outlineStyle !== "none" && (parseFloat(s.outlineWidth) || 0) > 0,
+        shadow: s.boxShadow,
+      };
     });
-    if (info) {
-      reached.push(`${info.tag}:${info.type}`);
-      expect(info.hasRing, `focused ${info.tag} "${info.label}" has no visible focus ring`).toBe(true);
-    }
+    if (!info) continue;
+    const rest = info.idx === null ? undefined : resting.find((r) => String(r.idx) === info.idx);
+    const shadowChanged = rest ? info.shadow !== rest.shadow : info.shadow !== "none";
+    expect(info.outlineShown || shadowChanged, `focused ${info.tag} "${info.name}" gained no focus-induced ring (outline/shadow unchanged from resting)`).toBe(true);
+    reached.push({ key: `${info.tag}:${info.type}`, name: info.name });
   }
 
-  // The email + password fields and the submit button were all tabbed onto.
-  expect(reached.some((r) => r === "input:email" || r === "input:text")).toBe(true);
-  expect(reached.some((r) => r === "input:password")).toBe(true);
-  expect(reached.some((r) => r.startsWith("button"))).toBe(true);
+  expect(reached.some((r) => r.key === "input:email" || r.key === "input:text")).toBe(true);
+  expect(reached.some((r) => r.key === "input:password")).toBe(true);
+  // The primary action specifically — not merely "some button" — must be reachable.
+  expect(reached.some((r) => r.key.startsWith("button") && /se connecter/i.test(r.name)), "submit button 'Se connecter' was never reached by Tab").toBe(true);
 });

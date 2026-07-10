@@ -50,7 +50,11 @@ describe("MonthCalendar — projection of the exception layer", () => {
   it("renders the month header and every day of the month with a readable name", () => {
     renderMay();
     expect(screen.getByText(/mai 2026/i)).toBeInTheDocument();
-    // A11Y-07: each in-month cell reads "{jour} mai …", not the raw ISO. May = 31 days.
+    // Full 6-week grid = 42 day cells incl. the leading/trailing padding days that
+    // keep dates aligned under their weekday column (May 1st 2026 is a Friday).
+    // After A11Y-07 every cell reads "{jour} {mois}", padding days included.
+    expect(screen.getAllByRole("button", { name: /^\d+ [A-Za-zÀ-ÿ]/ })).toHaveLength(42);
+    // …of which the 31 in-month days read "{jour} Mai".
     expect(screen.getAllByRole("button", { name: /^\d+ Mai/ })).toHaveLength(31);
   });
 

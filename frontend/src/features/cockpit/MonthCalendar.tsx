@@ -91,9 +91,11 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
             publicHoliday ? `jour férié — ${publicHoliday.label}` : null,
             ...dayEntries.map((e) => entryLabel(e)),
           ].filter((m): m is string => m !== null);
-          const dayLabel = [cell.inMonth ? `${cell.day} ${monthLabel(month)}` : cell.iso, isToday ? "aujourd'hui" : null, ...dayMarks]
-            .filter(Boolean)
-            .join(", ");
+          // Derive the readable date from the ISO so the leading/trailing spill days
+          // read "27 Avril", not the raw ISO — the same A11Y-07 fix must cover them
+          // (they are clickable too), and their month differs from the grid's month.
+          const [, isoMonth, isoDay] = cell.iso.split("-").map(Number);
+          const dayLabel = [`${isoDay} ${monthLabel(isoMonth - 1)}`, isToday ? "aujourd'hui" : null, ...dayMarks].filter(Boolean).join(", ");
           return (
             <button
               key={cell.iso}
