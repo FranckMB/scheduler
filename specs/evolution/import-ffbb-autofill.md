@@ -1,97 +1,82 @@
-# Import FFBB — autofill des infos club / ligue / comité + logos (lot C)
+# Import FFBB — auto-alimentation club / ligue / comité + logos (lot C)
 
-> **Statut** : **besoin spécifié, décisions produit posées** (retours de tests manuels 2026-07-10) ; **discovery technique du parseur ouverte**. Pas encore un `/plan`.
-> **Nature** : à partir du code club FFBB, **récupérer automatiquement** depuis le portail public FFBB (`competitions.ffbb.com` + assets `api.ffbb.com`) les coordonnées **club / comité / ligue** et les **logos**, pour pré-remplir la fiche club (lot B) et afficher les contacts fédéraux régulièrement utiles au gestionnaire.
-> **Rattachement roadmap** : `roadmap.md` §8 (import FFBB, FF#19) · onboarding §3. Croise [`enregistrement-ffbb.md`](enregistrement-ffbb.md) (légitimité/anti-squatting) : **même mécanisme de fetch FFBB**, finalités distinctes — à mutualiser le jour de l'implémentation.
-> **Réutilise l'existant** : lot B (`Club` + `PATCH /api/club/info` : comité, contacts, correspondant, président, salle) · `LeagueResolver` (préfixe `ffbbClubCode` → ligue) · `SchoolZoneResolver` · mécanisme d'upload/stockage du logo club (`ClubAppearanceController` / route logo) · rail SSRF déjà en place pour `backend → engine` (host fixe).
+> **Statut** : **décidé** (discovery technique **faite** le 2026-07-10, API vérifiée sur données réelles). Prêt pour `/plan`.
+> **Nature** : à la **création du club**, alimenter automatiquement — via l'**API publique FFBB** (Meilisearch) et à partir du seul **code club** — les coordonnées **institutionnelles** club / comité / ligue + les **logos**, et les afficher sur la page club.
+> **Rattachement roadmap** : `roadmap.md` §8 (import FFBB, FF#19) · onboarding §3. Croise [`enregistrement-ffbb.md`](enregistrement-ffbb.md) (légitimité/anti-squatting) : **hors scope de ce lot**.
+> **Réutilise l'existant** : `AuthController::createClub()` (déjà best-effort `schoolZone`/`league` depuis le code — même point d'ancrage) · lot B (`Club` + `PATCH /api/club/info`) · async Messenger (patron génération) · mécanisme de stockage du logo club.
+> **Discovery technique (faite)** : le portail est un **Next.js RSC** sans API JSON de contacts exploitable ; MAIS l'app FFBB s'appuie sur un **Meilisearch public** qui répond en JSON structuré. Le scraping HTML est **abandonné** au profit de cette API. Détail des routes : [`backend/docs/ffbb-api.md`](../../backend/docs/ffbb-api.md).
 
 ---
 
 ## 1. Le besoin (reformulé, validé)
 
-Le gestionnaire échange **beaucoup** avec sa **ligue** et son **comité** : il a besoin de leurs coordonnées sous la main. Ces infos (et le logo) sont **publiques** sur le portail FFBB, dérivables du **code club** que le club connaît déjà. Plutôt que de tout ressaisir (lot B = saisie manuelle), on **récupère quasi automatiquement** :
+Le club connaît son **code FFBB** (`ARA0069036`), saisi au register. À partir de ce seul code, on **alimente automatiquement** — sans ressaisie — les données **club** (nom, adresse, CP+ville, tél, mail, site, logo) **et** celles de son **comité** et de sa **ligue** (nom, adresse, CP+ville, tél, mail, logo), car le club échange régulièrement avec ces deux niveaux. Puis on les **affiche** sur la page club en **3 blocs institutionnels** (Club · Comité · Ligue).
 
-- **Page club** (`…/clubs/{code}`) → **logo du club**.
-- **Page comité** (`…/comites/{comité}`) → **coordonnées + président du comité** + **logo comité**.
-- **Page ligue** (`/ligues/{ligue}`) → **coordonnées + président de la ligue** + **logo ligue**.
-
-Puis on **stocke** ces infos et on les **expose sur la page club**, en lecture, sous forme de **3 blocs de contact sur une ligne** (Ligue · Comité · Club).
-
-> Décision produit (validée) — **les 3 blocs = Ligue + Comité + Club**. Chaque bloc porte :
-> **fonction · nom prénom · adresse · code postal + ville · téléphone · email**.
-> (Ligue/Comité = le président ; Club = le correspondant du lot B.)
+**Décision produit** : on stocke **la data du JSON API** (institutionnel). Le **président/correspondant nommé** (la personne) n'est **pas** exposé par l'API → **abandonné** pour ce lot (le mail secrétariat + tél = le vrai contact opérationnel, et le président change aux élections).
 
 ## 2. Décisions produit (verrouillées)
 
 | # | Décision |
 |---|---|
-| 1 | **Source = scraping HTML serveur** du portail public FFBB (host **fixe**), pas d'API tierce supposée. Le HTML FFBB peut changer → **parseur best-effort** ; tout échec **retombe sur la saisie manuelle** (lot B), jamais un blocage. |
-| 1 bis | **Ligue & comité = données de référence partagées, cache-first.** Une ligue (`ara`) / un comité (`0069`) est **commun à plusieurs clubs**. À l'import, on **cherche d'abord en base** (clé = slug ligue / code comité) : **présent → on réutilise, aucun fetch FFBB** ; **absent (ou périmé) → on scrape puis on stocke** pour les clubs suivants. Réduit les fetches (CGU, rate-limit, robustesse) et partage la donnée. |
-| 2 | **Déclencheur** : bouton **« Importer depuis la FFBB »** — à l'**onboarding** (pré-remplissage) **et** re-lançable depuis la page club (rafraîchissement). L'import **ne perd jamais** une saisie manuelle sans confirmation (cf. §6). |
-| 3 | **Identifiants dérivés du `ffbbClubCode`** : slug ligue = préfixe 3 lettres en minuscules (`ARA…` → `ara`) ; code comité = les chiffres département (`…069…` → `0069`, déjà en base lot B) ; code club = le `ffbbClubCode` complet. Aucune saisie d'URL par l'utilisateur (anti-SSRF). |
-| 4 | **Logos** club / comité / ligue **importés** (avif `api.ffbb.com/assets/{uuid}`) et stockés. Le logo **club** alimente le logo existant ; comité/ligue sont de **nouveaux** visuels affichés dans les blocs. |
-| 5 | **Affichage page club** : section (lecture seule) **« Contacts FFBB »** = 3 blocs sur une ligne — **Ligue · Comité · Club** — chacun `fonction / nom prénom / adresse / CP+ville / tél / email` + logo de l'entité. Données FFBB non éditables (rafraîchies par ré-import) ; le correspondant club reste éditable via lot B. |
-| 6 | **RGPD** : président ligue/comité = **contacts professionnels publics** (comme lot B) ; **aucune adresse de domicile**. Rétention/purge à couvrir par le socle RGPD pré-GA. |
+| 1 | **Source = API publique FFBB (Meilisearch)**, pas de scraping. Un appel `multi-search` sur le **code club** renvoie le club **et** sa hiérarchie (comité parent, ligue grand-parent) en JSON. Détail : [`backend/docs/ffbb-api.md`](../../backend/docs/ffbb-api.md). |
+| 2 | **Déclencheur = auto à la CRÉATION du club** (register), best-effort **asynchrone** (message Messenger, ne bloque pas le register ; les logos = I/O). **Pas de bouton** page club. Le **rafraîchissement manuel** est **différé** (futur **SUPERADMIN**, cf. [`console-superadmin.md`](console-superadmin.md)). |
+| 3 | **Une route unique** `POST /api/club/ffbb-import` (management-gated) qui **remplit tous les champs** depuis le JSON — partagée par le handler async (register) et le futur superadmin. Idempotente. |
+| 4 | **Ligue & comité = tables de référence partagées, cache-first** : clés = code ligue / code comité (ou id FFBB). Présent en base → réutilisé, **aucun appel** ; absent → un appel puis stockage pour les clubs suivants. |
+| 5 | **Logos réhébergés** (pas de hotlink) : download `api.ffbb.com/assets/{uuid}?format=webp` → stockage via le pipeline logo existant. Logo **club** posé **si vide** (jamais d'écrasement d'un logo uploadé sans confirmation superadmin) ; logos comité/ligue sur les tables de référence. |
+| 6 | **Affichage page club** : section lecture seule **« Contacts FFBB »** = 3 blocs (Club · Comité · Ligue) — `nom · adresse · CP+ville · téléphone · mail · logo`. Non éditable (data FFBB) ; les champs éditables du lot B restent tels quels. |
+| 7 | **RGPD** : données institutionnelles publiques (pas de personne physique nommée). Rien de nouveau côté données personnelles vs lot B. |
 
-Hors périmètre (PR/specs dédiées) : **preuve de légitimité gestionnaire** (→ [`enregistrement-ffbb.md`](enregistrement-ffbb.md)) · import des **équipes/catégories** (→ `FfbbExcelImporter`, roadmap §8) · rafraîchissement **automatique périodique** (ce lot = à la demande) · gestion multi-clubs.
+Hors périmètre : président/correspondant nommé · scraping · refresh manuel côté gestionnaire (→ superadmin) · [`enregistrement-ffbb.md`](enregistrement-ffbb.md) · import équipes (`engagements_codes` est là mais → roadmap §8).
 
-## 3. Ce qu'on récupère et d'où
+## 3. L'API FFBB (vérifiée sur `ARA0069036` → BCCL)
 
-| Page FFBB (host fixe) | Données | Logo |
-|---|---|---|
-| `/ligues/{ligue}` | Ligue : nom, contact + **président** (fonction, nom, adresse, CP, ville, tél, email) | `api.ffbb.com/assets/{uuid}` |
-| `/ligues/{ligue}/comites/{comité}` | Comité : nom, contact + **président** (idem champs) | idem |
-| `…/comites/{comité}/clubs/{code}` | Club : (déjà couvert lot B) — ici surtout le **logo** | idem |
+- **Token public** : `GET https://api.ffbb.com/items/configuration` (header `Origin: https://competitions.ffbb.com`) → `key_ms` (clé Meilisearch) + `key_dh` (Directus). **Pas de secret** : clés publiques embarquées dans l'app FFBB.
+- **Recherche** : `POST https://meilisearch-prod.ffbb.app/multi-search`, header `Authorization: Bearer {key_ms}`, index **`ffbbserver_organismes`**, `q = code club`.
+- **Réponse** : le hit club porte `code, nom, adresse, mail, telephone, urlSiteWeb, cartographie.{codePostal,ville}, commune.{libelle,codePostal,departement}, logo.id, thumbnail`, **et** `organisme_id_pere` (comité : `id, nom, adresse, code`) imbriquant la ligue (`id, nom, code`). Le comité/ligue **complets** (CP+ville, tél, mail, logo) se résolvent par un 2ᵉ `multi-search` filtré sur leur `code` (`0069`, `ARA`).
+- **Champs ignorés** : `offresPratiques, labellisation, engagements_*, _geo, type_association, *ClubPro, saison`.
 
-> Exemples réels fournis : ligue `ara`, comité `0069` (Rhône), club « B Charpennes Croix Luizet ». Logos servis en **avif**, `?height=220&fit=contain&format=avif`.
+Exemple réel consolidé : `ffbb-bccl-sample.json` (fourni en discovery).
 
-## 4. Données à stocker (décidé : référence partagée)
+## 4. Données à stocker
 
-**Ligue et comité = tables de référence partagées** (décision 1 bis) : ils sont communs à plusieurs clubs, donc stockés **une fois** et réutilisés.
+- **`FfbbLeague`** — clé unique = code ligue (`ARA`) [ou id FFBB]. Champs : `nom, adresse, codePostal, ville, telephone, mail, logoUrl, fetchedAt`.
+- **`FfbbCommittee`** — clé unique = code comité (`0069`) [+ ligue de rattachement]. Mêmes champs.
+- **`Club`** : les champs institutionnels club (nom déjà là ; adresse/CP/ville/tél/mail/site/logo → lot B a déjà `address`, `contactPhone`, `contactEmail`… : **on les remplit**, on ajoute ce qui manque). Référence ligue/comité par leur code (déjà en base : `league`, `committeeCode` — que l'import **backfill** aussi).
+- **Scoping/tenant** : `FfbbLeague`/`FfbbCommittee` = **référence publique sans `club_id`** (comme `Club`/`User`) → **hors RLS**, lisibles par tous, écriture par le service serveur. À exclure proprement de `TenantOwnedInterfaceCompletenessTest`.
 
-- **`FfbbLeague`** — clé unique = slug ligue (`ara`). Champs : nom, logo, contact président (`fonction`, `nom`, `adresse`, `codePostal`, `ville`, `téléphone`, `email`), `fetchedAt`.
-- **`FfbbCommittee`** — clé unique = code comité (`0069`) [+ slug ligue de rattachement]. Mêmes champs + logo.
-- **`Club`** : référence la ligue/comité (par slug/code déjà en base — `league`/`committeeCode` du lot B — ou FK). Le **logo club** reste sur `Club` (mécanisme lot B / upload existant).
+## 5. Sécurité — SSRF & robustesse (structurant)
 
-**Scoping/tenant** : ces tables sont de la **donnée de référence publique**, **sans `club_id`** (comme `Club`/`User`). Elles sont donc **hors RLS** et **lisibles par tous les clubs authentifiés** (info publique) ; l'écriture (populate à l'import) passe par le service serveur. À traiter comme les entités sans `club_id` (scoping dans le provider/processor, pas via `TenantFilter`) — le vérifier contre `TenantOwnedInterfaceCompletenessTest` (elles doivent être **exclues** proprement, pas oubliées).
-
-**Champs par bloc** (miroir du correspondant lot B) : `fonction+nom`, `adresse`, `codePostal`, `ville`, `téléphone`, `email`, `logoUrl`. **Pas d'adresse de domicile** (RGPD).
-
-> Alternative écartée pour ce lot : dénormaliser ligue/comité **sur chaque `Club`** — plus simple mais re-scrape/duplique par club, ce que la décision 1 bis interdit explicitement.
-
-## 5. Sécurité — SSRF & robustesse du fetch (structurant)
-
-Le fetch sortant vers un service externe est le **vecteur A12 (SSRF)** de l'audit. La spec **exige** :
-
-- **Host fixe** : uniquement `competitions.ffbb.com` et `api.ffbb.com` (liste blanche en dur), **jamais** une URL dérivée d'input utilisateur. Les identifiants (slug ligue, code comité/club) sont **validés par format** (`^[a-z]{2,4}$`, `^\d{4}$`, `^[A-Z0-9]+$`) avant interpolation.
-- **Pas de suivi de redirection** vers une IP interne / plage privée (résolution DNS + rejet RFC1918/loopback/link-local), timeout court, **taille de réponse bornée**, **MIME réel** validé pour le logo (avif/webp/png/jpeg — SVG rejeté, cf. A8/A13).
-- **Rate-limit** de la route d'import (SEC-11) — un import = un fetch multiple, ne pas laisser marteler FFBB.
-- **Management-gated (SEC-07)** comme toute écriture cockpit.
-- **Échec gracieux** : timeout / 404 / markup illisible → **repli saisie manuelle** (lot B), message actionnable, **aucune donnée existante écrasée** silencieusement.
-- **Parseur best-effort & testé sur fixtures** : figer des snapshots HTML FFBB réels en fixtures de test ; un changement de markup fait échouer un test dédié, pas la prod.
+- **Hosts en liste blanche dure** : `api.ffbb.com`, `meilisearch-prod.ffbb.app` (+ `api.ffbb.com/assets` pour les logos). **Jamais** une URL dérivée d'input. Le **code club** est validé par format (`^[A-Z]{2,4}\d{7}$` type) avant tout appel.
+- **Pas de redirection vers IP interne** (résolution DNS + rejet RFC1918/loopback/link-local), **timeout court**, **taille bornée** (JSON + logo), **MIME réel** du logo (webp/png/jpeg/avif — SVG rejeté).
+- **Token public mis en cache** (récupéré sur `/items/configuration`, TTL raisonnable, fallback env var) — jamais commité.
+- **Route management-gated (SEC-07)** + **rate-limit** (SEC-11).
+- **Best-effort** : tout échec (API down, code inconnu, parse incomplet) → **club créé quand même**, champs laissés à null/éditables ; **jamais** de register cassé. Validation avant persist d'une entrée référence (anti-donnée-partielle).
 
 ## 6. Impact & réutilisation
 
-- **Backend** : nouveau service `FfbbPortalClient` (fetch + parse, host fixe, SSRF-safe) + `FfbbAssetFetcher` (logo, MIME/size) ; endpoint `POST /api/club/ffbb-import` (management-gated) qui **cherche d'abord `FfbbLeague`/`FfbbCommittee` en base** (clé slug/code) et **ne fetch que sur cache-miss**, puis remplit les champs (confirmation d'écrasement si une saisie manuelle diffère) ; réutilise `LeagueResolver` (slug) et le stockage logo existant.
-- **Frontend** : bouton « Importer depuis la FFBB » (onboarding + page club) ; section lecture seule **« Contacts FFBB »** (3 blocs Ligue/Comité/Club) ; états chargement / échec (→ « complétez à la main »).
+- **Backend** :
+  - `FfbbApiClient` (token cache + `multi-search`, hosts fixes, SSRF-safe) + `FfbbLogoFetcher` (download webp, MIME/size).
+  - `FfbbClubPopulator` (service) : code club → remplit `Club` + upsert `FfbbLeague`/`FfbbCommittee` (cache-first) + logos. **Idempotent**, best-effort, validé.
+  - Route `POST /api/club/ffbb-import` (management-gated) → `FfbbClubPopulator`.
+  - **Hook register** : `AuthController::createClub()` → après commit, **dispatch** `PopulateClubFromFfbbMessage(clubId, ffbbCode)` → handler appelle `FfbbClubPopulator`. Non-bloquant.
+- **Frontend** : section lecture seule **« Contacts FFBB »** (3 blocs) sur la page club, alimentée par `/api/me` (nouveaux champs ligue/comité). **Aucun bouton d'import** (auto à la création). État vide si l'auto-population n'a pas (encore) abouti.
+- **Doc routes** : [`backend/docs/ffbb-api.md`](../../backend/docs/ffbb-api.md) — endpoints, récup token, index, champs consommés, mapping entités.
 - **Contrat** : aucun impact engine.
-- **Tests (axes structurants)** : SSRF (host fixe, rejet IP interne, MIME) en `--group phase1` ; parseur sur fixtures HTML ; garde management (`ManagementRoleTest`) ; RGPD (pas de domicile).
-- **Légal/CGU** : **l'utilisateur (Franck) doit vérifier les CGU FFBB** sur l'usage automatisé des pages publiques avant implémentation — bloquant produit, hors décision technique.
+- **Tests (`--group phase1`)** : SSRF (hosts fixes, rejet IP interne, code invalide) ; `FfbbClubPopulator` sur **fixture JSON figée** (mapping + cache-first + best-effort) ; garde management (`ManagementRoleTest`) ; register dispatch le message.
 
 ## 7. Phasage proposé
 
-- **C1** — tables de référence `FfbbLeague`/`FfbbCommittee` + endpoint import **cache-first** + `FfbbPortalClient`/`FfbbAssetFetcher` SSRF-safe + repli manuel (backend, gros du risque sécurité).
-- **C2** — bouton import (onboarding + page club) + section « Contacts FFBB » (3 blocs) + logos (frontend).
-- **C3** (optionnel) — action « rafraîchir » (re-scrape d'une entrée périmée).
+- **C1** — `FfbbApiClient` + `FfbbClubPopulator` + tables référence + route + hook register async (backend, le gros du risque). Tests sur fixture JSON.
+- **C2** — logos réhébergés (`FfbbLogoFetcher`).
+- **C3** — section « Contacts FFBB » (3 blocs) sur la page club (frontend).
+- **Différé** — refresh manuel côté **superadmin** (console superadmin).
 
-## 8. Questions ouvertes (à trancher avant `/plan`)
+## 8. Questions ouvertes (mineures, tranchables au `/plan`)
 
-1. **CGU FFBB** : l'usage automatisé du portail public est-il autorisé ? (bloquant — décision utilisateur).
-2. **Robustesse parseur** : à quelle fréquence le markup FFBB change-t-il ? faut-il une API JSON `api.ffbb.com` si elle existe (discovery à mener) plutôt que scraper le HTML ?
-3. **Fraîcheur du cache** : une entrée `FfbbLeague`/`FfbbCommittee` est réutilisée telle quelle — au bout de combien de temps la considère-t-on **périmée** et re-scrape-t-on ? (défaut proposé : jamais en auto ; re-scrape seulement sur action explicite « rafraîchir »).
-4. **Écrasement** : à l'import, si une saisie manuelle (lot B) diffère de la valeur FFBB, on écrase / on demande / on garde le manuel ? (défaut proposé : **confirmation d'impact**, comme lot D).
-5. **Logo club** : l'import écrase-t-il un logo déjà uploadé par le gestionnaire ? (défaut : ne pas écraser sans confirmation).
+1. **Rotation du token public** : `key_ms` change-t-il ? → cache court + re-fetch sur 401 (auto-réparation).
+2. **Résolution comité/ligue** : par `code` (2ᵉ multi-search filtré) vs par `id` FFBB — trancher au plan (le `code` est plus lisible, l'`id` plus stable).
+3. **Async vs inline** au register : message Messenger recommandé (non-bloquant + logos I/O) ; inline best-effort possible si on veut la data immédiatement visible. Défaut : **async**.
 
-## 9. Ce que ce fichier n'engage pas
+## 9. Décidé — plus une discovery
 
-Aucune décision d'implémentation ni migration. But : cadrer le besoin, verrouiller les décisions produit (3 blocs, scraping+repli, SSRF, RGPD) et forcer les 5 questions ci-dessus avant tout `/plan`.
+Décisions produit + technique verrouillées (API Meilisearch, auto à la création, institutionnel, référence cache-first, logos réhébergés, SSRF). Reste 3 micro-arbitrages plan-level (§8). CGU : usage d'une **API publique** à la création (un appel/club), acté par l'utilisateur.
