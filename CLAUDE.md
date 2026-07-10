@@ -32,7 +32,7 @@ make start | stop | install | test | lint        # root orchestration (docker co
 cd backend && make test    # CS-Fixer + PHPStan(lvl8) + PHPUnit (--group phase1)
 cd backend && make phpstan | cs-fix | rector | migration-diff | migration-migrate
 cd engine  && make test    # pytest + ruff + mypy   |  make format
-cd frontend && npm run dev  # host, Vite :5173 (proxies /api,/engine,/.well-known/mercure)
+cd frontend && npm run dev  # host, Vite :5173 (proxies /api + /.well-known/mercure — never /engine)
 ```
 
 ## 4. CI order (`.github/workflows/ci.yml`)

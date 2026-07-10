@@ -20,7 +20,6 @@ npm run dev            # Vite, http://localhost:5173 (proxy /api → :8080, /.we
 npm run build          # tsc + vite build (prod → dist/)
 npm run lint           # ESLint
 npm run test           # Vitest (unit + intégration RTL avec vi.mock)
-npm run gen:api-types  # regénère les types depuis le snapshot OpenAPI
 
 # e2e (Playwright)
 npx playwright test    # parcours bout-en-bout (frontend/tests/e2e, config playwright.config.ts)

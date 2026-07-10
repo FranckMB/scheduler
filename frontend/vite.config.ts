@@ -27,10 +27,8 @@ const config = defineConfig({
         target: 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
-      '/engine': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
+      // FRT-17: no `/engine` proxy — the frontend NEVER calls the engine directly
+      // (boundary §2); it goes through the backend `/api`. The dead proxy is removed.
     },
   },
 })

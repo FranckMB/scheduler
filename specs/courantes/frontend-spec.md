@@ -26,7 +26,7 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 | Primitives UI | Radix UI (label, slot) + cva + tailwind-merge | — | Composants shadcn-style dans `src/shared/components/ui/` |
 | Routing | React Router | 7 | Routes déclaratives, nested layouts |
 | Icons | lucide-react | latest | Icônes SVG tree-shakeable |
-| Types API | openapi-typescript | 7 | `npm run gen:api-types` génère `src/shared/api/types.gen.ts` depuis `openapi-snapshot.json` |
+| Types API | — (manuels) | — | Types API écrits à la main par feature (`features/*/api.ts`) ; le codegen `openapi-typescript`/`types.gen.ts` a été **supprimé** (FRT-15 : 8365 l., 0 import, source de vérité fantôme) |
 
 ### Principes de la stack
 
@@ -417,7 +417,7 @@ type AuthState = {
 | Document | Rôle | Localisation |
 |----------|------|--------------|
 | `backend-inventory.md` | Inventaire backward : resources API Platform, contrôleurs custom, sécurité JWT, Mercure, pagination | `specs/courantes/backend-inventory.md` |
-| `openapi-snapshot.json` | Snapshot OpenAPI 3.1 des ressources API Platform — sert aussi au codegen `npm run gen:api-types` (les routes Symfony custom comme `/api/me`, `/api/register` n'y figurent pas) | `specs/courantes/openapi-snapshot.json` |
+| `openapi-snapshot.json` | Snapshot OpenAPI 3.1 des ressources API Platform (contrat/doc ; plus de codegen front — types API manuels depuis FRT-15) | `specs/courantes/openapi-snapshot.json` |
 
 ### Endpoints consommés par le frontend (par route)
 
@@ -519,7 +519,7 @@ frontend/src/
 │   ├── season-transition/      # SeasonSelector, SeasonTransitionBanner, transitionUiStore
 │   └── wizard/                 # WizardLayout, steps/ (Teams, Venues, Coaches, Constraints, Recap, Generate), lib/, store
 ├── shared/
-│   ├── api/                    # client ky, collection (hydra), errors, types.gen.ts
+│   ├── api/                    # client ky, collection (hydra), errors
 │   ├── components/ui/          # Composants UI réutilisables (shadcn-style)
 │   ├── hooks/                  # useApplyTheme, useApplyClubTheme
 │   ├── lib/                    # color, palette, queryClient, utils
