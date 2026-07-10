@@ -1,48 +1,78 @@
-# Console super-admin (monitoring & exploitation) — besoin à spécifier
+# Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **besoin à spécifier** (discovery **ouverte** — périmètre & métriques posés, décisions à trancher). **Pas un plan.**
-> **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support. Surface la **plus sensible** du produit (elle voit tous les clubs) → sécurité d'abord.
+> **Statut** : **besoin spécifié, décisions socle posées** (2026-07-10). Discovery terminée sur l'axe sécurité/auth ; **phasé SA0 → SA5**. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
+> **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
-> **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · CLI `app:seasons:purge` · `ResetSeasonController` · métriques déjà calculées par `SolverMetricsMapper` (pas encore persistées).
+> **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` (**pas encore persistées**) · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
 
 ---
 
-## 1. Le besoin (reformulé)
+## 1. Le besoin (reformulé, validé)
 
-« **Quid de l'écran super-admin ? Que doit-il monitorer, que mettre dedans, quelles métriques par club et pour l'ensemble de l'app ?** »
+« Je veux une **interface super-admin** pour administrer l'application et les clubs, avec des **métriques** et la **mise à jour automatique des données** (vacances scolaires, clubs FFBB…). »
 
-Il faut une **console d'exploitation** répondant à trois usages :
-- **Santé** : l'app tourne-t-elle bien ? (engine, worker, DB, Redis, files, erreurs)
-- **Usage & business** : combien de clubs, quelle activité, quelle **conversion** freemium→payant, quelle charge solveur ?
-- **Support** : diagnostiquer/aider un club précis (voir son état, réinitialiser un quota, purger, dépanner).
+Trois usages :
+- **Santé** : l'app tourne-t-elle bien ? (engine, worker, DB, Redis, files Messenger, erreurs)
+- **Usage & business** : combien de clubs, quelle activité, quelle **conversion** Découverte→payant, quelle charge solveur ?
+- **Support & data ops** : diagnostiquer/aider un club, et **tenir à jour les données de référence** (vacances, ligues/comités/clubs FFBB) automatiquement, avec supervision.
 
-## 2. Métriques **par club**
+## 2. Décisions socle (verrouillées)
 
-- Volumétrie : nb équipes / gymnases / coachs / contraintes.
-- Générations : **compteur total** (quota Découverte, cf. [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md)), date + statut de la dernière, **taux d'INFEASIBLE**, temps de solve p50/p95.
-- Cycle de vie : plan (Découverte / payant), date de création, **dernière activité** (connexion / génération), saison courante, mode onboarding.
-- Ressources : stockage logo, taille des données.
+| # | Décision |
+|---|---|
+| 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
+| 2 | **On commence par SA0 + SA1** (socle sécurité/auth + capture des métriques). Sans le socle, tout le reste est soit vide (pas d'historique) soit dangereux. Peu visible mais indispensable. |
+| 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
+| 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
-## 3. Métriques **globales (application)**
+## 3. Découpage en lots (ordre imposé : SA0 → SA5)
 
-- Parc : nb clubs total, **actifs 7 j / 30 j**, nouveaux/semaine.
-- Conversion : Découverte→payant (taux, délai médian), clubs à quota épuisé (chauds pour la vente).
-- Charge solveur : générations/jour, file Messenger (backlog, échecs, retries), **temps de solve p50/p95**, taux d'INFEASIBLE global.
-- Santé technique : engine up, worker up, Redis, DB, Mercure ; erreurs (Sentry, cf. observabilité §prod-readiness) ; **coûts d'infra projetés à N clubs**.
+### SA0 — Socle sécurité & auth superadmin *(prérequis, 🔴 fondation)*
+Rôle applicatif superadmin distinct (hors `ClubUser`/tenant) · **auth séparée + MFA** · firewall/pare-feu dédié sur les routes `/admin/**` · **audit de tout accès et action** (qui, quand, quoi) · surface minimale, pas d'exposition publique sans garde. **NR sécurité obligatoire** (un `ClubUser` ne franchit jamais `/admin` ; un superadmin n'a pas de tenant).
 
-## 4. Actions d'exploitation (au-delà du read-only)
+### SA1 — Capture des métriques *(plomberie, avant l'UI, 🟡)*
+Persister **`solver_metrics`** à chaque génération (durée p50/p95, statut, INFEASIBLE, taille problème) — aujourd'hui calculées par `SolverMetricsMapper` puis **jetées** · **`Club.lastActivityAt`** (connexion / génération) · brancher l'**audit trail**. Sans SA1, la console n'a aucune donnée historique.
 
-À arbitrer (chacune = surface de risque) : **reset du quota** de générations (Découverte), **purge saison N-2** (`app:seasons:purge`), **reset club** (`ResetSeasonController` élargi), **désactiver/suspendre** un club, **approuver** une demande de gestionnaire en fallback (cf. [`enregistrement-ffbb.md`](enregistrement-ffbb.md)), **impersonation support** (se mettre à la place d'un club — très sensible).
+### SA2 — Console read-only (monitoring) *(🟢 lecture seule)*
+- **Santé technique** : engine up, worker up, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries) ; erreurs (Sentry si branché).
+- **Parc** : nb clubs total, **actifs 7 j / 30 j**, nouveaux/semaine.
+- **Par club** : volumétrie (équipes/gymnases/coachs/contraintes), générations (compteur quota, dernière date+statut, **taux d'INFEASIBLE**, p50/p95), plan (Découverte/payant), création, **dernière activité**, saison courante.
+- **Charge solveur** : générations/jour, p50/p95 globaux, INFEASIBLE global.
 
-## 5. Questions ouvertes (à trancher)
+### SA3 — Jobs de données auto + supervision *(🟡 — répond au besoin « mise à jour auto »)*
+- **Planifier** les commandes existantes sur `cron-runner` : **vacances scolaires/publiques** (annuel), **purges** (saisons N-2, users non vérifiés, orphelins), **rappels** (périodes, transition), **reconcile** stuck schedules.
+- **Vue superadmin des jobs** : dernier run, statut (OK/échec), **prochain run**, **re-trigger manuel** (non destructif).
+- **Refresh FFBB club** (route lot C déjà prête) : à la demande sur un club, ou **batch** (rafraîchir les ligues/comités périmés).
 
-1. **Qui est superadmin ?** Un rôle applicatif distinct (pas un `ClubUser`), hors multi-tenant. Comment on l'authentifie (compte séparé, **MFA** ?).
-2. **Read-only d'abord, ou actions dès le départ ?** Le read-only (monitoring) est peu risqué ; les actions (reset/impersonation) exigent un durcissement fort.
-3. **D'où viennent les métriques ?** Il faut **persister `solver_metrics`** (§9, aujourd'hui calculées mais jetées) et brancher l'**audit trail** (§9). Sans ça, la console n'a pas de données historiques.
-4. **Sécurité de la console** = priorité : c'est la seule surface **cross-tenant assumée** (bypass RLS via la connexion `admin`). Auth séparée, **toute action auditée**, périmètre minimal, jamais exposée au réseau public sans garde. Croise les findings cyber A15/A16/A17.
-5. **Où vit-elle ?** Route protégée dans l'app, sous-domaine séparé, ou outil interne distinct ?
-6. **Observabilité amont** : Sentry/health-checks/backups sont **prérequis** (aujourd'hui absents — cf. prod-readiness) ; la console les *affiche*, elle ne les remplace pas.
+### SA4 — Actions support *(🟠 durci, chaque action confirmée + auditée)*
+Reset quota Découverte · purge saison (`app:seasons:purge`) · reset club (`ResetSeasonController` élargi) · **suspendre/désactiver** un club · **approuver** un gestionnaire en fallback (cf. [`enregistrement-ffbb.md`](enregistrement-ffbb.md)).
 
-## 6. Ce que ce fichier n'engage pas
+### SA5 — Impersonation support *(🔴 le plus sensible, en dernier)*
+Se mettre à la place d'un club — **lecture d'abord**, bornée dans le temps, **bannière visible**, **tout audité**. Écriture éventuelle = décision ultérieure séparée.
 
-Aucune décision d'archi. But : cadrer le périmètre (santé / usage / support), lister les métriques candidates, et forcer la question **sécurité de la surface cross-tenant** avant tout `/plan`.
+## 4. Fonctionnalités intéressantes (au-delà de l'évident)
+
+- **Clubs « chauds » pour la vente** : quota Découverte épuisé **+** activité récente → liste de prospects (conversion Découverte→payant). *Business.*
+- **Rétention par cohorte** : % de clubs encore actifs N semaines après inscription.
+- **Alerting** : backlog Messenger, taux d'INFEASIBLE qui grimpe, engine down → notification (email/Slack).
+- **Data-freshness board** : date de dernière MAJ des vacances / ligues / comités / clubs FFBB → **signale le périmé** (rend le besoin « mise à jour auto » visible et redevable).
+- **Kill switch génération** (mode maintenance) : suspendre globalement les générations pendant un incident.
+- **Coûts d'infra projetés à N clubs** : extrapolation charge solveur / ressources.
+- **Audit viewer** : qui a fait quoi — en particulier les actions **superadmin** elles-mêmes.
+
+## 5. Prérequis amont (hors console, mais bloquants pour sa valeur)
+
+- **Observabilité** (Sentry, health-checks, backups PostgreSQL) : aujourd'hui **absents** (prod-readiness). La console les *affiche*, ne les remplace pas.
+- **Persistance `solver_metrics` + audit trail** : = SA1 (sans quoi SA2 est vide).
+
+## 6. Questions ouvertes (à trancher au `/plan` de chaque lot)
+
+1. **Où vit la console ?** Route `/admin` protégée dans l'app (réutilise l'infra Symfony/React) vs sous-domaine séparé vs outil interne distinct. Défaut pressenti : **route `/admin` sous firewall dédié** (moins d'infra, sécurité par le pare-feu + MFA).
+2. **MFA** : TOTP (app d'authentification) vs email OTP vs WebAuthn. Défaut pressenti : **TOTP**.
+3. **Frontend** : réutiliser le front React (feature `admin/`) vs pages serveur Twig minimalistes (moins de surface JS, plus sobre pour de l'ops). À trancher.
+4. **Granularité de l'audit** : quoi tracer, rétention, format (table `admin_audit` dédiée).
+5. **`lastActivityAt`** : quels événements le mettent à jour (login, génération, écriture cockpit) ?
+
+## 7. Ce que ce fichier engage / n'engage pas
+
+**Engage** : le périmètre (santé / usage / support / data ops), les 4 décisions socle (§2), l'ordre des lots (§3). **N'engage pas** : l'archi d'implémentation de chaque lot (route vs sous-domaine, TOTP vs WebAuthn, React vs Twig) — tranchées au `/plan` du lot concerné, en commençant par **SA0 + SA1**.
