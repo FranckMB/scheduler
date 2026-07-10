@@ -10,6 +10,10 @@ parameters:
     # Where club logos are stored. Dev/default = local disk (persisted via the
     # ./:/app mount). Prod: swap the LogoStorage alias below for object storage.
     app.logo_storage_dir: '%kernel.project_dir%/var/storage/logos'
+    # FFBB Meilisearch bearer token (lot C). Optional override — empty by default,
+    # in which case FfbbApiClient fetches the public token from the FFBB config
+    # endpoint at runtime. Never hard-code a token in the repo.
+    env(FFBB_MEILISEARCH_TOKEN): ''
 
 services:
     # default configuration for services in *this* file
@@ -20,6 +24,8 @@ services:
             # Browser-facing origin for links emailed to users (e.g. the email-verification
             # link). Empty → callers fall back to the request host (dev/e2e single origin).
             $frontendBaseUrl: '%env(FRONTEND_BASE_URL)%'
+            # Optional FFBB Meilisearch token override (lot C); empty → fetched at runtime.
+            $ffbbMeilisearchToken: '%env(FFBB_MEILISEARCH_TOKEN)%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name

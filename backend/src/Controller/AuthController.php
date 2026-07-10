@@ -7,12 +7,17 @@ namespace App\Controller;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\EmailVerificationToken;
+use App\Entity\FfbbCommittee;
+use App\Entity\FfbbLeague;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\User;
+use App\Message\PopulateClubFromFfbbMessage;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
+use App\Repository\FfbbCommitteeRepository;
+use App\Repository\FfbbLeagueRepository;
 use App\Repository\SportRepository;
 use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
@@ -31,6 +36,7 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
@@ -58,6 +64,9 @@ final class AuthController extends AbstractController
         private readonly EmailVerifier $emailVerifier,
         private readonly RateLimiterFactory $authRegisterVerifyLimiter,
         private readonly string $frontendBaseUrl,
+        private readonly MessageBusInterface $messageBus,
+        private readonly FfbbLeagueRepository $ffbbLeagues,
+        private readonly FfbbCommitteeRepository $ffbbCommittees,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -186,8 +195,9 @@ final class AuthController extends AbstractController
         // Materialise the tenant now. Club-scoped inserts need the RLS GUC; set it once
         // the club id is known, always clear afterwards (finally).
         $status = 'pending';
+        $newClubId = null;
         try {
-            $this->entityManager->wrapInTransaction(function () use ($tokenId, $userId, $ara, $intentClubName, &$status): void {
+            $this->entityManager->wrapInTransaction(function () use ($tokenId, $userId, $ara, $intentClubName, &$status, &$newClubId): void {
                 // Serialize concurrent verifies of the SAME token (double-click / retry /
                 // two tabs): the winner holds the write lock and consumes the row; a loser
                 // then re-reads null and only resolves the (already-created) status — no
@@ -213,12 +223,21 @@ final class AuthController extends AbstractController
                     $this->tenantConnectionContext->setClubId($club->getId());
                     $this->createMembership($club->getId(), $user->getId(), true);
                     $this->seedNewClub($club);
+                    $newClubId = $club->getId();
                     $status = 'active';
                 }
                 $this->emailVerifier->consume($token);
             });
         } finally {
             $this->tenantConnectionContext->clear();
+        }
+
+        // Lot C: newly created club → fill its institutional data from the FFBB
+        // API asynchronously (best-effort, non-blocking). Dispatched AFTER commit
+        // so the worker reads a persisted club. Never fires when joining an
+        // existing club.
+        if (null !== $newClubId) {
+            $this->messageBus->dispatch(new PopulateClubFromFfbbMessage($newClubId));
         }
 
         $user = $this->entityManager->getRepository(User::class)->find($userId);
@@ -270,6 +289,9 @@ final class AuthController extends AbstractController
                 // management member (the /club edit section is admin-only), never
                 // to a pending or non-management member.
                 if ($clubUser->getIsActive() && $this->clubUserRepository->isManagementRole($clubUser->getRole())) {
+                    $committee = null !== $clubEntity->getCommitteeCode()
+                        ? $this->ffbbCommittees->findByCode($clubEntity->getCommitteeCode())
+                        : null;
                     $club += [
                         'league' => $clubEntity->getLeague(),
                         'ffbbClubCode' => $clubEntity->getFfbbClubCode(),
@@ -285,6 +307,21 @@ final class AuthController extends AbstractController
                         'presidentEmail' => $clubEntity->getPresidentEmail(),
                         'mainVenueName' => $clubEntity->getMainVenueName(),
                         'mainVenueAddress' => $clubEntity->getMainVenueAddress(),
+                        // FFBB autofill (lot C): institutional club data + the
+                        // shared league/committee reference blocks (3-block
+                        // "Contacts FFBB" display). league/committee resolved from
+                        // the FFBB club-code prefix + committeeCode.
+                        'postalCode' => $clubEntity->getPostalCode(),
+                        'city' => $clubEntity->getCity(),
+                        'website' => $clubEntity->getWebsite(),
+                        'latitude' => $clubEntity->getLatitude(),
+                        'longitude' => $clubEntity->getLongitude(),
+                        'ffbbCommittee' => $this->ffbbOrganisme($committee),
+                        // Resolve the league through the committee's authoritative
+                        // leagueCode link — not by re-deriving the club-code prefix.
+                        'ffbbLeague' => $this->ffbbOrganisme(
+                            null !== $committee?->getLeagueCode() ? $this->ffbbLeagues->findByCode($committee->getLeagueCode()) : null,
+                        ),
                     ];
                 }
 
@@ -481,6 +518,29 @@ final class AuthController extends AbstractController
         $this->entityManager->persist($user);
 
         return $user;
+    }
+
+    /**
+     * Shape a league/committee reference row for /api/me (null when not yet
+     * populated → the frontend shows an empty state).
+     *
+     * @return array{name: string, address: ?string, postalCode: ?string, city: ?string, phone: ?string, email: ?string, logoUrl: ?string}|null
+     */
+    private function ffbbOrganisme(FfbbLeague|FfbbCommittee|null $organisme): ?array
+    {
+        if (null === $organisme) {
+            return null;
+        }
+
+        return [
+            'name' => $organisme->getName(),
+            'address' => $organisme->getAddress(),
+            'postalCode' => $organisme->getPostalCode(),
+            'city' => $organisme->getCity(),
+            'phone' => $organisme->getPhone(),
+            'email' => $organisme->getEmail(),
+            'logoUrl' => $organisme->getLogoUrl(),
+        ];
     }
 
     private function createClub(string $clubName, string $ara): Club

@@ -49,6 +49,8 @@ final class ManagementRoleTest extends WebTestCase
             ['PATCH', '/api/club/appearance'],
             // Lot B: FFBB club-info write (same management surface as appearance).
             ['PATCH', '/api/club/info'],
+            // Lot C: FFBB import (fills institutional data — management-only).
+            ['POST', '/api/club/ffbb-import'],
             // SEC-12: the pre-solve constraint check is part of the cockpit flow.
             ['POST', '/api/constraints/validate'],
             // Each manual-edit action carries its own guard call — pin all three.

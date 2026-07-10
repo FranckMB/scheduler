@@ -1,0 +1,9 @@
+framework:
+    messenger:
+        transports:
+            # Lot C: route the FFBB population message to an in-memory transport in
+            # tests so its dispatch is inspectable (no Redis, no external call). The
+            # other messages keep their real async→Redis routing.
+            ffbb_in_memory: 'in-memory://'
+        routing:
+            App\Message\PopulateClubFromFfbbMessage: ffbb_in_memory
