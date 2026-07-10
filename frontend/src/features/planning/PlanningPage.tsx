@@ -53,11 +53,18 @@ function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: b
       label="Valider le planning"
       title={
         <span className="flex items-center gap-2">
-          {hasAlerts ? <AlertTriangle className="size-5 text-warning" /> : <CheckCircle2 className="size-5 text-muted-foreground" />}
+          {hasAlerts ? <AlertTriangle aria-hidden="true" className="size-5 text-warning" /> : <CheckCircle2 aria-hidden="true" className="size-5 text-muted-foreground" />}
           Valider ce planning ?
         </span>
       }
-      onClose={onCancel}
+      // Block Escape/overlay/X dismissal while the validation is in flight: dismissing
+      // mid-request would hide the dialog but let the un-aborted mutation still lock the
+      // planning read-only (the raw dialog had no escape at all during busy).
+      onClose={() => {
+        if (!busy) {
+          onCancel();
+        }
+      }}
     >
       <p className="mt-2 text-sm text-muted-foreground">
         {hasAlerts
