@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe, useRenamePlanning } from "@/features/auth/queries";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -17,9 +17,10 @@ import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRenameSchedule, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
+import { visibleSeasonPlans } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -31,7 +32,8 @@ const IN_FLIGHT = ["PENDING", "GENERATING"];
 type LandingSchedule = { id: string; status: string; createdAt: string; calendarEntryId: string | null };
 
 export function pickDefaultSchedule(schedules: LandingSchedule[]): string | null {
-  const seasonPlans = schedules.filter((s) => null === s.calendarEntryId);
+  // planning-versions: ARCHIVED siblings are invisible — never auto-selected.
+  const seasonPlans = schedules.filter((s) => null === s.calendarEntryId && "ARCHIVED" !== s.status);
   if (0 === seasonPlans.length) {
     return null;
   }
@@ -49,7 +51,7 @@ export function pickLandingScheduleId(schedules: LandingSchedule[], baselineSche
   return base && !IN_FLIGHT.includes(base.status) ? base.id : pickDefaultSchedule(schedules);
 }
 
-function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: boolean; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: { hasAlerts: boolean; siblingCount: number; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal
       label="Valider le planning"
@@ -73,6 +75,11 @@ function ValidateDialog({ hasAlerts, busy, onConfirm, onCancel }: { hasAlerts: b
           ? "Ce planning présente des alertes du solveur (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
           : "Le planning passera en lecture seule (« Validé »). Vous pourrez le rouvrir pour le modifier."}
       </p>
+      {siblingCount > 0 ? (
+        <p className="mt-3 text-sm font-medium text-foreground">
+          Seule cette version sera conservée — {siblingCount > 1 ? `les ${siblingCount} autres versions seront retirées` : "l'autre version sera retirée"} de la liste.
+        </p>
+      ) : null}
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
           Annuler
@@ -134,7 +141,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
   const setBaselineMutation = useSetBaseline();
-  const renameMutation = useRenameSchedule();
+  const deleteMutation = useDeleteSchedule();
+  const renamePlanning = useRenamePlanning();
+  const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
   const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
@@ -161,7 +170,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
-  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending || renameMutation.isPending;
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending || deleteMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
@@ -220,12 +229,54 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
+  const currentSeason = me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? "")) ?? me?.seasons.find((sn) => sn.isCurrent) ?? null;
+  const planningTitle = me?.planningName ?? (currentSeason ? `Planning ${currentSeason.name}` : "Planning");
+  const structureDiverged =
+    null !== selectedSchedule && null === selectedSchedule.calendarEntryId
+    && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
+    && selectedSchedule.generatedTeamCount !== teams.length;
+
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
         {me?.club?.logoUrl ? <img src={me.club.logoUrl} alt="" className="size-8 shrink-0 rounded object-contain" /> : null}
-        <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">Planning</h1>
+        {null !== editingPlanningName ? (
+          <input
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- inline rename field revealed on demand
+            autoFocus
+            aria-label="Nom du planning"
+            value={editingPlanningName}
+            onChange={(e) => setEditingPlanningName(e.target.value)}
+            onKeyDown={(e) => {
+              if ("Enter" === e.key) {
+                const season = me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? "")) ?? me?.seasons.find((sn) => sn.isCurrent) ?? null;
+                if (season) {
+                  renamePlanning.mutate({ season, planningName: editingPlanningName.trim() });
+                }
+                setEditingPlanningName(null);
+              } else if ("Escape" === e.key) {
+                setEditingPlanningName(null);
+              }
+            }}
+            onBlur={() => setEditingPlanningName(null)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-xl font-semibold"
+          />
+        ) : (
+          <>
+            {/* planning-versions: THE plan's name lives here (Season.planningName), not in the version selector. */}
+            <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
+            <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
+              <Pencil className="size-4" />
+            </Button>
+          </>
+        )}
       </div>
+
+      {structureDiverged && "number" === typeof selectedSchedule?.generatedTeamCount ? (
+        <p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          Cette version a été générée le {new Date(selectedSchedule.createdAt).toLocaleDateString("fr-FR")} avec {selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""} — la structure du club a changé depuis ({teams.length} aujourd'hui).
+        </p>
+      ) : null}
 
 
       {0 === schedules.length ? (
@@ -245,7 +296,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onValidate={() => setValidateOpen(true)}
               onReopen={() => reopen()}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
-              onRename={(name) => validScheduleId && renameMutation.mutate({ id: validScheduleId, name, status: selectedSchedule?.status ?? "COMPLETED" })}
+              onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               baselineScheduleId={baselineScheduleId}
             />
             <div className="ml-auto flex items-center gap-2">
@@ -310,6 +361,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {validateOpen ? (
         <ValidateDialog
           hasAlerts={diagnostics.length > 0}
+          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId).length}
           busy={validateMutation.isPending}
           onCancel={() => setValidateOpen(false)}
           onConfirm={() => {

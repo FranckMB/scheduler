@@ -123,6 +123,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
                     throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before deleting.');
                 }
+                // A version whose solve is still running cannot be deleted out
+                // from under the worker (its import would resurrect artifacts).
+                if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+                    throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
+                }
                 $this->overlayManager->purgeScheduleArtifacts($schedule);
             }
         }

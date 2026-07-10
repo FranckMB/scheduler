@@ -38,7 +38,14 @@ vi.mock("./api", () => ({
 const { meState } = vi.hoisted(() => ({ meState: { socleValidatedAt: null as string | null } }));
 
 vi.mock("@/features/auth/queries", () => ({
-  useMe: () => ({ data: { id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" }, baselineScheduleId: SID, socleValidatedAt: meState.socleValidatedAt } }),
+  useMe: () => ({
+    data: {
+      id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" },
+      baselineScheduleId: SID, socleValidatedAt: meState.socleValidatedAt,
+      planningName: null, seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
+    },
+  }),
+  useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 beforeEach(() => {

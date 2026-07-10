@@ -1,5 +1,14 @@
 # Cycle de vie des plannings — statut `VALIDATED` (N3)
 
+> **Amendement 2026-07-10 (planning-versions D1, `specs/evolution/planning-versions.md`)** :
+> le sélecteur liste désormais des **versions de travail** d'UN planning de saison (étiquettes
+> « V3 — 10 juil. 14:32 », nom du planning = `Season.planningName`). **Valider ⇒ la version
+> devient AUSSI la baseline** (la séparation valider/définir-principal décrite plus bas est
+> caduque pour les plans de saison) **et les versions sœurs passent `ARCHIVED`** (invisibles,
+> jamais ressuscitées au reopen, purgées avec la saison). Nouveau statut `ARCHIVED`
+> (posé serveur uniquement). Une version peut être supprimée (409 si baseline / VALIDATED /
+> en cours de génération).
+
 > **But** : permettre au gestionnaire de **finaliser/verrouiller** un planning (lecture seule), de le **rouvrir** pour l'éditer, et distinguer le **« Planning de la saison »** (baseline) des **plannings secondaires**. Spec d'exécution pour la PR-3 de la série wizard/boucle-de-travail.
 > **Source de vérité** : le **code** (confronté au besoin exprimé). La roadmap n'est qu'une base de discussion.
 

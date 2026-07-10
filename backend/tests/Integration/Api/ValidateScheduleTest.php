@@ -21,8 +21,12 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * Validating a COMPLETED schedule locks it (→ VALIDATED, read-only); only within
- * the caller's own club, and only when completed. Designating the season main
- * plan is a separate action (SetBaselineTest).
+ * the caller's own club, and only when completed.
+ *
+ * Version model (§7.1 planning lifecycle, specs/evolution/planning-versions.md):
+ * validating a SEASON plan also makes it the season baseline and ARCHIVES its
+ * sibling season-plan versions — never the overlays; a sibling still generating
+ * blocks the validation (409).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -75,11 +79,12 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertNotNull($me['socleValidatedAt']);
     }
 
-    public function testValidatingNonBaselineDoesNotStampUnlock(): void
+    public function testValidatingSeasonPlanBecomesBaselineAndStampsUnlock(): void
     {
+        // Version model: "this version IS the plan" — validating a season plan
+        // that was NOT the baseline makes it the baseline and unlocks the cockpit.
         [$user, , $season] = $this->seed('VAL6');
         $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-        // No baseline designation → not the socle.
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
@@ -87,7 +92,41 @@ final class ValidateScheduleTest extends WebTestCase
 
         $this->em->clear();
         $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertNull($reloaded?->getSocleValidatedAt());
+        self::assertSame($schedule->getId(), $reloaded?->getBaselineScheduleId(), 'the validated version becomes the baseline');
+        self::assertNotNull($reloaded?->getSocleValidatedAt());
+    }
+
+    public function testValidateArchivesSiblingSeasonPlansButNotOverlays(): void
+    {
+        [$user, , $season] = $this->seed('VAL7');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $failed = $this->createSchedule($season, ScheduleStatus::FAILED);
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, '44444444-4444-4444-8444-444444444444');
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate");
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
+        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus(), 'sibling COMPLETED version archived');
+        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($failed->getId())?->getStatus(), 'sibling FAILED version archived');
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($overlay->getId())?->getStatus(), 'an overlay is NEVER archived by season-plan validation');
+    }
+
+    public function testValidateBlockedWhileSiblingIsGenerating(): void
+    {
+        [$user, , $season] = $this->seed('VAL8');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->createSchedule($season, ScheduleStatus::GENERATING);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate");
+
+        self::assertResponseStatusCodeSame(409);
+        $this->em->clear();
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus(), 'nothing committed when a sibling is mid-solve');
     }
 
     public function testNonCompletedScheduleCannotBeValidated(): void
@@ -170,13 +209,14 @@ final class ValidateScheduleTest extends WebTestCase
         return [$user, $club, $season];
     }
 
-    private function createSchedule(Season $season, ScheduleStatus $status): Schedule
+    private function createSchedule(Season $season, ScheduleStatus $status, ?string $calendarEntryId = null): Schedule
     {
         $schedule = new Schedule;
         $schedule->setClubId($season->getClubId());
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
+        $schedule->setCalendarEntryId($calendarEntryId);
         $this->em->persist($schedule);
         $this->em->flush();
 

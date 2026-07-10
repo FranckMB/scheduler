@@ -1,10 +1,12 @@
-import { CheckCircle2, Lock, LockOpen, Pencil, RefreshCw, Star } from "lucide-react";
+import { CheckCircle2, Lock, LockOpen, RefreshCw, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
+import { versionLabels, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -23,12 +25,18 @@ interface PlanningToolbarProps {
   onValidate: () => void;
   onReopen: () => void;
   onSetBaseline: () => void;
-  onRename: (name: string) => void;
+  onDelete: () => void;
   isGenerating: boolean;
   actionBusy: boolean;
   baselineScheduleId: string | null;
 }
 
+/**
+ * planning-versions: the selector lists the WORK VERSIONS of the season plan
+ * ("V3 — 10 juil. 14:32", newest last), never named schedules — the plan's
+ * NAME lives in the page header (Season.planningName). Versions are not
+ * renamable; a version can be deleted (workspace) behind a DeleteConfirm.
+ */
 export function PlanningToolbar({
   schedules,
   selectedScheduleId,
@@ -39,7 +47,7 @@ export function PlanningToolbar({
   onValidate,
   onReopen,
   onSetBaseline,
-  onRename,
+  onDelete,
   isGenerating,
   actionBusy,
   baselineScheduleId,
@@ -49,57 +57,39 @@ export function PlanningToolbar({
   const isValidated = null !== selected && "VALIDATED" === selected.status;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isFinished = isValidated || isCompleted;
-  const [editingName, setEditingName] = useState<string | null>(null);
+  const isOverlay = null !== selected && null !== selected.calendarEntryId;
+  const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const labels = versionLabels(schedules);
+  const labelOf = (schedule: Schedule): string => labels.get(schedule.id) ?? schedule.name;
+  // Deletable = a plain work version: never the baseline (anchors the season),
+  // never VALIDATED (read-only), never mid-solve, never an overlay.
+  const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
 
   return (
     <>
-      {null !== editingName ? (
-        <input
-          // eslint-disable-next-line jsx-a11y/no-autofocus -- reveals an inline rename field; focusing it immediately is the expected behaviour
-          autoFocus
-          aria-label="Nom du planning"
-          value={editingName}
-          onChange={(event) => setEditingName(event.target.value)}
-          onKeyDown={(event) => {
-            if ("Enter" === event.key) {
-              const value = editingName.trim();
-              if ("" !== value) {
-                onRename(value);
-              }
-              setEditingName(null);
-            } else if ("Escape" === event.key) {
-              setEditingName(null);
-            }
-          }}
-          onBlur={() => setEditingName(null)}
-          className="h-8 rounded-md border border-input bg-background px-3 text-sm"
-        />
-      ) : (
-        <>
-          <select
-            aria-label="Planning"
-            value={selectedScheduleId ?? ""}
-            onChange={(event) => onSelectSchedule(event.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            {/* Season plans only; a selected overlay (from the cockpit) is added so it stays visible. */}
-            {schedules
-              .filter((schedule) => null === schedule.calendarEntryId || schedule.id === selectedScheduleId)
-              .map((schedule) => (
-                <option key={schedule.id} value={schedule.id}>
-                  {schedule.name}
-                  {schedule.id === baselineScheduleId ? " ★" : ""}
-                  {null !== schedule.calendarEntryId ? " · période" : ""}
-                </option>
-              ))}
-          </select>
-          {null !== selected && !isValidated ? (
-            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditingName(selected.name)} aria-label="Renommer le planning" title="Renommer">
-              <Pencil className="size-4" />
-            </Button>
-          ) : null}
-        </>
-      )}
+      <select
+        aria-label="Version du planning"
+        value={selectedScheduleId ?? ""}
+        onChange={(event) => onSelectSchedule(event.target.value)}
+        className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+      >
+        {/* Visible season versions only; a selected overlay (from the cockpit) is added so it stays visible. */}
+        {[...visibleSeasonPlans(schedules), ...schedules.filter((s) => null !== s.calendarEntryId && s.id === selectedScheduleId)].map((schedule) => (
+          <option key={schedule.id} value={schedule.id}>
+            {labelOf(schedule)}
+            {schedule.id === baselineScheduleId ? " ★" : ""}
+            {"VALIDATED" === schedule.status ? " · validé" : ""}
+            {null !== schedule.calendarEntryId ? " · période" : ""}
+          </option>
+        ))}
+      </select>
+      {canDelete ? (
+        <Button size="sm" variant="ghost" className="h-8 px-2 text-destructive" disabled={actionBusy} onClick={() => setConfirmDelete(true)} aria-label="Supprimer cette version" title="Supprimer cette version">
+          <Trash2 className="size-4" />
+        </Button>
+      ) : null}
       {isValidated ? null : (
         <Button
           size="sm"
@@ -125,7 +115,7 @@ export function PlanningToolbar({
           Rouvrir
         </Button>
       ) : null}
-      {isFinished && !isBaseline && null === selected?.calendarEntryId ? (
+      {isFinished && !isBaseline && !isOverlay ? (
         <Button size="sm" variant="ghost" className="h-8" disabled={actionBusy} onClick={onSetBaseline}>
           <Star className="size-4" />
           Définir principal
@@ -159,11 +149,20 @@ export function PlanningToolbar({
               <Star className="size-3" />
               Planning principal
             </span>
-          ) : (
-            <span className="rounded-full border border-border px-2 py-0.5">Secondaire</span>
-          )}
+          ) : null}
         </span>
       ) : null}
+
+      <DeleteConfirm
+        open={confirmDelete}
+        entityName={selected ? labelOf(selected) : ""}
+        impacts={[]}
+        onConfirm={() => {
+          onDelete();
+          setConfirmDelete(false);
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   );
 }

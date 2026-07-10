@@ -32,6 +32,9 @@ class SeasonStateProcessor extends AbstractStateProcessor
         if (null !== $input->status) {
             $entity->setStatus($input->status);
         }
+        if (null !== $input->planningName) {
+            $entity->setPlanningName('' === trim($input->planningName) ? null : trim($input->planningName));
+        }
 
         return $entity;
     }
@@ -49,6 +52,10 @@ class SeasonStateProcessor extends AbstractStateProcessor
         $entity->setEndDate($input->endDate);
         if (null !== $input->status) {
             $entity->setStatus($input->status);
+        }
+        // Empty string = explicit reset to the default display name.
+        if (null !== $input->planningName) {
+            $entity->setPlanningName('' === trim($input->planningName) ? null : trim($input->planningName));
         }
     }
 

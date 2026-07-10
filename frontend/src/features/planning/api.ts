@@ -42,7 +42,7 @@ async function collectionAll<T extends { id: string }>(path: string): Promise<T[
   return all;
 }
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED" | "ARCHIVED";
 
 /** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
 export const STATUS_LABELS: Record<ScheduleStatus, string> = {
@@ -52,6 +52,8 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   COMPLETED: "Terminé",
   FAILED: "Échec",
   VALIDATED: "Validé",
+  // planning-versions: sibling version set aside at validation — hidden from the selector.
+  ARCHIVED: "Archivé",
 };
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
 export type LockLevel = "NONE" | "HARD";
@@ -70,6 +72,8 @@ export interface Schedule {
   pdfExportStatus?: string | null;
   pdfExportUrl?: string | null;
   pngExportUrl?: string | null;
+  /** Teams in the frozen solve input — divergence banner ("générée avec N équipes"). */
+  generatedTeamCount?: number | null;
 }
 
 /** Export scope: all venues (null) or a single one. */
@@ -208,6 +212,9 @@ export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules
 /** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();
+
+/** Delete a work version (server refuses baseline / VALIDATED / in-flight with 409). */
+export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedules/${id}`).then(() => undefined);
 
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. calendarEntryId → every

@@ -247,6 +247,7 @@ final class AuthController extends AbstractController
         $clubEntity = null;
         $baselineScheduleId = null;
         $socleValidatedAt = null;
+        $planningName = null;
         $seasons = [];
         $currentSeasonId = null;
         if (null !== $clubUser) {
@@ -284,6 +285,7 @@ final class AuthController extends AbstractController
                 }
                 $baselineScheduleId = $selected?->getBaselineScheduleId();
                 $socleValidatedAt = $selected?->getSocleValidatedAt()?->format(\DATE_ATOM);
+                $planningName = $selected?->getPlanningName();
 
                 foreach ($allSeasons as $season) {
                     $seasons[] = [
@@ -308,6 +310,7 @@ final class AuthController extends AbstractController
             'club' => $club,
             'baselineScheduleId' => $baselineScheduleId,
             'socleValidatedAt' => $socleValidatedAt,
+            'planningName' => $planningName,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
             'seasons' => $seasons,
             'currentSeasonId' => $currentSeasonId,
