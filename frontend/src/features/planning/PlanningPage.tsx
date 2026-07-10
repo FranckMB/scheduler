@@ -18,7 +18,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -144,7 +144,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const queryClient = useQueryClient();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
-  const generateMutation = useGenerate();
+  const regenerateMutation = useRegenerate();
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
   const setBaselineMutation = useSetBaseline();
@@ -357,9 +357,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
               onViewMode={setViewMode}
-              isGenerating={isGenerating}
+              isGenerating={isGenerating || regenerateMutation.isPending}
               actionBusy={actionBusy}
-              onRegenerate={() => validScheduleId && generateMutation.mutate(validScheduleId)}
+              onRegenerate={() => validScheduleId && regenerateMutation.mutate(validScheduleId, { onSuccess: (created) => setSelectedScheduleId(created.id) })}
               onValidate={() => setValidateOpen(true)}
               onReopen={() => reopen()}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
