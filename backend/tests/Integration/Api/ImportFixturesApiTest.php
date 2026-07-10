@@ -129,6 +129,9 @@ final class ImportFixturesApiTest extends WebTestCase
         $this->scopeGucToClub($clubId);
         $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $clubId]);
         self::assertNotNull($season);
+        // SocleGuard: fixture import is a match-module write, refused (409) until
+        // the season's main plan is validated — stamp it like the real flow would.
+        $season->setSocleValidatedAt(new \DateTimeImmutable);
 
         $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
         self::assertNotNull($sport, 'register seeds the basketball sport');
