@@ -6,14 +6,18 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # A10 (DoS "generation bomb" guard): bound every input list so an oversized payload is
 # rejected with 422 at the boundary, before CP-SAT builds the model. Values are generous
-# (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces the
-# same caps plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
+# (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces most
+# of these plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
 # the defense-in-depth last line. Availability slots are bounded BOTH per-venue and in
 # total (a model_validator sums across venues, so 50 venues x 1000 can't smuggle 50k slots).
 MAX_VENUES = 50
 MAX_TEAMS = 200
 MAX_COACHES = 200
-MAX_CONSTRAINTS = 500
+# ENG-23: this bounds the EXPANDED constraint list (the backend fans out 1 CLUB-scoped rule
+# into N per-team rows before sending). The backend pre-check caps the RAW stored count at
+# 500; a legit club (<=500 raw, some CLUB-scoped) can expand well past 500, so this last-line
+# DoS bound is deliberately generous — it must never false-block what the backend accepted.
+MAX_CONSTRAINTS = 5000
 MAX_SLOT_TEMPLATES = 2000
 MAX_PRIORITY_TIERS = 20
 MAX_SLOTS_PER_VENUE = 1000

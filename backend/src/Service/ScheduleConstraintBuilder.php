@@ -44,7 +44,6 @@ final class ScheduleConstraintBuilder
      * the maximum a manager can be made to wait, not a fixed solve time.
      */
     private const DEFAULT_SOLVER_TIMEOUT_SECONDS = 650;
-    private const SOFT_LOCK_PENALTY = 10_000;
 
     /** @var array<string, array<VenueTrainingSlot>> */
     private array $currentAvailabilitiesByVenue = [];
@@ -515,15 +514,9 @@ final class ScheduleConstraintBuilder
     /** @return array<string, mixed> */
     private function serializeSlotTemplate(ScheduleSlotTemplate $slotTemplate): array
     {
-        $lockLevel = $slotTemplate->getLockLevel();
-
+        // ENG-21: no SOFT-lock penalty is built — the engine never consumes it (placebo),
+        // and SOFT locks are rejected at the write endpoint. Only NONE/HARD reach here.
         $pendingConstraintSuggestion = $slotTemplate->getPendingConstraintSuggestion();
-        if (LockLevel::SOFT === $lockLevel) {
-            $pendingConstraintSuggestion = array_merge(
-                ['penalty' => self::SOFT_LOCK_PENALTY, 'reason' => 'Prefer keeping soft-locked slot'],
-                $pendingConstraintSuggestion ?? [],
-            );
-        }
 
         return [
             'id' => $slotTemplate->getId(),
@@ -533,7 +526,7 @@ final class ScheduleConstraintBuilder
             'dayOfWeek' => $slotTemplate->getDayOfWeek(),
             'startTime' => $this->formatTime($slotTemplate->getStartTime()),
             'durationMinutes' => $slotTemplate->getDurationMinutes(),
-            'lockLevel' => $lockLevel->value,
+            'lockLevel' => $slotTemplate->getLockLevel()->value,
             'temporaryLock' => $slotTemplate->getTemporaryLock(),
             'temporaryLockFor' => $slotTemplate->getTemporaryLockFor(),
             'temporaryMinSessionsOverride' => $slotTemplate->getTemporaryMinSessionsOverride(),

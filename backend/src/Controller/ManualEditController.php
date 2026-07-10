@@ -106,6 +106,13 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['error' => 'Invalid lockLevel.'], Response::HTTP_BAD_REQUEST);
         }
 
+        // ENG-21: SOFT is a placebo — the engine never reads the soft-lock penalty, so a
+        // SOFT lock has zero effect on placement. Reject it rather than accept a lock we
+        // silently ignore ("déclaré ≠ effectif"). Only NONE/HARD are honored.
+        if (LockLevel::SOFT === $lockLevel) {
+            return $this->json(['error' => 'SOFT lock is not supported (no solver effect); use NONE or HARD.'], Response::HTTP_BAD_REQUEST);
+        }
+
         $this->manualEditService->applyLock($slot, $lockLevel);
 
         return $this->json(['message' => 'Lock applied.'], Response::HTTP_OK);

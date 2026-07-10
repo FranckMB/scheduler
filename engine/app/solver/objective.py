@@ -58,11 +58,7 @@ def is_team_satisfied_by_hard_locks(
     ``-UNPLACED_PENALTY`` term in the objective.
     """
 
-    hard_count = sum(
-        1
-        for slot in locked_slots
-        if str(slot.get("team_id", "")) == str(team_id)
-    )
+    hard_count = sum(1 for slot in locked_slots if str(slot.get("team_id", "")) == str(team_id))
     return hard_count >= sessions_per_week
 
 
@@ -198,8 +194,7 @@ def add_level_2_objective(
 
     if score_formula_version != SCORE_FORMULA_VERSION:
         raise ValueError(
-            f"unsupported score_formula_version {score_formula_version!r}; "
-            f"expected {SCORE_FORMULA_VERSION!r}"
+            f"unsupported score_formula_version {score_formula_version!r}; expected {SCORE_FORMULA_VERSION!r}"
         )
 
     assignment_list = _normalise_assignments(assignments)
@@ -332,9 +327,7 @@ def _add_preferred_bonus(
             continue
         if _get(time_window, "family", default=None) != family:
             continue
-        team_id = _scalar_id(
-            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
-        )
+        team_id = _scalar_id(_get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None))
         if team_id is None:
             continue
 
@@ -392,9 +385,7 @@ def add_preferred_day_bonus(
             continue
         if _get(time_window, "family", default=None) != "DAY":
             continue
-        team_id = _scalar_id(
-            _get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None)
-        )
+        team_id = _scalar_id(_get(time_window, "scope_target_id", "scopeTargetId", "team_id", "teamId", default=None))
         if team_id is None:
             continue
         config = _get(time_window, "config", default={}) or {}
@@ -407,12 +398,14 @@ def add_preferred_day_bonus(
         avoided = avoided_by_team.get(team_id) or set()
         if not preferred and not avoided:
             continue
-        synthetic_windows.append({
-            "ruleType": "PREFERRED",
-            "family": "DAY",
-            "scope_target_id": team_id,
-            "config": {"preferredDays": sorted(preferred), "forbiddenDays": sorted(avoided)},
-        })
+        synthetic_windows.append(
+            {
+                "ruleType": "PREFERRED",
+                "family": "DAY",
+                "scope_target_id": team_id,
+                "config": {"preferredDays": sorted(preferred), "forbiddenDays": sorted(avoided)},
+            }
+        )
 
     def criterion(config: Mapping[str, Any]) -> tuple[set[int], set[int]] | None:
         preferred = day_set(config, "preferredDays", "preferred_days")
@@ -432,7 +425,11 @@ def add_preferred_day_bonus(
         return day not in avoided
 
     return _add_preferred_bonus(
-        x, synthetic_windows, weights, family="DAY", weight_name="preferred_day",
+        x,
+        synthetic_windows,
+        weights,
+        family="DAY",
+        weight_name="preferred_day",
         criterion=criterion,
         matches=matches,
     )
@@ -467,8 +464,13 @@ def add_preferred_time_bonus(
         return not (hi is not None and start_min > hi)
 
     return _add_preferred_bonus(
-        x, time_windows, weights, family="TIME", weight_name="preferred_time",
-        criterion=criterion, matches=matches,
+        x,
+        time_windows,
+        weights,
+        family="TIME",
+        weight_name="preferred_time",
+        criterion=criterion,
+        matches=matches,
     )
 
 
@@ -640,11 +642,13 @@ def add_chaining_bonus(
         end_min = int(end_val) if end_val is not None else None
 
         key = (str(venue_id), day, start_min)
-        slot_lookup.setdefault(key, []).append({
-            "assignment": assignment,
-            "start": start_min,
-            "end": end_min,
-        })
+        slot_lookup.setdefault(key, []).append(
+            {
+                "assignment": assignment,
+                "start": start_min,
+                "end": end_min,
+            }
+        )
 
     chaining_pairs: list[tuple[BoolVarLike, int]] = []
     seen_pairs: set[tuple[str, str]] = set()
@@ -697,9 +701,7 @@ def add_chaining_bonus(
     return chaining_pairs
 
 
-def _normalise_assignments(
-    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike]
-) -> list[AssignmentLike]:
+def _normalise_assignments(assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike]) -> list[AssignmentLike]:
     if isinstance(assignments, Mapping):
         return [_assignment_from_mapping_item(key, value) for key, value in assignments.items()]
     return list(assignments)
@@ -856,7 +858,9 @@ def _assignment_key(assignment: AssignmentLike, variable: BoolVarLike) -> Any:
 
 
 def _get_venue_id(assignment: AssignmentLike) -> str | None:
-    result = _scalar_id(_get(assignment, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None))
+    result = _scalar_id(
+        _get(assignment, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None)
+    )
     return str(result) if result is not None else None
 
 

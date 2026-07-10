@@ -65,6 +65,22 @@ class TestInputLimits:
         with pytest.raises(ValidationError):
             ScheduleInputSchema.model_validate(_payload(venues=venues))
 
+    def test_constraints_above_backend_raw_cap_still_accepted(self) -> None:
+        # ENG-23: the engine cap is on the EXPANDED list (backend fans out CLUB->N TEAM), so
+        # it must be generous enough not to false-block a legit club whose 500 raw rows expand
+        # past 500. 600 expanded constraints validate (the old 500 cap wrongly rejected them).
+        constraints = [{"id": f"c{i}"} for i in range(600)]
+        model = ScheduleInputSchema.model_validate(_payload(constraints=constraints))
+        assert len(model.constraints) == 600
+
+    def test_constraints_over_dos_cap_rejected(self) -> None:
+        from app.schemas.input_schema import MAX_CONSTRAINTS
+
+        with pytest.raises(ValidationError):
+            ScheduleInputSchema.model_validate(
+                _payload(constraints=[{"id": f"c{i}"} for i in range(MAX_CONSTRAINTS + 1)])
+            )
+
     def test_at_cap_payload_still_solves(self) -> None:
         # A max-teams / no-venue payload validates and solves instantly (all unplaced),
         # proving the cap boundary does not break the normal solve path.
