@@ -34,15 +34,26 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
         <h1 className="text-lg font-semibold">Une erreur inattendue s'est produite</h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          L'application a rencontré un problème. Vos données ne sont pas perdues — rechargez la page pour continuer.
+          L'application a rencontré un problème. Vos données ne sont pas perdues — réessayez, ou rechargez la page si le problème persiste.
         </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-        >
-          Recharger la page
-        </button>
+        <div className="flex gap-2">
+          {/* Retry re-renders the children in place: a transient throw (a racing query,
+              a route-transition blip) recovers without a full reload + re-auth. */}
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false })}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
+          >
+            Réessayer
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            Recharger la page
+          </button>
+        </div>
       </div>
     );
   }

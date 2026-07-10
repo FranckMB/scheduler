@@ -18,11 +18,12 @@ import { BlockerList } from "./BlockerList";
 
 const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
 
-// Hard client-side guard: if the backend/engine never answers, stop waiting instead of
-// polling forever and surface a retry. Must exceed the solver budget (adaptive phase-1 up
-// to 600 s + chaining 10 s + import/overhead, payload ceiling 650 s) — FRT-16: a 5-min
-// timeout wrongly declared a legitimately-long generation "failed" while it was still running.
-const TIMEOUT_MS = 12 * 60 * 1000;
+// Hard client-side guard: if the backend/engine never answers, stop polling forever and
+// surface a retry. Must exceed the WORST-CASE wall-clock, not just one solve: the message
+// can wait in the Redis queue / on ClubGenerationLock behind another club's ~600 s solve,
+// THEN run its own (adaptive phase-1 up to 600 s + chaining 10 s + import). FRT-16: a 5-min
+// timeout falsely failed a legitimately-long generation; 20 min covers a queued run too.
+const TIMEOUT_MS = 20 * 60 * 1000;
 
 export function GenerateStep() {
   const queryClient = useQueryClient();
