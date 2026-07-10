@@ -42,10 +42,11 @@ Hors périmètre (PR dédiées ultérieures) : **versions d'overlay** (lever la 
 - Table `schedule_structure_snapshot` (unique par schedule, RLS FORCE) — json par famille : SportCategory, Team, Venue, VenueTrainingSlot, Coach, TeamCoach, CoachPlayerMembership, Constraint permanentes, Reservation base, TeamTagAssignment. Sérialisation générique ClassMetadata (dates ATOM, enums value).
 - Écrite par `GenerateScheduleHandler` après le freeze (plans de saison, non-fatal). Écrite seulement si le solve aboutit (COMPLETED) — un échec n'écrase jamais la photo du plan encore affiché. Aucun UI. ~35 kB pour un gros club (fixture BCCL). Purgée avec le schedule (cascade artifacts) et par `SeasonDataPurger`.
 
-### D3 — restauration + lignée *(PR dédiée)*
-- **« Travailler sur cette version »** : savepoint auto (snapshot structurel de l'état courant, sans solve — Schedule « structure seule » ou entrée snapshot dédiée) → restauration **transactionnelle** de la structure depuis le snapshot (remplacement par saison ; les entités disparues suivent la **cascade E1** — fixtures d'une équipe supprimée incluses) → confirmation d'impact chiffrée.
-- **« Régénérer aux conditions »** : restauration + génération → enfant ; `Schedule.parentScheduleId` + numérotation V2.1.
-- Gardes inchangées : SocleGuard, VALIDATED, saison archivée (409).
+### D3 — régénérer aux conditions d'une version *(fait — 2026-07-10)*
+- **« Régénérer aux conditions de cette version »** : `POST /api/schedules/{id}/regenerate-from` (route custom, management-gated, saison writable) → `StructureRestorer` restaure la structure de la photo D2 (wipe structure-only + ré-insertion avec ids d'origine, transactionnel, RLS) → nouveau `Schedule` DRAFT + `GenerateScheduleMessage` → **nouvelle version LINÉAIRE** (pas de lignée V2.1, décision produit). 409 si overlay ou version sans photo (pré-D2).
+- **Confirmation d'impact chiffrée** côté front (structure actuelle N équipes → version M équipes) via `generatedTeamCount` (D1) + `useTeams`.
+- Wipe préserve : schedules/versions, calendrier (entries, contraintes datées, réservations d'overlay). Gardes inchangées.
+- **Reporté en D4** (design produit) : « Travailler sur cette version » (restauration pour édition manuelle) + savepoint auto de l'état vivant.
 
 ## 5. Invariants (à tester à chaque palier)
 

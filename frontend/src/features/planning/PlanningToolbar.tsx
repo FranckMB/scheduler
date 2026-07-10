@@ -1,4 +1,4 @@
-import { CheckCircle2, Lock, LockOpen, RefreshCw, Star, Trash2 } from "lucide-react";
+import { CheckCircle2, History, Lock, LockOpen, RefreshCw, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -26,6 +26,7 @@ interface PlanningToolbarProps {
   onReopen: () => void;
   onSetBaseline: () => void;
   onDelete: () => void;
+  onRegenerateFrom: () => void;
   isGenerating: boolean;
   actionBusy: boolean;
   baselineScheduleId: string | null;
@@ -48,6 +49,7 @@ export function PlanningToolbar({
   onReopen,
   onSetBaseline,
   onDelete,
+  onRegenerateFrom,
   isGenerating,
   actionBusy,
   baselineScheduleId,
@@ -66,6 +68,8 @@ export function PlanningToolbar({
   // Deletable = a plain work version: never the baseline (anchors the season),
   // never VALIDATED (read-only), never mid-solve, never an overlay.
   const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
+  // "Regenerate under this version's conditions" needs its D2 structure photo.
+  const canRegenerateFrom = null !== selected && isFinished && !isOverlay && "number" === typeof selected.generatedTeamCount;
 
   return (
     <>
@@ -102,6 +106,13 @@ export function PlanningToolbar({
           {isGenerating ? "Génération…" : "Régénérer"}
         </Button>
       )}
+
+      {canRegenerateFrom ? (
+        <Button size="sm" variant="ghost" className="h-8" disabled={actionBusy || isGenerating} onClick={onRegenerateFrom} title="Relancer une génération avec la structure de cette version">
+          <History className="size-4" />
+          Régénérer aux conditions
+        </Button>
+      ) : null}
 
       {isCompleted ? (
         <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>

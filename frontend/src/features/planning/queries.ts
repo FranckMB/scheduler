@@ -227,3 +227,17 @@ export function useDeleteSchedule() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }
+
+/** planning-versions D3: regenerate under a version's conditions → a new version. */
+export function useRegenerateFromVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => planningApi.regenerateFromVersion(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      // The structure changed under the restore — refresh the wizard entities.
+      void queryClient.invalidateQueries({ queryKey: ["wizard"] });
+      void queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+}
