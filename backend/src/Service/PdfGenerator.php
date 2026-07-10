@@ -231,7 +231,12 @@ class PdfGenerator
         }
         $venueRow = '<th class="corner"></th>';
         foreach ($columns as $col) {
-            $venueRow .= \sprintf('<th class="venue">%s</th>', htmlspecialchars($venues[$col['venueId']]['name'] ?? ''));
+            // Colour each venue header with its own colour (same mapping as the
+            // cells) instead of the flat grey; readable text on top.
+            $venue = $venues[$col['venueId']] ?? ['name' => '', 'color' => null];
+            $color = $venue['color'] ?? null;
+            $style = null === $color ? '' : \sprintf(' style="background:%s;color:%s"', htmlspecialchars($color), htmlspecialchars($this->readableForeground($color)));
+            $venueRow .= \sprintf('<th class="venue"%s>%s</th>', $style, htmlspecialchars($venue['name']));
         }
 
         return \sprintf('<tr>%s</tr><tr>%s</tr>', $dayRow, $venueRow);
