@@ -79,18 +79,6 @@ class ClubStateProcessor extends AbstractStateProcessor
         if (null !== $input->slug) {
             $entity->setSlug($input->slug);
         }
-        if (null !== $input->planId) {
-            $entity->setPlanId($input->planId);
-        }
-        if (null !== $input->billingCycle) {
-            $entity->setBillingCycle($input->billingCycle);
-        }
-        if (null !== $input->planExpiresAt) {
-            $entity->setPlanExpiresAt($input->planExpiresAt);
-        }
-        if (null !== $input->generationCountSeason) {
-            $entity->setGenerationCountSeason($input->generationCountSeason);
-        }
         if (null !== $input->schoolZone) {
             $entity->setSchoolZone($input->schoolZone);
         }
@@ -127,18 +115,6 @@ class ClubStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->slug) {
             $entity->setSlug($input->slug);
-        }
-        if (null !== $input->planId) {
-            $entity->setPlanId($input->planId);
-        }
-        if (null !== $input->billingCycle) {
-            $entity->setBillingCycle($input->billingCycle);
-        }
-        if (null !== $input->planExpiresAt) {
-            $entity->setPlanExpiresAt($input->planExpiresAt);
-        }
-        if (null !== $input->generationCountSeason) {
-            $entity->setGenerationCountSeason($input->generationCountSeason);
         }
         if (null !== $input->schoolZone) {
             $entity->setSchoolZone($input->schoolZone);

@@ -5,25 +5,20 @@ declare(strict_types=1);
 namespace App\ApiResource;
 
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use ApiPlatform\Metadata\Put;
-use App\Dto\PlanInput;
 use App\Entity\Plan;
-use App\State\Processor\PlanStateProcessor;
 use App\State\Provider\PlanStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// SEC-14: read-only over the tenant API. Plan is the GLOBAL billing catalogue (prices,
+// maxTeams, maxGenerations) — a write here would let any club member falsify pricing/
+// quotas. Managed out-of-band (fixtures / future super-admin surface), never the tenant API.
 #[ApiResource(shortName: 'Plan', operations: [
     new GetCollection,
     new Get,
-    new Post,
-    new Put,
-    new Delete,
-], input: PlanInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: PlanStateProvider::class, processor: PlanStateProcessor::class)]
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: PlanStateProvider::class)]
 class PlanResource
 {
     #[Groups(['read'])]

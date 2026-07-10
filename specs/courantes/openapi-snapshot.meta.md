@@ -2,6 +2,10 @@ Last verified @ feat/register-email-verification 2026-07-09
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **65 paths.**
 Changements récents :
+- **SEC-14 tables globales en lecture seule (2026-07-10)** : `Plan`, `PriorityTier`, `Sport`
+  perdent `Post/Put/Delete` (ne gardent que `GetCollection`/`Get`) — ce sont des tables
+  globales (sans `club_id`) lues par le solveur/facturation de tous les clubs ; une écriture
+  via l'API tenant les falsifiait cross-club. Leurs DTO d'input + processors write supprimés.
 - **Inscription vérifiée par email (A3, 2026-07-09)** : `/api/register` passe d'un `201`+JWT à un
   **`202` générique** (anti-énumération : réponse identique pour un email neuf ou déjà inscrit, aucun
   token) ; nouvelle route custom `POST /api/register/verify` (`AuthController`, ajoutée à
