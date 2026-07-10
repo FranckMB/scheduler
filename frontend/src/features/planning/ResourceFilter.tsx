@@ -33,7 +33,6 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
   const filteredGroups = groups
     .map((g) => ({ ...g, resources: g.resources.filter((r) => r.label.toLowerCase().includes(needle)) }))
     .filter((g) => g.resources.length > 0);
-  const filtered = filteredGroups.flatMap((g) => g.resources);
   const count = selected.length;
   const summary = 0 === count ? "tous" : `${count} sélectionné${count > 1 ? "s" : ""}`;
 
@@ -95,7 +94,7 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
                   </ul>
                 </li>
               ))}
-              {0 === filtered.length ? <li className="px-2 py-1 text-xs text-muted-foreground">Aucun résultat</li> : null}
+              {0 === filteredGroups.length ? <li className="px-2 py-1 text-xs text-muted-foreground">Aucun résultat</li> : null}
             </ul>
           </div>
         </>
