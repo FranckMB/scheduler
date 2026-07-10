@@ -26,6 +26,8 @@ use Symfony\Component\Routing\Attribute\Route;
 #[AsController]
 final class ClubInfoController extends AbstractController
 {
+    use ResolvesCurrentClubTrait;
+
     /** body key → [setter, max length]. Free-text fields. */
     private const TEXT_FIELDS = [
         'committeeCode' => ['setCommitteeCode', 24],
@@ -58,9 +60,8 @@ final class ClubInfoController extends AbstractController
     {
         $this->managementAccessGuard->assertManager(); // SEC-07
 
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
-        if (!\is_string($clubId) || '' === $clubId) {
+        $clubId = $this->resolveCurrentClubId($this->requestStack);
+        if (null === $clubId) {
             return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
         }
         $club = $this->clubRepository->find($clubId);
@@ -68,19 +69,24 @@ final class ClubInfoController extends AbstractController
             return $this->json(['error' => 'Club not found.'], Response::HTTP_NOT_FOUND);
         }
 
-        $data = json_decode((string) $request?->getContent(), true);
+        $data = json_decode((string) $this->requestStack->getCurrentRequest()?->getContent(), true);
         if (!\is_array($data)) {
             return $this->json(['error' => 'Invalid JSON.'], Response::HTTP_BAD_REQUEST);
         }
 
-        // Partial: only the keys present are touched. '' resets to null.
+        // Partial: only the keys present are touched. A string is trimmed
+        // (''→null resets); null resets; any other JSON type is rejected (422)
+        // rather than silently wiping the column.
         foreach (self::TEXT_FIELDS as $key => [$setter, $max]) {
             if (!\array_key_exists($key, $data)) {
                 continue;
             }
+            if (!$this->isStringOrNull($data[$key])) {
+                return $this->unprocessable(\sprintf('%s doit être une chaîne de caractères.', $key));
+            }
             $value = $this->normalize($data[$key]);
             if (null !== $value && mb_strlen($value) > $max) {
-                return $this->json(['error' => \sprintf('%s dépasse %d caractères.', $key, $max)], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->unprocessable(\sprintf('%s dépasse %d caractères.', $key, $max));
             }
             $club->{$setter}($value);
         }
@@ -89,44 +95,53 @@ final class ClubInfoController extends AbstractController
             if (!\array_key_exists($key, $data)) {
                 continue;
             }
+            if (!$this->isStringOrNull($data[$key])) {
+                return $this->unprocessable(\sprintf('%s doit être une chaîne de caractères.', $key));
+            }
             $value = $this->normalize($data[$key]);
             if (null !== $value && (mb_strlen($value) > 180 || false === filter_var($value, \FILTER_VALIDATE_EMAIL))) {
-                return $this->json(['error' => \sprintf('%s n\'est pas un email valide.', $key)], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->unprocessable(\sprintf('%s n\'est pas un email valide.', $key));
             }
             $club->{$setter}($value);
         }
 
         if (\array_key_exists('schoolZone', $data)) {
+            if (!$this->isStringOrNull($data['schoolZone'])) {
+                return $this->unprocessable('schoolZone doit être une chaîne de caractères.');
+            }
             $zone = $this->normalize($data['schoolZone']);
             if (null !== $zone && !\in_array($zone, SchoolZoneResolver::ZONES, true)) {
-                return $this->json(['error' => 'schoolZone n\'est pas une zone valide.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->unprocessable('schoolZone n\'est pas une zone valide.');
             }
             $club->setSchoolZone($zone);
         }
 
         $this->entityManager->flush();
 
-        return $this->json([
-            'committeeCode' => $club->getCommitteeCode(),
-            'contactPhone' => $club->getContactPhone(),
-            'contactEmail' => $club->getContactEmail(),
-            'address' => $club->getAddress(),
-            'correspondentName' => $club->getCorrespondentName(),
-            'correspondentPhone' => $club->getCorrespondentPhone(),
-            'correspondentEmail' => $club->getCorrespondentEmail(),
-            'presidentName' => $club->getPresidentName(),
-            'presidentPhone' => $club->getPresidentPhone(),
-            'presidentEmail' => $club->getPresidentEmail(),
-            'mainVenueName' => $club->getMainVenueName(),
-            'mainVenueAddress' => $club->getMainVenueAddress(),
-            'schoolZone' => $club->getSchoolZone(),
-        ]);
+        // Echo the editable fields back, derived from the whitelist so the field
+        // list lives in exactly one place.
+        $out = ['schoolZone' => $club->getSchoolZone()];
+        foreach ([...array_keys(self::TEXT_FIELDS), ...array_keys(self::EMAIL_FIELDS)] as $key) {
+            $out[$key] = $club->{'get' . ucfirst($key)}();
+        }
+
+        return $this->json($out);
+    }
+
+    private function isStringOrNull(mixed $value): bool
+    {
+        return null === $value || \is_string($value);
+    }
+
+    private function unprocessable(string $message): JsonResponse
+    {
+        return $this->json(['error' => $message], Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
     /** Trim; empty string → null (explicit reset). */
-    private function normalize(mixed $value): ?string
+    private function normalize(?string $value): ?string
     {
-        if (!\is_string($value)) {
+        if (null === $value) {
             return null;
         }
         $trimmed = trim($value);

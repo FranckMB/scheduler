@@ -44,8 +44,11 @@ describe("ClubPage", () => {
     // Read-only identity + editable groups render.
     expect(screen.getByText("Code FFBB")).toBeInTheDocument();
     expect(screen.getByText("Correspondant")).toBeInTheDocument();
+    // Editing a field then saving PATCHes only that field (partial update).
+    await user.type(screen.getByLabelText("Comité"), "0069");
     await user.click(screen.getByRole("button", { name: "Enregistrer" }));
     expect(updateClubInfo).toHaveBeenCalledOnce();
+    expect(updateClubInfo).toHaveBeenCalledWith({ committeeCode: "0069" });
   });
 
   it("hides the club-info section for a non-admin", () => {

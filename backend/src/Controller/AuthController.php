@@ -263,22 +263,30 @@ final class AuthController extends AbstractController
                     'accentColorDark' => $clubEntity->getAccentColorDark(),
                     'accentPalette' => $clubEntity->getAccentPalette(),
                     'schoolZone' => $clubEntity->getSchoolZone(),
-                    // FFBB club info (lot B).
-                    'league' => $clubEntity->getLeague(),
-                    'ffbbClubCode' => $clubEntity->getFfbbClubCode(),
-                    'committeeCode' => $clubEntity->getCommitteeCode(),
-                    'contactPhone' => $clubEntity->getContactPhone(),
-                    'contactEmail' => $clubEntity->getContactEmail(),
-                    'address' => $clubEntity->getAddress(),
-                    'correspondentName' => $clubEntity->getCorrespondentName(),
-                    'correspondentPhone' => $clubEntity->getCorrespondentPhone(),
-                    'correspondentEmail' => $clubEntity->getCorrespondentEmail(),
-                    'presidentName' => $clubEntity->getPresidentName(),
-                    'presidentPhone' => $clubEntity->getPresidentPhone(),
-                    'presidentEmail' => $clubEntity->getPresidentEmail(),
-                    'mainVenueName' => $clubEntity->getMainVenueName(),
-                    'mainVenueAddress' => $clubEntity->getMainVenueAddress(),
                 ];
+
+                // FFBB club info (lot B) carries officer personal contacts
+                // (president/correspondent phone+email): exposed ONLY to an active
+                // management member (the /club edit section is admin-only), never
+                // to a pending or non-management member.
+                if ($clubUser->getIsActive() && $this->clubUserRepository->isManagementRole($clubUser->getRole())) {
+                    $club += [
+                        'league' => $clubEntity->getLeague(),
+                        'ffbbClubCode' => $clubEntity->getFfbbClubCode(),
+                        'committeeCode' => $clubEntity->getCommitteeCode(),
+                        'contactPhone' => $clubEntity->getContactPhone(),
+                        'contactEmail' => $clubEntity->getContactEmail(),
+                        'address' => $clubEntity->getAddress(),
+                        'correspondentName' => $clubEntity->getCorrespondentName(),
+                        'correspondentPhone' => $clubEntity->getCorrespondentPhone(),
+                        'correspondentEmail' => $clubEntity->getCorrespondentEmail(),
+                        'presidentName' => $clubEntity->getPresidentName(),
+                        'presidentPhone' => $clubEntity->getPresidentPhone(),
+                        'presidentEmail' => $clubEntity->getPresidentEmail(),
+                        'mainVenueName' => $clubEntity->getMainVenueName(),
+                        'mainVenueAddress' => $clubEntity->getMainVenueAddress(),
+                    ];
+                }
 
                 $allSeasons = $this->seasonResolver->seasonsForClub($clubEntity->getId());
                 $now = $this->clock->now();

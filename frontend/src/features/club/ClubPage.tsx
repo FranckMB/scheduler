@@ -268,12 +268,22 @@ type InfoKey = (typeof INFO_KEYS)[number];
 /** FFBB club info (lot B): read-only identity + editable contacts. */
 function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   const update = useUpdateClubInfo();
-  const [form, setForm] = useState<Record<InfoKey, string>>(() =>
-    Object.fromEntries(INFO_KEYS.map((k) => [k, club[k] ?? ""])) as Record<InfoKey, string>,
+  // Seeded from the server values. The parent remounts this component (key on
+  // the server signature) when ["me"] refetches, so the inputs re-sync after a
+  // save instead of going stale — no effect needed.
+  const [form, setForm] = useState<Record<InfoKey, string>>(
+    () => Object.fromEntries(INFO_KEYS.map((k) => [k, club[k] ?? ""])) as Record<InfoKey, string>,
   );
   const set = (k: InfoKey) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const save = () => update.mutate(Object.fromEntries(INFO_KEYS.map((k) => [k, form[k].trim() || null])));
+  // PATCH is partial: send only the fields the admin actually changed, so a
+  // concurrent edit on an untouched field is not clobbered (last-write-wins).
+  const save = () => {
+    const changed = Object.fromEntries(
+      INFO_KEYS.filter((k) => (form[k].trim() || null) !== (club[k] ?? null)).map((k) => [k, form[k].trim() || null]),
+    );
+    if (Object.keys(changed).length > 0) update.mutate(changed);
+  };
 
   return (
     <div className="space-y-5">
@@ -370,7 +380,8 @@ function ClubHub({ me }: { me: MeResponse }) {
         </AccordionSection>
         {isAdmin && me.club ? (
           <AccordionSection title="Informations du club">
-            <ClubInfoSection club={me.club} />
+            {/* key = server signature: remount (re-seed the form) when ["me"] refetches after a save. */}
+            <ClubInfoSection key={INFO_KEYS.map((k) => me.club![k] ?? "").join("")} club={me.club} />
           </AccordionSection>
         ) : null}
         {isAdmin ? (

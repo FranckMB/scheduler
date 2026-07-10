@@ -16,7 +16,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 /**
  * Lot B: PATCH /api/club/info partial-updates the FFBB club fields. (Its SEC-07
- * management gate is covered by ManagementRoleTest's managementEndpoints.)
+ * management gate is covered by ManagementRoleTest's managementEndpoints.).
  */
 #[Group('phase1')]
 final class ClubInfoTest extends WebTestCase
@@ -66,14 +66,35 @@ final class ClubInfoTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
-    /** @param array<string, mixed> $body */
-    private function patch(array $body): void
+    public function testNonStringValueIsRejectedWithoutWiping(): void
     {
-        $this->client->request('PATCH', '/api/club/info', [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
-            'CONTENT_TYPE' => 'application/json',
-        ], json_encode($body, \JSON_THROW_ON_ERROR));
+        // Seed a value, then send a JSON number for the same key: it must 422
+        // (not silently wipe the column to null).
+        $this->patch(['committeeCode' => '0069']);
+        self::assertResponseIsSuccessful();
+
+        $this->patch(['committeeCode' => 69]);
+        self::assertResponseStatusCodeSame(422);
+        $this->em->clear();
+        self::assertSame('0069', $this->em->getRepository(Club::class)->find($this->club->getId())?->getCommitteeCode());
+    }
+
+    public function testMeExposesOfficerContactsOnlyToManagement(): void
+    {
+        // Officer personal contacts (president/correspondent phone+email) are
+        // personal data: /api/me must expose them to an active manager only,
+        // never to a non-management or pending member.
+        $this->patch(['presidentEmail' => 'president@bccl.fr']);
+        self::assertResponseIsSuccessful();
+
+        $adminMe = $this->me($this->token);
+        self::assertSame('president@bccl.fr', $adminMe['club']['presidentEmail'] ?? null, 'a manager sees officer contacts');
+
+        $editorMe = $this->me($this->makeMember('editor', true));
+        self::assertArrayNotHasKey('presidentEmail', $editorMe['club'] ?? [], 'a non-management member must not see officer contacts');
+
+        $pendingMe = $this->me($this->makeMember('admin', false));
+        self::assertArrayNotHasKey('presidentEmail', $pendingMe['club'] ?? [], 'a pending member must not see officer contacts');
     }
 
     protected function setUp(): void
@@ -97,5 +118,41 @@ final class ClubInfoTest extends WebTestCase
         $this->em->flush();
 
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /** @return array<string, mixed> */
+    private function me(string $token): array
+    {
+        $this->client->request('GET', '/api/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+        ]);
+        self::assertResponseIsSuccessful();
+
+        return json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+    }
+
+    /** Adds a member of the seeded club and returns its Bearer token. */
+    private function makeMember(string $role, bool $active): string
+    {
+        $container = self::getContainer();
+        $hasher = $container->get('security.user_password_hasher');
+        $uid = uniqid('', true);
+        $user = (new User)->setEmail('m' . $uid . '@test.com')->setFirstName('M')->setLastName('B');
+        $user->setPasswordHash($hasher->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole($role)->setIsActive($active));
+        $this->em->flush();
+
+        return $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /** @param array<string, mixed> $body */
+    private function patch(array $body): void
+    {
+        $this->client->request('PATCH', '/api/club/info', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode($body, \JSON_THROW_ON_ERROR));
     }
 }
