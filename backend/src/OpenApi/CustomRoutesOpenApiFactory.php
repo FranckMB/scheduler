@@ -368,7 +368,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 requestBody: $this->jsonBody([
                     'type' => 'object',
                     'required' => ['lockLevel'],
-                    'properties' => ['lockLevel' => ['type' => 'string', 'enum' => ['NONE', 'SOFT', 'HARD']]],
+                    'properties' => ['lockLevel' => ['type' => 'string', 'enum' => ['NONE', 'HARD']]],
                 ]),
             )),
             '/api/schedule-slots/{id}/manual-edit/one-time' => new PathItem(post: new Operation(

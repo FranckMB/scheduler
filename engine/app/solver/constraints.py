@@ -169,7 +169,8 @@ def add_level_1_hard_constraints(
       2. COACH_NO_OVERLAP   — one coach coaches at most one team per time slot
       3. COACH_PLAYER_NO_OVERLAP — a coach-player cannot be in two roles at once
       4. TEAM_NO_OVERLAP    — a team cannot have two sessions at the same time
-      5. MIN_SESSIONS        — every team receives at least its effective minimum
+      5. MIN_SESSIONS        — soft TARGET only (ENG-18): the objective rewards reaching a
+                               team's effective minimum; it is NOT a hard guarantee
 
     Derived (fed from parse_v2_constraints or direct arguments):
       6. fixed_slots          — pre-placed slots forced to 1
@@ -969,7 +970,9 @@ def add_min_sessions_constraints(
     min_sessions_by_team: Mapping[Any, int] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
 ) -> int:
-    """Constraint 10: every team receives at least its effective minimum sessions."""
+    """MIN_SESSIONS as a soft TARGET (ENG-18): rewards reaching each team's effective
+    minimum via the objective; NOT a hard "every team gets at least its minimum" guarantee
+    (production passes 0 as the hard floor, so no hard MIN_SESSIONS constraint is posted)."""
 
     if priority_tiers:
         minimums = _compute_effective_min_sessions(teams, priority_tiers)

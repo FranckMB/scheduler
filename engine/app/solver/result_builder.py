@@ -235,12 +235,18 @@ def _generate_diagnostics(
 ) -> list[dict[str, Any]]:
     """Run post-solve checks and return manager-readable diagnostics."""
     diagnostics: list[dict[str, Any]] = []
-    diagnostics.extend(_diagnose_unplaced(model_data, slots))
-    diagnostics.extend(_diagnose_soft_lock_moved(model_data, slots))
-    diagnostics.extend(_diagnose_coach_overload(model_data, slots))
-    diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
+    # ENG-22: every "analysis of the placed slots" diagnostic only makes sense for a REAL
+    # solve (OPTIMAL/FEASIBLE). On INFEASIBLE the demand-vs-supply message explains it; on
+    # UNKNOWN/timeout the solver simply didn't finish — claiming teams are "below their
+    # minimum for lack of gym slots" or slots are "occupied" would be a lie contradicting the
+    # timeout diagnostic. _diagnose_conflicts owns the INFEASIBLE + timeout cases.
+    if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        diagnostics.extend(_diagnose_unplaced(model_data, slots))
+        diagnostics.extend(_diagnose_soft_lock_moved(model_data, slots))
+        diagnostics.extend(_diagnose_coach_overload(model_data, slots))
+        diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
+        diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(model_data, solver_status, slots, slot_capacities=slot_capacities))
-    diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     if fallback_used:
         diagnostics.extend(_diagnose_coach_rest_days(model_data, slots))
     return diagnostics
@@ -370,17 +376,20 @@ def _diagnose_coach_overload(
     model_data: Mapping[str, Any] | Any,
     slots: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Flag coaches whose session count exceeds a safe threshold."""
+    """Flag coaches working more DAYS than their recommended maximum."""
     diagnostics: list[dict[str, Any]] = []
     coach_names = _coach_name_map(model_data)
-    coach_counts: dict[str, int] = defaultdict(int)
+    # ENG-24: the threshold (_coach_threshold = maxDaysOverride) is a number of DAYS, so count
+    # distinct working days per coach — NOT 15-min blocks (two 90-min sessions on the same day
+    # = 1 day worked, not 12 blocks) which produced systematic false alarms.
+    coach_days: dict[str, set[int]] = defaultdict(set)
     for slot in slots:
         coach_id = slot.get("coachId")
-        if coach_id:
-            duration_minutes = int(slot.get("durationMinutes", SLOT_MINUTES))
-            coach_counts[coach_id] += max(1, duration_minutes // SLOT_MINUTES)
+        if coach_id and slot.get("dayOfWeek") is not None:
+            coach_days[coach_id].add(int(slot["dayOfWeek"]))
 
-    for coach_id, count in coach_counts.items():
+    for coach_id, days in coach_days.items():
+        count = len(days)
         threshold = _coach_threshold(model_data, coach_id)
         if count > threshold:
             diagnostics.append({
@@ -389,7 +398,7 @@ def _diagnose_coach_overload(
                 "severity": "WARNING",
                 "coachId": coach_id,
                 "message": (
-                    f"Le coach {_label(coach_id, coach_names)} est affecté à {count} séances, "
+                    f"Le coach {_label(coach_id, coach_names)} intervient sur {count} jours, "
                     f"au-dessus de la limite recommandée de {threshold} : "
                     "risque de fatigue ou de conflits d'agenda."
                 ),
@@ -529,6 +538,42 @@ def _diagnose_conflicts(
                 "Ajoutez de la disponibilité de gymnase ou un coach supplémentaire.",
                 "Vérifiez les créneaux verrouillés (LOCK) qui se chevauchent entre équipes.",
             ],
+            "createdAt": datetime.now(UTC).isoformat(),
+        })
+        return diagnostics
+
+    if solver_status == cp_model.UNKNOWN:
+        # ENG-22: the solver stopped WITHOUT a solution and WITHOUT proving infeasibility — the
+        # time budget ran out on a hard instance. Say so, instead of a silent "failed".
+        diagnostics.append({
+            "id": "diag-timeout",
+            "type": "conflict",
+            "severity": "ERROR",
+            "message": (
+                "Le solveur n'a pas trouvé de planning dans le temps imparti (problème trop "
+                "complexe). Aucune infaisabilité prouvée — une solution existe peut-être avec "
+                "plus de temps ou moins de contraintes."
+            ),
+            "suggestions": [
+                "Réduisez la taille du problème (équipes / gymnases) ou le nombre de contraintes.",
+                "Relancez la génération : le solveur peut aboutir sur un nouvel essai.",
+            ],
+            "createdAt": datetime.now(UTC).isoformat(),
+        })
+        return diagnostics
+
+    if solver_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        # ENG-22: MODEL_INVALID (or any other non-solve status) is a construction bug, NOT a
+        # time problem — "retry / shrink" would mislead. Surface it as an internal error.
+        diagnostics.append({
+            "id": "diag-solver-error",
+            "type": "conflict",
+            "severity": "ERROR",
+            "message": (
+                "Erreur interne du solveur (modèle invalide). Ce n'est pas un problème de "
+                "taille ni de temps — signalez-le au support."
+            ),
+            "suggestions": ["Contactez le support : la génération n'a pas pu être construite correctement."],
             "createdAt": datetime.now(UTC).isoformat(),
         })
         return diagnostics
@@ -875,7 +920,7 @@ def _find_coach_for_team(model_data: Mapping[str, Any] | Any, team_id: str) -> s
 
 
 def _coach_threshold(model_data: Mapping[str, Any] | Any, coach_id: str) -> int:
-    """Return the recommended maximum session count for a coach."""
+    """Return the recommended maximum number of working DAYS for a coach (maxDaysOverride)."""
     for coach in _collection(model_data, "coaches"):
         cid = _get(coach, "id", "coach_id", "coachId")
         if cid is not None and str(cid) == coach_id:

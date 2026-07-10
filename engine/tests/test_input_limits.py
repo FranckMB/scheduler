@@ -65,6 +65,15 @@ class TestInputLimits:
         with pytest.raises(ValidationError):
             ScheduleInputSchema.model_validate(_payload(venues=venues))
 
+    def test_large_expanded_constraint_list_is_not_capped(self) -> None:
+        # ENG-23: constraints has NO per-list cap — the backend fans out CLUB-scoped rules into
+        # raw(<=500) x teams(<=200) rows, so any finite cap would false-block a legit club. A
+        # large expanded list validates; the real bounds are the backend RAW cap + the nginx
+        # 20m body limit + the solver timeout, not this schema.
+        constraints = [{"id": f"c{i}"} for i in range(10_000)]
+        model = ScheduleInputSchema.model_validate(_payload(constraints=constraints))
+        assert len(model.constraints) == 10_000
+
     def test_at_cap_payload_still_solves(self) -> None:
         # A max-teams / no-venue payload validates and solves instantly (all unplaced),
         # proving the cap boundary does not break the normal solve path.

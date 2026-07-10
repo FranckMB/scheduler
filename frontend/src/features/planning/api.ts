@@ -53,7 +53,8 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   FAILED: "Échec",
   VALIDATED: "Validé",
 };
-export type LockLevel = "NONE" | "SOFT" | "HARD";
+// ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
+export type LockLevel = "NONE" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 
 export interface Schedule {

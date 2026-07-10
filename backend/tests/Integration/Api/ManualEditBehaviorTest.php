@@ -80,6 +80,26 @@ final class ManualEditBehaviorTest extends WebTestCase
         self::assertSame(LockLevel::HARD, $reloaded?->getLockLevel());
     }
 
+    public function testSoftLockIsRejected(): void
+    {
+        // ENG-21: SOFT lock is a placebo (the engine never honors its penalty), so the
+        // endpoint rejects it (400) rather than accept a lock with zero placement effect.
+        [$user, , $season] = $this->seed('MEDSOFT');
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $slot = $this->createSlot($schedule, dayOfWeek: 2, startHm: '18:00');
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedule-slots/{$slot->getId()}/manual-edit/lock", [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['lockLevel' => 'SOFT'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(400);
+        $this->em->clear();
+        $this->scopeGucToClub($season->getClubId());
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertNotSame(LockLevel::SOFT, $reloaded?->getLockLevel(), 'the SOFT lock must not persist');
+    }
+
     public function testOneTimeUpdateMovesTheSlot(): void
     {
         [$user, , $season] = $this->seed('MED3');

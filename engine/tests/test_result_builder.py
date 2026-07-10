@@ -22,7 +22,13 @@ class ResultBuilderTest(unittest.TestCase):
             "clubId": "club-1",
             "seasonId": "season-1",
             "teams": [{"id": "team-1", "priorityTierId": 3, "sportCategoryId": "sc-1", "name": "Team 1"}],
-            "venues": [{"id": "venue-1", "name": "Court A", "trainingSlots": [{"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 60, "capacity": 1}]}],
+            "venues": [
+                {
+                    "id": "venue-1",
+                    "name": "Court A",
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 60, "capacity": 1}],
+                }
+            ],
             "coaches": [],
             "slotTemplates": [],
         }
@@ -116,9 +122,7 @@ class ResultBuilderTest(unittest.TestCase):
 
     def test_all_teams_appear_in_output(self):
         data = self._minimal_data()
-        data["teams"].append(
-            {"id": "team-2", "priorityTierId": 2, "sportCategoryId": "sc-1", "name": "Team 2"}
-        )
+        data["teams"].append({"id": "team-2", "priorityTierId": 2, "sportCategoryId": "sc-1", "name": "Team 2"})
         model = build_model(data)
         # Do not force any variable to 1, so team-2 has no slot.
         solver, status = self._solve(model)
@@ -180,16 +184,16 @@ class ResultBuilderTest(unittest.TestCase):
                 "teamId": "team-1",
                 "venueId": "venue-1",
                 "coachId": "coach-1",
-                "dayOfWeek": 1,
-                "startTime": "09:15",
+                "dayOfWeek": 3,
+                "startTime": "09:00",
                 "durationMinutes": 15,
                 "lockLevel": "NONE",
             },
         ]
-        # Two consecutive 15-min training slots so merged duration=30 → count=2 > maxDaysOverride=1.
+        # ENG-24: the coach works 2 DISTINCT days (Mon + Wed) > maxDaysOverride=1 → overloaded.
         data["venues"][0]["trainingSlots"] = [
             {"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 15, "capacity": 1},
-            {"dayOfWeek": 1, "startTime": "09:15", "durationMinutes": 15, "capacity": 1},
+            {"dayOfWeek": 3, "startTime": "09:00", "durationMinutes": 15, "capacity": 1},
         ]
         model = build_model(data)
         for var in model.x.values():
@@ -201,6 +205,63 @@ class ResultBuilderTest(unittest.TestCase):
         overload_diags = [d for d in result["diagnostics"] if d["type"] == "coach_overload"]
         self.assertTrue(overload_diags)
         self.assertEqual(overload_diags[0]["coachId"], "coach-1")
+        self.assertIn("2 jours", overload_diags[0]["message"])
+
+    def test_coach_two_sessions_same_day_is_not_overload(self):
+        # ENG-24: two sessions on the SAME day = 1 day worked, not 2 — must NOT flag overload
+        # for a coach whose maxDaysOverride is 1 (the old 15-min-block count wrongly did).
+        data = self._minimal_data()
+        data["coaches"] = [{"id": "coach-1", "firstName": "Al", "lastName": "S", "maxDaysOverride": 1}]
+        data["slotTemplates"] = [
+            {
+                "id": "tpl-1",
+                "teamId": "team-1",
+                "venueId": "venue-1",
+                "coachId": "coach-1",
+                "dayOfWeek": 1,
+                "startTime": "09:00",
+                "durationMinutes": 15,
+                "lockLevel": "NONE",
+            },
+            {
+                "id": "tpl-2",
+                "teamId": "team-1",
+                "venueId": "venue-1",
+                "coachId": "coach-1",
+                "dayOfWeek": 1,
+                "startTime": "18:00",
+                "durationMinutes": 15,
+                "lockLevel": "NONE",
+            },
+        ]
+        data["venues"][0]["trainingSlots"] = [
+            {"dayOfWeek": 1, "startTime": "09:00", "durationMinutes": 15, "capacity": 1},
+            {"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 15, "capacity": 1},
+        ]
+        model = build_model(data)
+        for var in model.x.values():
+            model.Add(var == 1)
+        solver, status = self._solve(model)
+        result = build_result(data, solver, model, status=status)
+
+        self.assertEqual([d for d in result["diagnostics"] if d["type"] == "coach_overload"], [])
+
+    def test_unknown_status_emits_timeout_diagnostic_not_false_unplaced(self):
+        # ENG-22: on UNKNOWN (solver ran out of time), the manager gets an explicit timeout
+        # diagnostic — NOT the misleading per-team "all slots were already occupied".
+        data = self._minimal_data()
+        model = build_model(data)
+        solver, _ = self._solve(model)
+        result = build_result(data, solver, model, status=cp_model.UNKNOWN)
+
+        self.assertEqual(result["status"], "failed")
+        timeout = [d for d in result["diagnostics"] if d.get("id") == "diag-timeout"]
+        self.assertTrue(timeout, "expected an explicit timeout diagnostic on UNKNOWN")
+        self.assertEqual(
+            [d for d in result["diagnostics"] if d["type"] == "unplaced"],
+            [],
+            "no misleading unplaced diagnostics on timeout",
+        )
 
     def test_empty_diagnostics_when_everything_ok(self):
         data = self._minimal_data()
@@ -261,7 +322,11 @@ class DiagnosticPrecisionTest(unittest.TestCase):
     def test_venue_capacity_two_not_flagged(self) -> None:
         from app.solver.result_builder import _diagnose_conflicts
 
-        model_data = {"teams": [{"id": "t1", "name": "A"}, {"id": "t2", "name": "B"}], "venues": [{"id": "v1", "name": "Gym"}], "coaches": []}
+        model_data = {
+            "teams": [{"id": "t1", "name": "A"}, {"id": "t2", "name": "B"}],
+            "venues": [{"id": "v1", "name": "Gym"}],
+            "coaches": [],
+        }
         slots = [
             {"venueId": "v1", "teamId": "t1", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90},
             {"venueId": "v1", "teamId": "t2", "dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90},
@@ -274,7 +339,13 @@ class DiagnosticPrecisionTest(unittest.TestCase):
 
         model_data = {
             "teams": [{"id": "team-9", "name": "U11 Mixte", "sessionsPerWeek": 2}],
-            "venues": [{"id": "v1", "name": "Gym", "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}]}],
+            "venues": [
+                {
+                    "id": "v1",
+                    "name": "Gym",
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}],
+                }
+            ],
         }
         diags = _diagnose_unplaced(model_data, slots=[])
         self.assertEqual(1, len(diags))
@@ -289,7 +360,11 @@ class DiagnosticPrecisionTest(unittest.TestCase):
         model_data = {
             "teams": [{"id": "t1", "name": "Séniors", "forcedVenueId": "v-closed"}],
             "venues": [
-                {"id": "v-open", "name": "Gym Ouvert", "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}]},
+                {
+                    "id": "v-open",
+                    "name": "Gym Ouvert",
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 90}],
+                },
                 {"id": "v-closed", "name": "Gym Fermé", "trainingSlots": []},
             ],
         }

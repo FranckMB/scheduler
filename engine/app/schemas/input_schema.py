@@ -13,7 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 MAX_VENUES = 50
 MAX_TEAMS = 200
 MAX_COACHES = 200
-MAX_CONSTRAINTS = 500
+# NB: `constraints` has NO cap (ENG-23) — its expanded size = raw(<=500) x teams(<=200)
+# after the backend fans out CLUB-scoped rules, so no fixed number can both bound a bomb
+# and never false-block a legit club; see the field comment on ScheduleInputSchema.
 MAX_SLOT_TEMPLATES = 2000
 MAX_PRIORITY_TIERS = 20
 MAX_SLOTS_PER_VENUE = 1000
@@ -153,7 +155,10 @@ class ScheduleInputSchema(SerializableModel):
     venues: list[VenueSchema] = Field(default_factory=list, max_length=MAX_VENUES)
     teams: list[TeamSchema] = Field(default_factory=list, max_length=MAX_TEAMS)
     coaches: list[CoachSchema] = Field(default_factory=list, max_length=MAX_COACHES)
-    constraints: list[ConstraintV2Schema] = Field(default_factory=list, max_length=MAX_CONSTRAINTS)
+    # ENG-23: NO per-list cap — the backend fans out 1 CLUB rule into N per-team rows, so the
+    # expanded count (raw<=500 x teams<=200) can't be reconciled with a fixed max_length without
+    # false-blocking a legit club. Real bounds: backend RAW cap + nginx 20m body + solver timeout.
+    constraints: list[ConstraintV2Schema] = Field(default_factory=list)
     slot_templates: list[ScheduleSlotTemplateSchema] = Field(
         default_factory=list, alias="slotTemplates", max_length=MAX_SLOT_TEMPLATES
     )
