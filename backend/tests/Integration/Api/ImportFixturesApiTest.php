@@ -74,6 +74,22 @@ final class ImportFixturesApiTest extends WebTestCase
         self::assertSame(2, $second['skipped']);
     }
 
+    public function testImportRefusedWhileSocleNotValidated(): void
+    {
+        // SocleGuard path on THIS controller: without a validated main plan the
+        // import must 409 — the other tests pre-stamp the socle, so this is the
+        // only request keeping that branch covered.
+        [$token, $clubName, $teamId] = $this->registerWithTeam(validateSocle: false);
+
+        $file = $this->xlsx([
+            ['D2 Poule A', 'A9100', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
+        ]);
+        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
+            'file' => new UploadedFile($file, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testNonXlsxUploadIsRejected(): void
     {
         [$token, , $teamId] = $this->registerWithTeam();
@@ -108,7 +124,7 @@ final class ImportFixturesApiTest extends WebTestCase
      *
      * @return array{0: string, 1: string, 2: string} [token, clubName, teamId]
      */
-    private function registerWithTeam(): array
+    private function registerWithTeam(bool $validateSocle = true): array
     {
         $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = 'fbi' . substr(md5(uniqid('', true)), 0, 6);
@@ -130,8 +146,11 @@ final class ImportFixturesApiTest extends WebTestCase
         $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $clubId]);
         self::assertNotNull($season);
         // SocleGuard: fixture import is a match-module write, refused (409) until
-        // the season's main plan is validated — stamp it like the real flow would.
-        $season->setSocleValidatedAt(new \DateTimeImmutable);
+        // the season's main plan is validated — stamp it like the real flow would
+        // (opt-out for the test covering the 409 branch itself).
+        if ($validateSocle) {
+            $season->setSocleValidatedAt(new \DateTimeImmutable);
+        }
 
         $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
         self::assertNotNull($sport, 'register seeds the basketball sport');
