@@ -21,6 +21,13 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         return VenueTrainingSlot::class;
     }
 
+    protected function cascadeBeforeDelete(object $entity): void
+    {
+        if ($entity instanceof VenueTrainingSlot) {
+            $this->cascadeDeleter?->purgeChildrenOfSlot($entity);
+        }
+    }
+
     /**
      * @param VenueTrainingSlotInput $input
      */

@@ -20,6 +20,13 @@ class TeamStateProcessor extends AbstractStateProcessor
         return Team::class;
     }
 
+    protected function cascadeBeforeDelete(object $entity): void
+    {
+        if ($entity instanceof Team) {
+            $this->cascadeDeleter?->purgeChildrenOfTeam($entity);
+        }
+    }
+
     /**
      * @param TeamInput $input
      */

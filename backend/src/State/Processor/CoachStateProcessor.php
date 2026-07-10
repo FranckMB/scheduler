@@ -18,6 +18,13 @@ class CoachStateProcessor extends AbstractStateProcessor
         return Coach::class;
     }
 
+    protected function cascadeBeforeDelete(object $entity): void
+    {
+        if ($entity instanceof Coach) {
+            $this->cascadeDeleter?->purgeChildrenOfCoach($entity);
+        }
+    }
+
     /**
      * @param CoachInput $input
      */
