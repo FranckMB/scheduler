@@ -115,6 +115,14 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?string $pngExportUrl = null;
 
+    /**
+     * Number of teams in the frozen solve input (planning-versions divergence
+     * banner: "generated with N teams — the structure has changed since").
+     * Read-only; null until a generation froze a snapshot.
+     */
+    #[Groups(['read'])]
+    public ?int $generatedTeamCount = null;
+
     public static function fromEntity(Schedule $entity): self
     {
         $dto = new self;
@@ -139,6 +147,8 @@ class ScheduleResource
         $dto->pdfExportStatus = $entity->getPdfExportStatus();
         $dto->pdfExportUrl = $entity->getPdfExportUrl();
         $dto->pngExportUrl = $entity->getPngExportUrl();
+        $snapshotTeams = $entity->getSnapshotData()['teams'] ?? null;
+        $dto->generatedTeamCount = \is_array($snapshotTeams) ? \count($snapshotTeams) : null;
 
         return $dto;
     }

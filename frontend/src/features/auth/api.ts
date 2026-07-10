@@ -31,6 +31,8 @@ export interface MeResponse {
   baselineScheduleId: string | null;
   /** Sticky cockpit-unlock milestone (ISO) of the selected season. */
   socleValidatedAt: string | null;
+  /** Manager-chosen name of THE season plan (planning-versions); null → default display. */
+  planningName: string | null;
   hasGenerated: boolean;
   /** All the club's seasons, startDate ASC. */
   seasons: MeSeason[];
@@ -48,6 +50,15 @@ export interface TransitionSeasonResponse {
 /** Copy the current season's entries into a fresh N+1 draft (409 carries existingSeasonId). */
 export function transitionSeason(sourceSeasonId: string): Promise<TransitionSeasonResponse> {
   return api.post(`seasons/${sourceSeasonId}/transition`).json();
+}
+
+/**
+ * Rename THE season plan (planning-versions). Partial PUT: only planningName
+ * travels — the season's name/dates are never echoed (a stale cached copy
+ * would silently revert a concurrent edit; the server keeps absent fields).
+ */
+export function renamePlanning(seasonId: string, planningName: string): Promise<unknown> {
+  return api.put(`seasons/${seasonId}`, { json: { planningName } }).json();
 }
 
 export interface RegisterPayload {

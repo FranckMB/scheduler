@@ -73,6 +73,31 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
         self::assertResponseStatusCodeSame(204);
     }
 
+    public function testGeneratingScheduleCannotBeDeleted(): void
+    {
+        // planning-versions D1: a version whose solve is still running cannot
+        // be deleted out from under the worker (its import would resurrect
+        // artifacts on a dead schedule id).
+        [$user, $club, $season] = $this->seed('SLG6');
+        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::GENERATING);
+
+        $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testArchivedScheduleCannotBeRegenerated(): void
+    {
+        // planning-versions: an ARCHIVED sibling is never resurrected — a
+        // regenerate would bring back a zombie version next to the validated plan.
+        [$user, $club, $season] = $this->seed('SLG7');
+        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::ARCHIVED);
+
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/generate", [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testStatusIsIgnoredOnPut(): void
     {
         [$user, $club, $season] = $this->seed('SLG4');

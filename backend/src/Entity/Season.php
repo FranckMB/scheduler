@@ -58,6 +58,14 @@ class Season implements TenantOwnedInterface
     #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
     private ?DateTimeImmutable $socleValidatedAt = null;
 
+    /**
+     * Manager-chosen name of THE season plan (planning-versions: one plan per
+     * season, declined in versions). Editable next to the club logo; null →
+     * the frontend shows "Planning {season name}".
+     */
+    #[ORM\Column(type: 'string', length: 120, nullable: true)]
+    private ?string $planningName = null;
+
     /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
     private array $transitionData = [];
@@ -209,6 +217,18 @@ class Season implements TenantOwnedInterface
     public function setBaselineScheduleId(?string $baselineScheduleId): self
     {
         $this->baselineScheduleId = $baselineScheduleId;
+
+        return $this;
+    }
+
+    public function getPlanningName(): ?string
+    {
+        return $this->planningName;
+    }
+
+    public function setPlanningName(?string $planningName): self
+    {
+        $this->planningName = $planningName;
 
         return $this;
     }

@@ -2,6 +2,7 @@ import { Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
+import { versionLabels, visibleSeasonPlans } from "@/features/planning/lib/versions";
 import { useSetBaseline } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
@@ -14,11 +15,13 @@ interface SeasonSchedulesModalProps {
   onClose: () => void;
 }
 
-/** Lists every schedule of the season (spec §5bis: listing = modal). Open one in read-only consultation, or set it as the main plan. */
+/** Lists the season's visible WORK VERSIONS (planning-versions; ARCHIVED hidden). Open one in consultation, or set it as the main plan. */
 export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const setBaseline = useSetBaseline();
+  const visible = visibleSeasonPlans(schedules);
+  const labels = versionLabels(schedules);
 
   const consult = (id: string) => {
     setSelectedScheduleId(id);
@@ -28,14 +31,14 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
   return (
     <Modal label="Plannings de la saison" title="Plannings de la saison" onClose={onClose} className="max-w-lg">
       <ul className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
-        {schedules.map((s) => {
+        {visible.map((s) => {
           const isBaseline = s.id === baselineScheduleId;
           return (
             <li key={s.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 truncate text-sm font-medium">
                   {isBaseline ? <Star className="size-3.5 fill-accent text-accent" /> : null}
-                  {s.name}
+                  {labels.get(s.id) ?? s.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {STATUS_LABELS[s.status]}

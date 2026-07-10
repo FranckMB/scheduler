@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { OverlaysExistError, STATUS_LABELS, type Schedule } from "@/features/planning/api";
+import { visibleSeasonPlans } from "@/features/planning/lib/versions";
 import { useReopenSchedule } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -29,7 +30,9 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
   const [confirmDeleteCount, setConfirmDeleteCount] = useState<number | null>(null);
 
   const baseline = schedules.find((s) => s.id === baselineScheduleId) ?? null;
-  const seasonPlans = schedules.filter((s) => null === s.calendarEntryId);
+  // planning-versions: ARCHIVED versions are invisible — the count and the
+  // modal (which filters them itself) must agree.
+  const seasonPlans = visibleSeasonPlans(schedules);
   const overlayCount = schedules.filter((s) => null !== s.calendarEntryId).length;
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the

@@ -42,7 +42,7 @@ async function collectionAll<T extends { id: string }>(path: string): Promise<T[
   return all;
 }
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED" | "ARCHIVED";
 
 /** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
 export const STATUS_LABELS: Record<ScheduleStatus, string> = {
@@ -52,6 +52,8 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   COMPLETED: "Terminé",
   FAILED: "Échec",
   VALIDATED: "Validé",
+  // planning-versions: sibling version set aside at validation — hidden from the selector.
+  ARCHIVED: "Archivé",
 };
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
 export type LockLevel = "NONE" | "HARD";
@@ -70,6 +72,8 @@ export interface Schedule {
   pdfExportStatus?: string | null;
   pdfExportUrl?: string | null;
   pngExportUrl?: string | null;
+  /** Teams in the frozen solve input — divergence banner ("générée avec N équipes"). */
+  generatedTeamCount?: number | null;
 }
 
 /** Export scope: all venues (null) or a single one. */
@@ -167,7 +171,24 @@ export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
 /** Validate a COMPLETED schedule → VALIDATED (finished, read-only). */
-export const validateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/validate`).json();
+/**
+ * Validate a COMPLETED version → it becomes THE plan (baseline). Validating a
+ * non-baseline version while period overlays exist → 409 overlays_exist unless
+ * confirmDeleteOverlays is passed (same destructive idiom as reopen).
+ */
+export async function validateSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {
+  try {
+    return await api.post(`schedules/${id}/validate`, opts?.confirmDeleteOverlays ? { json: { confirmDeleteOverlays: true } } : undefined).json();
+  } catch (error) {
+    if (error instanceof HTTPError && 409 === error.response.status) {
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      if ("overlays_exist" === body.code) {
+        throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
+      }
+    }
+    throw error;
+  }
+}
 
 /** Thrown when reopening the baseline would delete period overlays (409). */
 export class OverlaysExistError extends Error {
@@ -208,6 +229,9 @@ export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules
 /** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();
+
+/** Delete a work version (server refuses baseline / VALIDATED / in-flight with 409). */
+export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedules/${id}`).then(() => undefined);
 
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. calendarEntryId → every

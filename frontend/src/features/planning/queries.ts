@@ -168,7 +168,7 @@ export function useScheduleExport(scheduleId: string | null) {
 export function useValidateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (scheduleId: string) => planningApi.validateSchedule(scheduleId),
+    mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) => planningApi.validateSchedule(id, { confirmDeleteOverlays }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       // Validating the baseline stamps Season.socleValidatedAt (surfaced on /me),
@@ -215,6 +215,15 @@ export function useRenameSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, name, status }: { id: string; name: string; status: Schedule["status"] }) => planningApi.renameSchedule(id, name, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+  });
+}
+
+/** planning-versions: delete a work version (guards live server-side). */
+export function useDeleteSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => planningApi.deleteSchedule(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }

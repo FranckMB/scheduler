@@ -20,7 +20,7 @@ function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
       onValidate={noop}
       onReopen={noop}
       onSetBaseline={noop}
-      onRename={noop}
+      onDelete={noop}
       isGenerating={false}
       actionBusy={false}
       baselineScheduleId={baselineScheduleId}
@@ -48,8 +48,21 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByText("Planning principal")).toBeInTheDocument();
   });
 
-  it("marks a non-baseline schedule as « Secondaire »", () => {
+  it("labels the version « V1 — … » and offers no rename control (versions are not renamable)", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.getByRole("option", { name: /^V1 — / })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /renommer/i })).not.toBeInTheDocument();
+  });
+
+  it("offers Supprimer on a plain work version, but not on the baseline", () => {
     renderToolbar(schedule("COMPLETED"), "other");
-    expect(screen.getByText("Secondaire")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
+  });
+
+  it("hides Supprimer on the baseline and on a validated version", () => {
+    renderToolbar(schedule("COMPLETED"), "s1");
+    expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
+    renderToolbar(schedule("VALIDATED"), "other");
+    expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
   });
 });

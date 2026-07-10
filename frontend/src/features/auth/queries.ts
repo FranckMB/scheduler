@@ -16,6 +16,15 @@ export function useMe() {
   });
 }
 
+/** planning-versions: rename THE season plan (title next to the club logo). */
+export function useRenamePlanning() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seasonId, planningName }: { seasonId: string; planningName: string }) => authApi.renamePlanning(seasonId, planningName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
 export function useLogin() {
   const setToken = useAuthStore((state) => state.setToken);
   const queryClient = useQueryClient();

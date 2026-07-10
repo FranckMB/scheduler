@@ -254,7 +254,7 @@ export const createSchedule = (name: string, calendarEntryId?: string): Promise<
   api.post("schedules", { json: { name, status: "DRAFT", ...(calendarEntryId ? { calendarEntryId } : {}) } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED" | "ARCHIVED";
 export const getSchedule = (id: string): Promise<{ id: string; status: ScheduleStatus }> => api.get(`schedules/${id}`).json();
 
 export interface SlotTemplatePayload {
