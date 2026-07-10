@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
-use App\Entity\ScheduleSlotTemplate;
-use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use App\Service\GenerationComplexityGuard;
@@ -26,9 +24,11 @@ use Throwable;
  * planning-versions (décision 6): the plain "Régénérer" creates a NEW linear
  * version (V2, V3…) with the CURRENT club structure — never regenerates a
  * version in place (that would silently overwrite it, so no new version appears).
- * The version's HARD-locked slots are carried over so the solver re-pins them,
- * exactly as the in-place regeneration used to. Contrast RegenerateFromVersion,
- * which RESTORES a past version's structure photo first.
+ * HARD locks survive without any copy here: the generation payload
+ * (ScheduleConstraintBuilder::findBaseSlotTemplates) already feeds every base
+ * version's HARD slots as pins, so the solver re-honours them — exactly as the
+ * in-place regeneration used to. Contrast RegenerateFromVersion, which RESTORES
+ * a past version's structure photo first.
  */
 #[AsController]
 final class RegenerateController extends AbstractController implements SeasonScopedWriteInterface
@@ -95,17 +95,17 @@ final class RegenerateController extends AbstractController implements SeasonSco
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // New PENDING version + carried-over HARD locks commit together, then we
-        // dispatch (a dispatch failure only strands a PENDING the watchdog
-        // reconciles — same trade-off as GenerateScheduleController).
+        // New PENDING version, then dispatch (a dispatch failure only strands a
+        // PENDING the watchdog reconciles — same trade-off as
+        // GenerateScheduleController). No slot copy: the generation payload
+        // re-pins the base versions' HARD locks on its own.
         $newSchedule = (new Schedule)
             ->setClubId($source->getClubId())
             ->setSeasonId($source->getSeasonId())
             ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
             ->setStatus(ScheduleStatus::PENDING);
-        $this->entityManager->wrapInTransaction(function () use ($source, $newSchedule): void {
+        $this->entityManager->wrapInTransaction(function () use ($newSchedule): void {
             $this->entityManager->persist($newSchedule);
-            $this->carryOverHardLocks($source, $newSchedule->getId());
             $this->entityManager->flush();
         });
 
@@ -115,29 +115,5 @@ final class RegenerateController extends AbstractController implements SeasonSco
         ));
 
         return $this->json(['id' => $newSchedule->getId(), 'status' => ScheduleStatus::PENDING->value], Response::HTTP_ACCEPTED);
-    }
-
-    /** Clone the source version's HARD-locked slots onto the new version so the
-     *  solver re-pins them (durable locks only — session temporary locks drop). */
-    private function carryOverHardLocks(Schedule $source, string $newScheduleId): void
-    {
-        $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $source->getId()]);
-        foreach ($slots as $slot) {
-            if (LockLevel::HARD !== $slot->getLockLevel()) {
-                continue;
-            }
-            $clone = (new ScheduleSlotTemplate)
-                ->setClubId($slot->getClubId())
-                ->setSeasonId($slot->getSeasonId())
-                ->setScheduleId($newScheduleId)
-                ->setTeamId($slot->getTeamId())
-                ->setVenueId($slot->getVenueId())
-                ->setCoachId($slot->getCoachId())
-                ->setDayOfWeek($slot->getDayOfWeek())
-                ->setStartTime($slot->getStartTime())
-                ->setDurationMinutes($slot->getDurationMinutes())
-                ->setLockLevel(LockLevel::HARD);
-            $this->entityManager->persist($clone);
-        }
     }
 }

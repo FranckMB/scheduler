@@ -357,7 +357,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
               onViewMode={setViewMode}
-              isGenerating={isGenerating}
+              isGenerating={isGenerating || regenerateMutation.isPending}
               actionBusy={actionBusy}
               onRegenerate={() => validScheduleId && regenerateMutation.mutate(validScheduleId, { onSuccess: (created) => setSelectedScheduleId(created.id) })}
               onValidate={() => setValidateOpen(true)}

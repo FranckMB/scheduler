@@ -255,8 +255,11 @@ export function useRegenerate() {
   return useMutation({
     mutationFn: (id: string) => planningApi.regenerate(id),
     // A NEW version row appears — refresh the version list (the current structure
-    // is unchanged, so no need to refetch the reference families).
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    // is unchanged, so no need to refetch the reference families). Return the
+    // promise so react-query awaits the refetch before the caller's onSuccess
+    // selects the new id — otherwise it is absent from the cache and the landing
+    // effect immediately reverts the selection to the baseline.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
     onError: () => toast.error("La régénération a échoué."),
   });
 }

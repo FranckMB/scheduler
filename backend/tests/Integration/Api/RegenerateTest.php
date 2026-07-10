@@ -22,8 +22,9 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 /**
  * planning-versions (décision 6, clause 2) non-regression: the plain "Régénérer"
  * creates a NEW linear version (a new Schedule row) instead of overwriting the
- * source in place, carrying the source's HARD-locked slots (durable pins) so the
- * solver re-honours them. Guards mirror RegenerateFromVersion.
+ * source in place, and leaves the source version untouched. HARD locks survive
+ * via the generation payload (findBaseSlotTemplates re-pins every base version's
+ * HARD slots) — the controller copies nothing. Guards mirror RegenerateFromVersion.
  */
 #[Group('phase1')]
 final class RegenerateTest extends WebTestCase
@@ -38,7 +39,7 @@ final class RegenerateTest extends WebTestCase
 
     private string $token;
 
-    public function testRegenerateCreatesANewVersionCarryingHardLocks(): void
+    public function testRegenerateCreatesANewPendingVersionAndLeavesTheSourceUntouched(): void
     {
         $source = $this->seedSchedule(ScheduleStatus::COMPLETED);
         $this->seedSlot($source, LockLevel::HARD);
@@ -56,11 +57,10 @@ final class RegenerateTest extends WebTestCase
         $new = $this->em->getRepository(Schedule::class)->find($newId);
         self::assertSame(ScheduleStatus::PENDING, $new?->getStatus());
 
-        // Only the HARD-locked slot is carried over (NONE slots are regenerated).
-        $carried = $this->em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $newId]);
-        self::assertCount(1, $carried);
-        self::assertSame(LockLevel::HARD, $carried[0]->getLockLevel());
-        // The source version is left untouched (not overwritten).
+        // The new version starts empty — the solver fills it; the source's HARD
+        // pins reach it through the generation payload, not a controller copy.
+        self::assertCount(0, $this->em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $newId]));
+        // The source version is left fully untouched (both slots intact).
         self::assertCount(2, $this->em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $source->getId()]));
     }
 
