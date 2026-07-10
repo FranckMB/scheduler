@@ -555,6 +555,7 @@ function TeamsEditor() {
       <DeleteConfirm
         open={toDelete !== null}
         entityName={toDelete?.name ?? ""}
+        affectsPeriodPlans
         impacts={[
           { count: reservations.filter((r) => r.teamId === toDelete?.id).length, one: "créneau réservé", many: "créneaux réservés" },
           { count: teamCoaches.filter((l) => l.teamId === toDelete?.id).length, one: "coach lié", many: "coachs liés" },

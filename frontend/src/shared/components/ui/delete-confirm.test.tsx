@@ -24,12 +24,19 @@ describe("DeleteConfirm", () => {
     expect(screen.getByText("1 coach lié")).toBeInTheDocument();
     // Zero-count line is hidden — the dialog only ever states real collateral.
     expect(screen.queryByText(/coach-joueur/)).not.toBeInTheDocument();
+    // The permanence caution shows EVEN with collateral (the dangerous case).
+    expect(screen.getByText(/Cette action est définitive/)).toBeInTheDocument();
   });
 
-  it("states a plain definitive message when nothing is linked", () => {
+  it("always warns it is definitive, even when nothing is linked", () => {
     render(<DeleteConfirm open entityName="Gymnase A" impacts={[{ count: 0, one: "créneau", many: "créneaux" }]} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByText(/définitive/)).toBeInTheDocument();
+    expect(screen.getByText(/Cette action est définitive/)).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("names period-plan reservations in the caution when affectsPeriodPlans is set", () => {
+    render(<DeleteConfirm open entityName="SM1" affectsPeriodPlans impacts={[]} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByText(/plannings de période/)).toBeInTheDocument();
   });
 
   it("wires confirm and cancel", async () => {

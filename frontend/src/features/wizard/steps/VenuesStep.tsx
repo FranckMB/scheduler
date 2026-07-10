@@ -186,11 +186,13 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
       <DeleteConfirm
         open={confirmDelete}
         entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
+        affectsPeriodPlans
         impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
         onConfirm={() => {
-          del.mutate(slot.id);
+          // Close only once the delete succeeds (same as save()): a rejected
+          // write keeps the editor open instead of silently vanishing.
+          del.mutate(slot.id, { onSuccess: onClose });
           setConfirmDelete(false);
-          onClose();
         }}
         onCancel={() => setConfirmDelete(false)}
       />
@@ -405,6 +407,7 @@ function VenuesEditor() {
       <DeleteConfirm
         open={pendingDeleteVenue !== null}
         entityName={pendingDeleteVenue?.name ?? ""}
+        affectsPeriodPlans
         impacts={[
           { count: pendingDeleteSlotCount, one: "créneau de disponibilité", many: "créneaux de disponibilité" },
           { count: pendingDeleteReservationCount, one: "réservation d'équipe", many: "réservations d'équipe" },
