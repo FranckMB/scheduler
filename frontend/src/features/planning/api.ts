@@ -171,7 +171,24 @@ export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
 /** Validate a COMPLETED schedule → VALIDATED (finished, read-only). */
-export const validateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/validate`).json();
+/**
+ * Validate a COMPLETED version → it becomes THE plan (baseline). Validating a
+ * non-baseline version while period overlays exist → 409 overlays_exist unless
+ * confirmDeleteOverlays is passed (same destructive idiom as reopen).
+ */
+export async function validateSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {
+  try {
+    return await api.post(`schedules/${id}/validate`, opts?.confirmDeleteOverlays ? { json: { confirmDeleteOverlays: true } } : undefined).json();
+  } catch (error) {
+    if (error instanceof HTTPError && 409 === error.response.status) {
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      if ("overlays_exist" === body.code) {
+        throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
+      }
+    }
+    throw error;
+  }
+}
 
 /** Thrown when reopening the baseline would delete period overlays (409). */
 export class OverlaysExistError extends Error {

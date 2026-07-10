@@ -50,7 +50,9 @@ export function GenerateStep() {
   // Season mode keys completion off ANY completed schedule (first launch or
   // regeneration). Period mode keys strictly off THIS overlay's status.
   const overlayDone = periodMode && "COMPLETED" === status;
-  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => "COMPLETED" === s.status);
+  // planning-versions: validating archives the COMPLETED siblings — a season
+  // whose plan is VALIDATED is finished too (zero COMPLETED rows may remain).
+  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => null === s.calendarEntryId && ("COMPLETED" === s.status || "VALIDATED" === s.status));
   const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
   const showPlanning = periodMode ? overlayDone : hasCompleted || (anyInFlight && null === scheduleId);
 

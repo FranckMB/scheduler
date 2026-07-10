@@ -20,7 +20,7 @@ export function useMe() {
 export function useRenamePlanning() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ season, planningName }: { season: authApi.MeSeason; planningName: string }) => authApi.renamePlanning(season, planningName),
+    mutationFn: ({ seasonId, planningName }: { seasonId: string; planningName: string }) => authApi.renamePlanning(seasonId, planningName),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
   });
 }

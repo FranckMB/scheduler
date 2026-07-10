@@ -20,6 +20,8 @@ import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
+import { useSeasonStore } from "@/shared/stores/seasonStore";
+
 import { visibleSeasonPlans } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
@@ -33,7 +35,7 @@ type LandingSchedule = { id: string; status: string; createdAt: string; calendar
 
 export function pickDefaultSchedule(schedules: LandingSchedule[]): string | null {
   // planning-versions: ARCHIVED siblings are invisible — never auto-selected.
-  const seasonPlans = schedules.filter((s) => null === s.calendarEntryId && "ARCHIVED" !== s.status);
+  const seasonPlans = visibleSeasonPlans(schedules);
   if (0 === seasonPlans.length) {
     return null;
   }
@@ -115,9 +117,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
+  const selectedSeasonId = useSeasonStore((st) => st.selectedSeasonId);
 
-  // Keep a valid selection: default to the season base plan, else the latest completed.
-  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
+  // Keep a valid selection: default to the season base plan, else the latest
+  // completed. A selection archived concurrently (sibling validation in another
+  // tab) is invalid too — the selector has no option for it.
+  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId && "ARCHIVED" !== s.status) ? selectedScheduleId : null;
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
       setSelectedScheduleId(pickLandingScheduleId(schedules, baselineScheduleId));
@@ -147,6 +152,30 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
   const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
+
+  // Validating a non-baseline version with overlays → 409 escalation (same
+  // destructive idiom as reopen): confirm, then re-POST with the flag.
+  const [validateOverlayCount, setValidateOverlayCount] = useState<number | null>(null);
+  const validate = (confirmDeleteOverlays?: boolean) => {
+    if (!validScheduleId) {
+      return;
+    }
+    validateMutation.mutate(
+      { id: validScheduleId, confirmDeleteOverlays },
+      {
+        onSuccess: () => {
+          setValidateOverlayCount(null);
+          setValidateOpen(false);
+        },
+        onError: (error) => {
+          if (error instanceof OverlaysExistError) {
+            setValidateOpen(false);
+            setValidateOverlayCount(error.count);
+          }
+        },
+      },
+    );
+  };
 
   const reopen = (confirmDeleteOverlays?: boolean) => {
     if (!validScheduleId) {
@@ -229,8 +258,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
-  const currentSeason = me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? "")) ?? me?.seasons.find((sn) => sn.isCurrent) ?? null;
-  const planningTitle = me?.planningName ?? (currentSeason ? `Planning ${currentSeason.name}` : "Planning");
+  // The season the user is WORKING IN: the explicit selection (X-Season-Id,
+  // seasonStore) first, else the calendar-current one — renaming must target
+  // the season whose planningName is displayed, never silently another one.
+  const workingSeason =
+    me?.seasons.find((sn) => sn.id === selectedSeasonId)
+    ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
+    ?? me?.seasons.find((sn) => sn.isCurrent)
+    ?? null;
+  const planningTitle = me?.planningName ?? (workingSeason ? `Planning ${workingSeason.name}` : "Planning");
   const structureDiverged =
     null !== selectedSchedule && null === selectedSchedule.calendarEntryId
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -249,9 +285,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             onChange={(e) => setEditingPlanningName(e.target.value)}
             onKeyDown={(e) => {
               if ("Enter" === e.key) {
-                const season = me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? "")) ?? me?.seasons.find((sn) => sn.isCurrent) ?? null;
-                if (season) {
-                  renamePlanning.mutate({ season, planningName: editingPlanningName.trim() });
+                if (workingSeason) {
+                  renamePlanning.mutate({ seasonId: workingSeason.id, planningName: editingPlanningName.trim() });
                 }
                 setEditingPlanningName(null);
               } else if ("Escape" === e.key) {
@@ -265,9 +300,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           <>
             {/* planning-versions: THE plan's name lives here (Season.planningName), not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
-            <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
-              <Pencil className="size-4" />
-            </Button>
+            {workingSeason && !workingSeason.isReadonly ? (
+              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
+                <Pencil className="size-4" />
+              </Button>
+            ) : null}
           </>
         )}
       </div>
@@ -361,14 +398,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {validateOpen ? (
         <ValidateDialog
           hasAlerts={diagnostics.length > 0}
-          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId).length}
+          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId && !["VALIDATED", "PENDING", "GENERATING"].includes(sc.status)).length}
           busy={validateMutation.isPending}
           onCancel={() => setValidateOpen(false)}
-          onConfirm={() => {
-            if (null !== validScheduleId) {
-              validateMutation.mutate(validScheduleId, { onSuccess: () => setValidateOpen(false) });
-            }
-          }}
+          onConfirm={() => validate()}
         />
       ) : null}
 
@@ -380,6 +413,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         confirmLabel="Rouvrir et supprimer"
         onConfirm={() => reopen(true)}
         onCancel={() => setReopenOverlayCount(null)}
+      />
+
+      <ConfirmDialog
+        open={validateOverlayCount !== null}
+        title="Valider cette version et remplacer le planning principal ?"
+        description={`Cette version deviendra le planning principal ; ${validateOverlayCount ?? 0} planning${(validateOverlayCount ?? 0) > 1 ? "s" : ""} de période bâti${(validateOverlayCount ?? 0) > 1 ? "s" : ""} sur l'ancien principal ser${(validateOverlayCount ?? 0) > 1 ? "ont" : "a"} supprimé${(validateOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        confirmLabel="Valider et remplacer"
+        destructive
+        onConfirm={() => validate(true)}
+        onCancel={() => setValidateOverlayCount(null)}
       />
     </div>
   );

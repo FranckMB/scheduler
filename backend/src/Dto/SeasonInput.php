@@ -14,11 +14,13 @@ class SeasonInput
     #[Groups(['write'])]
     public ?string $name = null;
 
+    /** Required at creation; null on update = keep the current value (partial PUT). */
     #[Groups(['write'])]
-    public DateTimeImmutable $startDate;
+    public ?DateTimeImmutable $startDate = null;
 
+    /** Required at creation; null on update = keep the current value (partial PUT). */
     #[Groups(['write'])]
-    public DateTimeImmutable $endDate;
+    public ?DateTimeImmutable $endDate = null;
 
     #[Assert\Choice(choices: ['draft', 'active', 'archived', 'closed'])]
     #[Groups(['write'])]

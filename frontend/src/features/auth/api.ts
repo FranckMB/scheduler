@@ -53,11 +53,12 @@ export function transitionSeason(sourceSeasonId: string): Promise<TransitionSeas
 }
 
 /**
- * Rename THE season plan (planning-versions). The SeasonInput DTO requires
- * name/startDate/endDate, so the season's own fields are echoed unchanged.
+ * Rename THE season plan (planning-versions). Partial PUT: only planningName
+ * travels — the season's name/dates are never echoed (a stale cached copy
+ * would silently revert a concurrent edit; the server keeps absent fields).
  */
-export function renamePlanning(season: MeSeason, planningName: string): Promise<unknown> {
-  return api.put(`seasons/${season.id}`, { json: { name: season.name, startDate: season.startDate, endDate: season.endDate, planningName } }).json();
+export function renamePlanning(seasonId: string, planningName: string): Promise<unknown> {
+  return api.put(`seasons/${seasonId}`, { json: { planningName } }).json();
 }
 
 export interface RegisterPayload {

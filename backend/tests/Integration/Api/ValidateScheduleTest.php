@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
 use App\Enum\ScheduleStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -127,6 +129,46 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
         $this->em->clear();
         self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus(), 'nothing committed when a sibling is mid-solve');
+    }
+
+    public function testValidatingAnotherVersionWithOverlaysRequiresConfirmation(): void
+    {
+        // Baseline V1 VALIDATED with a period overlay built on its socle;
+        // validating V2 MOVES the baseline → the overlay would silently compose
+        // over a different base plan. Same destructive idiom as reopen:
+        // 409 overlays_exist, then confirmDeleteOverlays deletes the overlay.
+        [$user, , $season] = $this->seed('VAL9');
+        $v1 = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $season->setBaselineScheduleId($v1->getId());
+        $entry = (new CalendarEntry)
+            ->setClubId($season->getClubId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->flush();
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        // Two sequential authenticated calls → Bearer on each (stateless firewall).
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
+        $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json'];
+        // Without the confirm flag → 409 escalation, nothing mutated.
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], $auth);
+        self::assertResponseStatusCodeSame(409);
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('overlays_exist', $body['code'] ?? null);
+        $this->em->clear();
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus(), 'nothing committed on the 409 path');
+
+        // With the confirm flag → overlay deleted, baseline moved, V2 validated.
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], $auth, json_encode(['confirmDeleteOverlays' => true], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'the stale overlay is deleted after explicit confirmation');
+        self::assertSame($v2->getId(), $this->em->getRepository(Season::class)->find($season->getId())?->getBaselineScheduleId());
+        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
     }
 
     public function testNonCompletedScheduleCannotBeValidated(): void

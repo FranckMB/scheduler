@@ -86,6 +86,18 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    public function testArchivedScheduleCannotBeRegenerated(): void
+    {
+        // planning-versions: an ARCHIVED sibling is never resurrected — a
+        // regenerate would bring back a zombie version next to the validated plan.
+        [$user, $club, $season] = $this->seed('SLG7');
+        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::ARCHIVED);
+
+        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/generate", [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testStatusIsIgnoredOnPut(): void
     {
         [$user, $club, $season] = $this->seed('SLG4');

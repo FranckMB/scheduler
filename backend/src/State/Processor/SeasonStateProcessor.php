@@ -27,6 +27,9 @@ class SeasonStateProcessor extends AbstractStateProcessor
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
+        if (null === $input->startDate || null === $input->endDate) {
+            throw new \ApiPlatform\Validator\Exception\ValidationException('startDate and endDate are required to create a season.');
+        }
         $entity->setStartDate($input->startDate);
         $entity->setEndDate($input->endDate);
         if (null !== $input->status) {
@@ -48,8 +51,14 @@ class SeasonStateProcessor extends AbstractStateProcessor
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
-        $entity->setStartDate($input->startDate);
-        $entity->setEndDate($input->endDate);
+        // Partial PUT: absent dates keep the current values — a client updating
+        // one field (e.g. planningName) must not echo (possibly stale) dates.
+        if (null !== $input->startDate) {
+            $entity->setStartDate($input->startDate);
+        }
+        if (null !== $input->endDate) {
+            $entity->setEndDate($input->endDate);
+        }
         if (null !== $input->status) {
             $entity->setStatus($input->status);
         }

@@ -168,7 +168,7 @@ export function useScheduleExport(scheduleId: string | null) {
 export function useValidateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (scheduleId: string) => planningApi.validateSchedule(scheduleId),
+    mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) => planningApi.validateSchedule(id, { confirmDeleteOverlays }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       // Validating the baseline stamps Season.socleValidatedAt (surfaced on /me),

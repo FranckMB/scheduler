@@ -52,6 +52,13 @@ final class GenerateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before regenerating.'], Response::HTTP_CONFLICT);
         }
 
+        // planning-versions: an ARCHIVED sibling is a hidden safety net — it is
+        // never resurrected (a regenerate would bring back a zombie version
+        // competing with the validated plan).
+        if (ScheduleStatus::ARCHIVED === $schedule->getStatus()) {
+            return $this->json(['error' => 'This version is archived. Generate a new version instead.'], Response::HTTP_CONFLICT);
+        }
+
         // A secondary plan (period overlay) can only be generated once the season's
         // main plan is validated. Generating the main plan itself (no overlay) is
         // always allowed — that is how the socle gets created in the first place.

@@ -1,11 +1,18 @@
 import type { Schedule } from "../api";
 
+/** Structural subset shared with PlanningPage's LandingSchedule (single predicate owner). */
+interface VersionLike {
+  status: string;
+  createdAt: string;
+  calendarEntryId: string | null;
+}
+
 /**
  * planning-versions (specs/evolution/planning-versions.md): the selector lists
  * the WORK VERSIONS of one season plan, not named schedules. ARCHIVED versions
  * (siblings set aside at validation) are hidden everywhere.
  */
-export function visibleSeasonPlans(schedules: Schedule[]): Schedule[] {
+export function visibleSeasonPlans<T extends VersionLike>(schedules: T[]): T[] {
   return schedules.filter((s) => null === s.calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
