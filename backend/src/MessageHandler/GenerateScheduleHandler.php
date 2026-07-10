@@ -19,6 +19,7 @@ use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
+use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -47,6 +48,7 @@ final class GenerateScheduleHandler
         private SolverMetricsMapper $metricsMapper,
         private ClubGenerationLock $clubGenerationLock,
         private TenantConnectionContext $tenantConnectionContext,
+        private StructureSnapshotter $structureSnapshotter,
         private ?LoggerInterface $logger = null,
         private ?DevScheduleReportWriter $devReportWriter = null,
     ) {}
@@ -180,6 +182,21 @@ final class GenerateScheduleHandler
 
         $this->diagnosticsRecorder->purgePrevious($schedule);
         $this->entityManager->flush();
+
+        // planning-versions D2: photo fidèle de la structure (entités backend)
+        // attachée à cette version — season plans only (the D3 restore is
+        // season-scoped; overlays get their own tier later). NON-FATAL: the
+        // snapshot enables restore, it must never sink a generation.
+        if (null === $schedule->getCalendarEntryId()) {
+            try {
+                $this->structureSnapshotter->capture($schedule);
+            } catch (Throwable $e) {
+                $this->logger?->warning('Structure snapshot capture failed (generation continues)', [
+                    'scheduleId' => $schedule->getId(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $lotDir = null;
         if ($this->devReportWriter instanceof DevScheduleReportWriter) {
