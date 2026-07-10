@@ -12,6 +12,12 @@ interface MenuProps {
   trigger: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Overrides the trigger's SIZING (default `size-10`, meant for icon-only
+   * triggers). A text trigger (season switcher) needs an auto width — without
+   * it the label overflows the fixed 40px box and overlaps its neighbours.
+   */
+  triggerClassName?: string;
 }
 
 const ITEM_SELECTOR = '[role="menuitem"]';
@@ -22,7 +28,7 @@ const ITEM_SELECTOR = '[role="menuitem"]';
  * Arrow Up/Down roam the items; Escape or Tab close and restore focus to the
  * trigger; an outside click closes. No external dependency.
  */
-export function Menu({ label, trigger, children, className }: MenuProps) {
+export function Menu({ label, trigger, children, className, triggerClassName }: MenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -92,7 +98,10 @@ export function Menu({ label, trigger, children, className }: MenuProps) {
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex size-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:size-5"
+        className={cn(
+          "inline-flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:size-5",
+          triggerClassName ?? "size-10",
+        )}
       >
         {trigger}
       </button>

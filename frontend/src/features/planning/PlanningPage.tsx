@@ -3,6 +3,8 @@ import { AlertTriangle, CalendarX2, CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
+// Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
+import { usePriorityTiers } from "@/features/matches/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -13,7 +15,7 @@ import { OverlaysExistError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
-import { availableResources, buildGrid, type Lookups } from "./lib/grid";
+import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRenameSchedule, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
@@ -120,6 +122,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
   const { data: coaches = [] } = useCoaches();
+  const { data: tiers = [] } = usePriorityTiers();
   const { data: categories = [] } = useCategories();
   const { data: teamCoaches = [] } = useTeamCoaches();
   const { data: coachPlayers = [] } = useCoachPlayers();
@@ -199,7 +202,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     };
   }, [teams, venues, coaches, teamCoaches, coachPlayers]);
 
-  const resources = useMemo(() => availableResources(slots, viewMode, lookups), [slots, viewMode, lookups]);
+  const resourceGroups = useMemo(() => availableResourceGroups(slots, viewMode, lookups, tiers), [slots, viewMode, lookups, tiers]);
   const model = useMemo(() => buildGrid(slots, viewMode, lookups, new Set(resourceFilter)), [slots, viewMode, lookups, resourceFilter]);
 
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
@@ -247,7 +250,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             />
             <div className="ml-auto flex items-center gap-2">
               {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
-              <ResourceFilter viewMode={viewMode} resources={resources} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+              <ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
             </div>
           </div>
 

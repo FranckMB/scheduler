@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Coach, Slot, Team, Venue } from "../api";
-import { availableResources, buildGrid, computeTimeBounds, concernedSlots, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeysForSlot, toHourMinute } from "./grid";
+import { availableResourceGroups, availableResources, buildGrid, computeTimeBounds, concernedSlots, formatMinutes, type Lookups, NO_COACH, parseTimeToMinutes, resourceKeysForSlot, toHourMinute } from "./grid";
 
 function slot(over: Partial<Slot>): Slot {
   return {
@@ -71,6 +71,41 @@ describe("resourceKeysForSlot", () => {
   it("also surfaces the coach under teams where he is a player", () => {
     const withPlayers = { ...lookups, teamCoach: new Map([["t1", "c9"]]), teamPlayerCoaches: new Map([["t1", ["p1"]]]) };
     expect(resourceKeysForSlot(slot({ coachId: null, teamId: "t1" }), "coach", withPlayers).sort()).toEqual(["c9", "p1"]);
+  });
+});
+
+describe("availableResourceGroups", () => {
+  const tiers = [
+    { id: 1, label: "S", name: "Fanion" },
+    { id: 2, label: "A", name: "Importante" },
+  ];
+  const slots = [
+    slot({ id: "a", teamId: "t2", dayOfWeek: 1 }), // rank A first in slot order…
+    slot({ id: "b", teamId: "t1", dayOfWeek: 2 }),
+  ];
+
+  it("groups the equipe view by rank with visible tier headers, S before A", () => {
+    const groups = availableResourceGroups(slots, "equipe", lookups, tiers);
+    expect(groups.map((g) => g.label)).toEqual(["S · Fanion", "A · Importante"]);
+    expect(groups[0].resources.map((r) => r.id)).toEqual(["t1"]); // …but S (t1) leads
+    expect(groups[1].resources.map((r) => r.id)).toEqual(["t2"]);
+  });
+
+  it("keeps other views (and equipe while tiers load) a single flat unlabelled group", () => {
+    const gymnase = availableResourceGroups(slots, "gymnase", lookups, tiers);
+    expect(gymnase).toHaveLength(1);
+    expect(gymnase[0].label).toBeNull();
+
+    const noTiers = availableResourceGroups(slots, "equipe", lookups, []);
+    expect(noTiers).toHaveLength(1);
+    expect(noTiers[0].resources.map((r) => r.id)).toEqual(["t1", "t2"]); // still rank-sorted
+  });
+
+  it("keeps a resource missing from the team lookup visible in a trailing flat group", () => {
+    const groups = availableResourceGroups([...slots, slot({ id: "c", teamId: "ghost", dayOfWeek: 3 })], "equipe", lookups, tiers);
+    const last = groups[groups.length - 1];
+    expect(last.label).toBeNull();
+    expect(last.resources.map((r) => r.id)).toEqual(["ghost"]);
   });
 });
 

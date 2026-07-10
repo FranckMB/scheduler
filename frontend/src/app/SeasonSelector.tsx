@@ -111,6 +111,9 @@ export function SeasonSelector() {
     <>
       <Menu
         label="Saison de travail"
+        // Text trigger: auto width (the default size-10 icon box would let the
+        // season name overflow and overlap the "Matchs" link next to it).
+        triggerClassName="h-10 px-2"
         trigger={
           <span className="flex items-center gap-1.5 whitespace-nowrap text-sm text-muted-foreground">
             <CalendarRange className="size-4 shrink-0" />

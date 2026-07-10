@@ -1,4 +1,4 @@
-import { compareTeamsByRank } from "@/shared/lib/teamTiers";
+import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel, type TierLike } from "@/shared/lib/teamTiers";
 
 import type { Coach, Slot, Team, Venue } from "../api";
 import type { ViewMode } from "../store";
@@ -150,6 +150,36 @@ function resourceComparator(viewMode: ViewMode, lookups: Lookups): (a: GridResou
 export function availableResources(slots: Slot[], viewMode: ViewMode, lookups: Lookups): GridResource[] {
   const ids = [...new Set(slots.flatMap((s) => resourceKeysForSlot(s, viewMode, lookups)))];
   return ids.map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort(resourceComparator(viewMode, lookups));
+}
+
+export interface GridResourceGroup {
+  /** Rank header ("S · Fanion") in the equipe view; null = flat (no header row). */
+  label: string | null;
+  resources: GridResource[];
+}
+
+/**
+ * Resources for the filter picker, grouped by rank in the equipe view so the
+ * S/A/B/C/D headers are VISIBLE (a flat rank-sorted list reads as unsorted to
+ * the manager). Other views (and equipe while tiers load) stay a single flat
+ * group. Same grouping rules as the optgroup selects (shared/lib/teamTiers).
+ */
+export function availableResourceGroups(slots: Slot[], viewMode: ViewMode, lookups: Lookups, tiers: TierLike[]): GridResourceGroup[] {
+  const flat = availableResources(slots, viewMode, lookups);
+  if ("equipe" !== viewMode || 0 === tiers.length || 0 === flat.length) {
+    return [{ label: null, resources: flat }];
+  }
+  const byId = new Map(flat.map((r) => [r.id, r]));
+  const teams = flat.map((r) => lookups.teams.get(r.id)).filter((t): t is Team => undefined !== t);
+  const groups = groupTeamsByTier(teams, tiers).map((g) => ({
+    label: tierGroupLabel(g.tier),
+    resources: g.teams.map((t) => byId.get(t.id)).filter((r): r is GridResource => undefined !== r),
+  }));
+  // A resource with no team in the lookup ("Équipe ?") is not groupable — keep
+  // it visible in a trailing flat group rather than silently dropping it.
+  const grouped = new Set(groups.flatMap((g) => g.resources.map((r) => r.id)));
+  const leftovers = flat.filter((r) => !grouped.has(r.id));
+  return leftovers.length > 0 ? [...groups, { label: null, resources: leftovers }] : groups;
 }
 
 export interface GridColumn {
