@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
@@ -30,11 +31,6 @@ export function SectionCountTitle({ label, count }: { label: string; count: numb
       <span className="rounded-full bg-muted px-2 text-xs font-normal text-muted-foreground">{count}</span>
     </span>
   );
-}
-
-/** Venue colour dot (single source for the swatch, was duplicated inline). */
-export function VenueSwatch({ color }: { color: string | null }) {
-  return <span className="size-3 shrink-0 rounded-full border border-border" style={{ backgroundColor: color ?? "transparent" }} />;
 }
 
 const emptyDash = <p className="py-1.5 text-sm text-muted-foreground">—</p>;
@@ -109,7 +105,7 @@ export function ReadonlyVenues({ calendarEntryId }: { calendarEntryId: string | 
                   isClosed ? "border-destructive/50 bg-destructive/10" : "border-border bg-card",
                 )}
               >
-                <VenueSwatch color={v.color} />
+                <VenueSwatch color={v.color} className="size-3 border border-border" />
                 <span className={cn("flex-1", isClosed && "text-destructive line-through")}>{v.name}</span>
                 {isClosed ? (
                   <span className="flex items-center gap-1 text-xs font-semibold text-destructive">

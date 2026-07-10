@@ -1,6 +1,6 @@
 # Technical Debt Audit — ClubScheduler (engine + backend)
 
-Perimeter: **backend + engine only** (this audit predates the React frontend rebuild; the frontend is now active but was out of this audit's scope). This is a whole-perimeter audit, not a diff. **Every item carries hard evidence** (file:line + proof). Items without proof are not listed. *"Unclear to a reader" is never evidence.* **No deletion or refactor has been performed** — this is analysis only.
+Perimeter: originally **backend + engine only** (this audit predates the React frontend rebuild). The frontend is now active; deferred **frontend** debt surfaced by the `/audit` editions is tracked in the [Frontend](#frontend) section below. This is a whole-perimeter audit, not a diff. **Every item carries hard evidence** (file:line + proof). Items without proof are not listed. *"Unclear to a reader" is never evidence.* **No deletion or refactor has been performed** — this is analysis only.
 
 Classification: 🟥 delete · 🟧 refactor · 🟦 document · 🟩 keep (listed when previously suspected but proven fine).
 
@@ -81,6 +81,21 @@ _The dormant two-pass fallback is an intentional, documented single-pass design;
 - **Fix:** replaced both with a pointer to a backlog entry ("Backlog — PREFERRED TIME"). *(That backlog file, `features-futures.md`, was since absorbed into `specs/evolution/roadmap.md`; PREFERRED TIME itself was delivered 2026-07-03, ENGINE series.)*
 
 > No dead modules, no obsolete files, no import cycles in `engine/`.
+
+---
+
+## Frontend
+
+Deferred items from the `/audit` editions (`specs/audit/AUDIT-*.md`), by explicit decision, after the UX/a11y remediation batch landed the score-moving fixes.
+
+### 🟧 FE1 — UXS-03: three wizard-step components over 400 lines (medium)
+`frontend/src/features/wizard/steps/TeamsStep.tsx` (552), `ConstraintsStep.tsx` (498), `VenuesStep.tsx` (413). Each mixes list rendering, inline sub-forms/modals and mutation wiring in one file — high cognitive load, harder review. **Deferred** (user decision): a pure refactor with real regression risk on the most complex components, and lower priority than the pre-GA P0s (observability / backups / RGPD / prod config). *Example split:* extract each step's inline editor/modal (e.g. `TeamRow`/`TeamEditor`, `ColorField` + `SlotEditor` in Venues) into sibling components, leaving the step as list + orchestration. Do it in its own PR with `/code-review`; each extracted piece keeps its existing tests.
+
+### 🟦 FE2 — Register divergence wizard (tu) ↔ cockpit (vous) (low)
+The wizard tutoie the manager (dominant voice: ~29 tu / 15 vous), the cockpit/validation flows vouvoie ("Vous pourrez le rouvrir…"). UXC-08 unified **GenerateStep internally to tu** (wizard voice); the broader wizard↔cockpit split is a product-voice decision left open. Pick one register app-wide before GA and sweep. Proof: `PlanningPage.tsx` validate modal (vous) vs `features/wizard/**` (tu).
+
+### 🟩 FE3 — UXC-05 residual amber NOT migrated to the `--warning` token (kept, deliberate)
+`MonthCalendar.tsx` keeps hand-picked `amber-700`/`amber-300` for the school-holiday label + `amber-400/15` wash rather than `text-warning`/`bg-warning`. Measured: `--warning` in light mode is 2.9:1 on background (A11Y-06) — using it for the holiday *label text* would FAIL WCAG AA, whereas `amber-700` passes. Migrating would trade a cohérence residual for an a11y regression, so it stays. `app/DevClock.tsx` amber is dev-only tooling (never shipped to managers) — out of scope.
 
 ---
 

@@ -7,7 +7,9 @@ import { coachMeta, orderedCoaches } from "../lib/ranking";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
-import { SectionCountTitle, SummaryRow, TeamTierAccordion, VenueSwatch } from "./StructureSummary";
+import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
+
+import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
 import { useDeleteReservation, usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
@@ -121,7 +123,7 @@ export function RecapStep() {
                   key={v.id}
                   label={
                     <span className="flex items-center gap-2">
-                      <VenueSwatch color={v.color} />
+                      <VenueSwatch color={v.color} className="size-3 border border-border" />
                       {v.name}
                     </span>
                   }

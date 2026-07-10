@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { type UIEvent, useRef } from "react";
 
+import { EmptyBlock } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { tint } from "@/shared/lib/color";
 import { cn } from "@/shared/lib/utils";
@@ -21,11 +22,7 @@ export function WeekendGrid({ model }: WeekendGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
   if (empty || 0 === columns.length) {
-    return (
-      <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-        Aucun match placé sur ce week-end.
-      </div>
-    );
+    return <EmptyBlock>Aucun match placé sur ce week-end.</EmptyBlock>;
   }
 
   const gridTemplateColumns = `3.25rem repeat(${columns.length}, minmax(6rem, 1fr))`;

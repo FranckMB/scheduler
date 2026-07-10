@@ -47,11 +47,11 @@ function renderMay(entries: CalendarEntry[] = [], hols: SchoolHoliday[] = [], pu
 }
 
 describe("MonthCalendar — projection of the exception layer", () => {
-  it("renders the month header and a full 6-week grid", () => {
+  it("renders the month header and every day of the month with a readable name", () => {
     renderMay();
     expect(screen.getByText(/mai 2026/i)).toBeInTheDocument();
-    // 42 day cells (Monday-first grid), May 1st 2026 is a Friday.
-    expect(screen.getAllByRole("button", { name: /^Jour \d{4}-\d{2}-\d{2}$/ })).toHaveLength(42);
+    // A11Y-07: each in-month cell reads "{jour} mai …", not the raw ISO. May = 31 days.
+    expect(screen.getAllByRole("button", { name: /^\d+ Mai/ })).toHaveLength(31);
   });
 
   it("marks periods ⛔, disruptive events 🚫, plain events 🎉 and holidays 🏖 on their days", () => {
@@ -83,23 +83,25 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(markers[0]).toHaveTextContent("🛑");
   });
 
-  it("shows an accessible public-holiday dot on its exact day", () => {
+  it("names the public holiday on its exact day, not colour alone (A11Y-08)", () => {
     renderMay([], [], [{ id: "ph1", date: "2026-05-01", label: "Fête du Travail", national: true }]);
 
-    // role/aria-label: the marker must be perceivable beyond the hover tooltip.
-    expect(screen.getByRole("img", { name: "Férié — Fête du Travail" })).toBeInTheDocument();
+    // A11Y-08: the férié is announced in the cell's accessible name (and shown as a
+    // shape+letter marker, not a bare colour dot) — perceivable beyond the tooltip.
+    expect(screen.getByRole("button", { name: /jour férié — Fête du Travail/ })).toBeInTheDocument();
   });
 
-  it("exposes info-carrying emojis as text alternatives, not colour/tooltip only (A11Y-05, WCAG 1.1.1)", async () => {
+  it("carries every marker in the cell's accessible name, not colour/tooltip only (A11Y-05/07, WCAG 1.1.1)", async () => {
     const { container } = renderMay(
       [entry({ id: "a1", title: "AG du club", startDate: "2026-05-26", endDate: "2026-05-26" })],
       holidays,
     );
 
-    // The 🏖 holiday marker and the 🎉 event marker carry a screen-reader label,
-    // not just a hover title — regression for the audit's title-only inconsistency.
-    expect(screen.getAllByRole("img", { name: "Vacances — Pont de mai" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("img", { name: "AG du club" })).toBeInTheDocument();
+    // The 🏖 holiday and 🎉 event info reads from the composed button name (the
+    // markers themselves are aria-hidden), so a screen reader never depends on the
+    // hover title or colour — regression for the audit's title-only inconsistency.
+    expect(screen.getAllByRole("button", { name: /vacances — Pont de mai/ })).toHaveLength(4);
+    expect(screen.getByRole("button", { name: /AG du club/ })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -108,16 +110,16 @@ describe("MonthCalendar — projection of the exception layer", () => {
       entry({ id: "cut", kind: "period", periodType: "cutoff", title: "", startDate: "2026-05-12", endDate: "2026-05-12" }),
     ]);
 
-    // A blank title must not become aria-label="" (silent for SR, axe violation) —
-    // it falls back to the marker's meaning.
-    expect(screen.getByRole("img", { name: "Coupure" })).toBeInTheDocument();
+    // A blank title must not vanish from the cell name — it falls back to the
+    // marker's meaning ("Coupure"), carried by the composed accessible name.
+    expect(screen.getByRole("button", { name: /12 Mai, Coupure/ })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it("opens the day dialog on click with that day's entries", async () => {
     renderMay([entry({ id: "a1", title: "AG", startDate: "2026-05-26", endDate: "2026-05-26" })]);
 
-    await userEvent.click(screen.getByRole("button", { name: "Jour 2026-05-26" }));
+    await userEvent.click(screen.getByRole("button", { name: /26 Mai, AG/ }));
 
     // The DayDialog opened on that date and lists the day's entry.
     expect(screen.getByText(/26 mai 2026/)).toBeInTheDocument();

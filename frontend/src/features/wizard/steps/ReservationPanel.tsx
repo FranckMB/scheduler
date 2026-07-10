@@ -2,13 +2,13 @@ import { useState } from "react";
 
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Select } from "@/shared/components/ui/select";
+import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
 import { useReservations, useVenueSlots } from "../queries";
 import { ReservationGrid } from "./ReservationGrid";
 import { SlotReservationModal } from "./SlotReservationModal";
-import { VenueSwatch } from "./StructureSummary";
 
 /**
  * "Réserver" tab: a per-venue weekly grid of the club's availability slots — click
@@ -42,7 +42,7 @@ export function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { te
 
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Gymnase</span>
-        <VenueSwatch color={selected.color} />
+        <VenueSwatch color={selected.color} className="size-3 border border-border" />
         <Select
           aria-label="Gymnase"
           className="h-8 w-48"
