@@ -157,7 +157,7 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
   return (
     <FormShell onBack={onBack}>
       {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional, better than the neutral panel */}
-      <input className={fieldClass} placeholder="Titre (AG, tournoi…)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <input className={fieldClass} aria-label="Titre de l'événement" placeholder="Titre (AG, tournoi…)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isDisruptive} onChange={(e) => setDisruptive(e.target.checked)} />
@@ -180,7 +180,7 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
   const validEnd = endDate >= iso;
   const submit = () => {
     if (venueId === "" || !validEnd) return;
-    const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Salle";
+    const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Gymnase";
     // Structured "gymnase — raison" so the calendar tooltip names both the venue
     // and why it's closed. Don't prefix when the typed reason already mentions the
     // venue (avoids "Gymnase A — Gymnase A …"); default reason to "fermé" when
@@ -198,15 +198,15 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
   return (
     <FormShell onBack={onBack}>
       {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional */}
-      <select className={fieldClass} value={venueId} onChange={(e) => setVenueId(e.target.value)} autoFocus>
-        <option value="">Salle indisponible…</option>
+      <select className={fieldClass} aria-label="Gymnase indisponible" value={venueId} onChange={(e) => setVenueId(e.target.value)} autoFocus>
+        <option value="">Gymnase indisponible…</option>
         {(venues ?? []).map((v) => (
           <option key={v.id} value={v.id}>
             {v.name}
           </option>
         ))}
       </select>
-      <input className={fieldClass} placeholder="Intitulé (optionnel)" maxLength={140} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className={fieldClass} aria-label="Intitulé de l'indisponibilité (optionnel)" placeholder="Intitulé (optionnel)" maxLength={140} value={title} onChange={(e) => setTitle(e.target.value)} />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validEnd}>
         Enregistrer
@@ -233,7 +233,7 @@ function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; 
   return (
     <FormShell onBack={onBack}>
       {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional */}
-      <input className={fieldClass} placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <input className={fieldClass} aria-label="Intitulé de la coupure (optionnel)" placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <EndDateField iso={iso} value={endDate} onChange={setEndDate} />
       <p className="text-xs text-muted-foreground">Rappel affiché au calendrier (🛑) et au radar — le planning de base reste inchangé, rien à générer.</p>
       <Button className="w-full" onClick={submit} disabled={createCutoff.isPending || !validEnd}>

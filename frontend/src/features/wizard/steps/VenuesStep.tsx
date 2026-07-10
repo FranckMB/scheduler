@@ -40,9 +40,12 @@ function CapacitySelect({ value, onChange, canSplit, className }: { value: numbe
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+/** Neutral grey fallback when a venue has no colour set yet. */
+const DEFAULT_VENUE_COLOR = "#666666";
+
 /** Colour swatch + free hex field; both apply immediately, no Enter needed. */
 export function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: string) => void }) {
-  const current = venue.color ?? "#666666";
+  const current = venue.color ?? DEFAULT_VENUE_COLOR;
   const [hex, setHex] = useState(current);
   // The native colour picker fires onChange CONTINUOUSLY while dragging — persisting
   // a PUT per step races the Doctrine @Version lock ("optimistic lock failed"). Keep
@@ -61,7 +64,7 @@ export function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: 
   // clobbers what is being typed.
   useEffect(() => {
     if (null === pending.current) {
-      setHex(venue.color ?? "#666666");
+      setHex(venue.color ?? DEFAULT_VENUE_COLOR);
     }
   }, [venue.color]);
 
@@ -317,7 +320,7 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
-            <VenueSwatch color={selected.color ?? "#666666"} className="size-4 border border-input" />
+            <VenueSwatch color={selected.color ?? DEFAULT_VENUE_COLOR} className="size-4 border border-input" />
           </div>
 
           {/* Edit card — properties of the SELECTED gym (distinct block). */}

@@ -11,3 +11,12 @@ import { cn } from "@/shared/lib/utils";
 export function EmptyHint({ children, className }: { children: ReactNode; className?: string }) {
   return <p className={cn("text-sm text-muted-foreground", className)}>{children}</p>;
 }
+
+/**
+ * Dashed-card empty block for a grid/panel with nothing to show yet (the timetable
+ * grids re-implemented the exact same markup inline). Sits between the inline
+ * `EmptyHint` and PlanningPage's full-view `EmptyState` Card.
+ */
+export function EmptyBlock({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground", className)}>{children}</div>;
+}

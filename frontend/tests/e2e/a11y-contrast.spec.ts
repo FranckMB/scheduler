@@ -43,3 +43,116 @@ for (const mode of MODES) {
     await expectNoContrastViolations(page, `wizard · gymnases (${mode})`);
   });
 }
+
+/**
+ * A11Y-06: the semantic status tokens (`--warning`, `--success`) are used as
+ * normal-size text (`text-sm`/`text-xs` in DiagnosticsPanel, ConflictRadar,
+ * RecapStep…), where axe on the public screens never renders them. axe only
+ * checks text that is actually painted, so a token that fails in a state we don't
+ * navigate to would slip through. Measure the token pairs DIRECTLY, in both
+ * themes, against BOTH surfaces a status label can sit on (background + card):
+ * WCAG 1.4.3 requires 4.5:1 for normal text. Light `--warning`/`--success` were
+ * ~3:1 and were darkened to clear it — this locks that in.
+ */
+for (const mode of MODES) {
+  test(`contrast — semantic status tokens as normal text (${mode})`, async ({ page }) => {
+    await forceTheme(page, mode);
+    await page.goto("/login");
+
+    const ratios = await page.evaluate(() => {
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 1;
+      const ctx = cv.getContext("2d")!;
+      const probe = document.createElement("div");
+      document.body.appendChild(probe);
+      const toRgb = (color: string): [number, number, number] => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const d = ctx.getImageData(0, 0, 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      const of = (cls: string, prop: "color" | "backgroundColor"): [number, number, number] => {
+        probe.className = cls;
+        return toRgb(getComputedStyle(probe)[prop]);
+      };
+      const lum = ([r, g, b]: [number, number, number]): number => {
+        const c = [r, g, b].map((v) => {
+          const x = v / 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      };
+      const ratio = (a: [number, number, number], b: [number, number, number]): number => {
+        const [l1, l2] = [lum(a), lum(b)].sort((x, y) => y - x);
+        return (l1 + 0.05) / (l2 + 0.05);
+      };
+      const bg = of("bg-background", "backgroundColor");
+      const card = of("bg-card", "backgroundColor");
+      const out: Record<string, number> = {};
+      for (const token of ["text-warning", "text-success"]) {
+        const fg = of(token, "color");
+        out[`${token} on background`] = ratio(fg, bg);
+        out[`${token} on card`] = ratio(fg, card);
+      }
+      probe.remove();
+      return out;
+    });
+
+    for (const [pair, ratio] of Object.entries(ratios)) {
+      expect(ratio, `${pair} (${mode}) = ${ratio.toFixed(2)}:1, needs ≥ 4.5 for normal text`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
+/**
+ * Keyboard reachability + visible focus on the public forms (WCAG 2.1.1 / 2.4.7):
+ * tabbing from the top reaches the email + password fields and the NAMED submit
+ * control, and each focused control gains a FOCUS-INDUCED ring — an outline, or a
+ * box-shadow that DIFFERS from the control's resting shadow. Comparing against the
+ * resting style is deliberate: an input carries a permanent `shadow-sm`, so a
+ * "boxShadow !== none" check would pass even if the real focus ring were removed.
+ */
+test("keyboard — login form is reachable with a focus-induced ring", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
+
+  // Snapshot each focusable's RESTING outline/shadow (nothing focused yet), keyed
+  // by a data-idx we stamp on it, so the walk can prove the ring appeared on focus.
+  const resting: { idx: number; outlineW: number; shadow: string }[] = await page.evaluate(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>("input, button, a[href], select, textarea, [tabindex]"));
+    return els.map((el, i) => {
+      el.dataset.kbIdx = String(i);
+      const s = getComputedStyle(el);
+      return { idx: i, outlineW: parseFloat(s.outlineWidth) || 0, shadow: s.boxShadow };
+    });
+  });
+
+  const reached: { key: string; name: string }[] = [];
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    const info = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return null;
+      const s = getComputedStyle(el);
+      return {
+        idx: el.dataset.kbIdx ?? null,
+        tag: el.tagName.toLowerCase(),
+        type: (el as HTMLInputElement).type ?? "",
+        name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "",
+        outlineShown: s.outlineStyle !== "none" && (parseFloat(s.outlineWidth) || 0) > 0,
+        shadow: s.boxShadow,
+      };
+    });
+    if (!info) continue;
+    const rest = info.idx === null ? undefined : resting.find((r) => String(r.idx) === info.idx);
+    const shadowChanged = rest ? info.shadow !== rest.shadow : info.shadow !== "none";
+    expect(info.outlineShown || shadowChanged, `focused ${info.tag} "${info.name}" gained no focus-induced ring (outline/shadow unchanged from resting)`).toBe(true);
+    reached.push({ key: `${info.tag}:${info.type}`, name: info.name });
+  }
+
+  expect(reached.some((r) => r.key === "input:email" || r.key === "input:text")).toBe(true);
+  expect(reached.some((r) => r.key === "input:password")).toBe(true);
+  // The primary action specifically — not merely "some button" — must be reachable.
+  expect(reached.some((r) => r.key.startsWith("button") && /se connecter/i.test(r.name)), "submit button 'Se connecter' was never reached by Tab").toBe(true);
+});

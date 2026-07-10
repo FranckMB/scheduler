@@ -82,6 +82,20 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
           const holiday = holidayOn(cell.iso);
           const publicHoliday = publicHolidayOn(cell.iso);
           const isToday = cell.iso === today;
+          // A11Y-07: one composed accessible name for the whole cell. The button's
+          // aria-label overrides its children, so a bare `Jour {ISO}` used to hide
+          // every marker (holiday / férié / events) from a screen reader — compose
+          // them all here so nothing is lost, and read a human date, not the ISO.
+          const dayMarks = [
+            holiday ? `vacances — ${holiday.label}` : null,
+            publicHoliday ? `jour férié — ${publicHoliday.label}` : null,
+            ...dayEntries.map((e) => entryLabel(e)),
+          ].filter((m): m is string => m !== null);
+          // Derive the readable date from the ISO so the leading/trailing spill days
+          // read "27 Avril", not the raw ISO — the same A11Y-07 fix must cover them
+          // (they are clickable too), and their month differs from the grid's month.
+          const [, isoMonth, isoDay] = cell.iso.split("-").map(Number);
+          const dayLabel = [`${isoDay} ${monthLabel(isoMonth - 1)}`, isToday ? "aujourd'hui" : null, ...dayMarks].filter(Boolean).join(", ");
           return (
             <button
               key={cell.iso}
@@ -94,20 +108,22 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
                 // accent, which marks "today") so a break is spottable at a glance.
                 holiday && cell.inMonth ? "bg-amber-400/15 dark:bg-amber-400/10" : "",
               )}
-              aria-label={`Jour ${cell.iso}`}
+              aria-label={dayLabel}
             >
               <span className={cn("flex size-5 items-center justify-center rounded-full", isToday ? "bg-accent font-semibold text-accent-foreground" : "")}>{cell.day}</span>
-              <span className="flex flex-wrap items-center gap-0.5">
-                {holiday ? (
-                  <span role="img" aria-label={`Vacances — ${holiday.label}`} title={`Vacances — ${holiday.label}`}>
-                    🏖
+              {/* Markers are purely visual — the button's aria-label already names them
+                  to a screen reader, so hide them from the a11y tree (no double read). */}
+              <span aria-hidden className="flex flex-wrap items-center gap-0.5">
+                {holiday ? <span title={`Vacances — ${holiday.label}`}>🏖</span> : null}
+                {publicHoliday ? (
+                  // A11Y-08: was a bare red dot (info by colour alone). A shape + the
+                  // letter "F" makes "férié" legible without relying on colour.
+                  <span title={`Férié — ${publicHoliday.label}`} className="rounded-sm bg-destructive/15 px-0.5 text-[9px] font-bold leading-none text-destructive">
+                    F
                   </span>
                 ) : null}
-                {publicHoliday ? (
-                  <span role="img" aria-label={`Férié — ${publicHoliday.label}`} title={`Férié — ${publicHoliday.label}`} className="inline-block size-1.5 rounded-full bg-destructive" />
-                ) : null}
                 {dayEntries.map((e) => (
-                  <span key={e.id} role="img" aria-label={entryLabel(e)} title={e.title || entryLabel(e)}>
+                  <span key={e.id} title={e.title || entryLabel(e)}>
                     {entryIcon(e)}
                   </span>
                 ))}

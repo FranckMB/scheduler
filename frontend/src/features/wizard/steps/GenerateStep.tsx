@@ -134,7 +134,7 @@ export function GenerateStep() {
       <p className="mb-4 text-sm text-muted-foreground">
         {periodMode
           ? "Génère le planning de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
-          : "Le solveur place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner."}
+          : "Le solveur place tes équipes dans les créneaux selon tes règles. Lance, puis laisse tourner."}
       </p>
 
       {failed ? (
@@ -144,8 +144,8 @@ export function GenerateStep() {
             <p className="text-lg font-medium">La génération n'a pas abouti.</p>
             <p className="max-w-md text-sm text-muted-foreground">
               {timedOut
-                ? "Le service met trop de temps à répondre. Vérifiez que le moteur tourne, puis réessayez."
-                : "Une erreur est survenue (données ou moteur indisponible). Vous pouvez réessayer."}
+                ? "Le service met trop de temps à répondre. Vérifie que le moteur tourne, puis réessaie."
+                : "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer."}
             </p>
           </div>
           <Button size="lg" onClick={start}>
@@ -159,7 +159,7 @@ export function GenerateStep() {
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />
           <p className="max-w-sm text-sm text-muted-foreground">
-            {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
+            {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lance la génération de ton planning."}
           </p>
           {isFirstOverlay ? (
             <p className="max-w-sm rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-muted-foreground">
