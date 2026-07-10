@@ -18,9 +18,11 @@ import { BlockerList } from "./BlockerList";
 
 const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
 
-// Hard client-side guard: if the backend/engine never answers, stop waiting
-// instead of polling forever and surface a retry.
-const TIMEOUT_MS = 5 * 60 * 1000;
+// Hard client-side guard: if the backend/engine never answers, stop waiting instead of
+// polling forever and surface a retry. Must exceed the solver budget (adaptive phase-1 up
+// to 600 s + chaining 10 s + import/overhead, payload ceiling 650 s) — FRT-16: a 5-min
+// timeout wrongly declared a legitimately-long generation "failed" while it was still running.
+const TIMEOUT_MS = 12 * 60 * 1000;
 
 export function GenerateStep() {
   const queryClient = useQueryClient();
