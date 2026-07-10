@@ -47,7 +47,8 @@ final class FfbbImportController extends AbstractController
         }
 
         try {
-            $populated = $this->populator->populate($club);
+            // Explicit action → refresh: re-fetch and overwrite stale reference data.
+            $populated = $this->populator->populate($club, refresh: true);
         } catch (Throwable) {
             // Best-effort: an external failure is not the caller's fault.
             return $this->json(['populated' => false, 'error' => 'FFBB indisponible, réessayez plus tard.'], Response::HTTP_BAD_GATEWAY);

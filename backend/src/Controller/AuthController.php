@@ -289,6 +289,9 @@ final class AuthController extends AbstractController
                 // management member (the /club edit section is admin-only), never
                 // to a pending or non-management member.
                 if ($clubUser->getIsActive() && $this->clubUserRepository->isManagementRole($clubUser->getRole())) {
+                    $committee = null !== $clubEntity->getCommitteeCode()
+                        ? $this->ffbbCommittees->findByCode($clubEntity->getCommitteeCode())
+                        : null;
                     $club += [
                         'league' => $clubEntity->getLeague(),
                         'ffbbClubCode' => $clubEntity->getFfbbClubCode(),
@@ -313,11 +316,11 @@ final class AuthController extends AbstractController
                         'website' => $clubEntity->getWebsite(),
                         'latitude' => $clubEntity->getLatitude(),
                         'longitude' => $clubEntity->getLongitude(),
-                        'ffbbCommittee' => $this->ffbbOrganisme(
-                            null !== $clubEntity->getCommitteeCode() ? $this->ffbbCommittees->findByCode($clubEntity->getCommitteeCode()) : null,
-                        ),
+                        'ffbbCommittee' => $this->ffbbOrganisme($committee),
+                        // Resolve the league through the committee's authoritative
+                        // leagueCode link — not by re-deriving the club-code prefix.
                         'ffbbLeague' => $this->ffbbOrganisme(
-                            null !== ($lc = $this->leagueCodeOf($clubEntity->getFfbbClubCode())) ? $this->ffbbLeagues->findByCode($lc) : null,
+                            null !== $committee?->getLeagueCode() ? $this->ffbbLeagues->findByCode($committee->getLeagueCode()) : null,
                         ),
                     ];
                 }
@@ -515,16 +518,6 @@ final class AuthController extends AbstractController
         $this->entityManager->persist($user);
 
         return $user;
-    }
-
-    /** The FFBB league code = the 2-4 letter prefix of the club code (ARA0069036 → ARA). */
-    private function leagueCodeOf(?string $ffbbClubCode): ?string
-    {
-        if (null !== $ffbbClubCode && 1 === preg_match('/^([A-Z]{2,4})/', strtoupper(trim($ffbbClubCode)), $m)) {
-            return $m[1];
-        }
-
-        return null;
     }
 
     /**

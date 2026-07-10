@@ -356,9 +356,21 @@ function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   );
 }
 
+/** Only allow http(s) links — an FFBB-sourced `javascript:`/`data:` URL must never reach href (XSS). */
+function safeHttpUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** One read-only FFBB contact block (Club / Comité / Ligue). */
 function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & { website?: string | null }) | null }) {
   const filled = data && (data.address || data.city || data.phone || data.email);
+  const website = safeHttpUrl(data?.website);
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -380,10 +392,10 @@ function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & {
               </a>
             </dd>
           ) : null}
-          {data.website ? (
+          {website ? (
             <dd>
-              <a href={data.website} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
-                {data.website}
+              <a href={website} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
+                {website}
               </a>
             </dd>
           ) : null}

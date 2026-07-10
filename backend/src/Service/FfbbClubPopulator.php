@@ -40,8 +40,14 @@ final class FfbbClubPopulator
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** @return bool true if the club organisme was found and applied */
-    public function populate(Club $club): bool
+    /**
+     * @param bool $refresh false (async register hook) = cache-first, leave known
+     *                      reference rows untouched; true (explicit import route) =
+     *                      re-fetch and overwrite stale committee/league data
+     *
+     * @return bool true if the club organisme was found and applied
+     */
+    public function populate(Club $club, bool $refresh = false): bool
     {
         $code = (string) $club->getFfbbClubCode();
         if (!FfbbApiClient::isValidClubCode($code)) {
@@ -55,15 +61,17 @@ final class FfbbClubPopulator
             return false;
         }
 
+        // Persist the club data first, on its own flush: a later reference-row
+        // race (unique-code conflict) must never roll back the club's own fields.
         $this->applyClub($club, $hit);
+        $this->em->flush();
 
         $parent = $this->arr($hit['organisme_id_pere'] ?? null);
         if (null !== $parent) {
-            $this->upsertCommittee($parent, $this->arr($parent['organisme_id_pere'] ?? null));
-            $this->upsertLeague($this->arr($parent['organisme_id_pere'] ?? null));
+            $ligue = $this->arr($parent['organisme_id_pere'] ?? null);
+            $this->upsertCommittee($parent, $ligue, $refresh);
+            $this->upsertLeague($ligue, $refresh);
         }
-
-        $this->em->flush();
 
         return true;
     }
@@ -71,22 +79,23 @@ final class FfbbClubPopulator
     /** @param array<string, mixed> $hit */
     private function applyClub(Club $club, array $hit): void
     {
-        $club->setAddress($this->str($hit['adresse'] ?? null));
-        $club->setPostalCode($this->postalCode($hit));
-        $club->setCity($this->city($hit));
-        $club->setContactPhone($this->str($hit['telephone'] ?? null));
-        $club->setContactEmail($this->str($hit['mail'] ?? null));
-        $club->setWebsite($this->str($hit['urlSiteWeb'] ?? null));
+        // Set only when FFBB actually provides a value — never null out a
+        // manager-entered (lot B) address/phone/email on a refresh with gaps.
+        $this->setIfPresent($this->str($hit['adresse'] ?? null), $club->setAddress(...));
+        $this->setIfPresent($this->postalCode($hit), $club->setPostalCode(...));
+        $this->setIfPresent($this->city($hit), $club->setCity(...));
+        $this->setIfPresent($this->str($hit['telephone'] ?? null), $club->setContactPhone(...));
+        $this->setIfPresent($this->str($hit['mail'] ?? null), $club->setContactEmail(...));
+        $this->setIfPresent($this->str($hit['urlSiteWeb'] ?? null), $club->setWebsite(...));
 
         [$lat, $lng] = $this->coordinates($hit);
-        $club->setLatitude($lat);
-        $club->setLongitude($lng);
+        if (null !== $lat && null !== $lng) {
+            $club->setLatitude($lat);
+            $club->setLongitude($lng);
+        }
 
         $parent = $this->arr($hit['organisme_id_pere'] ?? null);
-        $committeeCode = null === $parent ? null : $this->str($parent['code'] ?? null);
-        if (null !== $committeeCode) {
-            $club->setCommitteeCode($committeeCode);
-        }
+        $this->setIfPresent(null === $parent ? null : $this->str($parent['code'] ?? null), $club->setCommitteeCode(...));
 
         // Club logo: only set it when the club has none (never clobber an upload).
         if (null === $club->getLogoUrl()) {
@@ -98,15 +107,23 @@ final class FfbbClubPopulator
         }
     }
 
+    /** @param callable(?string): mixed $setter */
+    private function setIfPresent(?string $value, callable $setter): void
+    {
+        if (null !== $value) {
+            $setter($value);
+        }
+    }
+
     /**
      * @param array<string, mixed>      $parent nested committee organisme
      * @param array<string, mixed>|null $ligue  nested league organisme (for leagueCode)
      */
-    private function upsertCommittee(array $parent, ?array $ligue): void
+    private function upsertCommittee(array $parent, ?array $ligue, bool $refresh): void
     {
         $code = $this->str($parent['code'] ?? null);
-        if (null === $code || null !== $this->committees->findByCode($code)) {
-            return; // cache-first: already known → no fetch
+        if (null === $code || (!$refresh && null !== $this->committees->findByCode($code))) {
+            return; // cache-first: already known → no fetch/write
         }
 
         try {
@@ -116,20 +133,20 @@ final class FfbbClubPopulator
                 ->setLeagueCode(null === $ligue ? null : $this->str($ligue['code'] ?? null))
                 ->setName((string) ($this->str($full['nom'] ?? $parent['nom'] ?? null) ?? $code));
             $this->applyOrganismeContact($full, $entity, 'ffbb-committee-' . $code, 'committee', $code);
-            $this->em->persist($entity);
+            $this->committees->upsert($entity, $refresh);
         } catch (Throwable $e) {
             $this->logger->warning('FFBB populate: committee upsert failed', ['code' => $code, 'error' => $e->getMessage()]);
         }
     }
 
     /** @param array<string, mixed>|null $ligue nested league organisme */
-    private function upsertLeague(?array $ligue): void
+    private function upsertLeague(?array $ligue, bool $refresh): void
     {
         if (null === $ligue) {
             return;
         }
         $code = $this->str($ligue['code'] ?? null);
-        if (null === $code || null !== $this->leagues->findByCode($code)) {
+        if (null === $code || (!$refresh && null !== $this->leagues->findByCode($code))) {
             return;
         }
 
@@ -139,7 +156,7 @@ final class FfbbClubPopulator
                 ->setCode($code)
                 ->setName((string) ($this->str($full['nom'] ?? $ligue['nom'] ?? null) ?? $code));
             $this->applyOrganismeContact($full, $entity, 'ffbb-league-' . $code, 'league', $code);
-            $this->em->persist($entity);
+            $this->leagues->upsert($entity, $refresh);
         } catch (Throwable $e) {
             $this->logger->warning('FFBB populate: league upsert failed', ['code' => $code, 'error' => $e->getMessage()]);
         }
@@ -168,7 +185,11 @@ final class FfbbClubPopulator
     /**
      * @param list<array<string, mixed>> $hits
      *
-     * @return array<string, mixed>|null the hit whose `code` matches (case-insensitive), else the first
+     * @return array<string, mixed>|null the hit whose `code` matches exactly
+     *                                   (case-insensitive), or null — NEVER an
+     *                                   arbitrary neighbour (Meilisearch is
+     *                                   typo-tolerant; hits[0] could be a
+     *                                   different organisation entirely)
      */
     private function firstByCode(array $hits, string $code): ?array
     {
@@ -178,7 +199,7 @@ final class FfbbClubPopulator
             }
         }
 
-        return $hits[0] ?? null;
+        return null;
     }
 
     /** @param array<string, mixed> $hit */

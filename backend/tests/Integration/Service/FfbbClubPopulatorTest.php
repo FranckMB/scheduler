@@ -91,6 +91,32 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertNull($this->em->getRepository(Club::class)->find($club->getId())?->getAddress());
     }
 
+    public function testNoExactCodeMatchDoesNotApplyStrangerData(): void
+    {
+        // Meilisearch is typo-tolerant: a search may return a neighbour with a
+        // DIFFERENT code. That must NOT be written onto this club.
+        $club = $this->seedClub('ARA0069999');
+        $populator = $this->buildPopulator(clubHit: ['code' => 'ARA0069036', 'nom' => 'AUTRE CLUB', 'adresse' => 'ailleurs']);
+
+        self::assertFalse($populator->populate($club));
+        self::assertNull($this->em->getRepository(Club::class)->find($club->getId())?->getAddress());
+    }
+
+    public function testRefreshDoesNotWipeManuallyEnteredFields(): void
+    {
+        $club = $this->seedClub(self::CLUB_CODE);
+        $club->setContactEmail('manuel@club.fr')->setAddress('Adresse manuelle');
+        $this->em->flush();
+
+        // FFBB hit for the right code but WITHOUT address/mail (gaps).
+        $populator = $this->buildPopulator(clubHit: ['code' => self::CLUB_CODE, 'nom' => 'BCCL']);
+
+        self::assertTrue($populator->populate($club));
+        $reloaded = $this->em->getRepository(Club::class)->find($club->getId());
+        self::assertSame('manuel@club.fr', $reloaded?->getContactEmail(), 'manual email preserved');
+        self::assertSame('Adresse manuelle', $reloaded?->getAddress(), 'manual address preserved');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -107,18 +133,23 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         return $club;
     }
 
-    /** @param-out callable(): int $searchCount */
-    private function buildPopulator(mixed &$searchCount = null): FfbbClubPopulator
+    /**
+     * @param array<string, mixed>|null $clubHit override the club search hit (else the BCCL fixture)
+     *
+     * @param-out callable(): int $searchCount
+     */
+    private function buildPopulator(mixed &$searchCount = null, ?array $clubHit = null): FfbbClubPopulator
     {
         $searches = 0;
-        $api = new FfbbApiClient(new MockHttpClient(function (string $method, string $url, array $options) use (&$searches): MockResponse {
+        $api = new FfbbApiClient(new MockHttpClient(function (string $method, string $url, array $options) use (&$searches, $clubHit): MockResponse {
             if (str_contains($url, '/items/configuration')) {
                 return new MockResponse((string) json_encode(['data' => ['key_ms' => 'test-token']]));
             }
             ++$searches;
             $body = (string) ($options['body'] ?? '');
+            $hit = (null !== $clubHit && !str_contains($body, 'COMITE') && !str_contains($body, 'LIGUE')) ? $clubHit : $this->hitFor($body);
 
-            return new MockResponse((string) json_encode(['results' => [['hits' => [$this->hitFor($body)]]]]));
+            return new MockResponse((string) json_encode(['results' => [['hits' => [$hit]]]]));
         }));
         $searchCount = static function () use (&$searches): int {
             return $searches;

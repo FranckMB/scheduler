@@ -52,19 +52,27 @@ final class FfbbLogoFetcher
             if (200 !== $response->getStatusCode()) {
                 return null;
             }
-            // Reject oversized responses before buffering the whole body.
+            // Reject oversized responses before buffering the whole body — and
+            // stream-cap even when the server omits Content-Length (chunked), so a
+            // rogue endpoint cannot OOM the worker.
             $declared = $response->getHeaders(false)['content-length'][0] ?? null;
             if (null !== $declared && (int) $declared > self::MAX_BYTES) {
                 return null;
             }
-            $bytes = $response->getContent(false);
+            $bytes = '';
+            foreach ($this->httpClient->stream($response) as $chunk) {
+                $bytes .= $chunk->getContent();
+                if (\strlen($bytes) > self::MAX_BYTES) {
+                    return null;
+                }
+            }
         } catch (Throwable $e) {
             $this->logger->warning('FFBB logo download failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
 
             return null;
         }
 
-        if ('' === $bytes || \strlen($bytes) > self::MAX_BYTES) {
+        if ('' === $bytes) {
             return null;
         }
         $mime = new finfo(\FILEINFO_MIME_TYPE)->buffer($bytes);
