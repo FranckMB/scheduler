@@ -3665,7 +3665,6 @@
                                         "type": "string",
                                         "enum": [
                                             "NONE",
-                                            "SOFT",
                                             "HARD"
                                         ]
                                     }

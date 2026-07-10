@@ -51,7 +51,6 @@ class ParsedConstraints(TypedDict):
     team_player_map: dict[str, list[str]]
     parse_warnings: list[dict[str, Any]]
 
-
 # Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
 # Used to warn ONLY on genuine contract drift, not on recognised families whose
 # specific config variant is intentionally a no-op.
@@ -199,7 +198,9 @@ def add_level_1_hard_constraints(
     stats.room_at_most_one = add_room_at_most_one(model, assignment_list)
 
     # 2. One coach works with at most one team at a time.
-    stats.coach_at_most_one = add_coach_at_most_one(model, assignment_list, team_coach_map=team_coach_map)
+    stats.coach_at_most_one = add_coach_at_most_one(
+        model, assignment_list, team_coach_map=team_coach_map
+    )
 
     # 3. A person cannot coach and play at the same time.
     stats.coach_player_non_overlap = add_coach_player_non_overlap(
@@ -209,30 +210,21 @@ def add_level_1_hard_constraints(
     # 3b. Every coach must have at least one rest day from Monday to Friday.
     if not skip_rest_day_and_distribution:
         stats.coach_rest_day = add_coach_rest_day_constraints(
-            model,
-            assignment_list,
-            coaches=coaches,
-            team_coach_map=team_coach_map,
-            team_player_map=team_player_map,
+            model, assignment_list, coaches=coaches,
+            team_coach_map=team_coach_map, team_player_map=team_player_map,
         )
 
     # 3c. At least one salarié coach must be present each Mon-Fri day.
     if not skip_rest_day_and_distribution:
         stats.salarie_distribution = add_salarie_distribution_constraints(
-            model,
-            assignment_list,
-            coaches=coaches,
-            team_coach_map=team_coach_map,
-            team_player_map=team_player_map,
+            model, assignment_list, coaches=coaches,
+            team_coach_map=team_coach_map, team_player_map=team_player_map,
         )
 
     # 3d. A coach may not be in all 3 slots of a consecutive triple.
     stats.max_consecutive_sessions = add_max_consecutive_sessions_constraints(
-        model,
-        assignment_list,
-        coaches=coaches,
-        team_coach_map=team_coach_map,
-        team_player_map=team_player_map,
+        model, assignment_list, coaches=coaches,
+        team_coach_map=team_coach_map, team_player_map=team_player_map,
     )
 
     # 4. A team cannot have two sessions at the same time slot.
@@ -242,7 +234,9 @@ def add_level_1_hard_constraints(
     stats.fixed_slots = add_fixed_slots(model, assignment_list, fixed_assignments)
 
     # 6. Explicitly forbidden assignment variables are forced to 0.
-    stats.forbidden_assignments = add_forbidden_assignments(model, assignment_list, forbidden_assignments)
+    stats.forbidden_assignments = add_forbidden_assignments(
+        model, assignment_list, forbidden_assignments
+    )
 
     # 7. Coach unavailable variables are forced to 0.
     stats.coach_unavailability = add_coach_unavailability_constraints(
@@ -261,13 +255,19 @@ def add_level_1_hard_constraints(
     )
 
     # 10. If a venue is forced, every other venue option is forced to 0.
-    stats.forced_venues = add_forced_venue_constraints(model, assignment_list, forced_venues=forced_venues)
+    stats.forced_venues = add_forced_venue_constraints(
+        model, assignment_list, forced_venues=forced_venues
+    )
 
     # 11. At most one session per day per team (unless explicitly allowed).
-    stats.one_session_per_day = add_one_session_per_day_constraints(model, assignment_list, teams=teams)
+    stats.one_session_per_day = add_one_session_per_day_constraints(
+        model, assignment_list, teams=teams
+    )
 
     # 12. Younger teams train earlier than older teams in the same venue+day.
-    stats.age_ascending = add_age_ascending_constraints(model, assignment_list, teams=teams)
+    stats.age_ascending = add_age_ascending_constraints(
+        model, assignment_list, teams=teams
+    )
 
     return stats
 
@@ -299,9 +299,7 @@ def add_room_at_most_one(model: Any, assignments: Sequence[AssignmentVariable]) 
     return added
 
 
-def add_coach_at_most_one(
-    model: Any, assignments: Sequence[AssignmentVariable], *, team_coach_map: dict[str, list[str]] | None = None
-) -> int:
+def add_coach_at_most_one(model: Any, assignments: Sequence[AssignmentVariable], *, team_coach_map: dict[str, list[str]] | None = None) -> int:
     """Constraint 2: one coach can coach at most one team per time slot.
 
     When ``team_coach_map`` is provided and the assignment's team is in the map,
@@ -348,13 +346,7 @@ def add_coach_at_most_one(
     return time_key_added + interval_added
 
 
-def add_coach_player_non_overlap(
-    model: Any,
-    assignments: Sequence[AssignmentVariable],
-    *,
-    team_coach_map: dict[str, list[str]] | None = None,
-    team_player_map: dict[str, list[str]] | None = None,
-) -> int:
+def add_coach_player_non_overlap(model: Any, assignments: Sequence[AssignmentVariable], *, team_coach_map: dict[str, list[str]] | None = None, team_player_map: dict[str, list[str]] | None = None) -> int:
     """Constraint 3: a coach-player cannot be in two roles at the same time.
 
     When ``team_coach_map`` / ``team_player_map`` are provided and the
@@ -407,7 +399,10 @@ def add_coach_player_non_overlap(
             for person_id in all_person_ids:
                 person_entries[person_id].append((start, end, var, day))
 
-    overlap_groups = (coach_groups[key] + player_groups[key] for key in coach_groups.keys() & player_groups.keys())
+    overlap_groups = (
+        coach_groups[key] + player_groups[key]
+        for key in coach_groups.keys() & player_groups.keys()
+    )
     time_key_added = _add_at_most_one_groups(model, overlap_groups)
     interval_added = _add_interval_at_most_one(model, person_entries)
     return time_key_added + interval_added
@@ -725,7 +720,9 @@ def add_fixed_slots(
     added = 0
     for assignment in assignments:
         assignment_id = assignment.id
-        if assignment.fixed or (assignment_id is not None and assignment_id in fixed_ids):
+        if assignment.fixed or (
+            assignment_id is not None and assignment_id in fixed_ids
+        ):
             model.Add(assignment.var == 1)
             added += 1
     return added
@@ -919,7 +916,9 @@ def add_time_window_constraints(
         # allowedDays = whitelist: forbid every day the team could train on that
         # is not allowed (the complement, restricted to days that actually exist).
         if allowed_day_set:
-            forbidden_day_set |= {day for day in team_day_vars.get(team_id_text, {}) if day not in allowed_day_set}
+            forbidden_day_set |= {
+                day for day in team_day_vars.get(team_id_text, {}) if day not in allowed_day_set
+            }
         # Contradiction → the team can be placed on NO day. Two shapes: a forced day
         # is also forbidden, OR a whitelist ('uniquement'/allowedDays) has ALL its
         # days explicitly forbidden ('évite'). Both are checked against the ORIGINAL
@@ -928,22 +927,20 @@ def add_time_window_constraints(
         forced_vs_forbidden = forced_day_set & original_forbidden
         allowed_all_forbidden = bool(allowed_day_set) and not (allowed_day_set - original_forbidden)
         if forced_vs_forbidden or allowed_all_forbidden:
-            conflicts.append(
-                {
-                    "id": f"day_constraint_conflict-{team_id_text}",
-                    "type": "day_constraint_conflict",
-                    "severity": "ERROR",
-                    "teamId": team_id_text,
-                    "message": (
-                        f"Team {team_id_text} has contradictory day rules "
-                        "(the allowed/forced days are all forbidden); the team is forced to 0 slots."
-                    ),
-                    "suggestions": [
-                        "Remove the overlapping days between the 'only these days' / 'forced' rule and the 'avoid' rule.",
-                    ],
-                    "createdAt": datetime.now(UTC).isoformat(),
-                }
-            )
+            conflicts.append({
+                "id": f"day_constraint_conflict-{team_id_text}",
+                "type": "day_constraint_conflict",
+                "severity": "ERROR",
+                "teamId": team_id_text,
+                "message": (
+                    f"Team {team_id_text} has contradictory day rules "
+                    "(the allowed/forced days are all forbidden); the team is forced to 0 slots."
+                ),
+                "suggestions": [
+                    "Remove the overlapping days between the 'only these days' / 'forced' rule and the 'avoid' rule.",
+                ],
+                "createdAt": datetime.now(UTC).isoformat(),
+            })
             for var in team_all_vars.get(team_id_text, []):
                 model.Add(var == 0)
                 added += 1
@@ -1044,10 +1041,7 @@ def add_venue_minimum_constraints(
         team_venue_vars = [
             var
             for slot_key, var in x.items()
-            if isinstance(slot_key, tuple)
-            and len(slot_key) >= 2
-            and str(slot_key[0]) == team_id
-            and str(slot_key[1]) == venue_id
+            if isinstance(slot_key, tuple) and len(slot_key) >= 2 and str(slot_key[0]) == team_id and str(slot_key[1]) == venue_id
         ]
 
         # Reachability is bounded by the number of DISTINCT DAYS available at the
@@ -1057,27 +1051,22 @@ def add_venue_minimum_constraints(
         team_venue_days = {
             slot_key[2]
             for slot_key in x
-            if isinstance(slot_key, tuple)
-            and len(slot_key) >= 3
-            and str(slot_key[0]) == team_id
-            and str(slot_key[1]) == venue_id
+            if isinstance(slot_key, tuple) and len(slot_key) >= 3 and str(slot_key[0]) == team_id and str(slot_key[1]) == venue_id
         }
 
         if len(team_venue_days) < minimum:
-            conflicts.append(
-                {
-                    "id": f"venue_minimum_unreachable-{team_id}-{venue_id}",
-                    "type": "venue_minimum_unreachable",
-                    "severity": "ERROR",
-                    "teamId": team_id,
-                    "message": (
-                        f"Team {team_id} cannot reach {minimum} session(s) at venue {venue_id}: "
-                        f"only {len(team_venue_days)} distinct day(s) available there (≤1 session/day)."
-                    ),
-                    "suggestions": ["Lower the minimum, or add availability slots on OTHER days at this venue."],
-                    "createdAt": datetime.now(UTC).isoformat(),
-                }
-            )
+            conflicts.append({
+                "id": f"venue_minimum_unreachable-{team_id}-{venue_id}",
+                "type": "venue_minimum_unreachable",
+                "severity": "ERROR",
+                "teamId": team_id,
+                "message": (
+                    f"Team {team_id} cannot reach {minimum} session(s) at venue {venue_id}: "
+                    f"only {len(team_venue_days)} distinct day(s) available there (≤1 session/day)."
+                ),
+                "suggestions": ["Lower the minimum, or add availability slots on OTHER days at this venue."],
+                "createdAt": datetime.now(UTC).isoformat(),
+            })
             continue
 
         model.Add(sum(team_venue_vars) >= minimum)
@@ -1087,7 +1076,7 @@ def add_venue_minimum_constraints(
 
 
 def _normalise_assignments(
-    assignments: Iterable[AssignmentInput] | Mapping[Any, BoolVarLike] | None,
+    assignments: Iterable[AssignmentInput] | Mapping[Any, BoolVarLike] | None
 ) -> list[AssignmentVariable]:
     """Convert any accepted input into a homogeneous ``list[AssignmentVariable]``.
 
@@ -1135,22 +1124,16 @@ def _as_assignment_variable(obj: AssignmentInput) -> AssignmentVariable:
         var=assignment_var(obj, skip_none=False),
         team_id=_coerce_id(assignment_team_id(obj, skip_none=False)),
         slot_id=_coerce_id(get_field(obj, "slot_id", "time_slot_id", "timeslot_id", "slot", "time_slot", default=None)),
-        venue_id=_coerce_id(
-            get_field(obj, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None)
-        ),
+        venue_id=_coerce_id(get_field(obj, "venue_id", "room_id", "location_id", "venue", "room", "location", default=None)),
         coach_id=_coerce_id(get_field(obj, "coach_id", "trainer_id", "coach", "trainer", default=None)),
-        session_id=_coerce_id(
-            get_field(obj, "session_id", "lesson_id", "event_id", "session", "lesson", "event", default=None)
-        ),
+        session_id=_coerce_id(get_field(obj, "session_id", "lesson_id", "event_id", "session", "lesson", "event", default=None)),
         player_ids=_raw_player_ids(obj),
         start=get_field(obj, "start", "start_minute", "start_time", "starts_at", default=None),
         end=get_field(obj, "end", "end_minute", "end_time", "ends_at", default=None),
         fixed=_bool_field(obj, "fixed", "is_fixed", "pre_placed", "preplaced", "is_pre_placed"),
         forbidden=_bool_field(obj, "forbidden", "is_forbidden"),
         coach_unavailable=_bool_field(obj, "coach_unavailable", "is_coach_unavailable"),
-        forced_venue_id=_coerce_id(
-            get_field(obj, "forced_venue_id", "forced_room_id", "forced_venue", "forced_room", default=None)
-        ),
+        forced_venue_id=_coerce_id(get_field(obj, "forced_venue_id", "forced_room_id", "forced_venue", "forced_room", default=None)),
         id=_coerce_id(get_field(obj, "id", "assignment_id", "key", default=None)),
     )
 
@@ -1342,9 +1325,7 @@ def _add_interval_at_most_one(
 
 def _find_consecutive_triples(
     entries: list[tuple[int, int, AssignmentVariable]],
-) -> list[
-    tuple[tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable]]
-]:
+) -> list[tuple[tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable]]]:
     """Find consecutive triples A->B->C where A.end == B.start and B.end == C.start.
 
     Uses a start-time index so that multiple entries sharing the same start
@@ -1378,7 +1359,9 @@ def _bool_field(obj: AssignmentInput, *names: str) -> bool:
     return any(bool(_get(obj, name, default=False)) for name in names)
 
 
-def _compute_effective_min_sessions(teams: Iterable[Any], priority_tiers: Mapping[int, int]) -> dict[Any, int]:
+def _compute_effective_min_sessions(
+    teams: Iterable[Any], priority_tiers: Mapping[int, int]
+) -> dict[Any, int]:
     """Compute effective minimum sessions per team via tier defaultMinSessions.
 
     effective_min = min(sessionsPerWeek, tier.defaultMinSessions)
@@ -1434,7 +1417,9 @@ def _effective_min_sessions_by_team(
     return minimums
 
 
-def _forced_venue_id(assignment: AssignmentVariable, forced_venues: Mapping[Any, Any] | None) -> Any:
+def _forced_venue_id(
+    assignment: AssignmentVariable, forced_venues: Mapping[Any, Any] | None
+) -> Any:
     explicit = _scalar_id(
         _get(
             assignment,
@@ -1643,13 +1628,10 @@ def _set_venue_rule(
     same silent-overwrite class as ENG-13)."""
     existing = rules.get(team_id)
     if existing is not None and existing != venue_id:
-        warnings.append(
-            _not_honored_warning(
-                constraint,
-                "INFO",
-                "Plusieurs règles de gymnase pour la même équipe — la dernière remplace la précédente.",
-            )
-        )
+        warnings.append(_not_honored_warning(
+            constraint, "INFO",
+            "Plusieurs règles de gymnase pour la même équipe — la dernière remplace la précédente.",
+        ))
     rules[team_id] = venue_id
 
 
@@ -1749,7 +1731,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                 or c.get("team_id")
                 or scope_target_id
             )
-            coach_id = metadata.get("coachId") or metadata.get("coach_id") or c.get("value")
+            coach_id = (
+                metadata.get("coachId")
+                or metadata.get("coach_id")
+                or c.get("value")
+            )
             if team_id and coach_id:
                 team_id_str = str(team_id)
                 coach_id_str = str(coach_id)
@@ -1778,14 +1764,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # Coach availability is always enforced HARD (a person cannot be in
             # two places); the UI now forces HARD — surface legacy soft rows.
             if rule_type not in (None, "HARD", "LOCK"):
-                result["parse_warnings"].append(
-                    _not_honored_warning(
-                        c,
-                        "INFO",
-                        "Une disponibilité de coach est toujours appliquée comme obligatoire "
-                        f"(ruleType {rule_type} reçu).",
-                    )
-                )
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "INFO",
+                    "Une disponibilité de coach est toujours appliquée comme obligatoire "
+                    f"(ruleType {rule_type} reçu).",
+                ))
 
         elif (
             family == "FACILITY"
@@ -1796,9 +1779,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope == "TEAM"
             and scope_target_id
         ):
-            _set_venue_rule(
-                result["forced_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"]
-            )
+            _set_venue_rule(result["forced_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"])
 
         elif (
             family == "FACILITY"
@@ -1807,9 +1788,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope == "TEAM"
             and scope_target_id
         ):
-            _set_venue_rule(
-                result["forced_venues"], scope_target_id, config["forcedVenueId"], c, result["parse_warnings"]
-            )
+            _set_venue_rule(result["forced_venues"], scope_target_id, config["forcedVenueId"], c, result["parse_warnings"])
 
         elif (
             family == "FACILITY"
@@ -1822,13 +1801,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # toutes les séances (≠ forcedVenueId). Défaut N=1 (cas courant).
             raw_count = config.get("minAtVenueCount")
             min_count = int(raw_count) if raw_count is not None else 1
-            result["venue_minimums"].append(
-                {
-                    "scope_target_id": str(scope_target_id),
-                    "venue_id": str(config["minAtVenueId"]),
-                    "min": max(1, min_count),
-                }
-            )
+            result["venue_minimums"].append({
+                "scope_target_id": str(scope_target_id),
+                "venue_id": str(config["minAtVenueId"]),
+                "min": max(1, min_count),
+            })
 
         elif (
             family == "FACILITY"
@@ -1837,9 +1814,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope == "TEAM"
             and scope_target_id
         ):
-            _set_venue_rule(
-                result["preferred_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"]
-            )
+            _set_venue_rule(result["preferred_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"])
 
         elif family == "FACILITY" and config.get("forbiddenVenueId"):
             # rule_type decides HOW hard "avoid this venue" is (ENG-11 — this
@@ -1858,13 +1833,10 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             else:
                 # Soft avoid without a target cannot be applied — say so (the
                 # sibling hard/target-less variants warn too, never a silent drop).
-                result["parse_warnings"].append(
-                    _not_honored_warning(
-                        c,
-                        "WARNING",
-                        "Contrainte de gymnase sans équipe cible — non appliquée.",
-                    )
-                )
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "WARNING",
+                    "Contrainte de gymnase sans équipe cible — non appliquée.",
+                ))
 
         elif family == "FACILITY_CAPACITY" and config.get("venueId"):
             # Max teams allowed simultaneously per slot of this venue. Applied in
@@ -1889,29 +1861,26 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                 # a target-less window reaching the engine would be silently
                 # skipped downstream (add_time_window_constraints requires a
                 # team) — surface it instead of a silent no-op.
-                result["parse_warnings"].append(
-                    _not_honored_warning(
-                        c,
-                        "WARNING",
-                        "Contrainte sans équipe cible — non appliquée (le backend doit l'étendre par équipe).",
-                    )
-                )
+                result["parse_warnings"].append(_not_honored_warning(
+                    c, "WARNING",
+                    "Contrainte sans équipe cible — non appliquée (le backend doit "
+                    "l'étendre par équipe).",
+                ))
             else:
                 result["time_windows"].append(c)
 
-        elif family == "FACILITY" and (config.get("preferredVenueId") or config.get("forcedVenueId")):
+        elif family == "FACILITY" and (
+            config.get("preferredVenueId") or config.get("forcedVenueId")
+        ):
             # A wizard-emitted venue rule that matched no branch (target-less
             # scope) — an explicit warning, never a silent drop. Other FACILITY
             # variants (e.g. the cockpit venue_closed marker, enforced via the
             # backend expandClosedVenues expansion) are deliberate no-ops here
             # and must NOT raise a false "not applied" alarm.
-            result["parse_warnings"].append(
-                _not_honored_warning(
-                    c,
-                    "WARNING",
-                    "Contrainte de gymnase sans équipe cible — non appliquée.",
-                )
-            )
+            result["parse_warnings"].append(_not_honored_warning(
+                c, "WARNING",
+                "Contrainte de gymnase sans équipe cible — non appliquée.",
+            ))
 
         elif family not in _KNOWN_FAMILIES and c_type not in _KNOWN_TYPES and rule_type != "LOCK":
             # Only warn when neither the family NOR the type is recognised — a
@@ -1920,10 +1889,7 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # a deliberate no-op, not drift, and must not spam warnings (review).
             logger.warning(
                 "unrecognised constraint dropped: id=%s type=%s family=%s ruleType=%s",
-                c.get("id"),
-                c_type,
-                family,
-                rule_type,
+                c.get("id"), c_type, family, rule_type,
             )
 
     # Merge the coach-availability algebra: blocked = union(blacklists) ∪

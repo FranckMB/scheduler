@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from ortools.sat.python import cp_model
 
-SLOT_MINUTES = 15  # solver granularity — do not change
+SLOT_MINUTES = 15            # solver granularity — do not change
 DEFAULT_SESSION_MINUTES = 90  # default session duration when not specified in input
 HARD_LOCK_LEVEL = "HARD"
 

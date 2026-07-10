@@ -6,18 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # A10 (DoS "generation bomb" guard): bound every input list so an oversized payload is
 # rejected with 422 at the boundary, before CP-SAT builds the model. Values are generous
-# (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces most
-# of these plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
+# (~10x a large FFBB club) — they only trip on a genuine bomb. The backend enforces the
+# same caps plus an n_teams x n_venues product pre-check BEFORE dispatch; this schema is
 # the defense-in-depth last line. Availability slots are bounded BOTH per-venue and in
 # total (a model_validator sums across venues, so 50 venues x 1000 can't smuggle 50k slots).
 MAX_VENUES = 50
 MAX_TEAMS = 200
 MAX_COACHES = 200
-# ENG-23: this bounds the EXPANDED constraint list (the backend fans out 1 CLUB-scoped rule
-# into N per-team rows before sending). The backend pre-check caps the RAW stored count at
-# 500; a legit club (<=500 raw, some CLUB-scoped) can expand well past 500, so this last-line
-# DoS bound is deliberately generous — it must never false-block what the backend accepted.
-MAX_CONSTRAINTS = 5000
+# NB: `constraints` has NO cap (ENG-23) — its expanded size = raw(<=500) x teams(<=200)
+# after the backend fans out CLUB-scoped rules, so no fixed number can both bound a bomb
+# and never false-block a legit club; see the field comment on ScheduleInputSchema.
 MAX_SLOT_TEMPLATES = 2000
 MAX_PRIORITY_TIERS = 20
 MAX_SLOTS_PER_VENUE = 1000
@@ -157,7 +155,10 @@ class ScheduleInputSchema(SerializableModel):
     venues: list[VenueSchema] = Field(default_factory=list, max_length=MAX_VENUES)
     teams: list[TeamSchema] = Field(default_factory=list, max_length=MAX_TEAMS)
     coaches: list[CoachSchema] = Field(default_factory=list, max_length=MAX_COACHES)
-    constraints: list[ConstraintV2Schema] = Field(default_factory=list, max_length=MAX_CONSTRAINTS)
+    # ENG-23: NO per-list cap — the backend fans out 1 CLUB rule into N per-team rows, so the
+    # expanded count (raw<=500 x teams<=200) can't be reconciled with a fixed max_length without
+    # false-blocking a legit club. Real bounds: backend RAW cap + nginx 20m body + solver timeout.
+    constraints: list[ConstraintV2Schema] = Field(default_factory=list)
     slot_templates: list[ScheduleSlotTemplateSchema] = Field(
         default_factory=list, alias="slotTemplates", max_length=MAX_SLOT_TEMPLATES
     )

@@ -5435,7 +5435,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    lockLevel: "NONE" | "SOFT" | "HARD";
+                    lockLevel: "NONE" | "HARD";
                 };
             };
         };
