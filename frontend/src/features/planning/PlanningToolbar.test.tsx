@@ -46,10 +46,8 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
   });
 
-  it("marks the baseline schedule as « Planning principal »", () => {
-    renderToolbar(schedule("COMPLETED"), "s1");
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
-  });
+  // The « Planning principal » badge moved to the page header (next to the title);
+  // its presence is asserted in PlanningPage.test.
 
   it("labels the version « V1 — … » and offers no rename control (versions are not renamable)", () => {
     renderToolbar(schedule("COMPLETED"));

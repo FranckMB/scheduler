@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Pencil } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe, useRenamePlanning } from "@/features/auth/queries";
@@ -324,6 +324,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           <>
             {/* planning-versions: THE plan's name lives here (Season.planningName), not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
+            {null !== selectedSchedule && selectedSchedule.id === baselineScheduleId ? (
+              <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                <Star className="size-3" />
+                Planning principal
+              </span>
+            ) : null}
             {workingSeason && !workingSeason.isReadonly ? (
               <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
                 <Pencil className="size-4" />

@@ -157,11 +157,6 @@ export function PlanningToolbar({
           {null !== selected.score ? <span>score {selected.score}</span> : null}
           {null !== selected.calendarEntryId ? (
             <span className="rounded-full border border-accent/50 px-2 py-0.5 font-medium text-accent">Période</span>
-          ) : isBaseline ? (
-            <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground">
-              <Star className="size-3" />
-              Planning principal
-            </span>
           ) : null}
         </span>
       ) : null}
