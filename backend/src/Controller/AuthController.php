@@ -263,6 +263,21 @@ final class AuthController extends AbstractController
                     'accentColorDark' => $clubEntity->getAccentColorDark(),
                     'accentPalette' => $clubEntity->getAccentPalette(),
                     'schoolZone' => $clubEntity->getSchoolZone(),
+                    // FFBB club info (lot B).
+                    'league' => $clubEntity->getLeague(),
+                    'ffbbClubCode' => $clubEntity->getFfbbClubCode(),
+                    'committeeCode' => $clubEntity->getCommitteeCode(),
+                    'contactPhone' => $clubEntity->getContactPhone(),
+                    'contactEmail' => $clubEntity->getContactEmail(),
+                    'address' => $clubEntity->getAddress(),
+                    'correspondentName' => $clubEntity->getCorrespondentName(),
+                    'correspondentPhone' => $clubEntity->getCorrespondentPhone(),
+                    'correspondentEmail' => $clubEntity->getCorrespondentEmail(),
+                    'presidentName' => $clubEntity->getPresidentName(),
+                    'presidentPhone' => $clubEntity->getPresidentPhone(),
+                    'presidentEmail' => $clubEntity->getPresidentEmail(),
+                    'mainVenueName' => $clubEntity->getMainVenueName(),
+                    'mainVenueAddress' => $clubEntity->getMainVenueAddress(),
                 ];
 
                 $allSeasons = $this->seasonResolver->seasonsForClub($clubEntity->getId());

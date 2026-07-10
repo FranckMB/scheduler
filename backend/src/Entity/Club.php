@@ -87,6 +87,45 @@ class Club
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $accentPalette = null;
 
+    // FFBB club info (lot B — manual entry, FFBB autofill in lot C). All nullable.
+    // President/correspondent are professional contacts (public FFBB data); home
+    // addresses are deliberately NOT stored (RGPD minimisation).
+    #[ORM\Column(type: 'string', length: 24, nullable: true)]
+    private ?string $committeeCode = null;
+
+    #[ORM\Column(type: 'string', length: 32, nullable: true)]
+    private ?string $contactPhone = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $contactEmail = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $address = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $correspondentName = null;
+
+    #[ORM\Column(type: 'string', length: 32, nullable: true)]
+    private ?string $correspondentPhone = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $correspondentEmail = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $presidentName = null;
+
+    #[ORM\Column(type: 'string', length: 32, nullable: true)]
+    private ?string $presidentPhone = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $presidentEmail = null;
+
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $mainVenueName = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $mainVenueAddress = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -341,6 +380,150 @@ class Club
     public function setAccentPalette(?array $accentPalette): self
     {
         $this->accentPalette = $accentPalette;
+
+        return $this;
+    }
+
+    public function getCommitteeCode(): ?string
+    {
+        return $this->committeeCode;
+    }
+
+    public function setCommitteeCode(?string $committeeCode): self
+    {
+        $this->committeeCode = $committeeCode;
+
+        return $this;
+    }
+
+    public function getContactPhone(): ?string
+    {
+        return $this->contactPhone;
+    }
+
+    public function setContactPhone(?string $contactPhone): self
+    {
+        $this->contactPhone = $contactPhone;
+
+        return $this;
+    }
+
+    public function getContactEmail(): ?string
+    {
+        return $this->contactEmail;
+    }
+
+    public function setContactEmail(?string $contactEmail): self
+    {
+        $this->contactEmail = $contactEmail;
+
+        return $this;
+    }
+
+    public function getAddress(): ?string
+    {
+        return $this->address;
+    }
+
+    public function setAddress(?string $address): self
+    {
+        $this->address = $address;
+
+        return $this;
+    }
+
+    public function getCorrespondentName(): ?string
+    {
+        return $this->correspondentName;
+    }
+
+    public function setCorrespondentName(?string $correspondentName): self
+    {
+        $this->correspondentName = $correspondentName;
+
+        return $this;
+    }
+
+    public function getCorrespondentPhone(): ?string
+    {
+        return $this->correspondentPhone;
+    }
+
+    public function setCorrespondentPhone(?string $correspondentPhone): self
+    {
+        $this->correspondentPhone = $correspondentPhone;
+
+        return $this;
+    }
+
+    public function getCorrespondentEmail(): ?string
+    {
+        return $this->correspondentEmail;
+    }
+
+    public function setCorrespondentEmail(?string $correspondentEmail): self
+    {
+        $this->correspondentEmail = $correspondentEmail;
+
+        return $this;
+    }
+
+    public function getPresidentName(): ?string
+    {
+        return $this->presidentName;
+    }
+
+    public function setPresidentName(?string $presidentName): self
+    {
+        $this->presidentName = $presidentName;
+
+        return $this;
+    }
+
+    public function getPresidentPhone(): ?string
+    {
+        return $this->presidentPhone;
+    }
+
+    public function setPresidentPhone(?string $presidentPhone): self
+    {
+        $this->presidentPhone = $presidentPhone;
+
+        return $this;
+    }
+
+    public function getPresidentEmail(): ?string
+    {
+        return $this->presidentEmail;
+    }
+
+    public function setPresidentEmail(?string $presidentEmail): self
+    {
+        $this->presidentEmail = $presidentEmail;
+
+        return $this;
+    }
+
+    public function getMainVenueName(): ?string
+    {
+        return $this->mainVenueName;
+    }
+
+    public function setMainVenueName(?string $mainVenueName): self
+    {
+        $this->mainVenueName = $mainVenueName;
+
+        return $this;
+    }
+
+    public function getMainVenueAddress(): ?string
+    {
+        return $this->mainVenueAddress;
+    }
+
+    public function setMainVenueAddress(?string $mainVenueAddress): self
+    {
+        $this->mainVenueAddress = $mainVenueAddress;
 
         return $this;
     }

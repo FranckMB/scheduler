@@ -15,6 +15,25 @@ export interface AppearanceResult {
 /** Partial update of the club identity (accent), scoped server-side to the JWT club. */
 export const updateAppearance = (body: AppearancePayload): Promise<AppearanceResult> => api.patch("club/appearance", { json: body }).json();
 
+export interface ClubInfoPayload {
+  committeeCode?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  address?: string | null;
+  correspondentName?: string | null;
+  correspondentPhone?: string | null;
+  correspondentEmail?: string | null;
+  presidentName?: string | null;
+  presidentPhone?: string | null;
+  presidentEmail?: string | null;
+  mainVenueName?: string | null;
+  mainVenueAddress?: string | null;
+  schoolZone?: string | null;
+}
+
+/** Partial update of the FFBB club info (lot B), scoped server-side to the JWT club. */
+export const updateClubInfo = (body: ClubInfoPayload): Promise<ClubInfoPayload> => api.patch("club/info", { json: body }).json();
+
 /** Upload the club logo (multipart); returns its public URL. */
 export const uploadLogo = (file: File): Promise<{ logoUrl: string }> => {
   const form = new FormData();

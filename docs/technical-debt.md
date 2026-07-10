@@ -99,6 +99,13 @@ The wizard tutoie the manager (dominant voice: ~29 tu / 15 vous), the cockpit/va
 
 ---
 
+## RGPD / données personnelles
+
+### 🟦 DP1 — Fiche club FFBB : contacts président/correspondant (lot B, minimisé)
+`PATCH /api/club/info` (lot B) stocke sur `club` des **contacts professionnels** issus de la fiche publique FFBB : nom, téléphone, email du **président** et du **correspondant**. Décision de minimisation (utilisateur) : **aucune adresse de domicile** — seules l'adresse du club et de la salle principale (lieux publics) sont persistées. Ces champs restent des **données personnelles** : à couvrir par la politique de purge/rétention et l'export/suppression sur demande, au même titre que les emails d'adhérents, quand le socle RGPD pré-GA (purge, audit trail, droit à l'effacement) sera implémenté. Pas d'action isolée : à traiter dans le lot RGPD global. Preuve : `Entity/Club.php` (colonnes `president_*`/`correspondent_*`), `Controller/ClubInfoController.php`.
+
+---
+
 ## Suggested priority
 Only **B4** remains — a deliberate defer (`🟩` keep): extract a shared Mercure notifier only if a 3rd publisher appears; no action now. *(B1, B2, B3, B6, B7, E1, E2, E3, E4, E5, E6 all resolved 2026-07-01.)*
 

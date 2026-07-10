@@ -14,7 +14,7 @@ import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { LogoCropper } from "./LogoCropper";
-import { useDeleteLogo, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
+import { useDeleteLogo, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -246,6 +246,106 @@ function DangerSection() {
   );
 }
 
+/** One labelled text field bound to local form state. */
+function InfoField({ label, value, onChange, type = "text", placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
+      <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+const INFO_KEYS = [
+  "committeeCode", "contactPhone", "contactEmail", "address",
+  "correspondentName", "correspondentPhone", "correspondentEmail",
+  "presidentName", "presidentPhone", "presidentEmail",
+  "mainVenueName", "mainVenueAddress",
+] as const;
+
+type InfoKey = (typeof INFO_KEYS)[number];
+
+/** FFBB club info (lot B): read-only identity + editable contacts. */
+function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
+  const update = useUpdateClubInfo();
+  const [form, setForm] = useState<Record<InfoKey, string>>(() =>
+    Object.fromEntries(INFO_KEYS.map((k) => [k, club[k] ?? ""])) as Record<InfoKey, string>,
+  );
+  const set = (k: InfoKey) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = () => update.mutate(Object.fromEntries(INFO_KEYS.map((k) => [k, form[k].trim() || null])));
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Identité</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="mb-1 block text-xs text-muted-foreground">Code FFBB</span>
+            <p className="font-mono">{club.ffbbClubCode ?? "—"}</p>
+          </div>
+          <div>
+            <span className="mb-1 block text-xs text-muted-foreground">Ligue</span>
+            <p>{club.league ?? "—"}</p>
+          </div>
+          <div>
+            <span className="mb-1 block text-xs text-muted-foreground">Zone de vacances</span>
+            <p>{club.schoolZone ?? "—"}</p>
+          </div>
+          <InfoField label="Comité" value={form.committeeCode} onChange={set("committeeCode")} placeholder="0069" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Contact du club</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoField label="Téléphone" value={form.contactPhone} onChange={set("contactPhone")} type="tel" />
+          <InfoField label="Email" value={form.contactEmail} onChange={set("contactEmail")} type="email" />
+          <label className="col-span-2 block">
+            <span className="mb-1 block text-xs text-muted-foreground">Adresse</span>
+            <Input value={form.address} onChange={(e) => set("address")(e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Correspondant</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoField label="Nom" value={form.correspondentName} onChange={set("correspondentName")} />
+          <InfoField label="Téléphone" value={form.correspondentPhone} onChange={set("correspondentPhone")} type="tel" />
+          <InfoField label="Email" value={form.correspondentEmail} onChange={set("correspondentEmail")} type="email" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Président</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoField label="Nom" value={form.presidentName} onChange={set("presidentName")} />
+          <InfoField label="Téléphone" value={form.presidentPhone} onChange={set("presidentPhone")} type="tel" />
+          <InfoField label="Email" value={form.presidentEmail} onChange={set("presidentEmail")} type="email" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Salle principale</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <InfoField label="Nom" value={form.mainVenueName} onChange={set("mainVenueName")} />
+          <label className="block">
+            <span className="mb-1 block text-xs text-muted-foreground">Adresse</span>
+            <Input value={form.mainVenueAddress} onChange={(e) => set("mainVenueAddress")(e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={update.isPending}>
+          Enregistrer
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   return (
@@ -268,6 +368,11 @@ function ClubHub({ me }: { me: MeResponse }) {
             clubName={me.club?.name ?? ""}
           />
         </AccordionSection>
+        {isAdmin && me.club ? (
+          <AccordionSection title="Informations du club">
+            <ClubInfoSection club={me.club} />
+          </AccordionSection>
+        ) : null}
         {isAdmin ? (
           <AccordionSection title="Réinitialiser le club">
             <DangerSection />
