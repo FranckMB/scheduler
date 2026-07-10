@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-07-07 (cockpit A/B/C · module matchs palier A · transition P1/P2 · calendriers globaux)
+Last verified @ 2026-07-10 (register vérifié par email A3 · cap complexité génération A10 · gate CI audit deps A18 · modale unifiée)
 
 ---
 
@@ -117,7 +117,8 @@ classiques avec `#[Route]`.
 | Route | Méthode | Description |
 |-------|---------|-------------|
 | `/api/login` | POST | Connexion — gérée par le firewall `json_login` de Symfony (username `email`, password `password`), succès/échec délégués à LexikJWT. Route déclarée dans `config/routes.yaml`. |
-| `/api/register` | POST | Inscription à deux modes selon le code ARA (rate-limité par IP, `auth_register` : 5/15 min). **Club inexistant** : crée `User` + `Club` (slug + code FFBB/ARA) + `ClubUser` actif (rôle `admin`) + `Season` active + `Sport` basketball + 9 `SportCategory` — `membershipStatus: "active"`. **ARA d'un club existant** : crée `User` + `ClubUser` **inactif** (`isActive=false`, en attente d'approbation admin, aucun accès aux données du club) — `membershipStatus: "pending"`. Retourne 201 `{ token, membershipStatus, user }`. Validation : email, mot de passe (politique `PasswordPolicy` : ≥12 car. + majuscule + spécial), ARA 3-20 alphanumérique majuscule, `club_name` requis si nouveau club. |
+| `/api/register` | POST | Inscription **différée, sans auto-login** (anti-énumération A3, #153 — rate-limité par IP, `auth_register` : 5/15 min). Crée un `User` **non vérifié** (`emailVerifiedAt=null`) + un `EmailVerificationToken` portant l'intention club `{ara, clubName}`, envoie un mail de vérification, et renvoie un **202 générique identique** dans tous les cas (email neuf ou déjà inscrit) — **aucun token émis**. Email déjà connu → aucune création, mail « tu as déjà un compte » (compte non vérifié → renvoie un nouveau lien). **Le club n'est PAS créé ici.** Validation : email, mot de passe (`PasswordPolicy` : ≥12 car. + majuscule + spécial), ARA 3-20 alphanumérique majuscule, `club_name` requis si ARA nouveau. Le login rejette un compte non vérifié (`UserChecker`, message identique à un mauvais mot de passe). |
+| `/api/register/verify` | POST | Body `{ token }`. Consomme le token de vérification (verrou pessimiste `PESSIMISTIC_WRITE` anti-double-verify), passe `emailVerifiedAt`, **matérialise le club** sous GUC RLS (ARA nouveau → `Club` + `Season` + `Sport` + 9 `SportCategory` + `ClubUser` actif `admin`, `membershipStatus:"active"` ; ARA existant → `ClubUser` **inactif** pending), puis **émet le JWT** (login effectif) : `{ token, membershipStatus, user }`. 400 token invalide/expiré ; 409 si le club à rejoindre a disparu. Purge des comptes non vérifiés > 7j : `app:users:purge-unverified` (cron-runner horaire). |
 | `/api/me` | GET | Profil courant — retourne `id`, `email`, `firstName`, `lastName`, `membershipStatus` (`none`/`pending`/`active`), `role`, `club` (id, name, `onboardingCompleted`, `logoUrl`, `accentColor`, `accentPalette`), `baselineScheduleId` (planning principal de la saison active), `hasGenerated` (booléen : `generationCountSeason > 0`). |
 
 ### Mots de passe (`PasswordController.php`)
@@ -131,7 +132,7 @@ classiques avec `#[Route]`.
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
-| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Vérifie l'appartenance du schedule au club courant (`_club_id`/`X-Club-Id`), passe le statut à `PENDING`, marque `onboardingCompleted=true` sur le club à la première génération, dispatche `GenerateScheduleMessage` sur le bus async. Retourne 202. |
+| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Gate management (`assertManager`, SEC-07). Vérifie l'appartenance du schedule au club courant, **borne de complexité A10 pré-dispatch** (`GenerationComplexityGuard` : teams ≤200 · venues ≤50 · slots ≤3000 · contraintes permanentes ≤500 · teams×venues ≤2000 → **422** avant toute mise en queue, statut inchangé, #156), passe le statut à `PENDING`, marque `onboardingCompleted=true` à la première génération, dispatche `GenerateScheduleMessage`. Retourne 202. |
 
 ### Cycle de vie du planning (VALIDATED / reopen / baseline)
 

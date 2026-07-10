@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-07-07 (matrice contrainte audit P0.1)
+Last verified @ 2026-07-10 (bornes payload A10 #156 · politique de bump CONTRACT_VERSION)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -70,6 +70,8 @@ Quatre endpoints exposés par `app/main.py` :
 ### ScheduleInputSchema (`engine/app/schemas/input_schema.py`)
 
 Version contrat : `"2.0"` (default). `ConfigDict(extra="forbid", populate_by_name=True)`.
+
+**Bornes A10** (#156, anti-bombe de génération) : chaque liste porte un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `constraints` ≤500 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). Le backend (`GenerationComplexityGuard`) pré-vérifie les mêmes caps + `teams×venues` ≤2000 **avant dispatch**. ⚠ Ce durcissement de validation n'a **pas** bumpé `CONTRACT_VERSION` (2.0) : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias).
 
 | Champ | Alias JSON | Type | Default |
 |-------|-------------|------|---------|
