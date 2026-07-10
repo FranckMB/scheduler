@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const team: Team = {
 const createMut = vi.fn();
 const updateMut = vi.fn();
 const reorderMut = vi.fn();
+const deleteMut = vi.fn();
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [team] }),
@@ -26,8 +27,11 @@ vi.mock("../queries", () => ({
   }),
   useCreateTeam: () => ({ mutate: createMut, isPending: false }),
   useUpdateTeam: () => ({ mutate: updateMut }),
-  useDeleteTeam: () => ({ mutate: vi.fn() }),
+  useDeleteTeam: () => ({ mutate: deleteMut }),
   useReorderTeams: () => ({ mutate: reorderMut }),
+  useReservations: () => ({ data: [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 90, calendarEntryId: null }] }),
+  useWizardTeamCoaches: () => ({ data: [] }),
+  useWizardCoachPlayers: () => ({ data: [] }),
 }));
 
 import { TeamsStep } from "./TeamsStep";
@@ -36,6 +40,22 @@ describe("TeamsStep", () => {
   beforeEach(() => {
     createMut.mockClear();
     updateMut.mockClear();
+    deleteMut.mockClear();
+  });
+
+  it("deleting a team confirms the impact first, then deletes on confirm", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    // The row's Trash button (aria-label "Supprimer") opens the confirmation.
+    await user.click(screen.getByRole("button", { name: "Supprimer" }));
+    const dialog = screen.getByRole("dialog");
+    // Impact confirmation names the linked reservation — no immediate delete.
+    expect(within(dialog).getByText("1 créneau réservé")).toBeInTheDocument();
+    expect(deleteMut).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Supprimer" }));
+    expect(deleteMut).toHaveBeenCalledWith("t1");
   });
 
   it("shows a play-level select and no redundant inner heading", () => {

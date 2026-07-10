@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
-import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
+import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
@@ -15,7 +15,7 @@ import { toast } from "@/shared/stores/toastStore";
 import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, hhmm } from "../lib/days";
 import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
-import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { ReadonlyVenues } from "./StructureSummary";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
@@ -107,11 +107,14 @@ export function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: 
 function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTrainingSlot; canSplit: boolean; otherSlots: VenueTrainingSlot[]; onClose: () => void }) {
   const update = useUpdateSlot();
   const del = useDeleteSlot();
+  const { data: reservations = [] } = useReservations();
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
   const [capacity, setCapacity] = useState(slot.capacity);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
 
   const save = () => {
     // Never let an edit overlap another slot of the same gym/day (self excluded).
@@ -171,7 +174,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
       ) : null}
 
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" className="text-destructive" onClick={() => (del.mutate(slot.id), onClose())}>
+        <Button variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}>
           <Trash2 className="size-4" />
           Supprimer
         </Button>
@@ -179,6 +182,18 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
           Enregistrer
         </Button>
       </div>
+
+      <DeleteConfirm
+        open={confirmDelete}
+        entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
+        impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
+        onConfirm={() => {
+          del.mutate(slot.id);
+          setConfirmDelete(false);
+          onClose();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </Modal>
   );
 }
@@ -195,6 +210,7 @@ export function VenuesStep() {
 function VenuesEditor() {
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
+  const { data: reservations = [] } = useReservations();
   const create = useCreateVenue();
   const update = useUpdateVenue();
   const delVenue = useDeleteVenue();
@@ -226,6 +242,7 @@ function VenuesEditor() {
     pendingColorsRef.current = pendingColorsRef.current.filter((c) => !persisted.has(c.toLowerCase()));
   }, [venues]);
   const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
+  const pendingDeleteReservationCount = pendingDeleteVenue ? reservations.filter((r) => r.venueId === pendingDeleteVenue.id).length : 0;
 
   const addVenue = (event: FormEvent) => {
     event.preventDefault();
@@ -385,24 +402,13 @@ function VenuesEditor() {
         </>
       )}
 
-      <ConfirmDialog
+      <DeleteConfirm
         open={pendingDeleteVenue !== null}
-        title="Supprimer ce gymnase ?"
-        description={
-          pendingDeleteVenue ? (
-            <>
-              Le gymnase « {pendingDeleteVenue.name} »
-              {pendingDeleteSlotCount > 0 ? (
-                <>
-                  {" "}
-                  et ses {pendingDeleteSlotCount} créneau{pendingDeleteSlotCount > 1 ? "x" : ""} de disponibilité
-                </>
-              ) : null}{" "}
-              seront supprimés définitivement.
-            </>
-          ) : null
-        }
-        confirmLabel="Supprimer"
+        entityName={pendingDeleteVenue?.name ?? ""}
+        impacts={[
+          { count: pendingDeleteSlotCount, one: "créneau de disponibilité", many: "créneaux de disponibilité" },
+          { count: pendingDeleteReservationCount, one: "réservation d'équipe", many: "réservations d'équipe" },
+        ]}
         onCancel={() => setPendingDeleteVenue(null)}
         onConfirm={() => {
           if (pendingDeleteVenue) {

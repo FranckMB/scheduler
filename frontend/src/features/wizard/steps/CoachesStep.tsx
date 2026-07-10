@@ -2,6 +2,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -50,6 +51,7 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
   const [last, setLast] = useState(coach.lastName);
   const [linkTeam, setLinkTeam] = useState("");
   const [linkRole, setLinkRole] = useState<TeamCoachRole | "PLAYER">("MAIN");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const firstTeam = teams[0]?.id ?? "";
   const addLink = () => {
@@ -85,10 +87,24 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
           <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
           Salarié
         </label>
-        <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => del.mutate(coach.id)}>
+        <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => setConfirmDelete(true)}>
           <Trash2 className="size-4" />
         </Button>
       </div>
+
+      <DeleteConfirm
+        open={confirmDelete}
+        entityName={`${coach.firstName} ${coach.lastName}`.trim()}
+        impacts={[
+          { count: coachLinks.length, one: "équipe coachée", many: "équipes coachées" },
+          { count: playerLinks.length, one: "équipe où il joue", many: "équipes où il joue" },
+        ]}
+        onConfirm={() => {
+          del.mutate(coach.id);
+          setConfirmDelete(false);
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {coachLinks.map((link) => (

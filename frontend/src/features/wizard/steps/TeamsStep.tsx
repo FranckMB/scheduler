@@ -5,6 +5,7 @@ import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -14,7 +15,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
-import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
+import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { ReadonlyTeams } from "./StructureSummary";
 
@@ -214,10 +215,14 @@ function TeamsEditor() {
   const { data: teams = [] } = useWizardTeams();
   const { data: categories = [] } = useSportCategories();
   const { data: tiers = [] } = usePriorityTiers();
+  const { data: reservations = [] } = useReservations();
+  const { data: teamCoaches = [] } = useWizardTeamCoaches();
+  const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const create = useCreateTeam();
   const update = useUpdateTeam();
   const del = useDeleteTeam();
   const reorder = useReorderTeams();
+  const [toDelete, setToDelete] = useState<Team | null>(null);
 
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState(false);
@@ -535,7 +540,7 @@ function TeamsEditor() {
                           categories={categories}
                           tiers={tiers}
                           onField={onField}
-                          onDelete={(t) => del.mutate(t.id)}
+                          onDelete={setToDelete}
                         />
                       ))}
                     </div>
@@ -547,6 +552,22 @@ function TeamsEditor() {
         </>
       )}
 
+      <DeleteConfirm
+        open={toDelete !== null}
+        entityName={toDelete?.name ?? ""}
+        impacts={[
+          { count: reservations.filter((r) => r.teamId === toDelete?.id).length, one: "créneau réservé", many: "créneaux réservés" },
+          { count: teamCoaches.filter((l) => l.teamId === toDelete?.id).length, one: "coach lié", many: "coachs liés" },
+          { count: coachPlayers.filter((l) => l.teamId === toDelete?.id).length, one: "coach-joueur lié", many: "coach-joueurs liés" },
+        ]}
+        onConfirm={() => {
+          if (toDelete) {
+            del.mutate(toDelete.id);
+          }
+          setToDelete(null);
+        }}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }
