@@ -128,6 +128,17 @@ export interface Venue {
   color: string | null;
 }
 
+/** A venue availability window (defined in the wizard). A window with no team
+ *  placement in the schedule is an "empty slot" surfaced in the grid. */
+export interface VenueTrainingSlot {
+  id: string;
+  venueId: string;
+  dayOfWeek: number;
+  startTime: string;
+  durationMinutes: number;
+  capacity: number;
+}
+
 export interface Coach {
   id: string;
   firstName: string;
@@ -254,6 +265,7 @@ export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
 export const getVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
+export const getTrainingSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
 export const getCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
 export const getCategories = (): Promise<Category[]> => collectionAll<Category>("sport_categories");
 export const getTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");

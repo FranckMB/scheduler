@@ -20,11 +20,15 @@ const ORDER: DiagnosticSeverity[] = ["ERROR", "WARNING", "INFO", "SUCCESS"];
 interface DiagnosticsPanelProps {
   diagnostics: Diagnostic[];
   slots: Slot[];
+  /** Synthetic `vide` cells, so an "unused_slot" warning can highlight them. */
+  emptySlots?: Slot[];
   lookups: Lookups;
   onHighlight: (slotIds: Set<string>) => void;
+  /** "unused_slot" warning: bring the concerned venue's column on screen. */
+  onFocusVenue?: (venueId: string) => void;
 }
 
-export function DiagnosticsPanel({ diagnostics, slots, lookups, onHighlight }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue }: DiagnosticsPanelProps) {
   const [openSeverity, setOpenSeverity] = useState<DiagnosticSeverity | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -43,6 +47,13 @@ export function DiagnosticsPanel({ diagnostics, slots, lookups, onHighlight }: D
       return;
     }
     setActiveId(diagnostic.id);
+    // The solver's "unused_slot" warning points at a defined-but-unfilled window:
+    // highlight the matching `vide` cell(s) and bring their venue column on screen.
+    if ("unused_slot" === diagnostic.type && null !== diagnostic.venueId) {
+      onHighlight(new Set(emptySlots.filter((s) => s.venueId === diagnostic.venueId).map((s) => s.id)));
+      onFocusVenue?.(diagnostic.venueId);
+      return;
+    }
     onHighlight(new Set(concernedSlots(diagnostic, slots, lookups).map((c) => c.slotId)));
   }
 

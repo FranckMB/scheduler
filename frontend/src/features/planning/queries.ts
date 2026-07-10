@@ -49,6 +49,10 @@ export function useVenues() {
   return useQuery({ queryKey: ["venues"], queryFn: planningApi.getVenues, staleTime: 300_000 });
 }
 
+export function useTrainingSlots() {
+  return useQuery({ queryKey: ["training-slots"], queryFn: planningApi.getTrainingSlots, staleTime: 300_000 });
+}
+
 export function useCoaches() {
   return useQuery({ queryKey: ["coaches"], queryFn: planningApi.getCoaches, staleTime: 300_000 });
 }
