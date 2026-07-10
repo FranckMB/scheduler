@@ -10,6 +10,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -57,6 +58,25 @@ final class ScheduleExportDataProvider
             $coachNames[$coach->getId()] = trim(\sprintf('%s %s', $coach->getFirstName(), $coach->getLastName()));
         }
 
-        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames);
+        // Defined-but-unfilled venue windows ("créneaux vides"): the same view the
+        // on-screen grid shows. A window is "filled" as soon as ≥1 team is placed
+        // on the same venue+day+start (capacity is not split — MVP, matches the UI).
+        $filled = [];
+        foreach ($slots as $slot) {
+            $filled[$slot->getVenueId() . '|' . $slot->getDayOfWeek() . '|' . $slot->getStartTime()->format('H:i')] = true;
+        }
+        $trainingCriteria = ['clubId' => $clubId, 'seasonId' => $seasonId];
+        if (null !== $venueId) {
+            $trainingCriteria['venueId'] = $venueId;
+        }
+        $emptySlots = [];
+        foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy($trainingCriteria) as $window) {
+            $key = $window->getVenueId() . '|' . $window->getDayOfWeek() . '|' . $window->getStartTime()->format('H:i');
+            if (!isset($filled[$key])) {
+                $emptySlots[] = new ExportEmptyWindow($window->getVenueId(), $window->getDayOfWeek(), $window->getStartTime(), $window->getDurationMinutes());
+            }
+        }
+
+        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots);
     }
 }

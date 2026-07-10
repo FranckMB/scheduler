@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Export\ExportEmptyWindow;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use DateTimeImmutable;
@@ -100,6 +101,11 @@ class PdfGenerator
         foreach ($slots as $slot) {
             $present[$slot->getDayOfWeek()][$slot->getVenueId()] = true;
         }
+        // Empty windows create their (day, venue) column too, so a venue used ONLY
+        // for unfilled windows still gets a column of `vide` cells.
+        foreach ($data->emptySlots as $window) {
+            $present[$window->dayOfWeek][$window->venueId] = true;
+        }
         ksort($present);
         /** @var list<array{day:int,venueId:string}> $columns */
         $columns = [];
@@ -111,7 +117,7 @@ class PdfGenerator
             }
         }
 
-        [$startMin, $endMin] = $this->timeBounds($slots);
+        [$startMin, $endMin] = $this->timeBounds($slots, $data->emptySlots);
 
         // Index slots by column + start step. A step can hold MORE than one slot
         // (a split court runs two teams at the same time in the same gym), so we
@@ -122,9 +128,16 @@ class PdfGenerator
             $startStep = intdiv($this->minutesOf($slot->getStartTime()) - $startMin, self::STEP_MINUTES);
             $byColStep[$key][$startStep][] = $slot;
         }
+        // Empty windows indexed the same way (one per bucket — rendered as `vide`).
+        $emptyByColStep = [];
+        foreach ($data->emptySlots as $window) {
+            $key = $window->dayOfWeek . '|' . $window->venueId;
+            $startStep = intdiv($this->minutesOf($window->startTime) - $startMin, self::STEP_MINUTES);
+            $emptyByColStep[$key][$startStep] = $window;
+        }
 
         $steps = max(1, intdiv($endMin - $startMin, self::STEP_MINUTES));
-        $rows = $this->buildRows($columns, $byColStep, $startMin, $steps, $teamNames, $venues, $coachNames, null !== $venueId);
+        $rows = $this->buildRows($columns, $byColStep, $emptyByColStep, $startMin, $steps, $teamNames, $venues, $coachNames, null !== $venueId);
         $header = $this->buildHeader($columns, $venues);
 
         $scopeLabel = null === $venueId ? 'Tous les gymnases' : ($venues[$venueId]['name'] ?? 'Gymnase');
@@ -140,11 +153,12 @@ class PdfGenerator
     /**
      * @param list<array{day:int,venueId:string}>                   $columns
      * @param array<string, array<int, list<ScheduleSlotTemplate>>> $byColStep
+     * @param array<string, array<int, ExportEmptyWindow>>          $emptyByColStep
      * @param array<string, string>                                 $teamNames
      * @param array<string, array{name:string,color:?string}>       $venues
      * @param array<string, string>                                 $coachNames
      */
-    private function buildRows(array $columns, array $byColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
+    private function buildRows(array $columns, array $byColStep, array $emptyByColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
     {
         // covered[colIndex][step] = true when a rowspan from above occupies the cell.
         $covered = [];
@@ -156,8 +170,21 @@ class PdfGenerator
                 if (isset($covered[$colIndex][$step])) {
                     continue;
                 }
-                $bucket = $byColStep[$col['day'] . '|' . $col['venueId']][$step] ?? [];
+                $colKey = $col['day'] . '|' . $col['venueId'];
+                $bucket = $byColStep[$colKey][$step] ?? [];
                 if ([] === $bucket) {
+                    // A defined-but-unfilled window here → a `vide` cell spanning its
+                    // duration; otherwise a blank gap.
+                    $window = $emptyByColStep[$colKey][$step] ?? null;
+                    if (null !== $window) {
+                        $span = max(1, (int) ceil($window->durationMinutes / self::STEP_MINUTES));
+                        for ($k = 1; $k < $span; ++$k) {
+                            $covered[$colIndex][$step + $k] = true;
+                        }
+                        $cells .= \sprintf('<td class="cell empty" rowspan="%d">vide</td>', $span);
+
+                        continue;
+                    }
                     $cells .= '<td class="cell"></td>';
 
                     continue;
@@ -244,12 +271,13 @@ class PdfGenerator
 
     /**
      * @param array<ScheduleSlotTemplate> $slots
+     * @param list<ExportEmptyWindow>     $emptySlots
      *
      * @return array{0:int,1:int} floor(min start)/ceil(max end) to the hour
      */
-    private function timeBounds(array $slots): array
+    private function timeBounds(array $slots, array $emptySlots = []): array
     {
-        if ([] === $slots) {
+        if ([] === $slots && [] === $emptySlots) {
             return [17 * 60, 21 * 60];
         }
         $min = \PHP_INT_MAX;
@@ -258,6 +286,11 @@ class PdfGenerator
             $start = $this->minutesOf($slot->getStartTime());
             $min = min($min, $start);
             $max = max($max, $start + $slot->getDurationMinutes());
+        }
+        foreach ($emptySlots as $window) {
+            $start = $this->minutesOf($window->startTime);
+            $min = min($min, $start);
+            $max = max($max, $start + $window->durationMinutes);
         }
 
         return [intdiv($min, 60) * 60, (int) (ceil($max / 60) * 60)];
@@ -311,6 +344,7 @@ class PdfGenerator
                 td.filled .team { display: block; font-weight: bold; line-height: 1.1; }
                 td.filled .sub { display: block; font-size: 8px; opacity: 0.9; line-height: 1.1; }
                 .empty { color: #999; font-style: italic; }
+                td.cell.empty { text-align: center; vertical-align: middle; color: #999; font-style: italic; font-size: 8px; border: 1px dashed #ccc; }
             </style></head><body>
                 <header><h1>%s</h1><span class="scope">%s</span><span class="sched">%s</span></header>
                 %s
