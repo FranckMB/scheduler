@@ -9,6 +9,7 @@ use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\TenantOwnedInterface;
+use App\Service\EntityCascadeDeleter;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
@@ -16,6 +17,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Contracts\Service\Attribute\Required;
 
 /**
  * @template TEntity of object
@@ -26,6 +28,12 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 abstract class AbstractStateProcessor implements ProcessorInterface
 {
+    /**
+     * Set via #[Required] (not the constructor) so the four cascade-delete
+     * subclasses share it without every processor rewriting the base ctor.
+     */
+    protected ?EntityCascadeDeleter $cascadeDeleter = null;
+
     public function __construct(
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
@@ -33,6 +41,12 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         protected readonly SeasonAccessGuard $seasonAccessGuard,
         protected readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
+
+    #[Required]
+    public function setCascadeDeleter(EntityCascadeDeleter $cascadeDeleter): void
+    {
+        $this->cascadeDeleter = $cascadeDeleter;
+    }
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
     {
@@ -194,7 +208,15 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             throw new AccessDeniedHttpException('Access denied');
         }
 
+        // Entities carry no ORM/DB cascade — a subclass may purge the deleted
+        // row's logical children (reservations, coach links, constraints…) here
+        // so a bare delete never orphans them. No-op by default.
+        $this->cascadeBeforeDelete($entity);
+
         $this->entityManager->remove($entity);
         $this->entityManager->flush();
     }
+
+    /** Purge the logical children of $entity before it is removed. No-op unless overridden. */
+    protected function cascadeBeforeDelete(object $entity): void {}
 }

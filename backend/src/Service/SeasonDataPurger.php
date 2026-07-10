@@ -34,6 +34,8 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class SeasonDataPurger
 {
+    use DisablesTenantFilters;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
     ) {}
@@ -43,12 +45,7 @@ final class SeasonDataPurger
      */
     public function purge(string $clubId, string $seasonId, bool $deleteSeasonRow = false): int
     {
-        $filters = $this->entityManager->getFilters();
-        foreach (['tenant_filter', 'season_filter'] as $filterName) {
-            if ($filters->isEnabled($filterName)) {
-                $filters->disable($filterName);
-            }
-        }
+        $this->disableTenantFilters($this->entityManager);
 
         $deleted = 0;
 
