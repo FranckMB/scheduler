@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarX2, CheckCircle2, Pencil } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMe, useRenamePlanning } from "@/features/auth/queries";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
@@ -15,9 +15,10 @@ import { OverlaysExistError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
+import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useGenerate, useLockSlot, useMoveSlot, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -131,6 +132,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const { data: slots = [] } = useSlots(validScheduleId);
   const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
+  const { data: trainingSlots = [] } = useTrainingSlots();
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
   const { data: coaches = [] } = useCoaches();
@@ -242,8 +244,25 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     };
   }, [teams, venues, coaches, teamCoaches, coachPlayers]);
 
+  // Defined venue windows the solver left unfilled ("créneaux vides"). Injected
+  // into the grid in the GYMNASE view only (they have no team/coach) so they
+  // show as `vide` cells even without a click; also listed as warnings below.
+  const emptySlots = useMemo(() => computeEmptySlots(trainingSlots, slots, validScheduleId ?? ""), [trainingSlots, slots, validScheduleId]);
+  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+
   const resourceGroups = useMemo(() => availableResourceGroups(slots, viewMode, lookups, tiers), [slots, viewMode, lookups, tiers]);
-  const model = useMemo(() => buildGrid(slots, viewMode, lookups, new Set(resourceFilter)), [slots, viewMode, lookups, resourceFilter]);
+  const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
+
+  // Clicking the solver's "unused_slot" warning brings its venue column on screen
+  // (venue view, filtered to that venue) so the concerned `vide` cell is visible.
+  const focusVenue = useCallback(
+    (venueId: string) => {
+      setViewMode("gymnase");
+      clearResourceFilter();
+      toggleResource(venueId);
+    },
+    [setViewMode, clearResourceFilter, toggleResource],
+  );
 
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
   const categoryLabel = useMemo(() => {
@@ -386,7 +405,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {isReadOnly ? null : (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} lookups={lookups} onHighlight={setHighlightSlotIds} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} />
                         </div>
                       )}
                     </div>

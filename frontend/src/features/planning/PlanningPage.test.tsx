@@ -20,10 +20,21 @@ vi.mock("./api", () => ({
     ]),
   ),
   getDiagnostics: vi.fn(() =>
-    Promise.resolve([{ id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, message: "Conflit de gymnase.", suggestions: [] }]),
+    Promise.resolve([
+      { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, message: "Conflit de gymnase.", suggestions: [] },
+      // The solver's own "unused_slot" warning for the ts-2 empty window.
+      { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
+    ]),
   ),
   getTeams: vi.fn(() => Promise.resolve([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 }])),
   getVenues: vi.fn(() => Promise.resolve([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }])),
+  // ts-1 matches slot-1 (filled) ; ts-2 is a defined-but-unfilled window → "vide".
+  getTrainingSlots: vi.fn(() =>
+    Promise.resolve([
+      { id: "ts-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1 },
+      { id: "ts-2", venueId: "venue-1", dayOfWeek: 2, startTime: "19:00:00", durationMinutes: 90, capacity: 1 },
+    ]),
+  ),
   getCoaches: vi.fn(() => Promise.resolve([{ id: "coach-1", firstName: "Jean", lastName: "Dupont" }])),
   getCategories: vi.fn(() => Promise.resolve([{ id: "cat-1", name: "U11" }])),
   getTeamCoaches: vi.fn(() => Promise.resolve([{ id: "tc-1", teamId: "team-1", coachId: "coach-1", role: "MAIN" }])),
@@ -93,5 +104,14 @@ describe("PlanningPage (integration)", () => {
     renderWithProviders(<PlanningPage />);
     const group = await screen.findByRole("button", { name: /Erreurs/ });
     expect(within(group).getByText("1")).toBeInTheDocument();
+  });
+
+  it("renders defined-but-unfilled windows as 'vide' cells alongside the solver's unused_slot warning", async () => {
+    renderWithProviders(<PlanningPage />);
+    // ts-2 (Gymnase Alpha, Mardi 19:00) has no placement → a `vide` cell in the grid.
+    expect(await screen.findByText("vide")).toBeInTheDocument();
+    // The solver's own unused_slot warning is listed under "Alertes" (no duplicate).
+    const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
+    expect(within(warnGroup).getByText("1")).toBeInTheDocument();
   });
 });

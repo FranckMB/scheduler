@@ -6,6 +6,7 @@ import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { tint } from "@/shared/lib/color";
 import { cn } from "@/shared/lib/utils";
 
+import { isEmptySlotId } from "./lib/emptySlots";
 import type { GridModel } from "./lib/grid";
 
 const ROW_HEIGHT = 16; // px per 15-min step (1h = 64px)
@@ -100,8 +101,35 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
 
         {/* Slots — overlapping ones share the column in side-by-side lanes */}
         {cells.map((cell) => {
+          const highlighting = highlightSlotIds && highlightSlotIds.size > 0;
+          const dimmed = highlighting && !highlightSlotIds.has(cell.slotId);
+          // Empty slots = defined venue windows the solver left unfilled. Muted,
+          // dashed, labelled "vide", not selectable — but still highlightable so a
+          // "créneau vide" warning can draw the eye to them.
+          if (isEmptySlotId(cell.slotId)) {
+            const flagged = highlighting && highlightSlotIds.has(cell.slotId);
+            return (
+              <div
+                key={cell.key}
+                title={`Créneau vide · ${cell.venueLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                className={cn(
+                  "z-10 m-px flex items-center justify-center overflow-hidden rounded border border-dashed border-muted-foreground/40 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70 transition",
+                  dimmed ? "opacity-30" : "",
+                  flagged ? "border-warning ring-2 ring-warning text-warning" : "",
+                )}
+                style={{
+                  gridColumn: cell.gridColumn,
+                  gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
+                  justifySelf: "start",
+                  width: `${100 / cell.laneCount}%`,
+                  transform: `translateX(${cell.lane * 100}%)`,
+                }}
+              >
+                vide
+              </div>
+            );
+          }
           const selected = cell.slotId === selectedSlotId;
-          const dimmed = highlightSlotIds && highlightSlotIds.size > 0 && !highlightSlotIds.has(cell.slotId);
           return (
             <button
               key={cell.key}
