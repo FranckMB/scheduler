@@ -6,7 +6,7 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
@@ -307,6 +307,52 @@ export function ConstraintsStep() {
 
   const list = constraints.filter((c) => c.family === family);
 
+  // Group the list for readability: GROUP (tag) constraints first, then one
+  // section per team in canonical rank order (Fanion S, A, B…), then club-wide,
+  // coach, and any remainder — instead of a flat, unordered list.
+  const sections = useMemo(() => {
+    const byTag = new Map<string, Constraint[]>();
+    const byTeam = new Map<string, Constraint[]>();
+    const byCoach = new Map<string, Constraint[]>();
+    const clubWide: Constraint[] = [];
+    const other: Constraint[] = [];
+    const push = (m: Map<string, Constraint[]>, k: string, c: Constraint): void => {
+      m.set(k, [...(m.get(k) ?? []), c]);
+    };
+    for (const c of list) {
+      const tag = "string" === typeof c.config?.targetTag ? (c.config.targetTag as string) : null;
+      if ("CLUB" === c.scope && null !== tag) {
+        push(byTag, tag, c);
+      } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
+        push(byTeam, c.scopeTargetId, c);
+      } else if ("COACH" === c.scope && null !== c.scopeTargetId) {
+        push(byCoach, c.scopeTargetId, c);
+      } else if ("CLUB" === c.scope) {
+        clubWide.push(c);
+      } else {
+        other.push(c);
+      }
+    }
+    const out: { key: string; label: string; items: Constraint[] }[] = [];
+    [...byTag.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tag}`, items }));
+    if (clubWide.length > 0) {
+      out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
+    }
+    [...teams].sort(compareTeamsByRank).forEach((t) => {
+      const items = byTeam.get(t.id);
+      if (items && items.length > 0) {
+        out.push({ key: `t:${t.id}`, label: t.name, items });
+      }
+    });
+    [...byCoach.entries()].forEach(([cid, items]) => out.push({ key: `c:${cid}`, label: coachName.get(cid) ?? "Coach", items }));
+    if (other.length > 0) {
+      out.push({ key: "other", label: "Autres", items: other });
+    }
+    return out;
+  // coachName is a fresh Map each render; teams/list are the real inputs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, teams]);
+
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
@@ -465,24 +511,31 @@ export function ConstraintsStep() {
         </Button>
       </div>
 
-      {/* List for the active family */}
+      {/* List for the active family — grouped by group (tag) then team (ranked). */}
       {0 === list.length ? (
         <EmptyHint>Aucune contrainte dans cette famille.</EmptyHint>
       ) : (
-        <ul className="flex flex-col gap-1">
-          {list.map((c: Constraint) => (
-            <li key={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
-              <span className="flex-1">{c.name}</span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
-              <button type="button" aria-label="Modifier" className="text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
-                <Pencil className="size-4" />
-              </button>
-              <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
-                <Trash2 className="size-4" />
-              </button>
-            </li>
+        <div className="flex flex-col gap-3">
+          {sections.map((section) => (
+            <div key={section.key}>
+              <p data-testid="constraint-section" className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</p>
+              <ul className="flex flex-col gap-1">
+                {section.items.map((c: Constraint) => (
+                  <li key={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
+                    <span className="flex-1">{c.name}</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
+                    <button type="button" aria-label="Modifier" className="text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
+                      <Pencil className="size-4" />
+                    </button>
+                    <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
+                      <Trash2 className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
         </>
       )}

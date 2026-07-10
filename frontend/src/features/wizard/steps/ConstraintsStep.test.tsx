@@ -71,6 +71,20 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(options).not.toContain("FEMININE");
   });
 
+  it("groups the constraints list: group (tag) sections first, then teams in rank order", () => {
+    h.list = [
+      { id: "cg", name: "Groupe SENIOR · pas après 21:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { targetTag: "SENIOR" }, isActive: true },
+      { id: "cb", name: "SM1 · pas après 21:00", scope: "TEAM", scopeTargetId: "t1", family: "TIME", ruleType: "PREFERRED", config: {}, isActive: true }, // t1 = tier B
+      { id: "cs", name: "Fanion · pas après 21:00", scope: "TEAM", scopeTargetId: "t2", family: "TIME", ruleType: "PREFERRED", config: {}, isActive: true }, // t2 = tier S
+    ] as Constraint[];
+
+    renderWithProviders(<ConstraintsStep />);
+
+    // Groups first, then the teams in canonical rank order (Fanion=S before SM1=B).
+    const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
+    expect(sections).toEqual(["Groupe SENIOR", "Fanion", "SM1"]);
+  });
+
   it("offers exactly Obligatoire/Préféré/Verrouillé — BONUS is gone (ENG-12)", () => {
     renderWithProviders(<ConstraintsStep />);
     const rule = screen.getByLabelText("Règle");
