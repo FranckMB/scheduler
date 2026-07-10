@@ -6,8 +6,11 @@ namespace App\Service;
 
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
+use App\Entity\Competition;
 use App\Entity\Constraint;
+use App\Entity\Fixture;
 use App\Entity\Reservation;
+use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
@@ -15,6 +18,7 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
+use App\Enum\LockLevel;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -36,6 +40,8 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class EntityCascadeDeleter
 {
+    use DisablesTenantFilters;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
     ) {}
@@ -51,6 +57,10 @@ final class EntityCascadeDeleter
             $this->deleteByField(TeamCoach::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(CoachPlayerMembership::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'teamId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(ScheduleDiagnostic::class, 'teamId', $teamId, $clubId, $seasonId);
+            // Match module: a team's fixtures + competition enrolments key on teamId.
+            $this->deleteByField(Fixture::class, 'teamId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(Competition::class, 'teamId', $teamId, $clubId, $seasonId);
             // TeamTagAssignment has a season_id but NO club_id (scoped by season).
             $this->deleteByField(TeamTagAssignment::class, 'teamId', $teamId, null, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
@@ -68,9 +78,13 @@ final class EntityCascadeDeleter
             $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(ScheduleDiagnostic::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::FACILITY, $venueId, $clubId, $seasonId);
             $this->clearParentRef(Team::class, 'forcedVenueId', $venueId, $clubId, $seasonId);
             $this->clearParentRef(Venue::class, 'parentVenueId', $venueId, $clubId, $seasonId);
+            // A fixture's venue is optional (match may be TBD) — the fixture
+            // survives the venue delete, it just loses its (now-gone) venue.
+            $this->clearParentRef(Fixture::class, 'venueId', $venueId, $clubId, $seasonId);
         });
     }
 
@@ -83,6 +97,7 @@ final class EntityCascadeDeleter
         $this->withoutTenantFilters(function () use ($clubId, $seasonId, $coachId): void {
             $this->deleteByField(TeamCoach::class, 'coachId', $coachId, $clubId, $seasonId);
             $this->deleteByField(CoachPlayerMembership::class, 'coachId', $coachId, $clubId, $seasonId);
+            $this->deleteByField(ScheduleDiagnostic::class, 'coachId', $coachId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::COACH, $coachId, $clubId, $seasonId);
             // A slot placement keeps existing without its (now-deleted) coach —
             // the engine leaves slot.coachId empty anyway, so null it out.
@@ -104,23 +119,35 @@ final class EntityCascadeDeleter
         $seasonId = $slot->getSeasonId();
 
         $this->withoutTenantFilters(function () use ($slot, $clubId, $seasonId): void {
-            foreach ([Reservation::class, ScheduleSlotTemplate::class] as $entityClass) {
-                $this->entityManager->createQueryBuilder()
-                    ->delete($entityClass, 'e')
-                    ->where('e.clubId = :clubId')
-                    ->andWhere('e.seasonId = :seasonId')
-                    ->andWhere('e.venueId = :venueId')
-                    ->andWhere('e.dayOfWeek = :dayOfWeek')
-                    ->andWhere('e.startTime = :startTime')
-                    ->setParameter('clubId', $clubId)
-                    ->setParameter('seasonId', $seasonId)
-                    ->setParameter('venueId', $slot->getVenueId())
-                    ->setParameter('dayOfWeek', $slot->getDayOfWeek())
-                    ->setParameter('startTime', $slot->getStartTime())
-                    ->getQuery()
-                    ->execute();
-            }
+            // Delete the reservations pinned to this slot, and ONLY the HARD
+            // templates those reservations materialised (same idiom as
+            // ReservationStateProcessor). Never the SOFT/NONE placements the
+            // solver chose on that venue/day/time in already-generated
+            // schedules — those are results, not pins, and belong to their
+            // own schedule, not to this availability slot.
+            $this->deleteBySlotKey(Reservation::class, $slot, $clubId, $seasonId, hardOnly: false);
+            $this->deleteBySlotKey(ScheduleSlotTemplate::class, $slot, $clubId, $seasonId, hardOnly: true);
         });
+    }
+
+    private function deleteBySlotKey(string $entityClass, VenueTrainingSlot $slot, string $clubId, string $seasonId, bool $hardOnly): void
+    {
+        $qb = $this->entityManager->createQueryBuilder()
+            ->delete($entityClass, 'e')
+            ->where('e.clubId = :clubId')
+            ->andWhere('e.seasonId = :seasonId')
+            ->andWhere('e.venueId = :venueId')
+            ->andWhere('e.dayOfWeek = :dayOfWeek')
+            ->andWhere('e.startTime = :startTime')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->setParameter('venueId', $slot->getVenueId())
+            ->setParameter('dayOfWeek', $slot->getDayOfWeek())
+            ->setParameter('startTime', $slot->getStartTime());
+        if ($hardOnly) {
+            $qb->andWhere('e.lockLevel = :hard')->setParameter('hard', LockLevel::HARD);
+        }
+        $qb->getQuery()->execute();
     }
 
     private function deleteByField(string $entityClass, string $field, string $value, ?string $clubId, string $seasonId): void
@@ -169,26 +196,9 @@ final class EntityCascadeDeleter
             ->execute();
     }
 
-    /**
-     * Run $work with the tenant/season Doctrine filters disabled (same as
-     * SeasonDataPurger): they alias the table name, invalid SQL for the
-     * reserved-word `constraint` table. NOT re-enabled — Doctrine drops a
-     * filter's bound parameters when it is disabled then re-enabled (the next
-     * query would throw "Parameter 'season_id' does not exist"). Leaving them
-     * off is safe: this runs in the DELETE processor, whose 204 response needs
-     * no further tenant-scoped read, and the per-request EM dies after. RLS
-     * still enforces the club boundary at the DB, plus the explicit clubId +
-     * seasonId scope on every statement.
-     */
     private function withoutTenantFilters(callable $work): void
     {
-        $filters = $this->entityManager->getFilters();
-        foreach (['tenant_filter', 'season_filter'] as $filterName) {
-            if ($filters->isEnabled($filterName)) {
-                $filters->disable($filterName);
-            }
-        }
-
+        $this->disableTenantFilters($this->entityManager);
         $work();
     }
 }

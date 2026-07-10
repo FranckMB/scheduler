@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Entity\Constraint;
+use App\Entity\ScheduleSlotTemplate;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
+use App\Service\DisablesTenantFilters;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -33,6 +37,8 @@ use Throwable;
 )]
 final class PurgeOrphansCommand extends Command
 {
+    use DisablesTenantFilters;
+
     /** DQL fragments identifying each orphan class, keyed by a human label. Each references its own alias. */
     private const ORPHAN_DQL = [
         'réservations sans créneau' => [
@@ -89,10 +95,9 @@ final class PurgeOrphansCommand extends Command
         }
 
         $verb = $force ? 'supprimé(s)' : 'à supprimer (dry-run)';
-        foreach (self::ORPHAN_DQL as $label => $_) {
-            $io->writeln(\sprintf('  %d %s %s', $totals[$label] ?? 0, $label, $verb));
+        foreach ($totals as $label => $count) {
+            $io->writeln(\sprintf('  %d %s %s', $count, $label, $verb));
         }
-        $io->writeln(\sprintf('  %d templates HARD orphelins %s', $totals['templates HARD orphelins'] ?? 0, $verb));
         if (!$force) {
             $io->note('Dry-run : relancez avec --force pour supprimer.');
         }
@@ -106,23 +111,31 @@ final class PurgeOrphansCommand extends Command
         $this->tenantConnectionContext->setClubId($clubId);
         // Commands don't go through the web tenant listener, but disable the
         // filters defensively (they alias tables, breaking these subqueries).
-        $filters = $this->entityManager->getFilters();
-        foreach (['tenant_filter', 'season_filter'] as $filterName) {
-            if ($filters->isEnabled($filterName)) {
-                $filters->disable($filterName);
-            }
-        }
+        $this->disableTenantFilters($this->entityManager);
 
         $counts = [];
         foreach (self::ORPHAN_DQL as $label => $spec) {
             $counts[$label] = $this->countOrDelete($spec['entity'], $spec['alias'], $spec['where'], [], $force);
         }
-        // HARD slot templates whose team or venue is gone (a stale forced pin).
+        // HARD templates whose availability slot is GONE (deleted pre-cascade) —
+        // team+venue may still exist, so keying on the slot is what catches the
+        // phantom forced pin this whole change targets — or whose team is gone.
         $counts['templates HARD orphelins'] = $this->countOrDelete(
-            \App\Entity\ScheduleSlotTemplate::class,
+            ScheduleSlotTemplate::class,
             'st',
-            'st.lockLevel = :hard AND (NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = st.teamId) OR NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = st.venueId))',
+            'st.lockLevel = :hard AND (NOT EXISTS (SELECT 1 FROM App\Entity\VenueTrainingSlot s WHERE s.venueId = st.venueId AND s.dayOfWeek = st.dayOfWeek AND s.startTime = st.startTime) OR NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = st.teamId))',
             ['hard' => LockLevel::HARD],
+            $force,
+        );
+        // Constraints whose scoped target (team / coach / venue) was deleted
+        // before cascade existed — ScheduleConstraintBuilder still feeds them.
+        $counts['contraintes sans cible'] = $this->countOrDelete(
+            Constraint::class,
+            'c',
+            '(c.scope = :team AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = c.scopeTargetId)) '
+            . 'OR (c.scope = :coach AND NOT EXISTS (SELECT 1 FROM App\Entity\Coach co WHERE co.id = c.scopeTargetId)) '
+            . 'OR (c.scope = :facility AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = c.scopeTargetId))',
+            ['team' => ConstraintScope::TEAM, 'coach' => ConstraintScope::COACH, 'facility' => ConstraintScope::FACILITY],
             $force,
         );
 
