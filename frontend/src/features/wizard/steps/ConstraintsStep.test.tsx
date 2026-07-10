@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   resCreate: vi.fn(),
   resDelete: vi.fn(),
   reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
+  tags: [] as { id: string; name: string; color: string | null; isSystem: boolean }[],
+  tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
 
 vi.mock("../queries", () => ({
@@ -24,7 +26,8 @@ vi.mock("../queries", () => ({
     ],
   }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
-  useWizardTeamTags: () => ({ data: [] }),
+  useWizardTeamTags: () => ({ data: h.tags }),
+  useWizardTeamTagAssignments: () => ({ data: h.tagAssignments }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
@@ -49,6 +52,23 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     h.createMut.mockClear();
     h.updateMut.mockClear();
     h.list = [];
+    h.tags = [];
+    h.tagAssignments = [];
+  });
+
+  it("only offers groups (tags) that have at least one assigned team", () => {
+    h.tags = [
+      { id: "tag-fem", name: "FEMININE", color: null, isSystem: true },
+      { id: "tag-sen", name: "SENIOR", color: null, isSystem: true },
+    ];
+    // Only SENIOR is assigned to a team — FEMININE concerns no team.
+    h.tagAssignments = [{ id: "a1", teamId: "t1", tagId: "tag-sen", seasonId: "s1" }];
+
+    renderWithProviders(<ConstraintsStep />);
+    const target = screen.getByRole("combobox", { name: "Cible" });
+    const options = Array.from(target.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toContain("SENIOR");
+    expect(options).not.toContain("FEMININE");
   });
 
   it("offers exactly Obligatoire/Préféré/Verrouillé — BONUS is gone (ENG-12)", () => {

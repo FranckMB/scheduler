@@ -218,6 +218,17 @@ export interface TeamTag {
 
 export const listTeamTags = (): Promise<TeamTag[]> => collectionAll<TeamTag>("team_tags");
 
+/** Explicit team→tag link (season-scoped). A tag with no assignment concerns no
+ *  team of the club — it must not appear in the constraint group selector. */
+export interface TeamTagAssignment {
+  id: string;
+  teamId: string;
+  tagId: string;
+  seasonId: string;
+}
+
+export const listTeamTagAssignments = (): Promise<TeamTagAssignment[]> => collectionAll<TeamTagAssignment>("team_tag_assignments");
+
 /** Base plan constraints (permanent=1) or a period's dated constraints (calendarEntryId). */
 export const listConstraints = (params?: Record<string, string>): Promise<Constraint[]> => collectionAll<Constraint>("constraints", params);
 export const createConstraint = (body: ConstraintPayload): Promise<Constraint> => api.post("constraints", { json: { isActive: true, ...body } }).json();

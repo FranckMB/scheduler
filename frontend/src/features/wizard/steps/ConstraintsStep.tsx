@@ -1,5 +1,5 @@
 import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoaches, useWizardConstraints, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { ReservationPanel } from "./ReservationPanel";
 
@@ -61,6 +61,7 @@ export function ConstraintsStep() {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
+  const { data: tagAssignments = [] } = useWizardTeamTagAssignments();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: venues = [] } = useWizardVenues();
   const create = useCreateConstraint();
@@ -274,12 +275,18 @@ export function ConstraintsStep() {
     setEditingId(c.id);
   };
 
+  // Only groups (tags) that ACTUALLY concern a team of the club: the backend
+  // always creates the 21 system tags, but a group with no assigned team (e.g.
+  // FEMININE when the club has no female team) must never appear in the selector.
+  const assignedTagIds = useMemo(() => new Set(tagAssignments.map((a) => a.tagId)), [tagAssignments]);
+  const visibleTags = useMemo(() => tags.filter((t) => assignedTagIds.has(t.id)), [tags, assignedTagIds]);
+
   const teamPicker = (
     <Select aria-label="Cible" title="Qui est concerné : tout le club, un groupe (tag), ou une équipe précise" className="h-8 w-48" value={target} onChange={(e) => setTarget(e.target.value)}>
       <option value="">Toutes les équipes</option>
-      {tags.length > 0 ? (
+      {visibleTags.length > 0 ? (
         <optgroup label="Groupes">
-          {tags.map((t) => (
+          {visibleTags.map((t) => (
             <option key={t.id} value={`tag:${t.name}`}>
               {t.name}
             </option>
