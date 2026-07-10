@@ -126,6 +126,25 @@ class Club
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $mainVenueAddress = null;
 
+    // FFBB autofill (lot C): institutional club data pulled from the FFBB API at
+    // creation. Complement the lot B contact fields (address/phone/email above).
+    #[ORM\Column(type: 'string', length: 16, nullable: true)]
+    private ?string $postalCode = null;
+
+    #[ORM\Column(type: 'string', length: 120, nullable: true)]
+    private ?string $city = null;
+
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $website = null;
+
+    // Club geolocation (from the FFBB API cartography). Drives club-to-club
+    // travel-time estimation for match scheduling (cf. MatchFootprint).
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $latitude = null;
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $longitude = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -524,6 +543,66 @@ class Club
     public function setMainVenueAddress(?string $mainVenueAddress): self
     {
         $this->mainVenueAddress = $mainVenueAddress;
+
+        return $this;
+    }
+
+    public function getPostalCode(): ?string
+    {
+        return $this->postalCode;
+    }
+
+    public function setPostalCode(?string $postalCode): self
+    {
+        $this->postalCode = $postalCode;
+
+        return $this;
+    }
+
+    public function getCity(): ?string
+    {
+        return $this->city;
+    }
+
+    public function setCity(?string $city): self
+    {
+        $this->city = $city;
+
+        return $this;
+    }
+
+    public function getWebsite(): ?string
+    {
+        return $this->website;
+    }
+
+    public function setWebsite(?string $website): self
+    {
+        $this->website = $website;
+
+        return $this;
+    }
+
+    public function getLatitude(): ?float
+    {
+        return $this->latitude;
+    }
+
+    public function setLatitude(?float $latitude): self
+    {
+        $this->latitude = $latitude;
+
+        return $this;
+    }
+
+    public function getLongitude(): ?float
+    {
+        return $this->longitude;
+    }
+
+    public function setLongitude(?float $longitude): self
+    {
+        $this->longitude = $longitude;
 
         return $this;
     }

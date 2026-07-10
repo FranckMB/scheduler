@@ -2,7 +2,13 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const me = { data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } }, isLoading: false };
+import type { MeResponse } from "@/features/auth/api";
+
+type ClubMock = (Partial<NonNullable<MeResponse["club"]>> & { name: string }) | null;
+const me: { data: { role: string; club: ClubMock }; isLoading: boolean } = {
+  data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } },
+  isLoading: false,
+};
 const updateClubInfo = vi.fn();
 
 vi.mock("@/features/auth/queries", () => ({
@@ -34,6 +40,31 @@ describe("ClubPage", () => {
     expect(screen.getByText(/Aucune demande en attente/)).toBeInTheDocument();
     // Visuel section present but collapsed.
     expect(screen.getByRole("button", { name: /Visuel/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows the FFBB contacts section with the 3 blocks", async () => {
+    me.data = {
+      role: "admin",
+      club: {
+        name: "BC Test",
+        accentColor: null,
+        accentColorDark: null,
+        accentPalette: null,
+        logoUrl: null,
+        address: "5 rue X",
+        postalCode: "69100",
+        city: "Villeurbanne",
+        contactEmail: "contact@bccl.fr",
+        ffbbCommittee: { name: "Comité du Rhône", email: "cdrbb@basketrhone.com", address: null, postalCode: null, city: null, phone: null, logoUrl: null },
+        ffbbLeague: { name: "Ligue AURA", email: null, address: null, postalCode: null, city: null, phone: null, logoUrl: null },
+      },
+    };
+    const user = userEvent.setup();
+    render(<ClubPage />);
+    await user.click(screen.getByRole("button", { name: /Contacts FFBB/ }));
+    expect(screen.getByText("Comité du Rhône")).toBeInTheDocument();
+    expect(screen.getByText("Ligue AURA")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "contact@bccl.fr" })).toHaveAttribute("href", "mailto:contact@bccl.fr");
   });
 
   it("shows the FFBB club-info section for an admin and saves it", async () => {

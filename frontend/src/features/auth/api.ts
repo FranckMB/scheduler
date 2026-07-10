@@ -10,6 +10,17 @@ export interface MeSeason {
   isReadonly: boolean;
 }
 
+/** FFBB institutional contact block (lot C) — league or committee. */
+export interface FfbbOrganisme {
+  name: string;
+  address: string | null;
+  postalCode: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  logoUrl: string | null;
+}
+
 export interface MeResponse {
   id: string;
   email: string;
@@ -40,6 +51,14 @@ export interface MeResponse {
     presidentEmail: string | null;
     mainVenueName: string | null;
     mainVenueAddress: string | null;
+    // FFBB autofill (lot C): institutional club data + shared league/committee blocks.
+    postalCode: string | null;
+    city: string | null;
+    website: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    ffbbCommittee: FfbbOrganisme | null;
+    ffbbLeague: FfbbOrganisme | null;
   } | null;
   /** Gates of the SELECTED season (X-Season-Id), else the current one. */
   baselineScheduleId: string | null;

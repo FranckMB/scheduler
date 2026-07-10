@@ -44,6 +44,8 @@ security:
         # unauthenticated consumers by design (emails, exported PDFs, future
         # public pages). The club id is an unguessable uuid; only GET is public.
         - { path: ^/api/clubs/[^/]+/logo$, methods: [GET], roles: PUBLIC_ACCESS }
+        # Lot C: rehosted FFBB league/committee logos — public brand assets, GET only (same SEC-10 rationale).
+        - { path: ^/api/ffbb-logos/, methods: [GET], roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:

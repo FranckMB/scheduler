@@ -26,3 +26,4 @@ framework:
         routing:
             App\Message\GenerateScheduleMessage: async
             App\Message\ExportPdfMessage: async
+            App\Message\PopulateClubFromFfbbMessage: async

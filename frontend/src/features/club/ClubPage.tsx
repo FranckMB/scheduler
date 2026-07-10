@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
-import type { MeResponse } from "@/features/auth/api";
+import type { FfbbOrganisme, MeResponse } from "@/features/auth/api";
 import { PendingMembersSection } from "@/features/auth/PendingMembersSection";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
@@ -356,6 +356,68 @@ function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   );
 }
 
+/** One read-only FFBB contact block (Club / Comité / Ligue). */
+function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & { website?: string | null }) | null }) {
+  const filled = data && (data.address || data.city || data.phone || data.email);
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="mb-2 flex items-center gap-2">
+        {data?.logoUrl ? <img src={data.logoUrl} alt="" className="h-8 w-8 shrink-0 object-contain" /> : null}
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{title}</p>
+          <p className="truncate text-sm font-semibold">{data?.name ?? "—"}</p>
+        </div>
+      </div>
+      {filled ? (
+        <dl className="space-y-0.5 text-sm">
+          {data.address ? <dd>{data.address}</dd> : null}
+          {data.postalCode || data.city ? <dd>{[data.postalCode, data.city].filter(Boolean).join(" ")}</dd> : null}
+          {data.phone ? <dd>{data.phone}</dd> : null}
+          {data.email ? (
+            <dd>
+              <a href={`mailto:${data.email}`} className="text-accent underline underline-offset-2">
+                {data.email}
+              </a>
+            </dd>
+          ) : null}
+          {data.website ? (
+            <dd>
+              <a href={data.website} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
+                {data.website}
+              </a>
+            </dd>
+          ) : null}
+        </dl>
+      ) : (
+        <p className="text-xs text-muted-foreground">Données FFBB non disponibles.</p>
+      )}
+    </div>
+  );
+}
+
+/** FFBB institutional contacts (lot C): Club · Comité · Ligue, read-only. */
+function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <ContactBlock
+        title="Club"
+        data={{
+          name: club.name,
+          address: club.address,
+          postalCode: club.postalCode,
+          city: club.city,
+          phone: club.contactPhone,
+          email: club.contactEmail,
+          logoUrl: club.logoUrl,
+          website: club.website,
+        }}
+      />
+      <ContactBlock title="Comité" data={club.ffbbCommittee} />
+      <ContactBlock title="Ligue" data={club.ffbbLeague} />
+    </div>
+  );
+}
+
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   return (
@@ -382,6 +444,14 @@ function ClubHub({ me }: { me: MeResponse }) {
           <AccordionSection title="Informations du club">
             {/* key = server signature: remount (re-seed the form) when ["me"] refetches after a save. */}
             <ClubInfoSection key={INFO_KEYS.map((k) => me.club![k] ?? "").join("")} club={me.club} />
+          </AccordionSection>
+        ) : null}
+        {isAdmin && me.club ? (
+          <AccordionSection title="Contacts FFBB">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Coordonnées récupérées automatiquement depuis la FFBB (lecture seule).
+            </p>
+            <ContactsFfbbSection club={me.club} />
           </AccordionSection>
         ) : null}
         {isAdmin ? (
