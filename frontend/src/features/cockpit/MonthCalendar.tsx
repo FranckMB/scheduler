@@ -82,6 +82,9 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
           const holiday = holidayOn(cell.iso);
           const publicHoliday = publicHolidayOn(cell.iso);
           const isToday = cell.iso === today;
+          // "On ne modifie pas le passé" : days strictly before today stay visible
+          // (holidays still shown) but are not clickable — no DayDialog on the past.
+          const isPast = cell.iso < today;
           // A11Y-07: one composed accessible name for the whole cell. The button's
           // aria-label overrides its children, so a bare `Jour {ISO}` used to hide
           // every marker (holiday / férié / events) from a screen reader — compose
@@ -100,15 +103,20 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
             <button
               key={cell.iso}
               type="button"
-              onClick={() => setSelectedDay(cell.iso)}
+              disabled={isPast}
+              onClick={isPast ? undefined : () => setSelectedDay(cell.iso)}
               className={cn(
                 "flex min-h-14 flex-col items-start gap-1 rounded-md border p-1.5 text-left text-xs transition-colors",
-                cell.inMonth ? "border-border hover:bg-muted" : "border-transparent text-muted-foreground/50",
-                // School-holiday days get a distinct amber wash (kept apart from the
-                // accent, which marks "today") so a break is spottable at a glance.
-                holiday && cell.inMonth ? "bg-amber-400/15 dark:bg-amber-400/10" : "",
+                cell.inMonth ? "border-border" : "border-transparent text-muted-foreground/50",
+                !isPast && cell.inMonth ? "hover:bg-muted" : "",
+                // Past days are dimmed and non-interactive (we prepare the future).
+                isPast ? "cursor-not-allowed opacity-50" : "",
+                // School-holiday days get a clear amber BACKGROUND (kept apart from
+                // the accent, which marks "today") so a break is obvious at a glance.
+                // Jours fériés keep only their "F" badge — no background (per product).
+                holiday && cell.inMonth ? "bg-amber-400/30 dark:bg-amber-400/20" : "",
               )}
-              aria-label={dayLabel}
+              aria-label={isPast ? `${dayLabel}, passé (non modifiable)` : dayLabel}
             >
               <span className={cn("flex size-5 items-center justify-center rounded-full", isToday ? "bg-accent font-semibold text-accent-foreground" : "")}>{cell.day}</span>
               {/* Markers are purely visual — the button's aria-label already names them

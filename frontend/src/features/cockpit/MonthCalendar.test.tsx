@@ -16,6 +16,13 @@ vi.mock("./queries", () => ({
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [] }),
 }));
+// Pin "today" to mid-May 2026 so the past/future split is deterministic
+// (real-clock today would make the whole rendered month past). Only todayISO
+// is overridden — the date maths (grid, isWithin…) keep their real behaviour.
+vi.mock("./lib/date", async (importActual) => ({
+  ...(await importActual<typeof import("./lib/date")>()),
+  todayISO: () => "2026-05-10",
+}));
 
 const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   id: "e1",
@@ -118,6 +125,21 @@ describe("MonthCalendar — projection of the exception layer", () => {
     // marker's meaning ("Coupure"), carried by the composed accessible name.
     expect(screen.getByRole("button", { name: /12 Mai, Coupure/ })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("makes past days non-interactive (on ne modifie pas le passé)", async () => {
+    renderMay([entry({ id: "past", title: "Passé", startDate: "2026-05-05", endDate: "2026-05-05" })]);
+
+    // A day before today (10 May) is disabled and labelled as such.
+    const pastDay = screen.getByRole("button", { name: /^5 Mai/ });
+    expect(pastDay).toBeDisabled();
+    expect(pastDay).toHaveAccessibleName(/passé/);
+
+    // Clicking it opens no dialog; today and future days stay interactive.
+    await userEvent.click(pastDay);
+    expect(screen.queryByText(/5 mai 2026/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^10 Mai/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^26 Mai/ })).toBeEnabled();
   });
 
   it("opens the day dialog on click with that day's entries", async () => {
