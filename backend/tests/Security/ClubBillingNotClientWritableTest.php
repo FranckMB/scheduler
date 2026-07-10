@@ -34,6 +34,8 @@ final class ClubBillingNotClientWritableTest extends WebTestCase
     {
         [$user, $club] = $this->seed();
         $originalPlanId = $club->getPlanId();
+        $originalBillingCycle = $club->getBillingCycle();
+        $originalPlanExpiresAt = $club->getPlanExpiresAt();
         $clubId = $club->getId();
 
         $this->client->loginUser($user);
@@ -42,9 +44,10 @@ final class ClubBillingNotClientWritableTest extends WebTestCase
             'slug' => $club->getSlug(),
             'timezone' => 'Europe/Paris',
             'locale' => 'fr',
-            // Attacker payload: try to self-assign a plan + wipe the season quota.
+            // Attacker payload: try to self-assign a plan + billing state + wipe the quota.
             'planId' => 999,
             'billingCycle' => 'annual',
+            'planExpiresAt' => '2099-12-31T00:00:00+00:00',
             'generationCountSeason' => 0,
         ], \JSON_THROW_ON_ERROR));
 
@@ -53,6 +56,8 @@ final class ClubBillingNotClientWritableTest extends WebTestCase
         $reloaded = $this->em->getRepository(Club::class)->find($clubId);
         self::assertSame('Renamed Club', $reloaded?->getName(), 'the legit field IS applied');
         self::assertSame($originalPlanId, $reloaded?->getPlanId(), 'planId must be ignored');
+        self::assertSame($originalBillingCycle, $reloaded?->getBillingCycle(), 'billingCycle must be ignored');
+        self::assertEquals($originalPlanExpiresAt, $reloaded?->getPlanExpiresAt(), 'planExpiresAt must be ignored');
         self::assertSame(7, $reloaded?->getGenerationCountSeason(), 'quota counter must be ignored (stays 7)');
     }
 

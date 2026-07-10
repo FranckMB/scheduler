@@ -48,8 +48,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register a user and create or join a club by ARA / FFBB code */
+        /** Register a user (creates an unverified account; sends an email-verification link) */
         post: operations["postApiRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/register/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Consume an email-verification token: verify the account, create/join its club, and log in */
+        post: operations["postApiRegisterVerify"];
         delete?: never;
         options?: never;
         head?: never;
@@ -624,11 +641,7 @@ export interface paths {
          */
         get: operations["api_plans_get_collection"];
         put?: never;
-        /**
-         * Creates a Plan resource.
-         * @description Creates a Plan resource.
-         */
-        post: operations["api_plans_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -647,17 +660,9 @@ export interface paths {
          * @description Retrieves a Plan resource.
          */
         get: operations["api_plans_id_get"];
-        /**
-         * Replaces the Plan resource.
-         * @description Replaces the Plan resource.
-         */
-        put: operations["api_plans_id_put"];
+        put?: never;
         post?: never;
-        /**
-         * Removes the Plan resource.
-         * @description Removes the Plan resource.
-         */
-        delete: operations["api_plans_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -676,11 +681,7 @@ export interface paths {
          */
         get: operations["api_priority_tiers_get_collection"];
         put?: never;
-        /**
-         * Creates a PriorityTier resource.
-         * @description Creates a PriorityTier resource.
-         */
-        post: operations["api_priority_tiers_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -699,17 +700,9 @@ export interface paths {
          * @description Retrieves a PriorityTier resource.
          */
         get: operations["api_priority_tiers_id_get"];
-        /**
-         * Replaces the PriorityTier resource.
-         * @description Replaces the PriorityTier resource.
-         */
-        put: operations["api_priority_tiers_id_put"];
+        put?: never;
         post?: never;
-        /**
-         * Removes the PriorityTier resource.
-         * @description Removes the PriorityTier resource.
-         */
-        delete: operations["api_priority_tiers_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1061,11 +1054,7 @@ export interface paths {
          */
         get: operations["api_sports_get_collection"];
         put?: never;
-        /**
-         * Creates a Sport resource.
-         * @description Creates a Sport resource.
-         */
-        post: operations["api_sports_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1084,17 +1073,9 @@ export interface paths {
          * @description Retrieves a Sport resource.
          */
         get: operations["api_sports_id_get"];
-        /**
-         * Replaces the Sport resource.
-         * @description Replaces the Sport resource.
-         */
-        put: operations["api_sports_id_put"];
+        put?: never;
         post?: never;
-        /**
-         * Removes the Sport resource.
-         * @description Removes the Sport resource.
-         */
-        delete: operations["api_sports_id_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1615,8 +1596,7 @@ export interface components {
             name: string | null;
             slug: string | null;
             planId?: number | null;
-            /** @enum {string|null} */
-            billingCycle?: "monthly" | "annual" | "quarterly" | null;
+            billingCycle?: string | null;
             /** Format: date-time */
             planExpiresAt?: string | null;
             generationCountSeason?: number | null;
@@ -2332,17 +2312,6 @@ export interface components {
                 [key: string]: string | null;
             };
         };
-        "Plan.PlanInput": {
-            name: string | null;
-            maxTeams?: number | null;
-            maxVenues?: number | null;
-            maxGenerations?: number | null;
-            monthlyPrice: string | null;
-            annualPrice: string | null;
-            features?: {
-                [key: string]: string | null;
-            } | null;
-        };
         "Plan.html": {
             /** @default  */
             id: string;
@@ -2412,13 +2381,6 @@ export interface components {
             orToolsWeight: number;
             /** @default 0 */
             defaultMinSessions: number;
-        };
-        "PriorityTier.PriorityTierInput": {
-            label: string | null;
-            name: string | null;
-            color: string | null;
-            orToolsWeight?: number | null;
-            defaultMinSessions?: number | null;
         };
         "PriorityTier.html": {
             /** @default 0 */
@@ -2938,12 +2900,6 @@ export interface components {
             icon?: string | null;
             /** @default false */
             isActive: boolean;
-        };
-        "Sport.SportInput": {
-            name: string | null;
-            slug: string | null;
-            icon?: string | null;
-            isActive?: boolean | null;
         };
         "Sport.html": {
             /** @default  */
@@ -3699,8 +3655,52 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Registered — returns a JWT and the membership status */
-            201: {
+            /** @description Verification pending — an email was sent (identical for a fresh or an already-registered address) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status?: "verification_pending";
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Too many attempts (rate limited) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    postApiRegisterVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description The raw token from the verification email link */
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified — materialises the club and returns a JWT (effective login) */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3716,15 +3716,8 @@ export interface operations {
                     };
                 };
             };
-            /** @description Validation error */
+            /** @description Invalid or expired verification token */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Email already registered */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5664,57 +5657,6 @@ export interface operations {
             };
         };
     };
-    api_plans_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new Plan resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["Plan.PlanInput"];
-                "application/json": components["schemas"]["Plan.PlanInput"];
-                "text/html": components["schemas"]["Plan.PlanInput"];
-            };
-        };
-        responses: {
-            /** @description Plan resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Plan.jsonld"];
-                    "application/json": components["schemas"]["Plan"];
-                    "text/html": components["schemas"]["Plan.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
     api_plans_id_get: {
         parameters: {
             query?: never;
@@ -5737,103 +5679,6 @@ export interface operations {
                     "application/json": components["schemas"]["Plan"];
                     "text/html": components["schemas"]["Plan.html"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    api_plans_id_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Plan identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description The updated Plan resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["Plan.PlanInput"];
-                "application/json": components["schemas"]["Plan.PlanInput"];
-                "text/html": components["schemas"]["Plan.PlanInput"];
-            };
-        };
-        responses: {
-            /** @description Plan resource updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Plan.jsonld"];
-                    "application/json": components["schemas"]["Plan"];
-                    "text/html": components["schemas"]["Plan.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
-    api_plans_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Plan identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Plan resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Not found */
             404: {
@@ -5875,57 +5720,6 @@ export interface operations {
             };
         };
     };
-    api_priority_tiers_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new PriorityTier resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["PriorityTier.PriorityTierInput"];
-                "application/json": components["schemas"]["PriorityTier.PriorityTierInput"];
-                "text/html": components["schemas"]["PriorityTier.PriorityTierInput"];
-            };
-        };
-        responses: {
-            /** @description PriorityTier resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["PriorityTier.jsonld"];
-                    "application/json": components["schemas"]["PriorityTier"];
-                    "text/html": components["schemas"]["PriorityTier.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
     api_priority_tiers_id_get: {
         parameters: {
             query?: never;
@@ -5948,103 +5742,6 @@ export interface operations {
                     "application/json": components["schemas"]["PriorityTier"];
                     "text/html": components["schemas"]["PriorityTier.html"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    api_priority_tiers_id_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description PriorityTier identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description The updated PriorityTier resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["PriorityTier.PriorityTierInput"];
-                "application/json": components["schemas"]["PriorityTier.PriorityTierInput"];
-                "text/html": components["schemas"]["PriorityTier.PriorityTierInput"];
-            };
-        };
-        responses: {
-            /** @description PriorityTier resource updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["PriorityTier.jsonld"];
-                    "application/json": components["schemas"]["PriorityTier"];
-                    "text/html": components["schemas"]["PriorityTier.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
-    api_priority_tiers_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description PriorityTier identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description PriorityTier resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Not found */
             404: {
@@ -7292,57 +6989,6 @@ export interface operations {
             };
         };
     };
-    api_sports_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description The new Sport resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["Sport.SportInput"];
-                "application/json": components["schemas"]["Sport.SportInput"];
-                "text/html": components["schemas"]["Sport.SportInput"];
-            };
-        };
-        responses: {
-            /** @description Sport resource created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Sport.jsonld"];
-                    "application/json": components["schemas"]["Sport"];
-                    "text/html": components["schemas"]["Sport.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
     api_sports_id_get: {
         parameters: {
             query?: never;
@@ -7365,103 +7011,6 @@ export interface operations {
                     "application/json": components["schemas"]["Sport"];
                     "text/html": components["schemas"]["Sport.html"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    api_sports_id_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Sport identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description The updated Sport resource */
-        requestBody: {
-            content: {
-                "application/ld+json": components["schemas"]["Sport.SportInput"];
-                "application/json": components["schemas"]["Sport.SportInput"];
-                "text/html": components["schemas"]["Sport.SportInput"];
-            };
-        };
-        responses: {
-            /** @description Sport resource updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Sport.jsonld"];
-                    "application/json": components["schemas"]["Sport"];
-                    "text/html": components["schemas"]["Sport.html"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["Error.jsonld"];
-                    "application/problem+json": components["schemas"]["Error"];
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description An error occurred */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/ld+json": components["schemas"]["ConstraintViolation.jsonld"];
-                    "application/problem+json": components["schemas"]["ConstraintViolation"];
-                    "application/json": components["schemas"]["ConstraintViolation"];
-                };
-            };
-        };
-    };
-    api_sports_id_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Sport identifier */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Sport resource deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Not found */
             404: {

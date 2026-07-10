@@ -41,7 +41,7 @@ final class GlobalReferenceTablesReadOnlyTest extends WebTestCase
     }
 
     #[DataProvider('globalCollections')]
-    public function testWriteOperationsAreRejected(string $collection): void
+    public function testCollectionPostIsRejected(string $collection): void
     {
         $this->client->loginUser($this->seedMember());
 
@@ -49,6 +49,22 @@ final class GlobalReferenceTablesReadOnlyTest extends WebTestCase
         // (never a 2xx that would mutate a table read by every other club).
         $this->client->request('POST', $collection, [], [], ['CONTENT_TYPE' => 'application/ld+json'], '{}');
         self::assertSame(405, $this->client->getResponse()->getStatusCode(), "POST {$collection} must be rejected");
+    }
+
+    #[DataProvider('globalCollections')]
+    public function testItemPutAndDeleteAreRejected(string $collection): void
+    {
+        $this->client->loginUser($this->seedMember());
+
+        // Item routes only expose GET → PUT/DELETE → 405 (checked at routing, before the
+        // item is even loaded — an arbitrary id suffices). Guards against a refactor
+        // re-adding `new Put`/`new Delete` and reopening the cross-tenant write surface.
+        $item = $collection . '/1';
+        $this->client->request('PUT', $item, [], [], ['CONTENT_TYPE' => 'application/ld+json'], '{}');
+        self::assertSame(405, $this->client->getResponse()->getStatusCode(), "PUT {$item} must be rejected");
+
+        $this->client->request('DELETE', $item);
+        self::assertSame(405, $this->client->getResponse()->getStatusCode(), "DELETE {$item} must be rejected");
     }
 
     #[DataProvider('globalCollections')]
