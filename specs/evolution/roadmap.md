@@ -7,7 +7,7 @@
 > **Effort** (annoté sur les items actionnables, pour arbitrer sans re-poser la question) : **🟢 léger** (≈ ≤2 j, ciblé, peu de risque) · **🟡 moyen** (quelques jours, plusieurs fichiers/zones) · **🔴 lourd** (structurant / semaine+ / nouvelle archi ou dépendance de zone). L'effort estime le **coût de mise en œuvre**, pas la valeur produit.
 > **Sources** : `initiales/ClubScheduler_v3.md` (réf `v3 §x`), `initiales/ClubScheduler_Specification_des_contraintes_v2.md` (réf `contraintes-v2`). Ces specs sont **figées** — ne pas les modifier.
 
-Ce n'est pas un backlog priorisé : c'est la **carte** de ce que la vision d'origine contient et de ce qui reste à faire. On priorisera au moment de traiter chaque sujet.
+Ce n'est pas un backlog priorisé : c'est la **carte** de ce que la vision d'origine contient et de ce qui reste à faire. **La coupe priorisée effort × impact (cap commercialisation mi-2027) vit dans [`backlog-priorise.md`](backlog-priorise.md)** — quoi faire dans quel ordre. On priorisera finement au moment de traiter chaque sujet.
 
 ---
 
