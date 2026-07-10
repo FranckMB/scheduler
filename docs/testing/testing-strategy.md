@@ -10,10 +10,13 @@ Order and dependencies:
 
 ```
 lint ──┐
-       ├─► blocking-tests ──► unit-tests
+       ├─► blocking-tests ──► {unit-tests, e2e}
 phpstan┘
 engine-tests ───────────────────────────────────► build-docker
 blocking-tests ─────────────────────────────────┘
+frontend            (tsc -b + vite build + vitest)  — parallel, no needs, does NOT gate build-docker
+dependency-audit    (composer/npm/pip audit, A18)    — parallel, no needs, does NOT gate build-docker
+engine-perf         (dense solve < 180 s)            — main only
 ```
 
 All PHP test jobs first **create + migrate the test DB** (`doctrine:database:create --if-not-exists` + `migrations:migrate`, `--env=test`) and run phpunit with `-e APP_ENV=test` on the `docker compose exec` — the containers default to `APP_ENV=dev` (root `.env` env_file) and `phpunit.xml.dist`'s `<server APP_ENV=test>` is not `force`d, so the real env var must be set explicitly.
@@ -22,10 +25,13 @@ All PHP test jobs first **create + migrate the test DB** (`doctrine:database:cre
 |-----|--------------|
 | `lint` | `docker compose config` + `make -n help` |
 | `phpstan` | `composer phpstan` (level 8) — needs postgres + redis |
-| `blocking-tests` | the `--group phase1` security/queue/contract tests below — **gate for the rest of the PHP suite**. Beyond the original 4: `RlsIsolationTest` (DB-level RLS), `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06) |
-| `unit-tests` | full PHPUnit `tests/` |
+| `blocking-tests` | the `--group phase1` security/queue/contract tests — **gate for the rest of the PHP suite**. Full list (12 steps): `TenantIsolationTest`, `SeasonIsolationTest`, `SeasonReadonlyTest`, `MatchTenantIsolationTest`, `TenantCacheIsolationTest`, `ConcurrentGenerationTest`, `ContractSchemaTest`, `RlsIsolationTest`, `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06), `ManagementRoleTest` (SEC-07), `ApiRateLimitTest` (SEC-11) — canonical list in `CLAUDE.md` §4 |
+| `unit-tests` | full PHPUnit `tests/` (does NOT gate build-docker) |
+| `e2e` | Playwright (full stack + Vite), needs blocking-tests |
 | `engine-tests` | `pytest` + `ruff check .` + `mypy` (in the engine container) |
-| `build-docker` | `docker compose build` (needs blocking + engine tests) |
+| `frontend` | `tsc -b` + `vite build` + `vitest` (parallel, no needs) |
+| `dependency-audit` | `composer audit` / `npm audit --audit-level=high` / `pip-audit` (A18, blocking, parallel, no needs) |
+| `build-docker` | `docker compose build` (needs **blocking + engine** tests only) |
 
 All PHP jobs invoke `vendor/bin/phpunit` (PHPUnit 11, the direct `phpunit/phpunit` dep) — same binary as `Makefile` and `composer test`.
 
@@ -51,7 +57,7 @@ Groups (PHP attributes): `#[Group('phase1')]`, `#[Group('integration')]`, `#[Gro
 ## 3. Engine tests (`engine/tests/`)
 
 - **Unit by feature/constraint:** `test_constraints.py`, `test_objective.py`, `test_result_builder.py`, `test_coach_rest_day.py`, `test_salarie_distribution.py`, `test_max_consecutive_sessions.py`, `test_age_order.py`, `test_chaining_bonus.py`, `test_engine.py` (endpoints), …
-- **Golden / integration** (`tests/golden/`): full solves on real club fixtures (`simple_club.json`, `dense_club.json`, `bccl_regression.json`, …) with expected outputs; `test_two_pass.py` covers the INFEASIBLE→fallback path.
+- **Golden / integration** (`tests/golden/`): full solves on real club fixtures (`simple_club.json`, `dense_club.json`, `bccl_regression.json`, …) with expected outputs; `test_two_pass.py` guards the **single-pass invariant** (ADR-0001) — the dormant relaxation fallback is NOT wired into production, so the test pins its absence.
 - **Invariants** (`tests/invariants/test_invariants.py`): post-solve checks — no team/coach overlaps, venue capacity respected, hard locks honored.
 - **Fixtures** (`tests/fixtures/`): 12 JSON club configs (simple, medium, dense, overlap_*, no_rest_*, vacation_week, impossible, score_hard_only_teams…).
 - Property-based tests via hypothesis; `pytest-timeout` guards runaway solves.

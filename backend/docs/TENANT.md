@@ -36,9 +36,9 @@ The shared membership lookups (`findActiveMembership`, `findActiveClubIds`, `isM
   1. Resolves the current `club_id`: `_club_id` route attribute → `X-Club-Id` header → **the authenticated JWT user's single active `ClubUser` membership** (the frontend sends no header — the club is derived from the token).
   2. If a club came from a header/attribute and a user is present, validates the membership (403 if the user is not an active member — blocks a spoofed `X-Club-Id`).
   3. Enables the `tenant_filter` SQL filter and sets its `club_id` parameter.
-  4. Executes `SET LOCAL app.club_id = '<uuid>'` on the PostgreSQL connection so that RLS policies are satisfied.
+  4. Executes `set_config('app.club_id', '<uuid>', false)` (session-scoped, via `TenantConnectionContext`) on the PostgreSQL connection so that RLS policies are satisfied. *(The historical out-of-transaction `SET LOCAL` was a no-op — see point 2 above.)*
   5. Resolves the **season** (after the GUC — the season table is RLS-protected): explicit `_season_id` attribute / `X-Season-Id` header, **validated against the club** (unknown, malformed or foreign-club id → 403, never a silent fallback) → else the **calendar-derived current season** (`SeasonResolver`, July-15 pivot on `startDate` — `Season.status` is display metadata, never read for resolution). Sets `_season_id` + `_season_readonly` attributes and enables the **`season_filter`** SQL filter (clone of the tenant filter keyed on `season_id`) so every season-scoped read stays inside the selected season.
-- **Safety rule:** if no `club_id` can be resolved, the filters are **not** enabled and `SET LOCAL` is **not** executed. This prevents accidental cross-tenant queries. Same for the season: no resolvable season → `season_filter` stays off (mono-season behaviour unchanged).
+- **Safety rule:** if no `club_id` can be resolved, the filters are **not** enabled and the GUC is **not** set. This prevents accidental cross-tenant queries. Same for the season: no resolvable season → `season_filter` stays off (mono-season behaviour unchanged).
 
 ### Season scoping (multi-season, transition P1)
 
@@ -56,7 +56,7 @@ The shared membership lookups (`findActiveMembership`, `findActiveClubIds`, `isM
 Console commands do **not** trigger `kernel.request`. Therefore:
 
 - The `tenant_filter` is **not** enabled automatically.
-- `SET LOCAL app.club_id` is **never** executed without an HTTP context.
+- the `app.club_id` GUC is **never** set without an HTTP context.
 - CLI scripts that need tenant isolation must implement their own mechanism (e.g., explicit `--club-id` option, or `TenantConnectionContext::setClubId()` per club like the reminder crons). Maintenance tasks that must SEE ALL tenants run on the **`admin` Doctrine connection (`clubscheduler`, superuser — the only RLS bypass)**. ⚠ `migration_user` does **NOT** bypass RLS: it is created `NOSUPERUSER` without `BYPASSRLS` and no policy targets it — under `FORCE ROW LEVEL SECURITY` it is default-deny on every tenant table. It exists in the init SQL but is not used by any configured connection.
 
 ## Registration

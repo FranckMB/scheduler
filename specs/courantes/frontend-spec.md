@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 09e67f3 2026-07-03
+Last verified @ 2026-07-10 (register vérifié par email A3 : 202 + /verify-email)
 
 ---
 
@@ -48,7 +48,8 @@ layouts (`src/app/router.tsx`).
 | Route | Objectif | Auth | Layout |
 |-------|----------|------|--------|
 | `/login` | Connexion gestionnaire (email + password) | Public | `AuthLayout` |
-| `/register` | Inscription : nouveau club (admin actif) ou demande d'adhésion à un club existant via ARA (membership `pending`) | Public | `AuthLayout` |
+| `/register` | Inscription (A3) : soumet le formulaire → écran « vérifie tes emails » (aucune session ; le club et le JWT sont créés à la vérification) | Public | `AuthLayout` |
+| `/verify-email/:token` | Consomme le lien email → crée/rejoint le club, connecte, redirige (`/waiting` si pending, sinon `/`) | Public | `AuthLayout` |
 | `/forgot-password` | Demande de réinitialisation de mot de passe (`POST /api/password/forgot`) | Public | `AuthLayout` |
 | `/reset-password/:token` | Saisie du nouveau mot de passe (`POST /api/password/reset`) | Public | `AuthLayout` |
 | `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
@@ -423,7 +424,8 @@ type AuthState = {
 | Route frontend | Endpoints backend consommés |
 |----------------|---------------------------|
 | `/login` | `POST /api/login` |
-| `/register` | `POST /api/register` |
+| `/register` | `POST /api/register` (202, écran « vérifie tes emails ») |
+| `/verify-email/:token` | `POST /api/register/verify` (émet le JWT → app) |
 | `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
 | `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
 | `/` (planning) | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/set-baseline`, `PUT /api/schedules/{id}` (renommage), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
@@ -447,7 +449,8 @@ override (tests), mais le frontend ne les envoie pas — le tenant est dérivé 
 | Endpoint | Méthode | Body | Réponse | Action frontend |
 |----------|---------|------|---------|-----------------|
 | `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
-| `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name? }` | 201 `{ token, membershipStatus, user }` | Stocker token ; `membershipStatus === "pending"` → `/waiting`, sinon `/wizard` |
+| `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name? }` | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
+| `/api/register/verify` | POST | `{ token }` (du lien email) | `{ token, membershipStatus, user }` | Stocker token ; `pending` → `/waiting`, sinon `/` |
 | `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, baselineScheduleId, hasGenerated }` | Query `["me"]` — source des guards, du thème (accent) et du planning principal |
 
 Référence : `backend-inventory.md` §3 (AuthController, PasswordController, MembershipController).
