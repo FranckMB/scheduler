@@ -70,6 +70,28 @@ db-reset-test:
 	$(EXECROOT) php bin/console doctrine:database:create --connection admin -e test
 	$(EXECROOT) php bin/console doctrine:migrations:migrate --no-interaction -e test
 
+.PHONY: migration-diff ## Generate a migration from the entity/schema diff
+migration-diff:
+	$(EXEC) php bin/console doctrine:migrations:diff --no-interaction
+
+# doctrine_migrations.yaml pins `connection: admin` — migrations carry DDL and RLS
+# policies, which the runtime app_user may not run. EXEC already injects APP_ENV,
+# so this single target serves both dev and test.
+.PHONY: migration-migrate ## Apply pending migrations (honours APP_ENV)
+migration-migrate:
+	$(EXEC) php bin/console doctrine:migrations:migrate --no-interaction
+
+.PHONY: jwt-keys ## Generate the JWT keypair if absent (idempotent)
+jwt-keys:
+	$(EXEC) php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction
+
+# Non-destructive counterpart to db-reset: never drops, safe to re-run.
+.PHONY: db-init ## Create + migrate the dev database (idempotent)
+db-init: APP_ENV = dev
+db-init:
+	$(EXEC) php bin/console doctrine:database:create --if-not-exists --connection admin
+	$(MAKE) APP_ENV=$(APP_ENV) migration-migrate
+
 # Real env var beats dotenv, so injecting DATABASE_URL=<admin url> makes the
 # whole fixtures run (purge + inserts) bypass RLS. Symfony dotenv precedence:
 # .env.local overrides .env — read both, last definition wins.

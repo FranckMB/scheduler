@@ -3,7 +3,8 @@
 ## Quick Start
 
 ```bash
-# 1. Start all services
+# 1. Start all services — on a fresh clone this also installs the dependencies,
+#    generates the JWT keypair and creates+migrates the dev database.
 make start
 
 # 2. Check health
@@ -12,6 +13,9 @@ curl http://localhost:8080/api/health
 # 3. Run tests
 make test
 ```
+
+The database starts empty; demo data is opt-in (`make -C backend fixtures`). After a `git pull`
+that brings new migrations, run `make bootstrap` — `make start` never migrates on its own.
 
 ## Architecture
 
@@ -35,17 +39,17 @@ ClubScheduler is a monorepo with three main stacks:
 
 ## Commands
 
+Root orchestration only. Zone commands (`phpstan`, `cs-fix`, `rector`, `phpunit`, migrations…)
+live in `backend/Makefile` and `engine/Makefile` — run `make -C backend help` or
+`make -C engine help` rather than trusting a copy of the list here.
+
 ```bash
-make help        # Show all commands
-make start       # Start Docker services
+make help        # Show all root commands
+make start       # Start Docker services (bootstraps a fresh clone)
+make bootstrap   # JWT keypair + create/migrate the dev DB (idempotent)
 make stop        # Stop Docker services
 make test        # Run all tests
-make phpunit     # Run PHPUnit tests
-make engine-test # Run Python tests
-make phpstan     # Run PHPStan (level 8)
-make cs-fix      # Run PHP-CS-Fixer
-make rector      # Run Rector
-make schema-validate  # Validate Doctrine schema
+make lint        # Run all linters
 ```
 
 ## Multi-Tenant Architecture

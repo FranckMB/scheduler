@@ -29,8 +29,10 @@ Backend & engine commands run **inside Docker** (their Makefiles wrap `docker co
 
 ```bash
 make start | stop | install | test | lint        # root orchestration (docker compose, reads .env)
+make bootstrap             # JWT keypair + create/migrate the dev DB — idempotent; `.installed` runs it
+                           # on first install, so re-run it by hand after a pull adds migrations
 cd backend && make test    # CS-Fixer + PHPStan(lvl8) + PHPUnit (--group phase1)
-cd backend && make phpstan | cs-fix | rector | migration-diff | migration-migrate
+cd backend && make phpstan | cs-fix | rector | migration-diff | migration-migrate | jwt-keys | db-init
 cd engine  && make test    # pytest + ruff + mypy   |  make format
 cd frontend && npm run dev  # host, Vite :5173 (proxies /api + /.well-known/mercure — never /engine)
 ```

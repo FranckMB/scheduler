@@ -75,6 +75,17 @@ make stop       # stop the stack
 cd frontend && npm install && npm run dev   # UI on http://localhost:5173 (proxies /api)
 ```
 
+On a fresh clone `make start` is the only command needed: it builds the images, installs the
+dependencies, then runs `make bootstrap` — which generates the JWT keypair and creates+migrates
+the dev database. Both steps are idempotent.
+
+`make bootstrap` is also the repair command: `make start` never touches the database on its own,
+so **re-run it after a `git pull` that brings new migrations**, otherwise the app hits
+`permission denied for table app_user` (the RLS grants ride along with the migrations).
+
+The database comes up empty. Demo data is opt-in: `make -C backend fixtures` seeds a club, its
+teams and the holiday reference data — it purges the existing rows first.
+
 Per-zone commands live in `backend/Makefile` and `engine/Makefile` (e.g.
 `cd backend && make test`, `cd engine && make test`). A solver smoke test drives a full
 create → generate → completed run: `bash backend/scripts/smoke-solver.sh`.

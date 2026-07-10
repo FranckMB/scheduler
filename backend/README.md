@@ -127,13 +127,17 @@ make phpstan          # PHPStan seul (niveau 8)
 make cs-fix           # CS-Fixer (auto-format)
 make db-init-test     # crée + migre la base de TEST (requis avant `make phpunit`)
 make phpunit          # PHPUnit --group phase1
-make db-reset         # drop + recreate + migre la base de dev
+make db-init          # crée + migre la base de dev — idempotent, ne détruit rien
+make db-reset         # drop + recreate + migre la base de dev (DESTRUCTIF)
+make jwt-keys         # génère le keypair JWT s'il est absent (config/jwt/*.pem, gitignoré)
+make migration-diff   # génère une migration depuis le diff d'entités
+make migration-migrate # applique les migrations en attente (suit APP_ENV)
 make exec             # Entrer dans le conteneur php-fpm
-
-# Dans le conteneur (make exec) :
-php bin/console doctrine:migrations:diff      # génère une migration depuis le diff d'entités
-php bin/console doctrine:migrations:migrate   # applique les migrations
 ```
+
+> Les migrations passent par la connexion `admin` (`config/packages/doctrine_migrations.yaml`,
+> `connection: admin`) : elles portent le DDL et les policies RLS, que le rôle applicatif
+> `app_user` n'a pas le droit d'exécuter.
 
 > ⚠️ Commandes backend = **dans Docker** (le Makefile enveloppe `docker compose exec`). Elles échouent sur l'hôte. La suite de tests a besoin de la base de test → `make db-init-test` d'abord.
 
