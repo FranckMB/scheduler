@@ -35,6 +35,11 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 // seed FAILURE so the next visit retries.
 const seededPeriods = new Set<string>();
 
+/** Test-only: reset the session seed memory so each test starts fresh. */
+export function __resetPeriodSeed(): void {
+  seededPeriods.clear();
+}
+
 /**
  * Period-editable teams (F1): the club roster is READ-ONLY (grouped by rank), but
  * each team can be toggled off for the period and given a period-specific number
@@ -75,34 +80,31 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next).catch(() => {});
 
   // Fanion-only default: on a FRESH period (no overrides yet, not already seeded this
-  // session) deactivate every team below the top tier, ONCE. Controls stay disabled
-  // (busy) until the async writes settle so a first click can't race them. On failure
-  // the period is un-marked so the next visit retries.
+  // session) deactivate every team below the top tier, ONCE — best-effort. Controls
+  // stay disabled (busy) until the async writes settle so a first click can't race
+  // them. The key is claimed BEFORE firing and never un-claimed: un-claiming on a
+  // partial failure re-runs the effect against a still-empty override cache and
+  // double-writes the teams that already succeeded. On a failure the global toast
+  // informs; the manager applies "Fanion seul" (ramp) to complete.
   useEffect(() => {
     if (isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || seededPeriods.has(calendarEntryId)) {
       return;
     }
-    const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
     seededPeriods.add(calendarEntryId);
+    const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
     if (0 === belowTop.length) {
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
     setBusy(true);
-    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false })))
-      .then((results) => {
-        if (results.some((r) => "rejected" === r.status)) {
-          seededPeriods.delete(calendarEntryId); // partial/failed seed → retry on the next visit
-        }
-      })
-      .finally(() => setBusy(false));
+    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
   }, [isLoading, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
-    // Ignore an emptied field (Number("") === 0) — the input's min/max + the backend
-    // bound the real range; never persist 0.
-    if (!Number.isInteger(raw) || raw < 1) {
+    // Ignore an emptied / out-of-range field client-side (Number("") === 0; the field
+    // caps at 7 but paste/typing can exceed it) rather than fire a doomed 422.
+    if (!Number.isInteger(raw) || raw < 1 || raw > 7) {
       return;
     }
     upsert(t, { isActive: isActive(t), sessions: raw === t.sessionsPerWeek ? null : raw });
@@ -116,8 +118,11 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     }
     setBusy(true);
     try {
-      await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
-      toast.success("Sélection appliquée");
+      const results = await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
+      // Only confirm when every write landed — failures are toasted by the global net.
+      if (!results.some((r) => "rejected" === r.status)) {
+        toast.success("Sélection appliquée");
+      }
     } finally {
       setBusy(false);
     }

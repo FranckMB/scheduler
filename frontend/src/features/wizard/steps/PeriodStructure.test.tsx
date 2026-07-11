@@ -29,9 +29,10 @@ vi.mock("../queries", () => ({
 vi.mock("@/features/cockpit/queries", () => ({ useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }) }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { PeriodTeams, PeriodVenues } from "./PeriodStructure";
+import { __resetPeriodSeed, PeriodTeams, PeriodVenues } from "./PeriodStructure";
 
 afterEach(() => {
+  __resetPeriodSeed();
   overridesState.data = [];
   conflictState.venueIds = [];
   createOverride.mockClear();
