@@ -73,7 +73,7 @@ describe("PlanningPage (integration)", () => {
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    expect(screen.getByText("principal")).toBeInTheDocument();
     expect(screen.getByText(/score 9051/i)).toBeInTheDocument();
     // A COMPLETED schedule offers validation (→ VALIDATED, read-only).
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
@@ -101,16 +101,21 @@ describe("PlanningPage (integration)", () => {
   });
 
   it("groups diagnostics by severity", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<PlanningPage />);
+    // Diagnostics collapsed by default → open the panel first (user request).
+    await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
     const group = await screen.findByRole("button", { name: /Erreurs/ });
     expect(within(group).getByText("1")).toBeInTheDocument();
   });
 
   it("renders defined-but-unfilled windows as 'vide' cells alongside the solver's unused_slot warning", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<PlanningPage />);
     // ts-2 (Gymnase Alpha, Mardi 19:00) has no placement → a `vide` cell in the grid.
     expect(await screen.findByText("vide")).toBeInTheDocument();
-    // The solver's own unused_slot warning is listed under "Alertes" (no duplicate).
+    // The solver's own unused_slot warning is listed under "Alertes" (panel opened).
+    await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
     const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
   });

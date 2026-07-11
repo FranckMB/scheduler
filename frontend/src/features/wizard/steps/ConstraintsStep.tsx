@@ -8,7 +8,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
-import { groupedCoaches } from "../lib/ranking";
+import { groupedCoaches, orderedCoaches } from "../lib/ranking";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
 
@@ -351,7 +351,12 @@ export function ConstraintsStep() {
       }
     }
     const out: { key: string; label: string; items: Constraint[] }[] = [];
-    [...byTag.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tag}`, items }));
+    // Groups (tags) in the SAME canonical order as the target picker: by axis
+    // (Genre, Niveau, Âge) then label — not raw-name alphabetical.
+    const tagRank = new Map(groupTagsByAxis(tags).flatMap((g) => g.tags).map((t, i) => [t.name, i]));
+    [...byTag.entries()]
+      .sort((a, b) => (tagRank.get(a[0]) ?? 999) - (tagRank.get(b[0]) ?? 999) || a[0].localeCompare(b[0]))
+      .forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tagLabel(tag)}`, items }));
     if (clubWide.length > 0) {
       out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
     }
@@ -361,14 +366,21 @@ export function ConstraintsStep() {
         out.push({ key: `t:${t.id}`, label: t.name, items });
       }
     });
-    [...byCoach.entries()].forEach(([cid, items]) => out.push({ key: `c:${cid}`, label: coachName.get(cid) ?? "Coach", items }));
+    // Coach sections in the staffing order (salarié → coach-joueur → bénévole,
+    // puis prénom) rather than insertion order.
+    orderedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))).forEach(({ coach }) => {
+      const items = byCoach.get(coach.id);
+      if (items && items.length > 0) {
+        out.push({ key: `c:${coach.id}`, label: coachName.get(coach.id) ?? "Coach", items });
+      }
+    });
     if (other.length > 0) {
       out.push({ key: "other", label: "Autres", items: other });
     }
     return out;
-  // coachName is a fresh Map each render; teams/list are the real inputs.
+  // coachName is a fresh Map each render; the real inputs are list/teams/tags/coaches.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, teams]);
+  }, [list, teams, tags, coaches, coachPlayers]);
 
   return (
     <div>
@@ -469,7 +481,7 @@ export function ConstraintsStep() {
             )}
             <Select aria-label="Gymnase" className="h-8 w-44" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
               <option value="">— gymnase —</option>
-              {venues.map((v) => (
+              {[...venues].sort((a, b) => a.name.localeCompare(b.name, "fr")).map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
                 </option>

@@ -1,6 +1,7 @@
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
+import { FAMILY_LABEL, FAMILY_ORDER, makeConstraintRank } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
 import { coachMeta, orderedCoaches } from "../lib/ranking";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
@@ -9,7 +10,7 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -40,6 +41,7 @@ export function RecapStep() {
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: reservations = [] } = useReservations(periodEntryId);
   const { data: tiers = [] } = usePriorityTiers();
+  const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
@@ -55,6 +57,18 @@ export function RecapStep() {
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
+  // Constraints grouped by family (Horaire/Jours/Gymnase/Dispo coach), each in
+  // the SAME order as its constraint tab (shared makeConstraintRank helper).
+  const constraintRank = makeConstraintRank(teams, tiers, tags, coaches, coachPlayerIds);
+  const isKnownFamily = (f: string): boolean => (FAMILY_ORDER as readonly string[]).includes(f);
+  const constraintFamilies: { family: string; items: typeof constraints }[] = [
+    ...FAMILY_ORDER.map((family) => ({
+      family: family as string,
+      items: constraints.filter((c) => c.family === family).sort((a, b) => constraintRank(a) - constraintRank(b)),
+    })),
+    // Any exotic family not in FAMILY_ORDER still shows, at the end.
+    { family: "OTHER", items: constraints.filter((c) => !isKnownFamily(c.family)) },
+  ].filter((g) => g.items.length > 0);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -135,7 +149,16 @@ export function RecapStep() {
               })}
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Contraintes" count={constraints.length} />}>
-          {0 === constraints.length ? empty : constraints.map((c) => <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />)}
+          {0 === constraints.length
+            ? empty
+            : constraintFamilies.map((group) => (
+                <div key={group.family} className="mb-2 last:mb-0">
+                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
+                  {group.items.map((c) => (
+                    <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
+                  ))}
+                </div>
+              ))}
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Réservations" count={reservations.length} />}>
           {0 === sortedReservations.length

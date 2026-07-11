@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Info, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Info, PanelRightClose, XCircle } from "lucide-react";
 import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -26,9 +26,11 @@ interface DiagnosticsPanelProps {
   onHighlight: (slotIds: Set<string>) => void;
   /** "unused_slot" warning: bring the concerned venue's column on screen. */
   onFocusVenue?: (venueId: string) => void;
+  /** Collapse the panel back to the compact bar (frees grid width). */
+  onCollapse?: () => void;
 }
 
-export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse }: DiagnosticsPanelProps) {
   const [openSeverity, setOpenSeverity] = useState<DiagnosticSeverity | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -59,8 +61,13 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
 
   return (
     <Card className="flex h-full min-h-0 flex-col">
-      <CardHeader className="shrink-0 pb-3">
+      <CardHeader className="shrink-0 flex-row items-center justify-between gap-2 pb-3">
         <CardTitle className="text-base">Diagnostics du solveur</CardTitle>
+        {onCollapse ? (
+          <button type="button" onClick={onCollapse} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Réduire les diagnostics" title="Réduire (plus de place pour la grille)">
+            <PanelRightClose className="size-4" />
+          </button>
+        ) : null}
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
         {0 === diagnostics.length ? (

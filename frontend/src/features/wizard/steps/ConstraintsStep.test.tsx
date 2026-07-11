@@ -84,9 +84,10 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
     renderWithProviders(<ConstraintsStep />);
 
-    // Groups first, then the teams in canonical rank order (Fanion=S before SM1=B).
+    // Groups first (human label, like the picker: SENIOR → Adulte), then the
+    // teams in canonical rank order (Fanion=S before SM1=B).
     const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
-    expect(sections).toEqual(["Groupe SENIOR", "Fanion", "SM1"]);
+    expect(sections).toEqual(["Groupe Adulte", "Fanion", "SM1"]);
   });
 
   it("offers exactly Obligatoire/Préféré/Verrouillé — BONUS is gone (ENG-12)", () => {
