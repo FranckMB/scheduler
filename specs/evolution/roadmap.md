@@ -258,11 +258,10 @@ Polish frontend discuté, non structurant mais confort d'usage.
 
 ### P0 — Bloquants GA & intégrité (à solder AVANT de vendre)
 
-Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune n'est commencée.
+Trois impasses GA restantes (P0-1 RGPD livré le 2026-07-11 — cf. §Livrés et `docs/security/rgpd.md`).
 
 | # | Sujet | Impact | Effort | Pourquoi maintenant | Dépend de |
 |---|-------|:---:|:---:|---|---|
-| P0-1 | **RGPD socle** — purge/rétention effective, audit trail, droit à l'effacement/export. Couvre DP1 (contacts président/correspondant FFBB stockés sur `club` — données perso pro, à couvrir par purge/export/effacement ; preuve `Entity/Club.php` colonnes `president_*`/`correspondent_*`). | 🔴 | L | Vente FR/UE **illégale** sans. `app:seasons:purge` existe mais manuel/partiel. | — |
 | P0-2 | **Config prod** — profil prod distinct, secrets managés, `APP_ENV=prod`/`DEBUG=0` durci, healthchecks, limites RAM. | 🔴 | M | Aucune config prod → pas déployable proprement. | — |
 | P0-3 | **Backups PostgreSQL** — `pg_dump` planifié + restauration testée. | 🔴 | S | Zéro backup = perte totale sur incident. | P0-2 |
 | P0-4 | **Observabilité** — Sentry + logs structurés sans PII + métriques. | 🔴 | M | Zéro visibilité prod. | P0-2 |
@@ -337,7 +336,7 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 |------|----------|-----------------|
 | **FE3 — ambre codé en dur dans `MonthCalendar.tsx`** (pas le token `--warning`) | 🟩 **keep délibéré** | `--warning` clair = 2.9:1 sur fond (A11Y-06) → l'utiliser sur le label vacances **échouerait WCAG AA** ; `amber-700` passe. Migrer = régression a11y contre un résidu de cohérence |
 | **B4 — publish Mercure dupliqué** | 🟩 defer (ligne P4-7) | 2 handlers, payloads distincts — extraire au 3e publisher |
-| **DP1 — contacts FFBB sur `club`** | 🟦 rattaché à P0-1 | données perso pro ; aucune action isolée, traité dans le lot RGPD |
+| **DP1 — contacts FFBB sur `club`** | ✅ soldé avec P0-1 (2026-07-11) | base légale intérêt légitime actée, survivent à la purge (annuaire adverse), export inclus — `docs/security/rgpd.md` §2 |
 | **Dette `TeamTagService::syncTeamTags`** (efface les tags custom à chaque édition) | 🟧 à corriger avant de fiabiliser les tags custom | ligne `team_tags` §9 ; bloque le report des tags custom entre saisons |
 
 **Soldé** (détail dans l'historique git de `docs/technical-debt.md`, supprimé le 2026-07-11) :
@@ -356,3 +355,4 @@ TODOs PREFERRED TIME) — tous résolus le 2026-07-01.
 | Date | Id | Sujet | Documenté dans |
 |------|----|-------|----------------|
 | 2026-07-11 | P0-5 | Ids de créneau par-schedule (vol de créneau inter-version) | [`planning-versions.md`](planning-versions.md) §D3quater |
+| 2026-07-11 | P0-1 | **RGPD socle** (5 PRs #199-#203) : effacement (anonymisation + purge club différée 30 j, identité FFBB épargnée, win-back), portabilité (exports JSON compte/club), rétention auto (inactifs 24 mois avec préavis 1 mois, saisons N-1 au cron), audit trail append-only (12 mois), consentement au register + page confidentialité (placeholders juridiques) | [`../../docs/security/rgpd.md`](../../docs/security/rgpd.md) (registre des traitements) |

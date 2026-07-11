@@ -128,7 +128,7 @@ final class ProfileEndpointsTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $email, 'password' => 'Password123!',
-            'firstName' => 'P', 'lastName' => 'Rofile', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
+            'firstName' => 'P', 'lastName' => 'Rofile', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara, 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         $token = $this->verifyRegistration($this->client, $email);

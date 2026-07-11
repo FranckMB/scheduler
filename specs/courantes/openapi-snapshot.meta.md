@@ -1,7 +1,10 @@
-Last verified @ feat/rgpd-export 2026-07-11
+Last verified @ feat/rgpd-consent-privacy 2026-07-11
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
 Changements récents :
+- **RGPD PR-5 consentement (2026-07-11)** : `/api/register` exige `consent: true` (400 sinon,
+  validation payload-only — enumeration-safe A3) ; preuve stockée (`termsAcceptedAt` +
+  `termsVersion`). Page publique `/confidentialite` côté frontend (placeholders juridiques).
 - **RGPD PR-2 portabilité (2026-07-11)** : `GET /api/me/export` (self-only — compte + adhésions,
   jamais le hash) et `GET /api/club/export` (management SEC-07, tenant du JWT — workspace complet
   en lignes brutes par table), servis en téléchargement JSON (`Content-Disposition: attachment`).

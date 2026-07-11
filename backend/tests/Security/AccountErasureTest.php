@@ -170,7 +170,7 @@ final class AccountErasureTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $newEmail, 'password' => 'Password123!',
-            'firstName' => 'Win', 'lastName' => 'Back', 'ara' => $ara, 'club_name' => 'Reprise',
+            'firstName' => 'Win', 'lastName' => 'Back', 'ara' => $ara, 'club_name' => 'Reprise', 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
         $token = $this->verifyRegistration($this->client, $newEmail);
         self::assertNotSame('', $token);
@@ -255,7 +255,7 @@ final class AccountErasureTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $email, 'password' => 'Password123!',
-            'firstName' => 'E', 'lastName' => 'Rasure', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
+            'firstName' => 'E', 'lastName' => 'Rasure', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara, 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         $token = $this->verifyRegistration($this->client, $email);

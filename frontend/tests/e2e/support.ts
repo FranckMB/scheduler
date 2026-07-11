@@ -32,6 +32,9 @@ export async function submitRegister(page: Page, opts: RegisterOpts): Promise<vo
   if (undefined !== opts.clubName) {
     await page.getByLabel(/nom du club/i).fill(opts.clubName);
   }
+  // RGPD : consentement CGU/confidentialité obligatoire (le bouton reste
+  // désarmé sans la case).
+  await page.getByRole("checkbox", { name: /j'accepte/i }).check();
   await page.getByRole("button", { name: /créer le compte/i }).click();
   await expect(page.getByText(/email de confirmation/i)).toBeVisible({ timeout: 15_000 });
 }

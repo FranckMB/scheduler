@@ -1,4 +1,4 @@
-import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User } from "lucide-react";
+import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User, ShieldCheck } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useLogout, useMe } from "@/features/auth/queries";
@@ -73,6 +73,9 @@ export function AppLayout() {
               </MenuItem>
               <MenuItem icon={mode === "dark" ? <Sun /> : <Moon />} onSelect={toggleMode}>
                 {mode === "dark" ? "Thème clair" : "Thème sombre"}
+              </MenuItem>
+              <MenuItem to="/confidentialite" icon={<ShieldCheck />}>
+                Confidentialité
               </MenuItem>
               <MenuItem icon={<LogOut />} className="text-destructive [&_svg]:text-destructive" onSelect={logout}>
                 Se déconnecter

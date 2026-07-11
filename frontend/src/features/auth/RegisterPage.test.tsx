@@ -36,6 +36,9 @@ describe("RegisterPage", () => {
     await user.type(screen.getByLabelText("Mot de passe"), "Sup3rStrongPwd!");
     await user.type(screen.getByLabelText(/code ara/i), "BCCL0123");
     await user.type(screen.getByLabelText(/nom du club/i), "Basket Club");
+    // RGPD : le bouton reste désarmé tant que le consentement n'est pas coché.
+    expect(screen.getByRole("button", { name: /créer le compte/i })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /j'accepte/i }));
     await user.click(screen.getByRole("button", { name: /créer le compte/i }));
 
     await waitFor(() => expect(screen.getByText(/email de confirmation/i)).toBeInTheDocument());

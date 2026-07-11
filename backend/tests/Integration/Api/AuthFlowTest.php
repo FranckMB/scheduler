@@ -36,7 +36,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $payload = [
             'email' => 'enum@club.fr', 'password' => 'Password123!',
-            'firstName' => 'En', 'lastName' => 'Um', 'ara' => 'ENUM1', 'club_name' => 'Enum Club',
+            'firstName' => 'En', 'lastName' => 'Um', 'ara' => 'ENUM1', 'club_name' => 'Enum Club', 'consent' => true,
         ];
 
         [$freshStatus, $freshBody] = $this->register($payload);
@@ -59,7 +59,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $this->register([
             'email' => 'defer@club.fr', 'password' => 'Password123!',
-            'firstName' => 'De', 'lastName' => 'Fer', 'ara' => 'DEFER1', 'club_name' => 'Defer Club',
+            'firstName' => 'De', 'lastName' => 'Fer', 'ara' => 'DEFER1', 'club_name' => 'Defer Club', 'consent' => true,
         ]);
 
         $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'defer@club.fr']);
@@ -74,7 +74,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $this->register([
             'email' => 'unverified@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Un', 'lastName' => 'Verified', 'ara' => 'UNVER1', 'club_name' => 'Unver Club',
+            'firstName' => 'Un', 'lastName' => 'Verified', 'ara' => 'UNVER1', 'club_name' => 'Unver Club', 'consent' => true,
         ]);
 
         [$unverifiedStatus, $unverifiedBody] = $this->login('unverified@club.fr', 'Password123!');
@@ -90,7 +90,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $this->register([
             'email' => 'admin@newclub.fr', 'password' => 'Password123!',
-            'firstName' => 'Jean', 'lastName' => 'Dupont', 'ara' => 'NEWARA1', 'club_name' => 'New Club',
+            'firstName' => 'Jean', 'lastName' => 'Dupont', 'ara' => 'NEWARA1', 'club_name' => 'New Club', 'consent' => true,
         ]);
 
         $token = $this->verifyRegistration($this->client, 'admin@newclub.fr');
@@ -107,7 +107,7 @@ final class AuthFlowTest extends WebTestCase
         // Real FFBB shape: GES (Grand Est) + 0067 (Bas-Rhin) → Strasbourg, zone B.
         $this->register([
             'email' => 'zone@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Zoe', 'lastName' => 'Ne', 'ara' => 'GES0067060', 'club_name' => 'Zone Club',
+            'firstName' => 'Zoe', 'lastName' => 'Ne', 'ara' => 'GES0067060', 'club_name' => 'Zone Club', 'consent' => true,
         ]);
         $this->verifyRegistration($this->client, 'zone@club.fr');
 
@@ -120,14 +120,14 @@ final class AuthFlowTest extends WebTestCase
         // First account verifies → creates the club (active admin).
         $this->register([
             'email' => 'owner@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Owner', 'lastName' => 'One', 'ara' => 'EXIST1', 'club_name' => 'Existing Club',
+            'firstName' => 'Owner', 'lastName' => 'One', 'ara' => 'EXIST1', 'club_name' => 'Existing Club', 'consent' => true,
         ]);
         $this->verifyRegistration($this->client, 'owner@club.fr');
 
         // Second account on the same ARA → pending membership, no new club.
         $this->register([
             'email' => 'joiner@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Joiner', 'lastName' => 'Two', 'ara' => 'EXIST1', 'club_name' => 'ignored',
+            'firstName' => 'Joiner', 'lastName' => 'Two', 'ara' => 'EXIST1', 'club_name' => 'ignored', 'consent' => true,
         ]);
         $data = $this->verifyRegistration($this->client, 'joiner@club.fr');
         self::assertNotEmpty($data);
@@ -156,7 +156,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $payload = [
             'email' => 'resend@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Re', 'lastName' => 'Send', 'ara' => 'RESEND1', 'club_name' => 'Resend Club',
+            'firstName' => 'Re', 'lastName' => 'Send', 'ara' => 'RESEND1', 'club_name' => 'Resend Club', 'consent' => true,
         ];
         [$first] = $this->register($payload);
         [$second] = $this->register($payload);
@@ -177,7 +177,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $this->register([
             'email' => 'single@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Si', 'lastName' => 'Ngle', 'ara' => 'SINGLE1', 'club_name' => 'Single Club',
+            'firstName' => 'Si', 'lastName' => 'Ngle', 'ara' => 'SINGLE1', 'club_name' => 'Single Club', 'consent' => true,
         ]);
         $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'single@club.fr']);
         $raw = self::getContainer()->get(EmailVerifier::class)->generateToken($user, 'SINGLE1', 'Single Club');
@@ -199,7 +199,7 @@ final class AuthFlowTest extends WebTestCase
     {
         $this->register([
             'email' => 'ghost@club.fr', 'password' => 'Password123!',
-            'firstName' => 'Gh', 'lastName' => 'Ost', 'ara' => 'GHOST1', 'club_name' => 'Ghost Club',
+            'firstName' => 'Gh', 'lastName' => 'Ost', 'ara' => 'GHOST1', 'club_name' => 'Ghost Club', 'consent' => true,
         ]);
         $user = $this->em->getRepository(User::class)->findOneBy(['email' => 'ghost@club.fr']);
         // Mint a JOIN-intent token (clubName = null) for an ARA that has no club.
@@ -216,7 +216,7 @@ final class AuthFlowTest extends WebTestCase
     {
         [$status] = $this->register([
             'email' => 'noname@club.fr', 'password' => 'Password123!',
-            'ara' => 'NONAME1', 'club_name' => 'No Name Club',
+            'ara' => 'NONAME1', 'club_name' => 'No Name Club', 'consent' => true,
         ]);
 
         self::assertSame(400, $status);
@@ -227,7 +227,7 @@ final class AuthFlowTest extends WebTestCase
         // Policy: ≥12 chars, ≥1 uppercase, ≥1 special. "password123" fails all three.
         [$status, $body] = $this->register([
             'email' => 'weakpw@club.fr', 'password' => 'password123',
-            'firstName' => 'Weak', 'lastName' => 'Pw', 'ara' => 'WEAKPW1', 'club_name' => 'Weak Club',
+            'firstName' => 'Weak', 'lastName' => 'Pw', 'ara' => 'WEAKPW1', 'club_name' => 'Weak Club', 'consent' => true,
         ]);
 
         self::assertSame(400, $status);

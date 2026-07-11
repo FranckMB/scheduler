@@ -64,6 +64,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'lastName' => ['type' => 'string'],
                     'ara' => ['type' => 'string', 'description' => 'FFBB club code — 3-20 uppercase alphanumeric'],
                     'club_name' => ['type' => 'string', 'description' => 'Required only when the ARA creates a new club (snake_case)'],
+                    'consent' => ['type' => 'boolean', 'description' => 'RGPD: acceptance of the terms & privacy policy — required (400 without)'],
                 ],
             ]),
         )));

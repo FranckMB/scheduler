@@ -74,7 +74,7 @@ final class DevClockTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $suffix . '@test.fr', 'password' => 'Password123!',
-            'firstName' => 'C', 'lastName' => 'Clock', 'ara' => strtoupper($suffix), 'club_name' => 'Club Clock',
+            'firstName' => 'C', 'lastName' => 'Clock', 'ara' => strtoupper($suffix), 'club_name' => 'Club Clock', 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
