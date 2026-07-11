@@ -250,6 +250,24 @@ export function useRegenerateFromVersion() {
   });
 }
 
+/** planning-versions (overlay versions): "Régénérer" on a period overlay creates
+ *  a NEW overlay version (a new Schedule for the same period) and generates it —
+ *  unlike a season plan, which regenerates from the current structure. */
+export function useRegenerateOverlay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (calendarEntryId: string) => {
+      const created = await planningApi.createOverlayVersion(calendarEntryId);
+      await planningApi.generateSchedule(created.id);
+      return created;
+    },
+    // Invalidate on settled, not just success: if generate fails AFTER the create,
+    // the new version already exists server-side — the list must refresh either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: () => toast.error("La régénération de la période a échoué."),
+  });
+}
+
 export function useRegenerate() {
   const queryClient = useQueryClient();
   return useMutation({

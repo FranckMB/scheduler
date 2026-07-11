@@ -67,15 +67,26 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
-    public function testSecondOverlayRejected(): void
+    public function testSecondOverlayCreatesNewActiveVersion(): void
     {
+        // planning-versions: a period may carry several overlay versions; the
+        // second is allowed and becomes the ACTIVE overlay (no more 422).
         [$user, $club, $season] = $this->seed('OV3');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
-        $entry->setOverlayScheduleId('11111111-1111-4111-8111-111111111111');
-        $this->em->flush();
 
-        $this->post($user, $club, ['name' => 'Dup', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
-        self::assertResponseStatusCodeSame(422);
+        $this->post($user, $club, ['name' => 'V1', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        self::assertResponseStatusCodeSame(201);
+        $v1 = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        $this->post($user, $club, ['name' => 'V2', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        self::assertResponseStatusCodeSame(201);
+        $v2 = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+        self::assertNotSame($v1, $v2);
+
+        // The newest version is the active overlay of the period.
+        $this->client->request('GET', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
+        $entryData = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame($v2, $entryData['overlayScheduleId'], 'the newest version is the active overlay');
     }
 
     public function testEventEntryRejected(): void

@@ -64,26 +64,29 @@ final class ValidateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
         }
 
-        // Version model — season plans only (an overlay validation, if it ever
-        // exists, would not archive anything): collect the sibling versions.
+        // Version model: validating a version archives its SIBLINGS of the same
+        // scope — season plans share calendarEntryId=null, a period's overlay
+        // versions share that period's id. Collect them (refuse while one solves).
+        $entryId = $schedule->getCalendarEntryId();
+        /** @var list<Schedule> $versions */
+        $versions = $this->entityManager->getRepository(Schedule::class)->findBy([
+            'clubId' => $schedule->getClubId(),
+            'seasonId' => $schedule->getSeasonId(),
+            'calendarEntryId' => $entryId,
+        ]);
         $siblings = [];
-        if (null === $schedule->getCalendarEntryId()) {
-            /** @var list<Schedule> $seasonPlans */
-            $seasonPlans = $this->entityManager->getRepository(Schedule::class)->findBy([
-                'clubId' => $schedule->getClubId(),
-                'seasonId' => $schedule->getSeasonId(),
-                'calendarEntryId' => null,
-            ]);
-            foreach ($seasonPlans as $sibling) {
-                if ($sibling->getId() === $schedule->getId()) {
-                    continue;
-                }
-                if (\in_array($sibling->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
-                    return $this->json(['error' => 'Une autre version est en cours de génération — attendez sa fin avant de valider.'], Response::HTTP_CONFLICT);
-                }
-                $siblings[] = $sibling;
+        foreach ($versions as $sibling) {
+            if ($sibling->getId() === $schedule->getId()) {
+                continue;
             }
+            if (\in_array($sibling->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+                return $this->json(['error' => 'Une autre version est en cours de génération — attendez sa fin avant de valider.'], Response::HTTP_CONFLICT);
+            }
+            $siblings[] = $sibling;
         }
+        $overlayEntry = null !== $entryId
+            ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId)
+            : null;
 
         $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
 
@@ -116,7 +119,7 @@ final class ValidateScheduleController extends AbstractController implements Sea
         // Atomic: overlay deletions + VALIDATED + baseline + socle + sibling
         // archiving commit together (a mid-loop failure must not leave a
         // half-switched plan).
-        $this->entityManager->wrapInTransaction(function () use ($schedule, $season, $siblings, $overlaysToDelete): void {
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $season, $siblings, $overlaysToDelete, $entryId, $overlayEntry): void {
             foreach ($overlaysToDelete as $entry) {
                 // force: the user explicitly confirmed destroying the overlays.
                 $this->overlayManager->deleteOverlayForEntry($entry, force: true);
@@ -124,23 +127,30 @@ final class ValidateScheduleController extends AbstractController implements Sea
 
             $schedule->setStatus(ScheduleStatus::VALIDATED);
 
-            if ($season instanceof Season && null === $schedule->getCalendarEntryId()) {
-                // "This version IS the plan": the validated version becomes the
-                // season baseline (validate + set-baseline used to be dissociated,
+            // The sibling versions are set aside — ARCHIVED, hidden from the
+            // selector, kept as a safety net until the purge. A previously
+            // VALIDATED sibling is archived too, so a scope (season plans, or a
+            // period's overlays) never keeps two VALIDATED versions at once.
+            foreach ($siblings as $sibling) {
+                $sibling->setStatus(ScheduleStatus::ARCHIVED);
+            }
+
+            if (null === $entryId) {
+                // "This version IS the plan": the validated season version becomes
+                // the baseline (validate + set-baseline used to be dissociated,
                 // incoherent in the version model)…
-                $season->setBaselineScheduleId($schedule->getId());
-                // …sticky cockpit-unlock, stamped on first validation, never reset
-                // on reopen. See accueil-cockpit-temporel.md §2ter.
-                if (null === $season->getSocleValidatedAt()) {
-                    $season->setSocleValidatedAt(new DateTimeImmutable);
-                }
-                // The non-validated sibling versions are set aside — hidden from
-                // the selector, kept in DB as a safety net until the season purge.
-                foreach ($siblings as $sibling) {
-                    if (ScheduleStatus::VALIDATED !== $sibling->getStatus()) {
-                        $sibling->setStatus(ScheduleStatus::ARCHIVED);
+                if ($season instanceof Season) {
+                    $season->setBaselineScheduleId($schedule->getId());
+                    // …sticky cockpit-unlock, stamped on first validation, never
+                    // reset on reopen. See accueil-cockpit-temporel.md §2ter.
+                    if (null === $season->getSocleValidatedAt()) {
+                        $season->setSocleValidatedAt(new DateTimeImmutable);
                     }
                 }
+            } elseif ($overlayEntry instanceof CalendarEntry) {
+                // "This overlay version IS the period's plan": it becomes the
+                // active overlay; its siblings were just archived above.
+                $overlayEntry->setOverlayScheduleId($schedule->getId());
             }
         });
 

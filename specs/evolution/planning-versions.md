@@ -23,7 +23,7 @@ Précision décisive (Q/R) : « Si je suis sur V1, j'ai **les conditions qui ont
 | 5 | **Clic sélecteur = consultation** (grille + bandeau divergence). **« Travailler sur cette version »** = action explicite : **savepoint auto** de l'état courant, puis **restauration de la structure** depuis le snapshot de la version (confirmation d'impact chiffrée, ex. 22→12 équipes). Rien n'est jamais perdu : tout état écrasé vit dans un savepoint. |
 | 6 | **« Régénérer aux conditions de cette version »** → version **enfant V2.1** (lignée `parentScheduleId`). Une régénération normale (structure actuelle) → V6 (linéaire). **Édition manuelle en place** : modifier V2 reste V2 (« modifiée le … ») — seule la génération crée une version. |
 
-Hors périmètre (PR dédiées ultérieures) : **versions d'overlay** (lever la contrainte 1-overlay-par-période ; purge des archives quand `endDate` passée) · comparaison/diff entre versions · restauration d'une version ARCHIVED post-validation.
+Hors périmètre (PR dédiées ultérieures) : comparaison/diff entre versions · restauration d'une version ARCHIVED post-validation. *(Les **versions d'overlay** — plusieurs versions par période + purge à `endDate` passée — sont **livrées**, voir §D3ter.)*
 
 ## 3. Contrainte technique structurante
 
@@ -54,6 +54,17 @@ Décision 6, **clause 2** (« une régénération normale → V linéaire ») : 
 Les **verrous HARD survivent sans copie** : la charge de génération (`ScheduleConstraintBuilder::findBaseSlotTemplates`) alimente déjà les créneaux HARD de **toutes** les versions base (`calendarEntryId IS NULL`) comme pins — le solveur les re-fixe, exactement comme le faisait la régé en place. `RegenerateController` ne clone donc **rien**.
 
 > **⚠️ Dette préexistante exposée (à traiter en axe structurant — pipeline de génération)** : les ids de créneau sont **déterministes globalement** (`uuid5(team,venue,day,start)`, engine `result_builder._slot_id`), donc deux versions base partageant un placement identique **ne peuvent coexister** comme deux lignes distinctes. À l'import (`ScheduleResultImporter`, scope saison), le créneau de la version source est alors **réassigné** à la nouvelle version → la source perd ce créneau. Idem, la nouvelle version hérite des HARD de **toutes** les versions base (contamination croisée). Ces deux comportements **préexistent** (déjà atteignables via D3 `regenerate-from`, qui crée aussi une 2ᵉ version base) ; « Régénérer » les rend fréquents. **Correction propre = ids de créneau par-schedule** (plan dédié : engine + importer + contrat).
+
+### D3ter — versions d'overlay (plusieurs versions par période) *(fait — 2026-07-11)*
+La machinerie de versions D1 est **déclinée aux overlays** : une même `CalendarEntry` (période closure/vacances) porte désormais **plusieurs versions d'overlay** (V1, V2…), pas une seule.
+- **Création** : la garde d'unicité 422 (`ScheduleStateProcessor`) est **levée** ; l'index DB partial-unique `uniq_schedule_calendar_entry` est **droppé** (migration `Version20260711120000`) → remplacé par un index non-unique. Une nouvelle version = un `Schedule` de plus avec le même `calendarEntryId` ; `CalendarEntry.overlayScheduleId` cesse d'être « l'unique » pour désigner la **version active**. Seule garde restante : une **sœur in-flight** de la période (409), miroir de la saison.
+- **Génération** : inchangée — `GenerateScheduleHandler` route déjà sur `buildForOverlay` quand `calendarEntryId` est posé.
+- **Validation** : `ValidateScheduleController` branche la voie overlay (jusque-là inerte) — valider une version d'overlay **archive les sœurs de LA MÊME période** et pose le pointeur actif, **sans** toucher le baseline/socle saison, les plans de saison, ni les overlays des autres périodes.
+- **Reopen** : rouvrir une version d'overlay (VALIDATED→COMPLETED) ne **ressuscite pas** les sœurs ARCHIVED.
+- **Suppression / purge** : `OverlayManager::deleteOverlayForEntry` supprime **toutes** les versions d'une période (forward-marker + pointeur inverse legacy) ; supprimer la version active repointe vers la plus récente survivante. Nouvelle commande **`app:overlays:purge`** (`PurgeOverlaysCommand`, idempotente, `--dry-run`/`--club`/`--date`) purge les overlays des périodes dont `endDate` est passée — manuelle aujourd'hui, cron via la future console superadmin.
+- **Front** : le sélecteur de versions liste les versions d'overlay de la période sélectionnée (`visibleOverlayVersions`, étiquettes `overlayVersionLabels`) ; « Régénérer » sur un overlay crée une **nouvelle version d'overlay** (`useRegenerateOverlay` → POST `/schedules` + generate) au lieu de la régé saison ; Valider/Rouvrir opèrent déjà par id.
+- **NR (`--group phase1`)** : `OverlayVersionsTest` (2ᵉ overlay ≠ 422 + version active ; validation archive les sœurs de la période et rien d'autre ; sœur in-flight → 409 ; reopen ne ressuscite pas) + `PurgeOverlaysCommandTest` (périodes terminées uniquement ; dry-run no-op).
+- **Non traité (P0-5)** : deux versions d'overlay d'une **même** période partageant un placement identique subissent le même vol de créneau déterministe (cf. ⚠️ ci-dessus). Risque moindre (placements souvent distincts) mais réel.
 
 ## 5. Invariants (à tester à chaque palier)
 

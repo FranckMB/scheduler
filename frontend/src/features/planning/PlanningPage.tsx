@@ -18,7 +18,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -145,6 +145,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const regenerateMutation = useRegenerate();
+  const regenerateOverlayMutation = useRegenerateOverlay();
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
   const setBaselineMutation = useSetBaseline();
@@ -357,9 +358,22 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
               onViewMode={setViewMode}
-              isGenerating={isGenerating || regenerateMutation.isPending}
+              isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
-              onRegenerate={() => validScheduleId && regenerateMutation.mutate(validScheduleId, { onSuccess: (created) => setSelectedScheduleId(created.id) })}
+              onRegenerate={() => {
+                if (null === validScheduleId) {
+                  return;
+                }
+                const select = { onSuccess: (created: { id: string }) => setSelectedScheduleId(created.id) };
+                // An overlay "Régénérer" creates a NEW overlay version for its
+                // period; a season plan regenerates from the current structure.
+                const entryId = selectedSchedule?.calendarEntryId ?? null;
+                if (null !== entryId) {
+                  regenerateOverlayMutation.mutate(entryId, select);
+                } else {
+                  regenerateMutation.mutate(validScheduleId, select);
+                }
+              }}
               onValidate={() => setValidateOpen(true)}
               onReopen={() => reopen()}
               onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}

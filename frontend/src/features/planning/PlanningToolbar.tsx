@@ -6,7 +6,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
-import { versionLabels, visibleSeasonPlans } from "./lib/versions";
+import { overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -64,7 +64,9 @@ export function PlanningToolbar({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const labels = versionLabels(schedules);
-  const labelOf = (schedule: Schedule): string => labels.get(schedule.id) ?? schedule.name;
+  // When an overlay is selected, its period's versions get their own V{n} labels.
+  const overlayLabels = isOverlay && null !== selected?.calendarEntryId ? overlayVersionLabels(schedules, selected.calendarEntryId) : null;
+  const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
   // Deletable = a plain work version: never the baseline (anchors the season),
   // never VALIDATED (read-only), never mid-solve, never an overlay.
   const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
@@ -81,8 +83,9 @@ export function PlanningToolbar({
         onChange={(event) => onSelectSchedule(event.target.value)}
         className="h-8 rounded-md border border-input bg-background px-3 text-sm"
       >
-        {/* Visible season versions only; a selected overlay (from the cockpit) is added so it stays visible. */}
-        {[...visibleSeasonPlans(schedules), ...schedules.filter((s) => null !== s.calendarEntryId && s.id === selectedScheduleId)].map((schedule) => (
+        {/* Season versions, plus — when an overlay is selected — that period's own
+            overlay versions (V1, V2…) so the manager can switch between them. */}
+        {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
           <option key={schedule.id} value={schedule.id}>
             {labelOf(schedule)}
             {schedule.id === baselineScheduleId ? " ★" : ""}

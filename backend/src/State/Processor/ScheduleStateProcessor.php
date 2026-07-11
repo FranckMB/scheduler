@@ -72,8 +72,19 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             if (!\in_array($entry->getPeriodType(), [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
                 throw new UnprocessableEntityHttpException('Overlay generation is only supported for closure and holiday periods.');
             }
-            if (null !== $entry->getOverlayScheduleId()) {
-                throw new UnprocessableEntityHttpException('This period already has an overlay schedule.');
+            // planning-versions: a period may carry SEVERAL overlay versions
+            // (V1, V2…) like a season plan; the new one becomes the active overlay
+            // (pointer set below). Only refuse while a sibling version of THIS
+            // period is still solving — a running solve must never be overwritten
+            // (mirror of the season in-flight guard).
+            $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
+                'clubId' => $entry->getClubId(),
+                'seasonId' => $entry->getSeasonId(),
+                'calendarEntryId' => $entry->getId(),
+                'status' => [ScheduleStatus::PENDING, ScheduleStatus::GENERATING],
+            ]);
+            if ($inFlight > 0) {
+                throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
             }
             // An overlay is built ON the socle: the season must have a baseline
             // (otherwise the club would be onboarded with only an overlay, no base).
@@ -95,7 +106,18 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         $output = parent::processPost($input, $clubId, $seasonId);
 
         if ($entry instanceof CalendarEntry) {
-            $entry->setOverlayScheduleId($output->id);
+            // The new version becomes the ACTIVE overlay only if the period has no
+            // usable one to fall back on — mirror of the season baseline, which
+            // moves only on validation. This keeps a good V1 shown while a
+            // regenerated V2 solves (or fails): validating V2 later flips the
+            // pointer (ValidateScheduleController). Otherwise a failed regenerate
+            // would strand the previously-adapted period on an empty draft.
+            $activeId = $entry->getOverlayScheduleId();
+            $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
+            $activeIsUsable = $active instanceof Schedule && \in_array($active->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true);
+            if (!$activeIsUsable) {
+                $entry->setOverlayScheduleId($output->id);
+            }
             $this->entityManager->flush();
         }
 
