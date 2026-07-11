@@ -50,6 +50,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $anonymizedAt = null;
 
+    // RGPD (rétention) : dernier login réussi — l'inactivité se mesure sur
+    // COALESCE(lastLoginAt, createdAt). Posé par LoginSuccessListener.
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $lastLoginAt = null;
+
+    // RGPD (rétention) : préavis d'inactivité envoyé (23 mois). Remis à null au
+    // login ; l'anonymisation (24 mois) exige un préavis vieux d'au moins 14 j.
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $inactivityWarnedAt = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -166,6 +176,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setAnonymizedAt(?DateTimeImmutable $anonymizedAt): self
     {
         $this->anonymizedAt = $anonymizedAt;
+
+        return $this;
+    }
+
+    public function getLastLoginAt(): ?DateTimeImmutable
+    {
+        return $this->lastLoginAt;
+    }
+
+    public function setLastLoginAt(?DateTimeImmutable $lastLoginAt): self
+    {
+        $this->lastLoginAt = $lastLoginAt;
+
+        return $this;
+    }
+
+    public function getInactivityWarnedAt(): ?DateTimeImmutable
+    {
+        return $this->inactivityWarnedAt;
+    }
+
+    public function setInactivityWarnedAt(?DateTimeImmutable $inactivityWarnedAt): self
+    {
+        $this->inactivityWarnedAt = $inactivityWarnedAt;
 
         return $this;
     }
