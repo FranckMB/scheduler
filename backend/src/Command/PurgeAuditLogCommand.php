@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use DateTimeImmutable;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -46,10 +45,21 @@ final class PurgeAuditLogCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $dryRun = (bool) $input->getOption('dry-run');
-        $threshold = DateTimeImmutable::createFromInterface($this->clock->now())->modify(self::RETENTION)->format('Y-m-d H:i:s');
+        $threshold = $this->clock->now()->modify(self::RETENTION)->format('Y-m-d H:i:s');
 
         $connection = $this->managerRegistry->getConnection('admin');
         \assert($connection instanceof \Doctrine\DBAL\Connection);
+
+        // GARDE BRUYANT (revue PR-4, patron RlsIsolationTest) : si la connexion
+        // « admin » régresse vers app_user, le DELETE sous RLS affecterait 0
+        // ligne SANS erreur — la rétention 12 mois serait silencieusement
+        // inappliquée à jamais. On refuse de tourner plutôt que mentir.
+        $currentUser = (string) $connection->fetchOne('SELECT current_user');
+        if ('app_user' === $currentUser) {
+            $io->error('The admin connection runs as app_user (RLS would silently no-op the purge). Fix DATABASE_ADMIN_URL.');
+
+            return Command::FAILURE;
+        }
 
         if ($dryRun) {
             $count = (int) $connection->fetchOne('SELECT COUNT(*) FROM audit_log WHERE occurred_at < :t', ['t' => $threshold]);

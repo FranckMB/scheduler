@@ -41,7 +41,7 @@ class AuditLog implements TenantOwnedInterface
     private ?string $clubId = null;
 
     #[ORM\Column(type: 'string', length: 40)]
-    private string $action;
+    private string $action = '';
 
     #[ORM\Column(type: 'string', length: 60, nullable: true)]
     private ?string $entityType = null;
@@ -69,23 +69,9 @@ class AuditLog implements TenantOwnedInterface
         return $this->occurredAt;
     }
 
-    public function setOccurredAt(DateTimeImmutable $occurredAt): self
-    {
-        $this->occurredAt = $occurredAt;
-
-        return $this;
-    }
-
     public function getActorUserId(): ?string
     {
         return $this->actorUserId;
-    }
-
-    public function setActorUserId(?string $actorUserId): self
-    {
-        $this->actorUserId = $actorUserId;
-
-        return $this;
     }
 
     public function getClubId(): ?string
@@ -105,23 +91,9 @@ class AuditLog implements TenantOwnedInterface
         return $this->action;
     }
 
-    public function setAction(string $action): self
-    {
-        $this->action = $action;
-
-        return $this;
-    }
-
     public function getEntityType(): ?string
     {
         return $this->entityType;
-    }
-
-    public function setEntityType(?string $entityType): self
-    {
-        $this->entityType = $entityType;
-
-        return $this;
     }
 
     public function getEntityId(): ?string
@@ -129,24 +101,9 @@ class AuditLog implements TenantOwnedInterface
         return $this->entityId;
     }
 
-    public function setEntityId(?string $entityId): self
-    {
-        $this->entityId = $entityId;
-
-        return $this;
-    }
-
     /** @return array<string, mixed> */
     public function getDetails(): array
     {
         return $this->details;
-    }
-
-    /** @param array<string, mixed> $details */
-    public function setDetails(array $details): self
-    {
-        $this->details = $details;
-
-        return $this;
     }
 }

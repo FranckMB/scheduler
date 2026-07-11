@@ -38,7 +38,7 @@ final class Version20260711200000 extends AbstractMigration
             action VARCHAR(40) NOT NULL,
             entity_type VARCHAR(60) DEFAULT NULL,
             entity_id VARCHAR(36) DEFAULT NULL,
-            details JSON NOT NULL,
+            details JSONB NOT NULL,
             PRIMARY KEY(id)
         )');
         $this->addSql('CREATE INDEX idx_audit_log_occurred_at ON audit_log (occurred_at)');

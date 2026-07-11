@@ -8,6 +8,7 @@ use App\Enum\AuditAction;
 use App\Service\AuditTrail;
 use ReflectionClass;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\Security\Core\Exception\TooManyLoginAttemptsAuthenticationException;
 use Symfony\Component\Security\Http\Event\LoginFailureEvent;
 
 /**
@@ -29,6 +30,12 @@ final class LoginFailureListener
         // Uniquement le firewall de login interactif : les 401 du firewall api
         // (JWT expiré au fil de l'eau) noieraient le signal.
         if ('login' !== $event->getFirewallName()) {
+            return;
+        }
+        // Les rejets DU throttle ne s'écrivent pas : sinon un attaquant non
+        // authentifié ferait grossir la table append-only sans borne (revue
+        // PR-4) — le volume audité est ainsi plafonné par login_throttling.
+        if ($event->getException() instanceof TooManyLoginAttemptsAuthenticationException) {
             return;
         }
 

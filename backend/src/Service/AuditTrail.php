@@ -45,10 +45,14 @@ final class AuditTrail
         // d'une transaction l'avorte (« current transaction is aborted ») et
         // ferait échouer l'opération métier malgré le catch. SAVEPOINT quand
         // une transaction est active → l'échec d'audit se rollback seul.
-        $inTransaction = $connection->isTransactionActive();
+        // isTransactionActive() ne voit que le compteur DBAL — la transaction
+        // de test dama (niveau driver) lui est invisible : on la détecte par
+        // le driver pour que le même filet joue en suite phase1 (revue PR-4).
+        $inTransaction = $connection->isTransactionActive()
+            || $connection->getDriver() instanceof \DAMA\DoctrineTestBundle\Doctrine\DBAL\StaticDriver;
         try {
             if ($inTransaction) {
-                $connection->createSavepoint('audit_trail');
+                $connection->executeStatement('SAVEPOINT audit_trail');
             }
             $connection->executeStatement(
                 'INSERT INTO audit_log (id, occurred_at, actor_user_id, club_id, action, entity_type, entity_id, details)
@@ -65,12 +69,12 @@ final class AuditTrail
                 ],
             );
             if ($inTransaction) {
-                $connection->releaseSavepoint('audit_trail');
+                $connection->executeStatement('RELEASE SAVEPOINT audit_trail');
             }
         } catch (Throwable $e) {
             if ($inTransaction) {
                 try {
-                    $connection->rollbackSavepoint('audit_trail');
+                    $connection->executeStatement('ROLLBACK TO SAVEPOINT audit_trail');
                 } catch (Throwable) {
                     // savepoint jamais créé (échec avant) — rien à défaire.
                 }

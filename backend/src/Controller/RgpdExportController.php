@@ -49,9 +49,12 @@ final class RgpdExportController extends AbstractController
             return $throttled;
         }
 
+        // Audit APRÈS la génération (revue PR-4) : un export qui échoue ne doit
+        // pas laisser une trace append-only affirmant qu'il a été remis.
+        $data = $this->exportService->exportUser($user);
         $this->auditTrail->record(AuditAction::EXPORT_USER, $user->getId());
 
-        return $this->downloadable($this->exportService->exportUser($user), 'mes-donnees');
+        return $this->downloadable($data, 'mes-donnees');
     }
 
     #[Route('/api/club/export', name: 'api_club_export', methods: ['GET'])]
@@ -81,9 +84,10 @@ final class RgpdExportController extends AbstractController
             return $this->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
         }
 
+        $data = $this->exportService->exportClub($clubId);
         $this->auditTrail->record(AuditAction::EXPORT_CLUB, $user->getId(), $clubId);
 
-        return $this->downloadable($this->exportService->exportClub($clubId), 'donnees-club');
+        return $this->downloadable($data, 'donnees-club');
     }
 
     /**
