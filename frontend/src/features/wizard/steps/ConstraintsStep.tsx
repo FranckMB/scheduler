@@ -332,6 +332,7 @@ export function ConstraintsStep() {
     () =>
       groupConstraints(list, family, {
         teams,
+        tiers,
         tags,
         coaches,
         coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
@@ -341,7 +342,7 @@ export function ConstraintsStep() {
       }),
     // coachName/venueName are fresh Maps each render; the real inputs are the data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [list, family, teams, tags, coaches, coachPlayers, venues],
+    [list, family, teams, tiers, tags, coaches, coachPlayers, venues],
   );
 
   return (

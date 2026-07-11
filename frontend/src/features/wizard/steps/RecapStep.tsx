@@ -71,6 +71,7 @@ export function RecapStep() {
   const constraintFamilies = useMemo(() => {
     const ctx = {
       teams,
+      tiers,
       tags,
       coaches,
       coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
@@ -85,7 +86,7 @@ export function RecapStep() {
     ].filter((g) => g.sections.length > 0);
     // coachName/venueName are fresh Maps each render; the real inputs are the data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [constraints, teams, tags, coaches, coachPlayers, venues]);
+  }, [constraints, teams, tiers, tags, coaches, coachPlayers, venues]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);

@@ -1,5 +1,5 @@
-import type { Coach, Constraint, Team, TeamTag, Venue } from "@/features/wizard/api";
-import { compareTeamsByRank } from "@/shared/lib/teamTiers";
+import type { Coach, Constraint, PriorityTier, Team, TeamTag, Venue } from "@/features/wizard/api";
+import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
 import { AXIS_LABEL, groupTagsByAxis, KNOWN_AXES, tagLabel } from "./tagLabels";
 
@@ -43,6 +43,7 @@ function constraintVenueId(c: Constraint): string | null {
 
 interface GroupContext {
   teams: Team[];
+  tiers: PriorityTier[];
   tags: TeamTag[];
   coaches: Coach[];
   coachPlayerIds: Set<string>;
@@ -140,12 +141,14 @@ export function groupConstraints(constraints: Constraint[], family: string, ctx:
   if (clubWide.length > 0) {
     out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
   }
-  [...ctx.teams].sort(compareTeamsByRank).forEach((t) => {
-    const items = byTeam.get(t.id);
-    if (items && items.length > 0) {
-      out.push({ key: `t:${t.id}`, label: t.name, items });
+  // A team-targeted constraint is filed under its team's RANG (tier) group
+  // (user: cibler SM14 → sous « S · Fanion »), teams in rank order within.
+  for (const tierGroup of groupTeamsByTier(ctx.teams, ctx.tiers)) {
+    const items = tierGroup.teams.flatMap((t) => byTeam.get(t.id) ?? []);
+    if (items.length > 0) {
+      out.push({ key: `tier:${tierGroup.tier?.id ?? "orphan"}`, label: tierGroupLabel(tierGroup.tier), items });
     }
-  });
+  }
   if (other.length > 0) {
     out.push({ key: "other", label: "Autres", items: other });
   }

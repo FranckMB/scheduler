@@ -85,10 +85,10 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
     renderWithProviders(<ConstraintsStep />);
 
-    // The SENIOR (axis AGE) group under « Âge », then teams in rank order
-    // (Fanion=S before SM1=B).
+    // SENIOR tag → axis « Âge » ; team-targeted constraints go under their
+    // team's RANG group (Fanion=S, SM1=B), in tier order.
     const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
-    expect(sections).toEqual(["Âge", "Fanion", "SM1"]);
+    expect(sections).toEqual(["Âge", "S · Fanion", "B · Moyenne"]);
   });
 
   it("groups gymnase constraints by VENUE (A→Z)", async () => {

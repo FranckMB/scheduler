@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Coach, Constraint, Team, TeamTag, Venue } from "@/features/wizard/api";
+import type { Coach, Constraint, PriorityTier, Team, TeamTag, Venue } from "@/features/wizard/api";
 
 import { FAMILY_ORDER, groupConstraints } from "./constraintOrder";
 
@@ -21,8 +21,14 @@ const venues = [
   { id: "v-mateo", name: "Matéo" },
 ] as unknown as Venue[];
 
+const tiers = [
+  { id: 1, label: "S", name: "Fanion" },
+  { id: 3, label: "B", name: "Moyenne" },
+] as unknown as PriorityTier[];
+
 const ctx = {
   teams,
+  tiers,
   tags,
   coaches,
   coachPlayerIds: new Set<string>(),
@@ -38,7 +44,7 @@ describe("groupConstraints", () => {
     expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"]);
   });
 
-  it("TIME/DAY → groups by tag axis (Genre before Âge), then club, then teams by rank", () => {
+  it("TIME/DAY → groups by tag axis (Genre before Âge), then teams by their RANG group", () => {
     const sections = groupConstraints(
       [
         c({ scope: "CLUB", config: { targetTag: "SENIOR" } }), // axis AGE
@@ -49,7 +55,7 @@ describe("groupConstraints", () => {
       "TIME",
       ctx,
     ).map((s) => s.label);
-    expect(sections).toEqual(["Genre", "Âge", "Fanion", "SM1"]);
+    expect(sections).toEqual(["Genre", "Âge", "S · Fanion", "B · Moyenne"]);
   });
 
   it("FACILITY → groups by venue, A→Z", () => {
