@@ -111,6 +111,66 @@ export function useDeleteSlot() {
   });
 }
 
+// --- Period-editable structure (F1): slots + team overrides scoped to a period ---
+
+export function usePeriodSlots(calendarEntryId: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "period_slots", calendarEntryId],
+    queryFn: () => wizardApi.listPeriodSlots(calendarEntryId as string),
+    enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreatePeriodSlot(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Omit<SlotPayload, "calendarEntryId">) => wizardApi.createSlot({ ...body, calendarEntryId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+  });
+}
+
+export function useDeletePeriodSlot(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteSlot(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+  });
+}
+
+export function useTeamPeriodOverrides(calendarEntryId: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "team_period_overrides", calendarEntryId],
+    queryFn: () => wizardApi.listTeamPeriodOverrides(calendarEntryId as string),
+    enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateTeamPeriodOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: wizardApi.TeamPeriodOverridePayload) => wizardApi.createTeamPeriodOverride(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+  });
+}
+
+export function useUpdateTeamPeriodOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: wizardApi.TeamPeriodOverridePayload }) => wizardApi.updateTeamPeriodOverride(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+  });
+}
+
+export function useDeleteTeamPeriodOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteTeamPeriodOverride(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+  });
+}
+
 // --- Coaches + links (W3) ---
 
 export function useWizardCoaches() {

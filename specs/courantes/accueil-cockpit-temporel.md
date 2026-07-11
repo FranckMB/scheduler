@@ -324,8 +324,10 @@ a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'orig
   (voir / éditer / supprimer). Une indispo/période porte un **« Adapter → »** qui ouvre
   l'**écran dédié**.
 - **L'écran dédié « calendrier secondaire » = le wizard réutilisé en « mode période »**
-  (voir §6bis). Pas un nouvel écran à apprendre : **les mêmes 6 étapes**, mais la **structure du
-  club est verrouillée** et seules les **contraintes + la génération** sont actives.
+  (voir §6bis). Pas un nouvel écran à apprendre : **les mêmes 6 étapes**, mais le roster/les
+  gymnases restent **hérités** (non ré-éditables comme entités) — on les **surcharge pour la
+  fenêtre** (équipe on/off + séances, créneaux prêtés) via un DIFF `calendarEntryId`, en plus des
+  **contraintes + la génération**.
   → **Une modale serait trop à l'étroit ; et surtout, réutiliser le wizard = zéro réapprentissage.**
 
 Le geste unique « cliquer une date » ouvre donc **le bon niveau selon le besoin** : une note
@@ -333,7 +335,7 @@ rapide (modale) ou l'atelier de génération (le wizard en mode période). Pas d
 
 > **Ex.** « AG le 12 mai » → clic sur le 12, popover, titre + toggle informatif, **enregistré, je
 > reste sur le cockpit** (2 s). « Gym Barros fermé la semaine du 4 » que je veux résoudre → clic,
-> « Adapter → » → **plein écran** = wizard mode période, structure verrouillée, contraintes ouvertes.
+> « Adapter → » → **plein écran** = wizard mode période, structure surchargeable pour la fenêtre, contraintes ouvertes.
 
 ## 6. Le calendrier secondaire = un overlay borné, pas une alternative plein-saison
 
@@ -364,11 +366,17 @@ Décision UX forte : générer le plan d'une période **ne réinvente aucun écr
 le wizard** avec un **3ᵉ mode** (`période`, à côté de `guidé` et `libre`) et des **accès
 différents** :
 
+> **Structure éditable PAR PÉRIODE (F1) :** le mode période n'est plus « lecture seule ». Le
+> roster/les gymnases restent **hérités** (non ré-éditables comme entités), mais on peut
+> **surcharger la participation pour la fenêtre** — équipe **on/off** + **séances**, et **créneaux
+> prêtés** (mairie) additifs — via un DIFF scopé `calendarEntryId` (le socle n'est jamais touché).
+> Détail besoin : [`../evolution/plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md) §3+§6bis.
+
 | Étape wizard | En mode période |
 |---|---|
-| Équipes | **Héritée du plan de base, lecture seule** (contexte, non ré-éditable) |
-| Gymnases | **Hérités, lecture seule** — le gymnase concerné est marqué **« fermé cette période »** |
-| Coachs | **Hérités, lecture seule** |
+| Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables. **Défaut : Fanion seul** (ramp de reprise), ajustable. |
+| Gymnases | Hérités (fermetures marquées **« fermé cette période »**) + **créneaux prêtés** ajoutables pour la fenêtre (additifs, scopés période) |
+| Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |
 | **Génération** | Génère l'**overlay** borné à la fenêtre (le calendrier secondaire) |

@@ -1,17 +1,15 @@
-import { Lock, OctagonX } from "lucide-react";
+import { Lock } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
-import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Team } from "../api";
-import { useEntryConflicts } from "@/features/cockpit/queries";
 import { coachMeta, orderedCoaches } from "../lib/ranking";
-import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
-import { usePriorityTiers, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { coachTeamNames } from "../lib/summary";
+import { usePriorityTiers, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams } from "../queries";
 
 /** One item per row — shared by the recap and the period read-only views. */
 export function SummaryRow({ label, meta, className }: { label: ReactNode; meta?: ReactNode; className?: string }) {
@@ -70,59 +68,6 @@ function LockedBanner({ title }: { title: string }) {
 // ---------------------------------------------------------------------------
 // Period read-only views (wizard "period" mode): inherited from the base plan.
 // ---------------------------------------------------------------------------
-
-export function ReadonlyTeams() {
-  const { data: teams = [] } = useWizardTeams();
-  return (
-    <div className="space-y-3">
-      <LockedBanner title="Équipes" />
-      <TeamTierAccordion teams={teams} renderRow={(t) => <SummaryRow key={t.id} label={t.name} />} />
-    </div>
-  );
-}
-
-export function ReadonlyVenues({ calendarEntryId }: { calendarEntryId: string | null }) {
-  const { data: venues = [] } = useWizardVenues();
-  const { data: slots = [] } = useVenueSlots();
-  const { data: conflicts } = useEntryConflicts(calendarEntryId);
-  const closed = new Set(conflicts?.venueIds ?? []);
-  const slotsByVenue = countSlotsByVenue(slots);
-
-  return (
-    <div className="space-y-3">
-      <LockedBanner title="Gymnases" />
-      {0 === venues.length ? (
-        <EmptyHint>Aucun gymnase.</EmptyHint>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {venues.map((v) => {
-            const isClosed = closed.has(v.id);
-            return (
-              <li
-                key={v.id}
-                className={cn(
-                  "flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm",
-                  isClosed ? "border-destructive/50 bg-destructive/10" : "border-border bg-card",
-                )}
-              >
-                <VenueSwatch color={v.color ?? "transparent"} className="size-3 border border-border" />
-                <span className={cn("flex-1", isClosed && "text-destructive line-through")}>{v.name}</span>
-                {isClosed ? (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-destructive">
-                    <OctagonX className="size-4" />
-                    INTERDIT cette période
-                  </span>
-                ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground">{slotsByVenue.get(v.id) ?? 0} créneau(x)</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export function ReadonlyCoaches() {
   const { data: coaches = [] } = useWizardCoaches();

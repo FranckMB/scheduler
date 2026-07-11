@@ -17,7 +17,7 @@ import { DAYS, hhmm } from "../lib/days";
 import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
-import { ReadonlyVenues } from "./StructureSummary";
+import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
 const DURATIONS = [60, 75, 90, 105, 120];
@@ -202,9 +202,8 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
 
 export function VenuesStep() {
   const { mode, calendarEntryId } = useWizardStore();
-  const periodMode = "period" === mode;
-  if (periodMode) {
-    return <ReadonlyVenues calendarEntryId={calendarEntryId} />;
+  if ("period" === mode && null !== calendarEntryId) {
+    return <PeriodVenues calendarEntryId={calendarEntryId} />;
   }
   return <VenuesEditor />;
 }
