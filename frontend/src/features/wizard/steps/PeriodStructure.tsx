@@ -1,5 +1,5 @@
-import { CalendarPlus, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { useEntryConflicts } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
@@ -29,6 +29,12 @@ import { SectionCountTitle } from "./StructureSummary";
 
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
+// Which periods this session has already auto-seeded (Fanion-only). Module-level so
+// it survives a step remount (WizardLayout unmounts inactive steps) — the only signal
+// that distinguishes "fresh period" from "manager cleared all overrides". Cleared on
+// seed FAILURE so the next visit retries.
+const seededPeriods = new Set<string>();
+
 /**
  * Period-editable teams (F1): the club roster is READ-ONLY (grouped by rank), but
  * each team can be toggled off for the period and given a period-specific number
@@ -43,7 +49,6 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const create = useCreateTeamPeriodOverride(calendarEntryId);
   const update = useUpdateTeamPeriodOverride(calendarEntryId);
   const del = useDeleteTeamPeriodOverride(calendarEntryId);
-  const seeded = useRef(false);
   const [busy, setBusy] = useState(false);
 
   const groups = groupTeamsByTier(teams, tiers);
@@ -65,29 +70,39 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     const body = { calendarEntryId, teamId: t.id, isActive: next.isActive, sessionsPerWeek: next.sessions };
     return existing ? update.mutateAsync({ id: existing.id, body }) : create.mutateAsync(body);
   };
-  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next);
+  // Fire-and-forget for single edits (checkbox/session). Swallow the rejection: the
+  // global MutationCache already toasts it — this only avoids an unhandledrejection.
+  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next).catch(() => {});
 
-  // Fanion-only default: on a FRESH period (no overrides yet) deactivate every team
-  // below the top tier, ONCE. Controls stay disabled (busy) until the async seed
-  // settles so a first click can't race the in-flight writes (and get dropped).
+  // Fanion-only default: on a FRESH period (no overrides yet, not already seeded this
+  // session) deactivate every team below the top tier, ONCE. Controls stay disabled
+  // (busy) until the async writes settle so a first click can't race them. On failure
+  // the period is un-marked so the next visit retries.
   useEffect(() => {
-    if (seeded.current || busy || isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId) {
+    if (isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || seededPeriods.has(calendarEntryId)) {
       return;
     }
-    seeded.current = true;
     const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
+    seededPeriods.add(calendarEntryId);
     if (0 === belowTop.length) {
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
     setBusy(true);
-    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [busy, isLoading, teams, overrides, topTierId, calendarEntryId, create]);
+    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false })))
+      .then((results) => {
+        if (results.some((r) => "rejected" === r.status)) {
+          seededPeriods.delete(calendarEntryId); // partial/failed seed → retry on the next visit
+        }
+      })
+      .finally(() => setBusy(false));
+  }, [isLoading, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
-    // Ignore an emptied / out-of-range field (Number("") === 0) rather than persist 0.
-    if (!Number.isInteger(raw) || raw < 1 || raw > 7) {
+    // Ignore an emptied field (Number("") === 0) — the input's min/max + the backend
+    // bound the real range; never persist 0.
+    if (!Number.isInteger(raw) || raw < 1) {
       return;
     }
     upsert(t, { isActive: isActive(t), sessions: raw === t.sessionsPerWeek ? null : raw });
@@ -102,6 +117,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     setBusy(true);
     try {
       await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
+      toast.success("Sélection appliquée");
     } finally {
       setBusy(false);
     }
@@ -112,11 +128,11 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">
         Choisissez qui reprend sur cette période. Par défaut seul le <strong>Fanion</strong> est actif — cochez les équipes au fur et à mesure de la montée en charge.
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(0)}>
           Fanion seul
         </Button>
@@ -128,6 +144,12 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(groups.length - 1)}>
           Tout le club
         </Button>
+        {busy ? (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            Application…
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-1.5">

@@ -43,9 +43,10 @@ afterEach(() => {
 
 describe("PeriodTeams — Fanion-only default + toggles", () => {
   it("seeds a fresh period with only the top tier active (deactivates the rest)", () => {
-    render(<PeriodTeams calendarEntryId="e1" />);
+    // Unique id: the module-level "already seeded" set persists across tests.
+    render(<PeriodTeams calendarEntryId="fresh-seed" />);
     // U13 (tier 2) is deactivated by default; SM1 (Fanion) is not touched.
-    expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", teamId: "t2", isActive: false });
+    expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "fresh-seed", teamId: "t2", isActive: false });
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
