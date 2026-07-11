@@ -39,7 +39,8 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await page.getByLabel("Prénom").fill("Coa");
   await page.getByLabel("Nom", { exact: true }).fill("Ch");
   await page.getByRole("button", { name: "Ajouter le coach" }).click();
-  await expect(page.locator('input[value="Coa"]')).toBeVisible();
+  // Lot A: coach cards are read-only by default (name as text, edit on demand).
+  await expect(page.getByText("Coa Ch", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Suivant" }).click();
 
   // --- Step 4 · constraints (none — skip).
