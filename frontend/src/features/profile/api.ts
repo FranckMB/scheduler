@@ -23,3 +23,16 @@ export interface ChangePasswordPayload {
 
 /** Change the connected user's password (current password required). */
 export const changePassword = (body: ChangePasswordPayload): Promise<{ status: string }> => api.post("me/password", { json: body }).json();
+
+export interface DeleteAccountResult {
+  message: string;
+  clubPurgeScheduled: boolean;
+  gracePeriodDays: number;
+}
+
+/**
+ * RGPD erasure (DELETE /api/me): anonymise immédiatement le compte connecté.
+ * Confirmation = ré-authentification : le mot de passe courant est exigé
+ * (un JWT volé ne suffit pas à détruire le compte).
+ */
+export const deleteAccount = (password: string): Promise<DeleteAccountResult> => api.delete("me", { json: { password } }).json();

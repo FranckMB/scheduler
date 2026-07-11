@@ -1,7 +1,13 @@
-Last verified @ feat/d1-planning-versions 2026-07-10
+Last verified @ feat/rgpd-account-erasure 2026-07-11
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **65 paths.**
 Changements récents :
+- **RGPD PR-1 effacement (2026-07-11)** : `/api/me` gagne **DELETE** (`DeleteAccountController`,
+  ajouté à `CustomRoutesOpenApiFactory`) — anonymisation immédiate self-only, confirmation =
+  **ré-authentification par mot de passe** (revue sécurité : un JWT volé ne suffit pas) ; si
+  plus aucun membre actif, purge du workspace club programmée à +30 j (`clubPurgeScheduled`/
+  `gracePeriodDays` dans la réponse), auto-annulée si un membre revient. L'identité publique
+  FFBB du club survit à la purge (win-back : ré-inscription sur l'ARA = reprise directe).
 - **planning-versions D1 (2026-07-10)** : `ScheduleStatus` gagne `ARCHIVED` (posé serveur
   uniquement — jamais accepté d'un payload client) ; `Schedule` expose `generatedTeamCount`
   (read-only, bandeau divergence) ; `Season` gagne `planningName` (nom du planning de saison,

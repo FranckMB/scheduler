@@ -10,7 +10,7 @@ import { isPasswordValid, PASSWORD_REQUIREMENT } from "@/shared/lib/passwordPoli
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
-import { useChangePassword, useUpdateProfile } from "./queries";
+import { useChangePassword, useDeleteAccount, useUpdateProfile } from "./queries";
 
 function ProfileForm({ firstName, lastName, email }: { firstName: string; lastName: string; email: string }) {
   const update = useUpdateProfile();
@@ -115,6 +115,63 @@ function PasswordForm() {
   );
 }
 
+/**
+ * RGPD — droit à l'effacement, self-service. Confirmation = ré-authentification
+ * (mot de passe courant, patron changement de mot de passe) : un JWT volé ne
+ * suffit pas à détruire le compte. L'anonymisation est immédiate ; sans autre
+ * membre actif, les données du club sont supprimées après un délai de grâce de
+ * 30 jours (annulé si un membre revient avant l'échéance).
+ */
+function DangerZone() {
+  const deleteAccount = useDeleteAccount();
+  const logout = useLogout();
+  const [password, setPassword] = useState("");
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    deleteAccount.mutate(password, {
+      onSuccess: (result) => {
+        toast.info(
+          result.clubPurgeScheduled
+            ? `Compte supprimé. Sans autre membre actif, les données du club seront effacées dans ${result.gracePeriodDays} jours.`
+            : "Compte supprimé.",
+        );
+        logout();
+      },
+    });
+  };
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="text-destructive">Supprimer mon compte</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-3" onSubmit={submit}>
+          <p className="text-sm text-muted-foreground">
+            Action <strong>irréversible</strong> : vos données personnelles sont anonymisées immédiatement. Si vous êtes
+            le dernier membre actif, les données du club seront supprimées après un délai de 30 jours (seule la fiche
+            publique FFBB du club est conservée).
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="deletePassword">Confirmez avec votre mot de passe</Label>
+            <PasswordInput
+              id="deletePassword"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <Button type="submit" variant="destructive" disabled={password === "" || deleteAccount.isPending}>
+            {deleteAccount.isPending ? <Spinner className="size-4" /> : null}
+            Supprimer définitivement mon compte
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ProfilePage() {
   const { data, isLoading } = useMe();
 
@@ -132,6 +189,7 @@ export function ProfilePage() {
       </div>
       <ProfileForm firstName={data.firstName} lastName={data.lastName} email={data.email} />
       <PasswordForm />
+      <DangerZone />
     </div>
   );
 }

@@ -102,6 +102,60 @@
                 },
                 "summary": "Hydrate the authenticated user and its active club context"
             },
+            "delete": {
+                "operationId": "deleteApiMe",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Account anonymized (RGPD erasure)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "clubPurgeScheduled": {
+                                            "type": "boolean"
+                                        },
+                                        "gracePeriodDays": {
+                                            "type": "integer"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Wrong password"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "RGPD erasure: anonymize the connected account (re-authentication: current password required); if no active member remains, schedule the club workspace purge (30-day grace, auto-cancelled if a member returns)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "password"
+                                ],
+                                "properties": {
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            },
             "patch": {
                 "operationId": "patchApiMe",
                 "tags": [
@@ -9670,31 +9724,6 @@
                             "null"
                         ]
                     },
-                    "planId": {
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
-                    "billingCycle": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planExpiresAt": {
-                        "type": [
-                            "string",
-                            "null"
-                        ],
-                        "format": "date-time"
-                    },
-                    "generationCountSeason": {
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
                     "schoolZone": {
                         "enum": [
                             "A",
@@ -11719,19 +11748,31 @@
                                         "type": "string"
                                     },
                                     "first": {
-                                        "type": "string",
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "format": "iri-reference"
                                     },
                                     "last": {
-                                        "type": "string",
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "format": "iri-reference"
                                     },
                                     "previous": {
-                                        "type": "string",
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "format": "iri-reference"
                                     },
                                     "next": {
-                                        "type": "string",
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "format": "iri-reference"
                                     }
                                 },
@@ -12459,6 +12500,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "generatedTeamCount": {
+                        "description": "Number of teams in the frozen solve input (planning-versions divergence\nbanner: \"generated with N teams \u2014 the structure has changed since\").",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -12627,6 +12675,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "generatedTeamCount": {
+                        "description": "Number of teams in the frozen solve input (planning-versions divergence\nbanner: \"generated with N teams \u2014 the structure has changed since\").",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -12756,6 +12811,13 @@
                             "pngExportUrl": {
                                 "type": [
                                     "string",
+                                    "null"
+                                ]
+                            },
+                            "generatedTeamCount": {
+                                "description": "Number of teams in the frozen solve input (planning-versions divergence\nbanner: \"generated with N teams \u2014 the structure has changed since\").",
+                                "type": [
+                                    "integer",
                                     "null"
                                 ]
                             }
@@ -13460,6 +13522,13 @@
                             "null"
                         ]
                     },
+                    "planningName": {
+                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "transitionData": {
                         "type": "object",
                         "additionalProperties": {
@@ -13484,11 +13553,19 @@
                         ]
                     },
                     "startDate": {
-                        "type": "string",
+                        "description": "Required at creation; null on update = keep the current value (partial PUT).",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "format": "date-time"
                     },
                     "endDate": {
-                        "type": "string",
+                        "description": "Required at creation; null on update = keep the current value (partial PUT).",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "format": "date-time"
                     },
                     "status": {
@@ -13498,6 +13575,14 @@
                             "archived",
                             "closed"
                         ],
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "planningName": {
+                        "maxLength": 120,
+                        "description": "Name of THE season plan (planning-versions) \u2014 null keeps the current value.",
                         "type": [
                             "string",
                             "null"
@@ -13547,6 +13632,13 @@
                         ]
                     },
                     "baselineScheduleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "planningName": {
+                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                         "type": [
                             "string",
                             "null"
@@ -13610,6 +13702,13 @@
                                 ]
                             },
                             "baselineScheduleId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "planningName": {
+                                "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                                 "type": [
                                     "string",
                                     "null"
@@ -14574,6 +14673,13 @@
                     "isSystem": {
                         "default": false,
                         "type": "boolean"
+                    },
+                    "axis": {
+                        "description": "GENRE / NIVEAU / AGE \u2014 the axis grouping the constraint target picker (null when unclassified).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -14609,6 +14715,13 @@
                     "isSystem": {
                         "default": false,
                         "type": "boolean"
+                    },
+                    "axis": {
+                        "description": "GENRE / NIVEAU / AGE \u2014 the axis grouping the constraint target picker (null when unclassified).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -14649,6 +14762,13 @@
                             "isSystem": {
                                 "default": false,
                                 "type": "boolean"
+                            },
+                            "axis": {
+                                "description": "GENRE / NIVEAU / AGE \u2014 the axis grouping the constraint target picker (null when unclassified).",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         }
                     }
