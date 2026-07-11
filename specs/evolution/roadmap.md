@@ -7,7 +7,7 @@
 > **Effort** (annoté sur les items actionnables, pour arbitrer sans re-poser la question) : **🟢 léger** (≈ ≤2 j, ciblé, peu de risque) · **🟡 moyen** (quelques jours, plusieurs fichiers/zones) · **🔴 lourd** (structurant / semaine+ / nouvelle archi ou dépendance de zone). L'effort estime le **coût de mise en œuvre**, pas la valeur produit.
 > **Sources** : `initiales/ClubScheduler_v3.md` (réf `v3 §x`), `initiales/ClubScheduler_Specification_des_contraintes_v2.md` (réf `contraintes-v2`). Ces specs sont **figées** — ne pas les modifier.
 
-Ce n'est pas un backlog priorisé : c'est la **carte** de ce que la vision d'origine contient et de ce qui reste à faire. **La coupe priorisée effort × impact (cap commercialisation mi-2027) vit dans [`backlog-priorise.md`](backlog-priorise.md)** — quoi faire dans quel ordre. On priorisera finement au moment de traiter chaque sujet.
+Ce fichier est le **document de suivi unique** (fusion du 2026-07-11 : `backlog-priorise.md` + `docs/technical-debt.md` absorbés — même fonction, un seul endroit) : la **carte** de la vision (§1-§10), la **coupe priorisée** effort × impact (§Backlog, cap commercialisation mi-2027) et la **dette technique ouverte** (§Dette). Un item livré quitte le backlog et laisse une **trace datée** dans la carte ou §Livrés ; les ids P*x-y* sont stables, jamais réutilisés.
 
 ---
 
@@ -245,3 +245,114 @@ Polish frontend discuté, non structurant mais confort d'usage.
 2. **Modèle temporel & périodes d'exception** (templates→occurrences, vacances, plans secondaires) — grosse feature produit.
 3. **Bridage plan Découverte** — verrou de conversion, business-critique, rien de fait.
 4. **Transition de saison** — nécessaire dès la 2e saison d'un club.
+
+---
+
+## Backlog priorisé — effort × impact (cap commercialisation mi-2027)
+
+> Vue de pilotage (ex-`backlog-priorise.md`, absorbé le 2026-07-11). **Impact** 🔴 bloque la vente /
+> l'intégrité · 🟠 fort levier · 🟡 valeur ciblée · ⚪ polish/dette. **Effort** S ≤ 1 PR · M 2-3 PR ·
+> L lot phasé · XL recherche + gros lot. Un item livré **quitte** ces tableaux (trace : ligne de la
+> carte §1-§10 mise à jour + entrée §Livrés) ; les ids sont **stables, jamais réutilisés** (un trou =
+> un livré, pas un oubli).
+
+### P0 — Bloquants GA & intégrité (à solder AVANT de vendre)
+
+Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune n'est commencée.
+
+| # | Sujet | Impact | Effort | Pourquoi maintenant | Dépend de |
+|---|-------|:---:|:---:|---|---|
+| P0-1 | **RGPD socle** — purge/rétention effective, audit trail, droit à l'effacement/export. Couvre DP1 (contacts président/correspondant FFBB stockés sur `club` — données perso pro, à couvrir par purge/export/effacement ; preuve `Entity/Club.php` colonnes `president_*`/`correspondent_*`). | 🔴 | L | Vente FR/UE **illégale** sans. `app:seasons:purge` existe mais manuel/partiel. | — |
+| P0-2 | **Config prod** — profil prod distinct, secrets managés, `APP_ENV=prod`/`DEBUG=0` durci, healthchecks, limites RAM. | 🔴 | M | Aucune config prod → pas déployable proprement. | — |
+| P0-3 | **Backups PostgreSQL** — `pg_dump` planifié + restauration testée. | 🔴 | S | Zéro backup = perte totale sur incident. | P0-2 |
+| P0-4 | **Observabilité** — Sentry + logs structurés sans PII + métriques. | 🔴 | M | Zéro visibilité prod. | P0-2 |
+
+### P1 — Enablers à fort levier
+
+| # | Sujet | Impact | Effort | Débloque | Note |
+|---|-------|:---:|:---:|---|---|
+| P1-1 | **Rôles non-admin + modèle de permissions** (`ClubUser.role` hardcodé `admin`) | 🟠 | L | self-service coach · collecte vacances (P2-1) · salle convivialité · comptes coach | `isManagementRole` = amorce ; voters à câbler partout |
+| P1-2 | **Console superadmin — lot socle SA0** (accès `admin` Doctrine + audit + bannière) | 🟠 | L | crons vacances/purge · refresh FFBB manuel · métriques · reconcile stuck · impersonation lecture | spec'd SA0→SA5 (#175) |
+| P1-3 | **Bridage freemium Découverte** | 🟠 | M | monétisation | doc'd, 0 code ; anti-abus par identité hors v1 |
+
+### P2 — Différenciateurs & complétion
+
+| # | Sujet | Impact | Effort | Note |
+|---|-------|:---:|:---:|---|
+| P2-1 | **Plan de vacances éditable + collecte coach** | 🟠 | L | **le différenciateur commercial** ; collecte = lien tokenisé sans login. Gagne à ce que P1-1 existe, pas bloqué |
+| P2-2 | **Boucle d'ajustement — « corriger sur place »** (glisser une équipe dans un créneau vide) | 🟠 | M | « naviguer » fait (#180) ; même primitive que la grille de réservation |
+| P2-3 | **Versions D4 — « Travailler sur cette version »** + savepoint auto | 🟡 | M | moitié manquante de la décision 5 (D1-D3 livrés) |
+| P2-4 | **Compte démo** | 🟡 | S/M | spec'd ([`compte-demo.md`](compte-demo.md)), 0 code |
+
+### P3 — Complétude modules
+
+| # | Sujet | Impact | Effort | Note |
+|---|-------|:---:|:---:|---|
+| P3-1 | **Matchs — reste palier A** : volet joueur, `Team.preferredMatchWindow`, envelope HARD | 🟡 | M | paliers B/C plus tard |
+| P3-2 | **Overlays — période `custom` générante** (aujourd'hui 422, mitigé bouton désactivé) | 🟡 | M | seul reste des overlays |
+| P3-3 | **Modèle « templates → occurrences »** | 🟡 | L | débloque la cascade baseline→secondaires |
+| P3-4 | **Enregistrement FFBB** (anti-squatting code club) | 🟡 | M | spec'd (#145) |
+| P3-5 | **Versions — diff/comparaison · restaurer une ARCHIVED** | 🟡 | L | hors périmètre D assumé |
+| P3-6 | **`solver_metrics` — persistance + partition + purge 6 mois** | 🟡 | M | calculées, pas persistées ; alimente la console superadmin |
+| P3-7 | **Import équipes Excel — UI wizard** | ⚪ | S | backend existe ; l'API FFBB remplacera à terme |
+
+### P4 — Dette & polish (avant GA, par lots opportunistes)
+
+| # | Sujet | Impact | Effort | Réf |
+|---|-------|:---:|:---:|---|
+| P4-1 | **FRT-02** — erreur de query avalée → vide trompeur (pas d'`isError`/retry UI) | 🟡 | S | audit 07-10 |
+| P4-2 | **ENG-17 + ENG-24** — `coachId` de sortie limité aux slotTemplates → diagnostics coach inertes ; `coach_overload` confond les unités | 🟡 | M | audit |
+| P4-3 | **FE1 — 3 composants wizard > 400 lignes** (TeamsStep 552 · ConstraintsStep 498 · VenuesStep 413) — extraire éditeurs/modales en composants frères, la step reste liste + orchestration ; PR dédiée + `/code-review` | ⚪ | M | dette FE1 / UXS-03 |
+| P4-4 | **FE2 — registre tu/vous incohérent** (wizard tutoie ~29/15, cockpit vouvoie) — trancher un registre app-wide + sweep | ⚪ | S | dette FE2 |
+| P4-5 | **FRT-18 / SEC-08 résiduel** — messages serveur bruts en toast + `ManualEditController:154` | ⚪ | S | audit |
+| P4-6 | **Bundle unique 639 KB** — pas de code-splitting | ⚪ | S | audit perf |
+| P4-7 | **B4 — publish Mercure dupliqué** (`GenerateScheduleHandler`/`ExportPdfHandler::publishProgress`) — extraire un `MercureScheduleNotifier` **seulement si un 3e publisher apparaît** (defer délibéré) | ⚪ | S | dette B4 |
+| P4-8 | **BCK-10** — `requireActiveAdmin()` sans `clubId` (non déterministe multi-club ; pas de fuite grâce à RLS) | ⚪ | S | audit |
+| P4-9 | **Radar « jour férié » à retravailler** (quels fériés + texte d'impact) | ⚪ | S | décision produit |
+| P4-10 | **#3b — désactiver « Régénérer » si rien n'a changé** | ⚪ | M | détection de changement fiable |
+| P4-11 | **lint-staged installé mais jamais invoqué** (pre-commit = build+tsc, aucune config) — le câbler ou le retirer | ⚪ | S | constaté 2026-07-11 (dependabot #91) |
+
+### Parking (idées gardées, non cadrées)
+
+- **Reverse-engineering des contraintes** (idée club #92) — fort attrait, effort XL, aucun cadrage.
+- **Réservation salle de convivialité** (V2 « club hub ») — triviale en soi, bloquée sur P1-1.
+
+### Ordre d'attaque conseillé
+
+1. **P0 d'abord** — sans RGPD + prod + backups + observabilité, rien n'est vendable.
+2. **P1-1 (rôles)** — le verrou qui débloque le plus de valeur aval.
+3. **P1-2 (superadmin SA0)** — solde la colonne « manuel aujourd'hui ».
+4. Puis **P2** selon l'appétit commercial, **P3/P4** par lots opportunistes.
+
+---
+
+## Dette technique — état vivant
+
+> Ex-`docs/technical-debt.md` (absorbé le 2026-07-11). Règle d'origine conservée : **un item de
+> dette n'existe qu'avec une preuve** (`fichier:ligne`). Les dettes actionnables vivent comme
+> lignes **P4-x** ci-dessus (même pipeline que tout le reste) ; cette section ne garde que les
+> **keeps délibérés** (décisions « ne pas corriger » qu'il faut pouvoir retrouver) et le solde.
+
+| Item | Décision | Preuve / raison |
+|------|----------|-----------------|
+| **FE3 — ambre codé en dur dans `MonthCalendar.tsx`** (pas le token `--warning`) | 🟩 **keep délibéré** | `--warning` clair = 2.9:1 sur fond (A11Y-06) → l'utiliser sur le label vacances **échouerait WCAG AA** ; `amber-700` passe. Migrer = régression a11y contre un résidu de cohérence |
+| **B4 — publish Mercure dupliqué** | 🟩 defer (ligne P4-7) | 2 handlers, payloads distincts — extraire au 3e publisher |
+| **DP1 — contacts FFBB sur `club`** | 🟦 rattaché à P0-1 | données perso pro ; aucune action isolée, traité dans le lot RGPD |
+| **Dette `TeamTagService::syncTeamTags`** (efface les tags custom à chaque édition) | 🟧 à corriger avant de fiabiliser les tags custom | ligne `team_tags` §9 ; bloque le report des tags custom entre saisons |
+
+**Soldé** (détail dans l'historique git de `docs/technical-debt.md`, supprimé le 2026-07-11) :
+B1 (Rector 8.4) · B2 (PHPUnit unifié) · B3 (TenantCacheIsolationTest réel) · B6 (attributs PHPUnit 11) ·
+B7 (tag LOISIR fixture) · E1-E6 (aliases morts, helpers dédupliqués, ADR-0001 single-pass, doc timeout,
+TODOs PREFERRED TIME) — tous résolus le 2026-07-01.
+
+---
+
+## Livrés — traces datées (depuis la fusion du 2026-07-11)
+
+> Quand un item du backlog est livré : sa ligne P*x-y* est **supprimée** des tableaux ci-dessus,
+> la ligne correspondante de la carte (§1-§10) passe ✅ avec pointeur, et une ligne s'ajoute ici
+> (date · id · sujet · où c'est documenté). C'est la trace que `documentation-update` maintient.
+
+| Date | Id | Sujet | Documenté dans |
+|------|----|-------|----------------|
+| 2026-07-11 | P0-5 | Ids de créneau par-schedule (vol de créneau inter-version) | [`planning-versions.md`](planning-versions.md) §D3quater |

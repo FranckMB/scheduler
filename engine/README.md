@@ -162,13 +162,13 @@ Tiers S>A>B>C>D, `preferred`, `avoided_venue` (malus), `preferred_day`, `preferr
 
 ## Pour aller plus loin (docs structurantes)
 
-Le métier du solveur vit dans `engine/doc/` — à lire avant de toucher au solveur :
+Le métier du solveur vit dans `engine/docs/` — à lire avant de toucher au solveur :
 
 | Doc | Contenu |
 |-----|---------|
-| [`doc/business.md`](doc/business.md) | **Cœur métier** — concepts (équipe, salle, coach, contrainte : scopes/familles/règles, tiers de priorité, contraintes implicites, niveaux de lock). |
-| [`doc/nominal-flow.md`](doc/nominal-flow.md) | Flux nominal d'une requête de bout en bout — structure du payload v2.0, négociation de version, locks par club, étapes du pipeline, schéma de sortie. |
-| [`doc/solver-errors.md`](doc/solver-errors.md) | Erreurs & diagnostics — erreurs HTTP, statuts solveur, types de diagnostics, scénarios d'infaisabilité, lecture du score, guide de debug. |
+| [`docs/business.md`](docs/business.md) | **Cœur métier** — concepts (équipe, salle, coach, contrainte : scopes/familles/règles, tiers de priorité, contraintes implicites, niveaux de lock). |
+| [`docs/nominal-flow.md`](docs/nominal-flow.md) | Flux nominal d'une requête de bout en bout — structure du payload v2.0, négociation de version, locks par club, étapes du pipeline, schéma de sortie. |
+| [`docs/solver-errors.md`](docs/solver-errors.md) | Erreurs & diagnostics — erreurs HTTP, statuts solveur, types de diagnostics, scénarios d'infaisabilité, lecture du score, guide de debug. |
 | [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions ruff/mypy/pytest, gotchas, quick-reference). |
 
 Contrat backend↔engine : version dans `engine/CONTRACT_VERSION`, synchronisé **à la main** (pas de codegen), gardé par `backend/tests/.../ContractSchemaTest`.

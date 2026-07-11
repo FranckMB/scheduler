@@ -147,6 +147,8 @@ Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`
 ---
 
 ## 6. Cross-references
+- Vocabulaire transverse (termes métier + clés de payload): [`glossary.md`](glossary.md)
+- Commandes backend (make · console `app:*` · pièges RLS): [`../backend/docs/commands.md`](../backend/docs/commands.md) · routes FFBB: [`../backend/docs/ffbb-api.md`](../backend/docs/ffbb-api.md)
 - Tests & guardrails: [`testing/testing-strategy.md`](testing/testing-strategy.md)
-- Debt (proof-backed): [`technical-debt.md`](technical-debt.md) · safe deletions: [`cleanup-candidates.md`](cleanup-candidates.md)
+- Debt & backlog priorisé: [`../specs/evolution/roadmap.md`](../specs/evolution/roadmap.md) (§Backlog · §Dette) · safe deletions: [`cleanup-candidates.md`](cleanup-candidates.md)
 - Decisions to formalize: [`architecture/adr-index.md`](architecture/adr-index.md)

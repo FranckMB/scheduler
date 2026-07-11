@@ -2,7 +2,7 @@
 
 > **Statut** : **étude / aide à la décision** (2026-07-10). Pas un plan d'implémentation. But : comparer les options d'hébergement, chiffrer, et **recommander** une architecture pour la commercialisation (mi-2027).
 > **Nature** : SaaS multi-tenant (clubs de basket FFBB, marché **français**) → contraintes **RGPD / localisation UE**, données critiques (plannings, contacts), charge **CPU-bursty** (solveur CP-SAT).
-> **Prérequis liés** (prod-readiness, aujourd'hui absents) : **backups PostgreSQL**, observabilité (Sentry/health/alerting), config prod distincte. Le choix d'infra doit **résoudre le backup en priorité** (cf. `docs/technical-debt.md`).
+> **Prérequis liés** (prod-readiness, aujourd'hui absents) : **backups PostgreSQL**, observabilité (Sentry/health/alerting), config prod distincte. Le choix d'infra doit **résoudre le backup en priorité** (cf. `specs/evolution/roadmap.md` §Backlog P0).
 
 ---
 
