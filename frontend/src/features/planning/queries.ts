@@ -261,7 +261,9 @@ export function useRegenerateOverlay() {
       await planningApi.generateSchedule(created.id);
       return created;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    // Invalidate on settled, not just success: if generate fails AFTER the create,
+    // the new version already exists server-side — the list must refresh either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
     onError: () => toast.error("La régénération de la période a échoué."),
   });
 }

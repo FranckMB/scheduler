@@ -73,6 +73,29 @@ final class OverlayVersionsTest extends WebTestCase
         self::assertSame($baseline->getId(), $reloadedSeason?->getBaselineScheduleId(), 'validating an overlay must not move the season baseline');
     }
 
+    public function testCreatingAVersionKeepsAUsableActiveOverlay(): void
+    {
+        [$user, $club, $season] = $this->seed('OVV4');
+        $entry = $this->period($club, $season, 'P');
+        $v1 = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
+        $entry->setOverlayScheduleId($v1->getId());
+        $this->em->flush();
+
+        // Creating a new version must NOT strand the good V1 as active (it stays
+        // shown while the new draft solves; validation flips the pointer later).
+        $this->client->request('POST', '/api/schedules', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user),
+            'HTTP_X-Club-Id' => $club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => 'V2', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $v2 = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR)['id'];
+        self::assertNotSame($v1->getId(), $v2);
+
+        $this->em->clear();
+        self::assertSame($v1->getId(), $this->em->getRepository(CalendarEntry::class)->find($entry->getId())?->getOverlayScheduleId(), 'a usable active overlay is kept while the new draft solves');
+    }
+
     public function testInFlightSiblingOverlayBlocksValidation(): void
     {
         [$user, $club, $season] = $this->seed('OVV2');

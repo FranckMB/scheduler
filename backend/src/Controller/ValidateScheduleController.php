@@ -127,13 +127,12 @@ final class ValidateScheduleController extends AbstractController implements Sea
 
             $schedule->setStatus(ScheduleStatus::VALIDATED);
 
-            // The non-validated sibling versions are set aside — ARCHIVED, hidden
-            // from the selector, kept as a safety net until the purge. Applies to
-            // season plans AND to a period's overlay versions.
+            // The sibling versions are set aside — ARCHIVED, hidden from the
+            // selector, kept as a safety net until the purge. A previously
+            // VALIDATED sibling is archived too, so a scope (season plans, or a
+            // period's overlays) never keeps two VALIDATED versions at once.
             foreach ($siblings as $sibling) {
-                if (ScheduleStatus::VALIDATED !== $sibling->getStatus()) {
-                    $sibling->setStatus(ScheduleStatus::ARCHIVED);
-                }
+                $sibling->setStatus(ScheduleStatus::ARCHIVED);
             }
 
             if (null === $entryId) {

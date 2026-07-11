@@ -106,7 +106,18 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         $output = parent::processPost($input, $clubId, $seasonId);
 
         if ($entry instanceof CalendarEntry) {
-            $entry->setOverlayScheduleId($output->id);
+            // The new version becomes the ACTIVE overlay only if the period has no
+            // usable one to fall back on — mirror of the season baseline, which
+            // moves only on validation. This keeps a good V1 shown while a
+            // regenerated V2 solves (or fails): validating V2 later flips the
+            // pointer (ValidateScheduleController). Otherwise a failed regenerate
+            // would strand the previously-adapted period on an empty draft.
+            $activeId = $entry->getOverlayScheduleId();
+            $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
+            $activeIsUsable = $active instanceof Schedule && \in_array($active->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true);
+            if (!$activeIsUsable) {
+                $entry->setOverlayScheduleId($output->id);
+            }
             $this->entityManager->flush();
         }
 

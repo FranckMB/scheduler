@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Repository\CalendarEntryRepository;
@@ -101,35 +102,47 @@ final class PurgeOverlaysCommand extends Command
 
         $purged = 0;
         foreach ($this->calendarEntryRepository->findEndedPeriods($clubId, $today) as $entry) {
-            $overlayCount = $this->entityManager->getRepository(Schedule::class)->count(['calendarEntryId' => $entry->getId()]);
-            if (0 === $overlayCount) {
+            if ($dryRun) {
+                // Dry-run only counts (the real path derives the total from the
+                // deletion itself, avoiding a second round-trip over the same rows).
+                $count = $this->entityManager->getRepository(Schedule::class)->count(['calendarEntryId' => $entry->getId()]);
+                if ($count > 0) {
+                    $io->writeln($this->line('<comment>would</comment>', $count, $entry, $clubId));
+                    $purged += $count;
+                }
+
                 continue;
             }
-            $io->writeln(\sprintf(
-                '  %s purge %d overlay version(s) of period "%s" (%s, ended %s, club %s)',
-                $dryRun ? '<comment>would</comment>' : '<info>✓</info>',
-                $overlayCount,
-                $entry->getTitle(),
-                $entry->getId(),
-                $entry->getEndDate()->format('Y-m-d'),
-                $clubId,
-            ));
-            if (!$dryRun) {
-                try {
-                    // force: an ended period is being cleaned up; a validated
-                    // version is fair game (this is the authorized purge path).
-                    $this->overlayManager->deleteOverlayForEntry($entry, force: true);
-                } catch (Throwable $e) {
-                    $this->hadFailure = true;
-                    $io->warning(\sprintf('  period %s skipped: %s', $entry->getId(), $e->getMessage()));
+            try {
+                // force: an ended period is being cleaned up; a validated version
+                // is fair game (this is the authorized purge path).
+                $removed = $this->overlayManager->deleteOverlayForEntry($entry, force: true);
+            } catch (Throwable $e) {
+                $this->hadFailure = true;
+                $io->warning(\sprintf('  period %s skipped: %s', $entry->getId(), $e->getMessage()));
 
-                    continue;
-                }
+                continue;
             }
-            $purged += $overlayCount;
+            if ($removed > 0) {
+                $io->writeln($this->line('<info>✓</info>', $removed, $entry, $clubId));
+                $purged += $removed;
+            }
         }
 
         return $purged;
+    }
+
+    private function line(string $mark, int $count, CalendarEntry $entry, string $clubId): string
+    {
+        return \sprintf(
+            '  %s purge %d overlay version(s) of period "%s" (%s, ended %s, club %s)',
+            $mark,
+            $count,
+            $entry->getTitle(),
+            $entry->getId(),
+            $entry->getEndDate()->format('Y-m-d'),
+            $clubId,
+        );
     }
 
     /** Strict: a real calendar date, else null. */

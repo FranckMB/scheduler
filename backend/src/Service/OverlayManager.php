@@ -37,7 +37,8 @@ final class OverlayManager
      * path must not bypass the guard DELETE /api/schedules enforces). The
      * destructive reopen passes $force: the user explicitly confirmed destruction.
      */
-    public function deleteOverlayForEntry(CalendarEntry $entry, bool $force = false): void
+    /** @return int the number of overlay versions removed */
+    public function deleteOverlayForEntry(CalendarEntry $entry, bool $force = false): int
     {
         // planning-versions: a period may hold SEVERAL overlay versions — delete
         // them ALL (the pointer only names the active one). Guard every version
@@ -68,6 +69,8 @@ final class OverlayManager
 
         $entry->setOverlayScheduleId(null);
         $this->entityManager->flush();
+
+        return \count($overlays);
     }
 
     /**
@@ -92,7 +95,9 @@ final class OverlayManager
         }
     }
 
-    /** Most recent non-archived overlay version of the entry other than $excludeId, or null. */
+    /** Most recent USABLE (COMPLETED/VALIDATED) overlay version of the entry other
+     *  than $excludeId, or null — never promotes a FAILED/DRAFT/PENDING version as
+     *  the active plan (that would show an empty overlay in the cockpit). */
     private function newestOtherOverlayId(string $entryId, string $excludeId): ?string
     {
         $candidates = $this->entityManager->getRepository(Schedule::class)->findBy(
@@ -100,11 +105,12 @@ final class OverlayManager
             ['createdAt' => 'DESC'],
         );
         foreach ($candidates as $candidate) {
-            if ($candidate->getId() === $excludeId || ScheduleStatus::ARCHIVED === $candidate->getStatus()) {
+            if ($candidate->getId() === $excludeId) {
                 continue;
             }
-
-            return $candidate->getId();
+            if (\in_array($candidate->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true)) {
+                return $candidate->getId();
+            }
         }
 
         return null;
