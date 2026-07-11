@@ -281,8 +281,10 @@ final class ScheduleConstraintBuilder
         array $priorityTiers = [],
         array $constraints = [],
     ): array {
-        // In-memory (DB-free) builder: no period overrides. Reset for symmetry with
-        // the DB entry points so a reused instance can never leak a stale map.
+        // In-memory (DB-free) builder: no preloaded availabilities, no period
+        // overrides. Reset both for symmetry with the DB entry points so a reused
+        // instance can never leak a stale map into serializeVenue/serializeTeam.
+        $this->currentAvailabilitiesByVenue = [];
         $this->currentSessionOverrides = [];
 
         return $this->buildPayload(

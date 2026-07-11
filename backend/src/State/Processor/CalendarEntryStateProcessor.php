@@ -8,6 +8,7 @@ use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\VenueTrainingSlot;
@@ -167,6 +168,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             // A period's own reservations (dated pins) are keyed on the entry too.
             foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['calendarEntryId' => $id]) as $reservation) {
                 $this->entityManager->remove($reservation);
+            }
+            // …and any reminder logged for this period (else a ghost survives to the season purge).
+            foreach ($this->entityManager->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $id]) as $log) {
+                $this->entityManager->remove($log);
             }
             $this->entityManager->flush();
         }
