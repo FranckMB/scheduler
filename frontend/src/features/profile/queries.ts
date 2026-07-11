@@ -31,11 +31,10 @@ export function useDeleteAccount() {
   });
 }
 
-/** RGPD portabilité — télécharge l'export JSON du périmètre demandé. */
-export function useDownloadExport() {
+/** RGPD portabilité — export JSON de mes données de compte. */
+export function useDownloadMyData() {
   return useMutation({
-    mutationFn: ({ path, filename }: { path: "me/export" | "club/export"; filename: string }) =>
-      profileApi.downloadExport(path, filename),
+    mutationFn: () => profileApi.downloadMyDataExport(),
     onSuccess: () => toast.success("Export téléchargé."),
   });
 }

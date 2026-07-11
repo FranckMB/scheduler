@@ -13,10 +13,8 @@ import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
-import { useDownloadExport } from "@/features/profile/queries";
-
 import { LogoCropper } from "./LogoCropper";
-import { useDeleteLogo, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
+import { useDeleteLogo, useDownloadClubExport, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -434,7 +432,7 @@ function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }
 
 /** RGPD — portabilité : export JSON complet du workspace du club (management). */
 function ExportClubSection() {
-  const exportDownload = useDownloadExport();
+  const exportDownload = useDownloadClubExport();
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -445,7 +443,7 @@ function ExportClubSection() {
         type="button"
         variant="outline"
         disabled={exportDownload.isPending}
-        onClick={() => exportDownload.mutate({ path: "club/export", filename: "donnees-club.json" })}
+        onClick={() => exportDownload.mutate()}
       >
         {exportDownload.isPending ? <Spinner className="size-4" /> : null}
         Exporter les données du club
@@ -456,6 +454,9 @@ function ExportClubSection() {
 
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
+  // Le gate backend management = owner|admin (SEC-07) — l'UI doit matcher,
+  // sinon un owner ne voit jamais l'export RGPD (revue PR-2).
+  const isManagement = me.role === "admin" || me.role === "owner";
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-1 border-l-[3px] border-accent pl-3 text-xl font-semibold">Gestion du club</h1>
@@ -490,7 +491,7 @@ function ClubHub({ me }: { me: MeResponse }) {
             <ContactsFfbbSection club={me.club} />
           </AccordionSection>
         ) : null}
-        {isAdmin ? (
+        {isManagement ? (
           <AccordionSection title="Exporter les données">
             <ExportClubSection />
           </AccordionSection>

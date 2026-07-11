@@ -39,6 +39,7 @@ final class RgpdExportService
         'reservation',
         'schedule_slot_template',
         'schedule_diagnostic',
+        'schedule_structure_snapshot',
         'calendar_entry',
         'competition',
         'fixture',
@@ -97,13 +98,22 @@ final class RgpdExportService
             );
         }
 
-        // schedule sans son blob interne (snapshot_data = duplicat technique
-        // du reste de l'export, pas une donnée première).
-        $data['schedule'] = $connection->fetchAllAssociative(
-            'SELECT id, club_id, season_id, name, status, score, solver_seed, snapshot_hash,
-                    solver_version, constraint_version, score_formula_version,
-                    calendar_entry_id, pdf_export_status, created_at, updated_at
-             FROM schedule WHERE club_id = :cid',
+        // schedule sans son blob interne : SELECT * puis unset — une liste de
+        // colonnes rotirait à chaque migration (revue PR-2), le blob exclu est
+        // le seul invariant (snapshot_data = duplicat technique de l'export).
+        $data['schedule'] = array_map(
+            static function (array $row): array {
+                unset($row['snapshot_data']);
+
+                return $row;
+            },
+            $connection->fetchAllAssociative('SELECT * FROM schedule WHERE club_id = :cid', ['cid' => $clubId]),
+        );
+
+        // constraint_conflict n'a pas de club_id : jointure par schedule.
+        $data['constraint_conflict'] = $connection->fetchAllAssociative(
+            'SELECT cc.* FROM constraint_conflict cc
+             JOIN schedule s ON s.id = cc.schedule_id WHERE s.club_id = :cid',
             ['cid' => $clubId],
         );
 

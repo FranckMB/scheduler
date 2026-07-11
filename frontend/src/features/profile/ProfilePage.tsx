@@ -10,7 +10,7 @@ import { isPasswordValid, PASSWORD_REQUIREMENT } from "@/shared/lib/passwordPoli
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
-import { useChangePassword, useDeleteAccount, useDownloadExport, useUpdateProfile } from "./queries";
+import { useChangePassword, useDeleteAccount, useDownloadMyData, useUpdateProfile } from "./queries";
 
 function ProfileForm({ firstName, lastName, email }: { firstName: string; lastName: string; email: string }) {
   const update = useUpdateProfile();
@@ -117,7 +117,7 @@ function PasswordForm() {
 
 /** RGPD — portabilité (art. 20) : télécharger ses données de compte en JSON. */
 function ExportSection() {
-  const exportDownload = useDownloadExport();
+  const exportDownload = useDownloadMyData();
   return (
     <Card>
       <CardHeader>
@@ -131,7 +131,7 @@ function ExportSection() {
           type="button"
           variant="outline"
           disabled={exportDownload.isPending}
-          onClick={() => exportDownload.mutate({ path: "me/export", filename: "mes-donnees.json" })}
+          onClick={() => exportDownload.mutate()}
         >
           {exportDownload.isPending ? <Spinner className="size-4" /> : null}
           Exporter mes données

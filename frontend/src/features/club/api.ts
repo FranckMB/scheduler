@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client";
+import { downloadBlob } from "@/shared/lib/download";
 
 export interface AppearancePayload {
   accentColor?: string | null;
@@ -54,3 +55,13 @@ export interface ResetClubResult {
  * server-side (TenantFilterListener sets _season_id from the active season).
  */
 export const resetClub = (): Promise<ResetClubResult> => api.delete("reset-season").json();
+
+/**
+ * RGPD portabilité : télécharge l'export JSON complet du workspace du club
+ * (management). timeout désactivé : le backend construit tout le JSON avant de
+ * répondre (le défaut ky de 10 s couperait les gros clubs).
+ */
+export async function downloadClubExport(): Promise<void> {
+  const blob = await api.get("club/export", { timeout: false }).blob();
+  downloadBlob(blob, "donnees-club.json");
+}

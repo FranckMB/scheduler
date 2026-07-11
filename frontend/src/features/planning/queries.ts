@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
+import { download } from "@/shared/lib/download";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, Schedule, SlotMovePatch } from "./api";
@@ -102,21 +103,6 @@ const EXPORT_POLL_MS = 1500;
 const EXPORT_TIMEOUT_MS = 60_000;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Trigger a browser download of a URL (same-origin) under a chosen filename. */
-function download(url: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke on the next macrotask: a synchronous revoke can cancel the download
-  // the click just started in some browsers.
-  if (url.startsWith("blob:")) {
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
-  }
-}
 
 /**
  * Export a schedule to PDF/PNG (async worker → poll status → download the file)

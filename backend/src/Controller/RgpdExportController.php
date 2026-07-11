@@ -12,6 +12,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -31,6 +32,7 @@ final class RgpdExportController extends AbstractController
         private readonly RgpdExportService $exportService,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly RequestStack $requestStack,
+        private readonly RateLimiterFactory $rgpdExportLimiter,
     ) {}
 
     #[Route('/api/me/export', name: 'api_me_export', methods: ['GET'])]
@@ -39,6 +41,9 @@ final class RgpdExportController extends AbstractController
         $user = $this->getUser();
         if (!$user instanceof User) {
             return $this->json(['error' => 'Unauthorized'], 401);
+        }
+        if (null !== ($throttled = $this->throttle($user))) {
+            return $throttled;
         }
 
         return $this->downloadable($this->exportService->exportUser($user), 'mes-donnees');
@@ -50,6 +55,10 @@ final class RgpdExportController extends AbstractController
         $user = $this->getUser();
         if (!$user instanceof User) {
             return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        if (null !== ($throttled = $this->throttle($user))) {
+            return $throttled;
         }
 
         $clubId = $this->resolveCurrentClubId($this->requestStack);
@@ -70,13 +79,30 @@ final class RgpdExportController extends AbstractController
         return $this->downloadable($this->exportService->exportClub($clubId), 'donnees-club');
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * Encodage UNIQUE (revue PR-2 : ->json() + setEncodingOptions = 3 passes
+     * encode/decode/encode sur le plus gros body de l'app). Pas de pretty-print
+     * non plus : c'est un export machine-readable, le pretty doublerait la
+     * mémoire pour rien.
+     *
+     * @param array<string, mixed> $data
+     */
     private function downloadable(array $data, string $basename): JsonResponse
     {
-        $response = $this->json($data);
-        $response->setEncodingOptions($response->getEncodingOptions() | \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE);
+        $response = JsonResponse::fromJsonString(json_encode($data, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE));
         $response->headers->set('Content-Disposition', \sprintf('attachment; filename="%s-%s.json"', $basename, date('Y-m-d')));
 
         return $response;
+    }
+
+    /** 429 si le quota dédié export (10/h par utilisateur) est épuisé. */
+    private function throttle(User $user): ?JsonResponse
+    {
+        $limit = $this->rgpdExportLimiter->create($user->getId())->consume();
+        if (!$limit->isAccepted()) {
+            return $this->json(['error' => 'Trop d\'exports — réessayez plus tard.'], Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
+        return null;
     }
 }

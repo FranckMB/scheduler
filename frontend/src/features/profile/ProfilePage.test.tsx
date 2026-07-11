@@ -10,7 +10,7 @@ vi.mock("./queries", () => ({
   useUpdateProfile: () => ({ mutate: vi.fn(), isPending: false }),
   useChangePassword: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteAccount: () => ({ mutate: deleteMut, isPending: false }),
-  useDownloadExport: () => ({ mutate: exportMut, isPending: false }),
+  useDownloadMyData: () => ({ mutate: exportMut, isPending: false }),
 }));
 
 vi.mock("@/features/auth/queries", () => ({
@@ -51,7 +51,7 @@ describe("ProfilePage — zone de danger (RGPD)", () => {
     const user = userEvent.setup();
     render(<ProfilePage />);
     await user.click(screen.getByRole("button", { name: /Exporter mes données/ }));
-    expect(exportMut).toHaveBeenCalledWith({ path: "me/export", filename: "mes-donnees.json" });
+    expect(exportMut).toHaveBeenCalled();
   });
 
   it("annonce la conséquence : anonymisation immédiate + purge club à 30 jours", () => {

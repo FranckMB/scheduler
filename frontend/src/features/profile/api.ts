@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client";
+import { downloadBlob } from "@/shared/lib/download";
 
 export interface UpdateProfilePayload {
   firstName?: string;
@@ -38,19 +39,11 @@ export interface DeleteAccountResult {
 export const deleteAccount = (password: string): Promise<DeleteAccountResult> => api.delete("me", { json: { password } }).json();
 
 /**
- * RGPD portabilité : télécharge un export JSON (mes données / données du club).
- * Blob + ancre : la réponse porte un Content-Disposition attachment.
+ * RGPD portabilité : télécharge l'export JSON de MES données de compte.
+ * timeout désactivé : le backend construit tout le JSON avant de répondre
+ * (le défaut ky de 10 s couperait les gros exports).
  */
-export async function downloadExport(path: "me/export" | "club/export", filename: string): Promise<void> {
-  const blob = await api.get(path).blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Révocation différée : un revoke synchrone peut annuler le téléchargement.
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+export async function downloadMyDataExport(): Promise<void> {
+  const blob = await api.get("me/export", { timeout: false }).blob();
+  downloadBlob(blob, "mes-donnees.json");
 }
