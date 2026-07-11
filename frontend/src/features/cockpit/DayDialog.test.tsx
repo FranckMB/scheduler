@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,9 @@ const closureMutate = vi.fn();
 // "Adapter" (create branch) uses mutateAsync so the wizard navigation survives a
 // mid-POST modal dismiss — the mock resolves with the created period's id.
 const holidayMutateAsync = vi.fn(() => Promise.resolve({ id: "created-hol" }));
+const navigate = vi.fn();
+const startPeriodMode = vi.fn();
+const setSelectedScheduleId = vi.fn();
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
@@ -24,6 +27,9 @@ vi.mock("./queries", () => ({
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
 }));
+vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
+vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
+vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 // Freeze "today" so the fixed test date (2026-05-12) is not in the past (start ≥ today).
 vi.mock("./lib/date", () => ({ todayISO: () => "2026-05-12" }));
 
@@ -193,7 +199,12 @@ describe("DayDialog — deletion is always confirmed", () => {
 });
 
 describe("DayDialog — holiday awareness (Lot B)", () => {
-  beforeEach(() => holidayMutateAsync.mockClear());
+  beforeEach(() => {
+    holidayMutateAsync.mockClear();
+    navigate.mockClear();
+    startPeriodMode.mockClear();
+    setSelectedScheduleId.mockClear();
+  });
 
   // item 1: a public holiday (jour férié) shows read-only info.
   it("shows the public-holiday info banner", () => {
@@ -211,6 +222,17 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
     // mutateAsync (no mutate-scoped options) so the wizard navigation survives a dismiss.
     expect(holidayMutateAsync).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" });
+    // …AND once it resolves, the wizard opens on the created period (the orphan-entry guard).
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("created-hol"));
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+
+  // finding [1]: an existing overlay stays viewable even for a summer holiday (legacy data).
+  it("still offers « Voir le planning » for a summer holiday that already has an overlay", () => {
+    const periodEntry = entry({ id: "pe", kind: "period", periodType: "holiday", schoolHolidayId: "sh-ete", startDate: "2026-05-10", endDate: "2026-05-20", overlayScheduleId: "ov-ete" });
+    renderDialog([periodEntry], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });
+    expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 
   // item 3: once the holiday overlay is generated, offer "Voir le planning" instead.

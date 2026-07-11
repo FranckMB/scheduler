@@ -12,6 +12,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { todayISO } from "./lib/date";
+import { isAdaptableHoliday } from "./lib/holidays";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry } from "./queries";
 
@@ -164,42 +165,45 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <span className="font-medium">Vacances</span> — {holiday.label}
         </span>
       </p>
-      {/* Summer holidays are off-season — never adapted (a schedule spans one
-          season). Show the info, but offer no "Adapter" (same rule as the radar,
-          which excludes "ete"). */}
-      {holiday.holidayType === "ete" ? (
-        <p className="text-xs text-muted-foreground">Vacances d'été — hors saison, pas de planning à adapter.</p>
-      ) : (
+      {/* An existing overlay is always viewable (even for summer — legacy data).
+          "Adapter" (create/replay) is only offered for adaptable holidays: summer
+          (ete) is off-season, a schedule spans one season, so nothing to build —
+          same rule as the radar (isAdaptableHoliday, single source of truth). */}
+      {entry?.overlayScheduleId ? (
         <div className="flex justify-end">
-          {entry?.overlayScheduleId ? (
           <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
             Voir le planning
           </Button>
-        ) : entry ? (
+        </div>
+      ) : !isAdaptableHoliday(holiday) ? (
+        <p className="text-xs text-muted-foreground">Vacances d'été — hors saison, pas de planning à adapter.</p>
+      ) : entry ? (
+        <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
             Adapter
           </Button>
-        ) : (
+        </div>
+      ) : (
+        <div className="flex justify-end">
           <Button
             variant="outline"
             size="sm"
             disabled={createHoliday.isPending}
             onClick={async () => {
               // mutateAsync (not a mutate-scoped onSuccess): the navigation must
-              // fire even if the modal is dismissed mid-POST — otherwise the hook
-              // still creates the period (hook onSuccess) but the wizard never
-              // opens, leaving an orphan holiday entry. Errors are toasted by the hook.
+              // fire even if the modal is dismissed mid-POST — otherwise the period
+              // IS created but the wizard never opens, leaving an orphan entry.
+              // The 409/error is surfaced by the global mutation-cache net (queryClient.ts).
               try {
                 const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: holiday.startDate, endDate: holiday.endDate });
                 adapt(created.id);
               } catch {
-                /* surfaced by the hook's onError */
+                /* surfaced by the global mutation-cache net */
               }
             }}
           >
             Adapter
           </Button>
-          )}
         </div>
       )}
     </div>
