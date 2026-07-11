@@ -9,6 +9,7 @@ use App\Service\AccountErasureService;
 use App\Service\InactivityMailBuilder;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -43,11 +44,12 @@ final class PurgeInactiveUsersCommand extends Command
     private const MIN_WARNING_AGE = '-14 days';
 
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
+        private EntityManagerInterface $entityManager,
         private readonly AccountErasureService $accountErasureService,
         private readonly InactivityMailBuilder $mailBuilder,
         private readonly MailerInterface $mailer,
         private readonly ClockInterface $clock,
+        private readonly ManagerRegistry $managerRegistry,
     ) {
         parent::__construct();
     }
@@ -122,18 +124,33 @@ final class PurgeInactiveUsersCommand extends Command
             ->setParameter('minWarningAge', $now->modify(self::MIN_WARNING_AGE))
             ->getQuery()
             ->getResult();
+        // Ids d'abord : après un resetManager (échec précédent), les entités
+        // déjà hydratées seraient détachées — chaque itération refetch frais.
+        $userIds = array_map(static fn (User $u): string => $u->getId(), $users);
+        $this->entityManager->clear();
 
         $count = 0;
         $failed = false;
-        foreach ($users as $user) {
-            \assert($user instanceof User);
+        foreach ($userIds as $userId) {
+            $user = $this->entityManager->find(User::class, $userId);
+            if (!$user instanceof User) {
+                continue;
+            }
             $io->writeln(\sprintf('  %s anonymize %s (warned %s)', $dryRun ? '<comment>would</comment>' : '<info>✓</info>', $user->getEmail(), $user->getInactivityWarnedAt()?->format('Y-m-d') ?? '?'));
             if (!$dryRun) {
                 try {
                     $this->accountErasureService->erase($user);
                 } catch (Throwable $e) {
                     $failed = true;
-                    $io->warning(\sprintf('Erasure of %s failed: %s', $user->getId(), $e->getMessage()));
+                    $io->warning(\sprintf('Erasure of %s failed: %s', $userId, $e->getMessage()));
+                    // Un flush raté FERME l'EntityManager (leçon PR-1) : sans
+                    // reset, tous les users suivants échoueraient en cascade.
+                    if (!$this->entityManager->isOpen()) {
+                        $this->managerRegistry->resetManager();
+                        $manager = $this->managerRegistry->getManager();
+                        \assert($manager instanceof EntityManagerInterface);
+                        $this->entityManager = $manager;
+                    }
                     continue;
                 }
             }
