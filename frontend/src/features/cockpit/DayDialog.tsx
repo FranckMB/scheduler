@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarOff, CalendarX2, OctagonX, PartyPopper, Trash2 } from "lucide-react";
+import { CalendarOff, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -12,6 +12,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { todayISO } from "./lib/date";
+import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry } from "./queries";
 
 type Mode = "list" | "event" | "closure" | "cutoff";
@@ -70,16 +71,10 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
           {entries.map((entry) => (
             <li key={entry.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
               <span className="flex items-center gap-2">
-                {entry.kind === "period" ? (
-                  entry.periodType === "cutoff" ? (
-                    <OctagonX className="size-4 text-destructive" />
-                  ) : (
-                    <CalendarX2 className="size-4 text-destructive" />
-                  )
-                ) : (
-                  <PartyPopper className="size-4 text-accent" />
-                )}
-                <span>{entry.title}</span>
+                {/* Same emoji marker as the month calendar (decorative → aria-hidden;
+                    the title/fallback text carries the meaning). */}
+                <span aria-hidden className="text-base leading-none">{entryIcon(entry)}</span>
+                <span>{entry.title || entryLabel(entry)}</span>
               </span>
               <button
                 type="button"
@@ -163,7 +158,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   return (
     <div className="space-y-2 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2">
       <p className="flex items-center gap-2 text-sm">
-        <CalendarClock className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        {/* Same season emoji as the calendar (🎄/🎃/…) — decorative, the text names it. */}
+        <span aria-hidden className="text-base leading-none">{holidayIcon(holiday)}</span>
         <span>
           <span className="font-medium">Vacances</span> — {holiday.label}
         </span>

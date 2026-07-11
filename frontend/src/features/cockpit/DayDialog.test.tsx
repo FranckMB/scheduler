@@ -221,6 +221,13 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 
+  // The modal reuses the calendar's emoji markers (same look in both places).
+  it("marks day entries with the same calendar emojis (⛔ closure, 🛑 cutoff)", () => {
+    renderDialog([entry({ id: "c1", kind: "period", periodType: "closure", title: "Gym fermé" }), entry({ id: "c2", kind: "period", periodType: "cutoff", title: "Coupure de Noël" })]);
+    expect(screen.getByText("⛔")).toBeInTheDocument();
+    expect(screen.getByText("🛑")).toBeInTheDocument();
+  });
+
   // Summer holidays: info only, never adaptable (off-season, no schedule to build).
   it("shows summer-holiday info but NO « Adapter » action", () => {
     renderDialog([], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });

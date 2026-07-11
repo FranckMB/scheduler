@@ -6,41 +6,9 @@ import { cn } from "@/shared/lib/utils";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { DayDialog } from "./DayDialog";
 import { buildMonthGrid, isWithin, monthLabel, todayISO } from "./lib/date";
+import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
-
-/** Single home of the entry→marker mapping (next periodType goes here, not in the JSX). */
-const entryIcon = (e: CalendarEntry): string => {
-  if (e.kind === "period") {
-    return e.periodType === "cutoff" ? "🛑" : "⛔";
-  }
-  return e.isDisruptive ? "🚫" : "🎉";
-};
-
-/** Emoji per school-holiday period, so the marker fits the season (not a beach for winter). */
-const HOLIDAY_ICON: Record<string, string> = {
-  ete: "🏖️", // été → plage
-  toussaint: "🎃", // automne → citrouille
-  noel: "🎄", // Noël → sapin
-  hiver: "⛷️", // hiver → ski
-  printemps: "🐰", // printemps / Pâques → lapin
-};
-const holidayIcon = (h: SchoolHoliday): string => HOLIDAY_ICON[h.holidayType] ?? "🏖️";
-
-/**
- * Accessible name for an entry marker. `title` may be empty (imported / auto-named
- * entries), so fall back to the marker's meaning — never an empty aria-label, which
- * would be a silent marker for a screen reader (and an axe violation).
- */
-const entryLabel = (e: CalendarEntry): string => {
-  if (e.title.trim() !== "") {
-    return e.title;
-  }
-  if (e.kind === "period") {
-    return e.periodType === "cutoff" ? "Coupure" : "Période fermée";
-  }
-  return e.isDisruptive ? "Événement perturbant" : "Événement";
-};
 
 interface MonthCalendarProps {
   year: number;
