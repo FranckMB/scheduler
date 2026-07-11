@@ -156,7 +156,9 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
         })}
       </div>
 
-      {selectedDay !== null ? <DayDialog iso={selectedDay} entries={entriesOn(selectedDay)} onClose={() => setSelectedDay(null)} /> : null}
+      {selectedDay !== null ? (
+        <DayDialog iso={selectedDay} entries={entriesOn(selectedDay)} holiday={holidayOn(selectedDay)} publicHoliday={publicHolidayOn(selectedDay)} onClose={() => setSelectedDay(null)} />
+      ) : null}
     </div>
   );
 }

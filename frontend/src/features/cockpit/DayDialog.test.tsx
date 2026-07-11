@@ -1,24 +1,29 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CalendarEntry } from "./api";
+import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { DayDialog } from "./DayDialog";
 
 const deleteMutate = vi.fn();
 const cutoffMutate = vi.fn();
 const closureMutate = vi.fn();
+const holidayMutate = vi.fn();
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
+  useCreateHolidayPeriod: () => ({ mutate: holidayMutate, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
 }));
+// Freeze "today" so the fixed test date (2026-05-12) is not in the past (start ≥ today).
+vi.mock("./lib/date", () => ({ todayISO: () => "2026-05-12" }));
 
 const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   id: "e1",
@@ -35,20 +40,25 @@ const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   ...overrides,
 });
 
-function renderDialog(entries: CalendarEntry[]) {
+function renderDialog(entries: CalendarEntry[], holidays: { holiday?: SchoolHoliday; publicHoliday?: PublicHoliday } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <DayDialog iso="2026-05-12" entries={entries} onClose={vi.fn()} />
+      <MemoryRouter>
+        <DayDialog iso="2026-05-12" entries={entries} holiday={holidays.holiday} publicHoliday={holidays.publicHoliday} onClose={vi.fn()} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
+
+const schoolHoliday = (over: Partial<SchoolHoliday> = {}): SchoolHoliday => ({ id: "sh1", label: "Vacances de Noël", holidayType: "noel", startDate: "2026-05-10", endDate: "2026-05-20", schoolYear: "2025-2026", ...over });
 
 describe("DayDialog — deletion is always confirmed", () => {
   beforeEach(() => {
     deleteMutate.mockReset();
     cutoffMutate.mockReset();
     closureMutate.mockReset();
+    holidayMutate.mockReset();
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -148,5 +158,50 @@ describe("DayDialog — deletion is always confirmed", () => {
       { title: "Gymnase A en travaux", startDate: "2026-05-12", endDate: "2026-05-12", venueId: "v1" },
       expect.anything(),
     );
+  });
+
+  // Lot B — item 2: the clicked day is only a DEFAULT start; both ends are editable.
+  it("lets the start date be changed (clicked day is only the default)", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Coupure (pas d'entraînement)" }));
+    const startInput = screen.getByLabelText("Du");
+    await userEvent.clear(startInput);
+    await userEvent.type(startInput, "2026-05-15");
+    const endInput = screen.getByLabelText("Jusqu'au");
+    await userEvent.clear(endInput);
+    await userEvent.type(endInput, "2026-05-18");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure", startDate: "2026-05-15", endDate: "2026-05-18" }, expect.anything());
+  });
+});
+
+describe("DayDialog — holiday awareness (Lot B)", () => {
+  beforeEach(() => holidayMutate.mockReset());
+
+  // item 1: a public holiday (jour férié) shows read-only info.
+  it("shows the public-holiday info banner", () => {
+    renderDialog([], { publicHoliday: { id: "ph1", date: "2026-05-12", label: "Ascension", national: true } });
+    expect(screen.getByText("Jour férié")).toBeInTheDocument();
+    expect(screen.getByText(/Ascension/)).toBeInTheDocument();
+  });
+
+  // item 1 + 3: a school holiday shows info AND the "Adapter" entry point.
+  it("shows the school-holiday info + an « Adapter » action when no period exists yet", async () => {
+    renderDialog([], { holiday: schoolHoliday() });
+    expect(screen.getByText("Vacances")).toBeInTheDocument();
+    expect(screen.getByText(/Vacances de Noël/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(holidayMutate).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" }, expect.anything());
+  });
+
+  // item 3: once the holiday overlay is generated, offer "Voir le planning" instead.
+  it("offers « Voir le planning » when the holiday's overlay is already generated", () => {
+    const periodEntry = entry({ id: "p9", kind: "period", periodType: "holiday", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20", overlayScheduleId: "ov9" });
+    renderDialog([periodEntry], { holiday: schoolHoliday() });
+    expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 });
