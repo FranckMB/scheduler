@@ -17,6 +17,16 @@ const entryIcon = (e: CalendarEntry): string => {
   return e.isDisruptive ? "🚫" : "🎉";
 };
 
+/** Emoji per school-holiday period, so the marker fits the season (not a beach for winter). */
+const HOLIDAY_ICON: Record<string, string> = {
+  ete: "🏖️", // été → plage
+  toussaint: "🎃", // automne → citrouille
+  noel: "🎄", // Noël → sapin
+  hiver: "⛷️", // hiver → ski
+  printemps: "🐰", // printemps / Pâques → lapin
+};
+const holidayIcon = (h: SchoolHoliday): string => HOLIDAY_ICON[h.holidayType] ?? "🏖️";
+
 /**
  * Accessible name for an entry marker. `title` may be empty (imported / auto-named
  * entries), so fall back to the marker's meaning — never an empty aria-label, which
@@ -122,7 +132,7 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
               {/* Markers are purely visual — the button's aria-label already names them
                   to a screen reader, so hide them from the a11y tree (no double read). */}
               <span aria-hidden className="flex flex-wrap items-center gap-0.5">
-                {holiday ? <span title={`Vacances — ${holiday.label}`}>🏖</span> : null}
+                {holiday ? <span title={`Vacances — ${holiday.label}`}>{holidayIcon(holiday)}</span> : null}
                 {publicHoliday ? (
                   // A11Y-08: was a bare red dot (info by colour alone). A shape + the
                   // letter "F" makes "férié" legible without relying on colour.

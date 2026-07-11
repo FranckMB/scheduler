@@ -94,6 +94,12 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(markers[0]).toHaveTextContent("🛑");
   });
 
+  it("uses a season-appropriate emoji per holiday type (not a beach for spring)", () => {
+    renderMay([], [{ id: "hp", label: "Vacances de Printemps", holidayType: "printemps", startDate: "2026-05-14", endDate: "2026-05-17", schoolYear: "2025-2026" }]);
+    // printemps → 🐰 (lapin de Pâques), pas 🏖 (plage réservée à l'été).
+    expect(screen.getAllByTitle(/Vacances — Vacances de Printemps/)[0]).toHaveTextContent("🐰");
+  });
+
   it("names the public holiday on its exact day, not colour alone (A11Y-08)", () => {
     renderMay([], [], [{ id: "ph1", date: "2026-05-01", label: "Fête du Travail", national: true }]);
 

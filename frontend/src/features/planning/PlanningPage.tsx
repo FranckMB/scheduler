@@ -413,7 +413,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
               return (
                 <div className={`${showAside ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4" : ""} ${height}`}>
-                  <div className="relative flex min-w-0 flex-col gap-2 lg:h-full">
+                  {/* min-h-0 is essential: without it the flex-1 grid wrapper keeps
+                      its content height and overflows past the container, spilling
+                      under the sticky footer (revue #204 — grille coupée en 2). */}
+                  <div className="relative flex min-h-0 min-w-0 flex-col gap-2 lg:h-full">
                     {/* Collapsed diagnostics → a compact bar re-opens the aside;
                         the grid keeps full width until then (user request). */}
                     {!isReadOnly && diagnosticsCollapsed ? (
@@ -427,7 +430,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         {diagnostics.length > 0 ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{diagnostics.length}</span> : null}
                       </button>
                     ) : null}
-                    <div className="relative min-w-0 flex-1">
+                    <div className="relative min-h-0 min-w-0 flex-1">
                       <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
                     </div>
                   </div>

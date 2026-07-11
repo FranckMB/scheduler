@@ -54,7 +54,9 @@ export function ExportMenu({ scheduleId, venues }: { scheduleId: string; venues:
         Exporter
       </Button>
       {open ? (
-        <div role="menu" className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
+        // z-50: above the WeekGrid frozen headers (z-40 corner / z-30 rows), which
+        // otherwise render over the dropdown ("coupent" le menu — revue #204).
+        <div role="menu" className="absolute right-0 z-50 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
           <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="export-scope">
             Périmètre
           </label>
