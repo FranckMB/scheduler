@@ -281,6 +281,10 @@ final class ScheduleConstraintBuilder
         array $priorityTiers = [],
         array $constraints = [],
     ): array {
+        // In-memory (DB-free) builder: no period overrides. Reset for symmetry with
+        // the DB entry points so a reused instance can never leak a stale map.
+        $this->currentSessionOverrides = [];
+
         return $this->buildPayload(
             clubId: $this->firstString($venues, 'getClubId')
                 ?? $this->firstString($teams, 'getClubId')

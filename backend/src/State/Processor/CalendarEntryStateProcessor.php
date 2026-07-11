@@ -8,6 +8,7 @@ use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
@@ -162,6 +163,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             }
             foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
                 $this->entityManager->remove($override);
+            }
+            // A period's own reservations (dated pins) are keyed on the entry too.
+            foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['calendarEntryId' => $id]) as $reservation) {
+                $this->entityManager->remove($reservation);
             }
             $this->entityManager->flush();
         }

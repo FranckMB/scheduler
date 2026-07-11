@@ -140,6 +140,27 @@ final class StructureRestorer
             $this->entityManager->createQuery('DELETE App\Entity\Reservation r WHERE r.id IN (:ids)')
                 ->setParameter('ids', $deadReservationIds)->execute();
         }
+
+        // Period-editable structure: a period's team override / borrowed slot whose
+        // target team/venue no longer exists after the restore is a ghost too —
+        // mirror the E1 cascade (team/venue delete) on the restore path.
+        $deadOverrideIds = $this->entityManager->createQuery(
+            'SELECT o.id FROM App\Entity\TeamPeriodOverride o WHERE o.clubId = :c AND o.seasonId = :s '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = o.teamId)',
+        )->setParameter('c', $clubId)->setParameter('s', $seasonId)->getSingleColumnResult();
+        if ([] !== $deadOverrideIds) {
+            $this->entityManager->createQuery('DELETE App\Entity\TeamPeriodOverride o WHERE o.id IN (:ids)')
+                ->setParameter('ids', $deadOverrideIds)->execute();
+        }
+
+        $deadPeriodSlotIds = $this->entityManager->createQuery(
+            'SELECT vts.id FROM App\Entity\VenueTrainingSlot vts WHERE vts.clubId = :c AND vts.seasonId = :s AND vts.calendarEntryId IS NOT NULL '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = vts.venueId)',
+        )->setParameter('c', $clubId)->setParameter('s', $seasonId)->getSingleColumnResult();
+        if ([] !== $deadPeriodSlotIds) {
+            $this->entityManager->createQuery('DELETE App\Entity\VenueTrainingSlot vts WHERE vts.id IN (:ids)')
+                ->setParameter('ids', $deadPeriodSlotIds)->execute();
+        }
     }
 
     /** Delete the current permanent structure (NOT schedules, NOT the calendar). */

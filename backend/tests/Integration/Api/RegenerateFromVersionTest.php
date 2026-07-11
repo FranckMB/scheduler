@@ -69,6 +69,11 @@ final class RegenerateFromVersionTest extends WebTestCase
     public function testLoadVersionKeepsPeriodTrainingSlots(): void
     {
         $this->persistTeam('SM1');
+        // A venue captured in the snapshot so it survives the restore (else the
+        // period slot on it would be purged as dangling — the sibling guard).
+        $venue = (new \App\Entity\Venue)->setId('11111111-1111-4111-8111-111111111111')
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setName('Gym')->setCanSplit(false)->setSource('manual');
+        $this->em->persist($venue);
         $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
         $this->em->flush();
         self::getContainer()->get(StructureSnapshotter::class)->store($v1, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
@@ -77,7 +82,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         // base structure — a base-version restore must not wipe it.
         $periodSlot = (new \App\Entity\VenueTrainingSlot)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setVenueId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($venue->getId())
             ->setDayOfWeek(1)->setStartTime(new DateTimeImmutable('20:00'))->setDurationMinutes(90)->setCapacity(1)
             ->setCalendarEntryId('22222222-2222-4222-8222-222222222222');
         $this->em->persist($periodSlot);
@@ -88,6 +93,30 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         $this->em->clear();
         self::assertCount(1, $this->em->getRepository(\App\Entity\VenueTrainingSlot::class)->findBy(['calendarEntryId' => '22222222-2222-4222-8222-222222222222']), 'the period slot survives a base-version restore');
+    }
+
+    public function testLoadVersionPurgesDanglingTeamOverride(): void
+    {
+        $this->persistTeam('SM1');
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        self::getContainer()->get(StructureSnapshotter::class)->store($v1, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
+
+        // A team added AFTER the snapshot, with a period override on it.
+        $sm2 = $this->persistTeam('SM2');
+        $override = (new \App\Entity\TeamPeriodOverride)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setCalendarEntryId('33333333-3333-4333-8333-333333333333')
+            ->setTeamId($sm2->getId())->setIsActive(false);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+        self::assertResponseStatusCodeSame(200);
+
+        // Restore removed SM2 (not in the snapshot) → its override is a ghost → purged.
+        $this->em->clear();
+        self::assertCount(0, $this->em->getRepository(\App\Entity\TeamPeriodOverride::class)->findBy(['teamId' => $sm2->getId()]), 'a dangling period override is purged on restore');
     }
 
     public function testRegenerateFromANonCompletedSourceIsRefused(): void
