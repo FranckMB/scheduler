@@ -23,6 +23,14 @@ framework:
             policy: 'sliding_window'
             limit: 300
             interval: '1 minute'
+        # RGPD portabilité : l'export club lit 19 tables et encode plusieurs Mo
+        # par appel — l'usage légitime est ponctuel (quelques exports par an).
+        # 10/h par utilisateur = large pour l'usage réel, borne réelle contre
+        # un JWT management qui pomperait le workspace en boucle.
+        rgpd_export:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 hour'
 
 # Dev/e2e: the Playwright suite registers ~8 clubs in one minute from one IP —
 # the strict anti-brute-force sizing (5/15min) is a production concern. 100 is

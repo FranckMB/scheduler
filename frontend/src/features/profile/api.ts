@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client";
+import { downloadBlob } from "@/shared/lib/download";
 
 export interface UpdateProfilePayload {
   firstName?: string;
@@ -36,3 +37,13 @@ export interface DeleteAccountResult {
  * (un JWT volé ne suffit pas à détruire le compte).
  */
 export const deleteAccount = (password: string): Promise<DeleteAccountResult> => api.delete("me", { json: { password } }).json();
+
+/**
+ * RGPD portabilité : télécharge l'export JSON de MES données de compte.
+ * timeout désactivé : le backend construit tout le JSON avant de répondre
+ * (le défaut ky de 10 s couperait les gros exports).
+ */
+export async function downloadMyDataExport(): Promise<void> {
+  const blob = await api.get("me/export", { timeout: false }).blob();
+  downloadBlob(blob, "mes-donnees.json");
+}

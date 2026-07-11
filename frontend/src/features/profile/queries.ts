@@ -30,3 +30,11 @@ export function useDeleteAccount() {
     // n'existe plus) et affiche la conséquence club si elle s'applique.
   });
 }
+
+/** RGPD portabilité — export JSON de mes données de compte. */
+export function useDownloadMyData() {
+  return useMutation({
+    mutationFn: () => profileApi.downloadMyDataExport(),
+    onSuccess: () => toast.success("Export téléchargé."),
+  });
+}

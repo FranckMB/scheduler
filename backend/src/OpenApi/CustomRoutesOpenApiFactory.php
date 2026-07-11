@@ -174,6 +174,28 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             ]),
         )));
 
+        $paths->addPath('/api/me/export', new PathItem(get: new Operation(
+            operationId: 'getApiMeExport',
+            tags: ['Auth'],
+            responses: [
+                '200' => new Response('RGPD portability export of the connected account (user + memberships), served as a JSON download'),
+                '401' => new Response('Unauthorized'),
+            ],
+            summary: 'RGPD portability: export the connected user own account data (self-only)',
+        )));
+
+        $paths->addPath('/api/club/export', new PathItem(get: new Operation(
+            operationId: 'getApiClubExport',
+            tags: ['Club'],
+            responses: [
+                '200' => new Response('RGPD portability export of the current club workspace (raw rows per table), served as a JSON download'),
+                '401' => new Response('Unauthorized'),
+                '403' => new Response('Member but not a management role'),
+                '404' => new Response('No active membership in the current club'),
+            ],
+            summary: 'RGPD portability: export the current club full workspace (management only, tenant from JWT)',
+        )));
+
         $paths->addPath('/api/me/password', new PathItem(post: new Operation(
             operationId: 'postApiMePassword',
             tags: ['Auth'],

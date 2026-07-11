@@ -10,7 +10,7 @@ import { isPasswordValid, PASSWORD_REQUIREMENT } from "@/shared/lib/passwordPoli
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
-import { useChangePassword, useDeleteAccount, useUpdateProfile } from "./queries";
+import { useChangePassword, useDeleteAccount, useDownloadMyData, useUpdateProfile } from "./queries";
 
 function ProfileForm({ firstName, lastName, email }: { firstName: string; lastName: string; email: string }) {
   const update = useUpdateProfile();
@@ -115,6 +115,32 @@ function PasswordForm() {
   );
 }
 
+/** RGPD — portabilité (art. 20) : télécharger ses données de compte en JSON. */
+function ExportSection() {
+  const exportDownload = useDownloadMyData();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Mes données</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Téléchargez une copie de vos données personnelles (identité de compte et adhésions) au format JSON.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={exportDownload.isPending}
+          onClick={() => exportDownload.mutate()}
+        >
+          {exportDownload.isPending ? <Spinner className="size-4" /> : null}
+          Exporter mes données
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * RGPD — droit à l'effacement, self-service. Confirmation = ré-authentification
  * (mot de passe courant, patron changement de mot de passe) : un JWT volé ne
@@ -189,6 +215,7 @@ export function ProfilePage() {
       </div>
       <ProfileForm firstName={data.firstName} lastName={data.lastName} email={data.email} />
       <PasswordForm />
+      <ExportSection />
       <DangerZone />
     </div>
   );

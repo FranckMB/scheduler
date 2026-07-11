@@ -55,3 +55,11 @@ export function useResetClub() {
     },
   });
 }
+
+/** RGPD portabilité — export JSON du workspace du club (management). */
+export function useDownloadClubExport() {
+  return useMutation({
+    mutationFn: () => clubApi.downloadClubExport(),
+    onSuccess: () => toast.success("Export téléchargé."),
+  });
+}
