@@ -7,11 +7,13 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+
+import { groupedCoaches } from "../lib/ranking";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { ReservationPanel } from "./ReservationPanel";
 
@@ -63,6 +65,7 @@ export function ConstraintsStep() {
   const { data: tags = [] } = useWizardTeamTags();
   const { data: tagAssignments = [] } = useWizardTeamTagAssignments();
   const { data: coaches = [] } = useWizardCoaches();
+  const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const { data: venues = [] } = useWizardVenues();
   const create = useCreateConstraint();
   const update = useUpdateConstraint();
@@ -99,6 +102,8 @@ export function ConstraintsStep() {
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
+  // Group the coach picker: Salariés, then Coachs-joueurs, then Bénévoles (batch item 1).
+  const coachGroups = useMemo(() => groupedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))), [coaches, coachPlayers]);
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
 
   // Resolve the target into scope + optional tag (CLUB+targetTag → N team constraints backend-side).
@@ -465,11 +470,23 @@ export function ConstraintsStep() {
           <>
             <Select aria-label="Coach" className="h-8 w-44" value={coachId} onChange={(e) => setCoachId(e.target.value)}>
               <option value="">— coach —</option>
-              {coaches.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {coachName.get(c.id)}
-                </option>
-              ))}
+              {(
+                [
+                  ["Salariés", coachGroups.salaried],
+                  ["Coachs-joueurs", coachGroups.player],
+                  ["Bénévoles", coachGroups.other],
+                ] as const
+              ).map(([label, group]) =>
+                group.length > 0 ? (
+                  <optgroup key={label} label={label}>
+                    {group.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {coachName.get(c.id)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null,
+              )}
             </Select>
             <Select aria-label="Disponibilité" className="h-8 w-44" value={coachMode} onChange={(e) => setCoachMode(e.target.value as "unavailable" | "available")}>
               <option value="unavailable">indisponible</option>

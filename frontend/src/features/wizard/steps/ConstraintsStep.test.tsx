@@ -28,7 +28,8 @@ vi.mock("../queries", () => ({
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: h.tags }),
   useWizardTeamTagAssignments: () => ({ data: h.tagAssignments }),
-  useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont" }] }),
+  useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont", isEmployee: false, isActive: true, email: null }] }),
+  useWizardCoachPlayers: () => ({ data: [] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
   useCreateConstraint: () => ({ mutate: h.createMut, isPending: false }),
@@ -107,6 +108,15 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
     expect(h.createMut).toHaveBeenCalledOnce();
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", unavailableDays: [1] } });
+  });
+
+  it("groups the coach picker (a non-employee non-player coach lands under « Bénévoles »)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Dispo coach" }));
+    const benevoles = screen.getByRole("group", { name: "Bénévoles" });
+    expect(within(benevoles).getByRole("option", { name: "Jean Dupont" })).toBeInTheDocument();
   });
 
   it("coach 'disponible uniquement' emits HARD availableDays (whitelist — ALIGN, engine already honored it)", async () => {
