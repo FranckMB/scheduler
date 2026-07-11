@@ -4,13 +4,13 @@
 
 ---
 
-## 1. Le backend construit le payload (format v2.0)
+## 1. Le backend construit le payload (contrat 2.1)
 
-Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le backend assemble un objet JSON conforme au schema `ScheduleInputSchema` (version 2.0). Voici la structure complete, avec des explications inline.
+Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le backend assemble un objet JSON conforme au schema `ScheduleInputSchema` (version de contrat **2.1**, fichier `engine/CONTRACT_VERSION`). Voici la structure complete, avec des explications inline.
 
 ```json
 {
-  "version": "2.0",
+  "version": "2.1",
   "clubId": "550e8400-e29b-41d4-a716-446655440000",
   "seasonId": "660e8400-e29b-41d4-a716-446655440001",
 
@@ -19,22 +19,20 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
       "id": "v1",
       "name": "Gymnase A",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 1, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 6, "startTime": "08:00", "endTime": "12:00"}
+      "trainingSlots": [
+        {"dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 90, "capacity": 1},
+        {"dayOfWeek": 2, "startTime": "19:00", "durationMinutes": 90, "capacity": 1},
+        {"dayOfWeek": 3, "startTime": "20:30", "durationMinutes": 90, "capacity": 1},
+        {"dayOfWeek": 6, "startTime": "10:00", "durationMinutes": 90, "capacity": 1}
       ]
     },
     {
       "id": "v2",
       "name": "Gymnase B",
       "isActive": true,
-      "availability": [
-        {"dayOfWeek": 2, "startTime": "18:00", "endTime": "21:00"},
-        {"dayOfWeek": 4, "startTime": "18:00", "endTime": "21:00"}
+      "trainingSlots": [
+        {"dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "capacity": 2},
+        {"dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90, "capacity": 2}
       ]
     }
   ],
@@ -43,6 +41,7 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
     {
       "id": "t-sm1",
       "name": "SM1",
+      "sportCategoryId": "cat-seniors",
       "priorityTierId": 1,
       "sessionsPerWeek": 3,
       "tags": ["REGIONAL", "SENIOR", "MASCULINE"],
@@ -53,6 +52,7 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
     {
       "id": "t-u15f1",
       "name": "U15F1",
+      "sportCategoryId": "cat-u15",
       "priorityTierId": 3,
       "sessionsPerWeek": 2,
       "tags": ["JEUNE", "FEMININE", "DEPARTEMENTAL"],
@@ -119,30 +119,22 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
       "durationMinutes": 90,
       "lockLevel": "HARD"
     }
-  ],
-
-  "priorityTiers": [
-    {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 3},
-    {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 3},
-    {"id": 3, "label": "B", "orToolsWeight": 100, "defaultMinSessions": 2},
-    {"id": 4, "label": "C", "orToolsWeight": 10, "defaultMinSessions": 2},
-    {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 1}
   ]
 }
 ```
 
 ### Explications par section
 
-- **`version`** : doit valoir exactement `"2.0"`. Le moteur refuse les payloads d'anciennes versions.
+- **`version`** : version du contrat (actuellement `2.1`). Le moteur ne compare que le **MAJOR** : `"2.0"` et `"2.1"` passent tous les deux ; un payload `1.x` ou `3.x` est refuse.
 - **`clubId` / `seasonId`** : identifiants du club et de la saison en cours. Le moteur ne les utilise pas pour le calcul, mais les inclut dans les logs et les diagnostics.
-- **`venues`** : liste des salles. Chaque salle a des fenetres de disponibilite (`availability`). Le champ `venueAvailabilities` n'existe plus dans le format v2.0. Dans les versions precedentes, les disponibilites etaient stockees dans une cle separee au niveau du payload. Elles sont maintenant imbriquees directement dans chaque salle, ce qui est plus logique et evite les erreurs de coherence.
-- **`teams`** : liste des equipes. Le `priorityTierId` fait reference a l'identifiant dans `priorityTiers`.
+- **`venues`** : liste des salles. Chaque salle porte ses **creneaux d'entrainement** explicites dans la cle `trainingSlots` : `{dayOfWeek, startTime, durationMinutes, capacity}`. Il n'existe **ni** cle `availability` **ni** champ `endTime` (la fin se deduit de `startTime + durationMinutes`) — les schemas Pydantic sont `extra=forbid`, donc une cle inconnue provoque un `422`. La `capacity` indique combien d'equipes peuvent occuper le creneau simultanement (gymnase divisible : le backend envoie `canSplit ? capacity : 1`).
+- **`teams`** : liste des equipes. Le champ `sportCategoryId` est **requis** (son absence provoque un `422`). Le `priorityTierId` identifie le rang de priorite (1 = S ... 5 = D), dont le poids est code en dur cote moteur.
 - **`coaches`** : liste des entraineurs. Leur disponibilite propre est exprimee via des contraintes `COACH_AVAILABILITY`.
 - **`constraints`** : deux formats coexistent :
   - **Format unifie v2** (`scope`, `family`, `ruleType`, `config`) : le nouveau format, plus flexible. Exemple : une contrainte `TIME` avec `maxStartTime: "20:00"`.
   - **Format legacy type** (`teamId`, `type`, `severity`, `value`) : conserve pour la retrocompatibilite, notamment pour les liens equipe-entraineur (`TEAM_COACH`). Exemple : `team-coach:t-sm1` lie le SM1 a Maxime Dupont comme entraineur principal.
 - **`slotTemplates`** : creneaux pre-existants. Un creneau `HARD` est fige. Un creneau `SOFT` est une suggestion. Un creneau `NONE` n'a pas lieu d'etre dans cette liste (il serait genere par le moteur).
-- **`priorityTiers`** : definition des niveaux de priorite. Le poids `orToolsWeight` est ce que le solveur OR-Tools maximise.
+- **Pas de section `priorityTiers`** : le backend n'envoie **pas** cette cle (le schema l'accepte, avec une liste vide par defaut). Les poids de priorite que le solveur maximise sont **codes en dur** cote moteur (`LEVEL_2_OBJECTIVE_WEIGHTS`) — un `orToolsWeight` recu dans le payload serait ignore.
 
 ### Resolution des tags
 
@@ -156,15 +148,15 @@ Le backend envoie le payload au moteur via une requete HTTP POST sur `http://eng
 
 ### Validation Pydantic v2
 
-FastAPI valide automatiquement le JSON contre le schema `ScheduleInputSchema`. Si un champ manque, si un type est incorrect (par exemple `sessionsPerWeek: "trois"` au lieu de `3`), ou si une valeur d'enum est invalide (par exemple `lockLevel: "FORT"` au lieu de `HARD`), FastAPI retourne immediatement une erreur `422 Unprocessable Entity` avec le detail des champs en erreur.
+FastAPI valide automatiquement le JSON contre le schema `ScheduleInputSchema`. Si un champ manque, si un type est incorrect (par exemple `sessionsPerWeek: "trois"` au lieu de `3`), ou si une cle inconnue est presente (les schemas sont `extra=forbid`), FastAPI retourne immediatement une erreur `422 Unprocessable Entity` avec le detail des champs en erreur. Attention : `lockLevel` est une **chaine libre**, pas un enum — un `lockLevel: "FORT"` ne provoque **pas** de 422, il est simplement traite comme non-`HARD`.
 
 ### Verrou asyncio par club
 
-Avant de lancer le solveur, le moteur acquiert un verrou asyncio specifique au `clubId`. Cela empeche deux generations simultanees pour le meme club. Si un second utilisateur demande une generation pendant que la premiere est en cours, le moteur retourne `503 Service Unavailable` avec le message "Club already generating, retry later".
+Avant de lancer le solveur, le moteur acquiert un verrou asyncio specifique au `clubId`. Cela empeche deux generations simultanees pour le meme club. Si un second utilisateur demande une generation pendant que la premiere est en cours, la seconde requete n'est **pas** rejetee : elle **attend** la liberation du verrou puis s'execute a son tour. Les generations d'un meme club sont donc serialisees — jamais de `503`.
 
 ### Verification de version
 
-Le moteur verifie que `version == "2.0"`. Si ce n'est pas le cas, il retourne une erreur indiquant la version attendue et la version recue.
+Le moteur verifie que le **MAJOR** de `version` correspond au MAJOR de son contrat (`2` pour le contrat `2.1`) : `"2.0"` comme `"2.1"` sont acceptes. Si le MAJOR differe, il retourne une erreur indiquant la version attendue et la version recue.
 
 ---
 
@@ -180,7 +172,7 @@ x[team_id, venue_id, day_of_week, slot_start]
 
 Chaque variable signifie : "l'equipe T s'entraine-t-elle a la salle V le jour D a l'heure S ?" (1 = oui, 0 = non).
 
-Les creneaux disponibles sont derives des fenetres `venue.availability`, avec une granularite de **15 minutes**. Si le Gymnase A est ouvert de 08h00 a 22h00, les slots possibles sont 08h00, 08h15, 08h30, ..., 21h45. La duree de la seance (par defaut 90 minutes) determine quel slot de debut est valide. Un slot a 21h45 serait invalide car la seance finirait a 23h15, hors des horaires d'ouverture.
+Les creneaux candidats sont **exactement les `trainingSlots` declares par les salles** : chaque `trainingSlot` (salle, jour, `startTime`) constitue **un seul depart candidat**. Il n'y a **pas** de discretisation d'une fenetre horaire en pas de 15 minutes — si le Gymnase A declare un creneau le lundi a 19h00, le seul depart possible ce jour-la est 19h00. La constante `SLOT_MINUTES = 15` ne sert qu'a une chose : bloquer la **duree** des verrous `HARD` (occupation du creneau sur toute la duree de la seance).
 
 Les creneaux `HARD`-verrouilles sont **pre-placees** : la variable correspondante est fixee a 1 et retiree de l'espace d'optimisation. Le solveur ne cherchera pas a les deplacer.
 
@@ -195,8 +187,8 @@ Ces contraintes doivent etre satisfaites pour que la solution soit **faisable**.
 5. **FIXED_SLOTS** : pour chaque creneau `HARD`, la variable vaut exactement 1.
 6. **FORBIDDEN_ASSIGNMENTS** : pour chaque contrainte `HARD` de type interdiction, la variable vaut 0. Exemple : si le SM1 a une contrainte "pas le vendredi", toutes les variables `x[t-sm1, *, 5, *]` valent 0.
 7. **COACH_UNAVAILABILITY** : pour chaque contrainte `COACH_AVAILABILITY`, les variables correspondantes valent 0.
-8. **VENUE_CLOSURES** : pour chaque contrainte `FACILITY_CAPACITY`, les variables de la salle fermee valent 0.
-9. **MIN_SESSIONS** : pour chaque equipe, la somme totale de ses variables est superieure ou egale a `min_sessions` (derive de `sessionsPerWeek` ou de `defaultMinSessions` du tier).
+8. **FACILITY_CAPACITY** : pour chaque contrainte `FACILITY_CAPACITY`, le nombre d'equipes **simultanees** sur un creneau de la salle est plafonne a `min(capacite du creneau, maxTeams)`. Ce n'est **pas** une fermeture de salle : les fermetures temporaires (`venue_closed`) sont expansees **cote backend** en contraintes `forbiddenVenueId` par equipe avant l'envoi.
+9. **MIN_SESSIONS** : attention, ce n'est **pas** une contrainte dure — c'est une **cible soft** (audit ENG-18). Le nombre de seances souhaite (`sessionsPerWeek`) est encourage via l'objectif, jamais impose (plancher dur 0 en production) : une equipe peut recevoir moins de seances que demande sans rendre l'instance infaisable.
 10. **FORCED_VENUES** : si une equipe a une contrainte `FACILITY` `HARD` l'obligeant a une salle specifique, toutes les variables `x[team, autre_salle, *, *]` valent 0.
 
 ### Etape 3 — `add_level_2_objective()`
@@ -205,10 +197,11 @@ Le solveur maximise la fonction objectif suivante :
 
 ```
 maximiser  Σ weight(tier) × x[team, venue, day, slot]
-         + bonus pour preservation des verrous SOFT
-         + bonus pour slots preferes (contraintes DAY PREFERRED)
-         - penalite pour surcharge d'entraineur
-         + ...
+         + bonus session_count (chaque seance placee)
+         + bonus preferred / preferred_day / preferred_time (preferences soft)
+         - malus avoided_venue (salle a eviter, soft)
+         + bonus rest (jour de repos apres un match)
+         - malus spacing (deux seances sur des jours consecutifs)
 ```
 
 Les poids des tiers sont fixes :
@@ -223,16 +216,16 @@ Les poids des tiers sont fixes :
 
 Ainsi, placer une seance du SM1 (S) rapporte 10 000 points. Placer une seance de l'U15F1 (B) rapporte 100 points. Si une seule place est disponible au Gymnase A le lundi a 19h00, le solveur la donnera au SM1.
 
-Les bonus et penalites sont des termes secondaires. Ils ne changent pas l'ordre de grandeur du score, mais affinent la solution. Par exemple, preserver un verrou `SOFT` rapporte un petit bonus. Placer une equipe sur son jour prefere rapporte un bonus. Surcharger un entraineur (plus de seances que son seuil) applique une penalite.
+Les bonus et malus sont des termes secondaires. Ils ne changent pas l'ordre de grandeur du score, mais affinent la solution. Les termes reels de l'objectif (poids `LEVEL_2_OBJECTIVE_WEIGHTS`) sont : les **tiers** (S/A/B/C/D), `session_count`, `preferred`, `avoided_venue`, `preferred_day`, `preferred_time`, `rest` et `spacing`. L'objectif ne contient **ni** bonus de preservation des verrous `SOFT` **ni** penalite de surcharge d'entraineur : `soft_lock_moved` et `coach_overload` sont des **diagnostics post-solve** (le solveur ne les optimise pas, il les constate apres coup).
 
 ### Etape 4 — `CpSolver.Solve()`
 
-Le solveur OR-Tools CP-SAT est lance avec un temps maximum de **10 secondes** (`max_time_in_seconds=10`).
+Le solveur OR-Tools CP-SAT est lance avec un budget de temps **adaptatif** selon la taille du probleme (`n_teams × n_venues`) : **60 s** si ≤ 50, **180 s** si ≤ 200, **600 s** sinon. Le `solverTimeoutSeconds` du payload (defaut 650) n'est qu'un **plafond** — jamais le budget reel. La resolution se fait en **deux phases lexicographiques** (placement d'abord, puis chainage) ; les **10 secondes** souvent citees sont le cap de la **phase 2 (chaining) uniquement**.
 
 Trois resultats possibles :
 
 - `OPTIMAL` : la meilleure solution possible a ete trouvee. Le score est le maximum theorique.
-- `FEASIBLE` : une solution valide a ete trouvee, mais pas necessairement la meilleure (le temps de 10 secondes a ete atteint). Le score est bon, mais peut-etre pas optimal.
+- `FEASIBLE` : une solution valide a ete trouvee, mais pas necessairement la meilleure (le budget de temps a ete epuise). Le score est bon, mais peut-etre pas optimal.
 - `INFEASIBLE` : aucune solution ne satisfait toutes les contraintes `HARD`. L'instance est impossible. Le moteur retournera `status: failed`.
 
 ---
@@ -270,11 +263,11 @@ Une fois le solveur termine, le moteur construit la reponse JSON :
   "unplaced": [],
   "diagnostics": [
     {
+      "id": "diag-1",
       "type": "soft_lock_moved",
-      "severity": "MEDIUM",
+      "severity": "WARNING",
       "message": "Le creneau SOFT du SM1 (lundi 19h) a ete deplace vers mardi 19h pour optimiser le score global",
-      "teamId": "t-sm1",
-      "slotId": "st-1"
+      "teamId": "t-sm1"
     }
   ],
   "metrics": {
@@ -292,7 +285,7 @@ Une fois le solveur termine, le moteur construit la reponse JSON :
 - **`score`** : score total de la solution. 0 signifie que rien n'a ete place
 - **`slots`** : liste des creneaux assignes. Chaque creneau a un `lockLevel` (`NONE` pour les nouveaux, `HARD`/`SOFT` pour les pre-existants preserves)
 - **`unplaced`** : liste des `teamId` pour lesquels aucune seance n'a ete placee
-- **`diagnostics`** : alertes detaillees (voir `solver-errors.md` pour le catalogue complet)
+- **`diagnostics`** : alertes detaillees (voir `solver-errors.md` pour le catalogue complet). Les severites reelles sont `ERROR` / `WARNING` / `INFO` (ex. `soft_lock_moved` = `WARNING`). Le `DiagnosticSchema` exige un champ `id` et ne connait **pas** de champ `slotId` (`extra=forbid`)
 - **`metrics`** : metriques techniques du solveur. `nb_variables` et `nb_constraints` donnent une idee de la taille du probleme. `wall_time_ms` indique le temps reel de resolution
 
 ---
@@ -328,8 +321,8 @@ Le frontend ecoute ce topic via `EventSource`. Des que l'evenement arrive, le fr
 
 ## Resume du flux en 5 etapes
 
-1. **Backend** : construit le payload v2.0 a partir des entites du club (equipes, salles, entraineurs, contraintes)
-2. **Moteur** : valide le payload, acquiert le verrou club, verifie la version
-3. **Solveur** : construit le modele, ajoute les contraintes HARD, definit l'objectif, resout en 10 secondes max
+1. **Backend** : construit le payload (contrat 2.1) a partir des entites du club (equipes, salles, entraineurs, contraintes)
+2. **Moteur** : valide le payload, acquiert le verrou club, verifie le MAJOR de la version
+3. **Solveur** : construit le modele, ajoute les contraintes HARD, definit l'objectif, resout dans le budget adaptatif (60/180/600 s selon la taille du probleme)
 4. **Moteur** : retourne `ScheduleOutputSchema` avec creneaux, diagnostics, metriques
 5. **Backend** : importe les resultats en base, met a jour le statut, notifie le frontend via Mercure

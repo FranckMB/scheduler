@@ -18,11 +18,11 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 
 ## How Tenant Isolation Works
 
-1. **Set context** — Before executing a query, the application calls:
+1. **Set context** — Before executing tenant queries, the application (`TenantConnectionContext`) executes directly:
    ```sql
-   SELECT app_security.set_club_id('550e8400-e29b-41d4-a716-446655440000'::uuid);
+   SELECT set_config('app.club_id', '550e8400-e29b-41d4-a716-446655440000', false);
    ```
-   This stores the current club ID in the session variable `app.club_id`.
+   This stores the current club ID in the session variable `app.club_id`. Note: the SQL helper function `app_security.set_club_id(...)` exists in the initdb scripts but is called by **no application code** — the app always issues `set_config` itself (the function remains a convenience for manual `psql` sessions).
 
 2. **Policy enforcement** — Every RLS-protected table has a policy:
    ```sql
@@ -38,7 +38,7 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 
 ## Enabling RLS on a New Table
 
-After a Doctrine migration creates a new table that contains `club_id`, run the following **manually** (or via a post-deploy script):
+There is **no manual post-deploy step**: the Doctrine migration that creates a new `club_id` table also creates its RLS policy — the migration is the source of truth. A migration adding a tenant table must include:
 
 ```sql
 -- 1. Enable RLS
@@ -51,6 +51,8 @@ CREATE POLICY tenant_isolation ON public.<table_name>
     USING (club_id = current_setting('app.club_id')::UUID)
     WITH CHECK (club_id = current_setting('app.club_id')::UUID);
 ```
+
+`RlsIsolationTest` (blocking, `--group phase1`) guards that every `club_id` table is covered.
 
 > **Do NOT enable RLS on tables without `club_id`** (e.g. `doctrine_migration_versions`, `messenger_messages`, `sessions`).
 
@@ -86,15 +88,17 @@ DATABASE_ADMIN_URL="postgresql://clubscheduler:...@postgres:5432/clubscheduler?s
 
 ### 2. Setting the Tenant Context
 
-Create a Doctrine middleware or event subscriber that executes `app_security.set_club_id(...)` at the start of every request, using the club resolved from the authenticated user or JWT token:
+This mechanism **exists and is active**: on every request, `TenantFilterListener` (kernel listener, priority 7 — after the firewall) resolves the club from the authenticated user (or validated header) and hands it to `TenantConnectionContext`, which sets the GUC on the runtime connection:
 
 ```php
-// src/Doctrine/TenantContextMiddleware.php (example)
+// src/Service/TenantConnectionContext.php (actual code)
 $connection->executeStatement(
-    "SELECT app_security.set_club_id(?::uuid)",
-    [$currentClubId]
+    "SELECT set_config('app.club_id', ?, false)",
+    [$clubId]
 );
 ```
+
+Messenger workers do the same from the message's `clubId` before touching tenant data. No `app_security.set_club_id(...)` call is involved anywhere in the application.
 
 ### 3. Testing RLS
 
@@ -126,7 +130,7 @@ SELECT * FROM public.event;
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `0 rows returned` for a table that has data | `app.club_id` not set | Call `app_security.set_club_id(...)` before querying |
+| `0 rows returned` for a table that has data | `app.club_id` not set | In `psql`: run `SELECT set_config('app.club_id', '<uuid>', false)` (or the `app_security.set_club_id(...)` helper). In the app: the context is set automatically by `TenantConnectionContext` |
 | `permission denied for table` | `app_user` lacks `GRANT` | Re-run `02-users.sql` or check `GRANT` statements |
 | Policy not enforced for table owner | `FORCE ROW LEVEL SECURITY` missing | Run `ALTER TABLE ... FORCE ROW LEVEL SECURITY` |
 | Migration fails with RLS error | Migration runs as `app_user` (or `migration_user` — no bypass either) | Run migrations on the `admin` connection (`clubscheduler`, superuser) |

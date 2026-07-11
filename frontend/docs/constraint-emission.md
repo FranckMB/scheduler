@@ -24,8 +24,8 @@
 | **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) (+ `fromTime`/`untilTime` optionnels) | **HARD** (épinglé) | coach dispo seulement le mardi de 20:00 à 22:00 |
 | **Cible** | `targetTag` si groupe (sinon `scope`/`scopeTargetId`) | — | groupe FEMININE / REGIONAL |
 | **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** | — | épingle 1 séance sur un créneau |
-| **Écran Gymnases** (hors onglet contraintes) | `FACILITY_CAPACITY` `maxTeams` (`canSplit`) | — | ADN divisible |
-| **Classement équipes** (hors onglet) | `PRIORITY_TIER` `orToolsWeight` | — | rangs S/A/B/C/D |
+| **Écran Gymnases** (hors onglet contraintes) | *aucune contrainte* — `canSplit` devient `trainingSlots[].capacity` côté backend (`canSplit ? capacity : 1`) | — | ADN divisible |
+| **Classement équipes** (hors onglet) | `PRIORITY_TIER` **sans** `orToolsWeight` (poids fixes codés en dur côté engine) | — | rangs S/A/B/C/D |
 
 ## 2. Table d'alignement 3 couches
 
@@ -41,10 +41,10 @@ Colonnes : le **front** l'émet-il ? · le **backend** le transmet/transforme-t-
 | `forcedVenueId` | ✅ « impose » | + exclusivité tag | ✅ salle forcée | ✅ **aligné** |
 | `unavailableDays` | ✅ coach « indisponible » | passe | ✅ union, dur | ✅ **aligné** |
 | `availableDays` (coach « disponible **uniquement** ») | ✅ coach *(depuis ALIGN)* | passe | ✅ whitelist (intersection) | ✅ **aligné** |
-| `maxTeams` | ✅ (écran Gymnases) | passe | ✅ cap capacité | ✅ **aligné** |
+| `maxTeams` | ❌ (l'écran Gymnases n'émet pas de contrainte) | `canSplit` → `trainingSlots[].capacity` par créneau | ✅ cap `min(capacité, maxTeams)` **si** contrainte `FACILITY_CAPACITY` explicite | 🟠 la divisibilité passe par la capacité des créneaux ; `maxTeams` n'est honoré que via une contrainte explicite, que l'écran n'émet pas |
 | `venue_closed` (période) | ✅ (cockpit) | → `forbiddenVenueId`/équipe | ✅ | ✅ **aligné** *(via expansion backend)* |
 | `targetTag` (groupe) | ✅ | → N contraintes TEAM | ✅ (par équipe) | ✅ **aligné** |
-| `orToolsWeight` (tier) | ✅ (classement) | passe | ✅ poids objectif | ✅ **aligné** |
+| `orToolsWeight` (tier) | ❌ jamais émis (nulle part dans `frontend/src`) | ❌ ne l'envoie pas (retiré volontairement) | poids **fixes codés en dur** (`LEVEL_2_OBJECTIVE_WEIGHTS`) | ✅ **sans objet** : la priorité S≫A≫B≫C≫D est garantie côté engine sans transport du poids |
 | **`forcedDays`** (« au moins une séance tel jour ») | ❌ non émis | — | ✅ compris | 🟠 **scission A** : engine sait, le front n'expose pas |
 | **`preferredDays`** | ❌ non émis | — | ✅ (objectif) | 🟠 **scission A** (racine d'ENG-10) |
 | **`maxEndTime`** (« Fini avant X h ») | ✅ « Fini avant » | passe | ✅ fenêtre dure (fin ≤ borne) | ✅ **aligné** *(ALIGN-04)* |

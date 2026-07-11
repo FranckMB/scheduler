@@ -1,6 +1,6 @@
 # Documentation technique du flux de génération de planning
 
-> ClubScheduler — Symfony 7 + API Platform + Messenger Redis + Mercure SSE. Contexte : BCCL (Basket Club de la Côte du Languedoc).
+> ClubScheduler — Symfony 7 + API Platform + Messenger Redis + Mercure SSE. Contexte : BCCL (B CHARPENNES CROIX LUIZET, code FFBB ARA0069036, ligue ARA).
 
 ---
 
@@ -57,9 +57,7 @@ Le contrôleur retourne immédiatement :
 
 ```json
 {
-  "scheduleId": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "PENDING",
-  "message": "La génération du planning a été mise en file d'attente."
+  "message": "Schedule generation queued"
 }
 ```
 
@@ -76,51 +74,52 @@ Le handler `GenerateScheduleHandler` s'exécute dans le conteneur Docker `messen
 Avant tout traitement, le handler tente d'acquérir un verrou Redis :
 
 ```
-SET club:{clubId}:generation locked NX EX 300
+SET schedule_generation:club:{clubId} <token> NX EX {timeoutSeconds + 60}
 ```
 
+- La **valeur** est un token aléatoire (16 octets hex) : seul le détenteur du token peut libérer le verrou (compare-and-delete atomique en Lua).
 - `NX` : uniquement si la clé n'existe pas encore.
-- `EX 300` : expiration automatique après 5 minutes (safety net en cas de crash du worker).
+- `EX` : expiration automatique après `timeoutSeconds + 60` secondes, soit **710 s** avec le timeout par défaut de 650 s (safety net en cas de crash du worker).
 
 **Si le verrou est déjà tenu** (une autre génération pour le même club est en cours), le handler :
-1. Crée un `ScheduleDiagnostic` de type `engine_busy`.
-2. Met à jour `Schedule.status` → `FAILED`.
-3. Publie l'échec via Mercure.
-4. Retourne sans appeler l'engine.
+1. Remet `Schedule.status` → `PENDING`.
+2. Lève une `RecoverableMessageHandlingException` : Messenger **réessaiera** le message plus tard.
 
-> Exemple concret : si l'administrateur du BCCL clique deux fois rapidement sur "Générer", la seconde requête échoue immédiatement avec le diagnostic `engine_busy`. Cela évite de surcharger le moteur et de corrompre les données.
+Il n'y a donc **pas d'échec** pour l'utilisateur, et le diagnostic `engine_busy` n'existe plus : la seconde demande attend simplement son tour.
+
+> Exemple concret : si l'administrateur du BCCL clique deux fois rapidement sur "Générer", la seconde génération reste en `PENDING` et sera rejouée par le worker une fois la première terminée. Cela évite de surcharger le moteur et de corrompre les données, sans faire échouer la demande.
 
 ### 3b — Construction du payload (ScheduleConstraintBuilder)
 
 Le verrou acquis, `ScheduleConstraintBuilder` construit le payload JSON destiné au moteur. Voici ce qu'il fait, dans l'ordre :
 
-1. **Salles actives** (`venues[]`) : récupère toutes les salles du club pour la saison active. Chaque salle est sérialisée avec ses fenêtres de disponibilité par défaut (lundi-samedi, 08h00-22h00) et ses éventuelles fermetures spécifiques (contraintes `FACILITY` scope `FACILITY`).
+1. **Salles actives** (`venues[]`) : récupère toutes les salles du club pour la saison active. Il n'y a **pas de fenêtres par défaut** : chaque salle est sérialisée avec ses créneaux d'ouverture réels (`VenueTrainingSlot`) dans une clé `trainingSlots` — liste éventuellement **vide** si aucun créneau n'a été saisi (la salle est alors inutilisable par le solveur).
 
-   > Exemple : ADN est fermé le lundi (contrainte `FACILITY` + `closedDay: 1`). Cette information est intégrée directement dans l'objet salle du payload.
+   > Exemple : ADN expose `trainingSlots: [{dayOfWeek: 2, startTime: "17:00", durationMinutes: 300, capacity: 1}, …]` — uniquement les créneaux effectivement déclarés dans le wizard.
 
 2. **Équipes actives** (`teams[]`) : récupère toutes les équipes avec leurs tags (générés par `TeamTagService`), leur niveau, leur genre, et leur nombre de séances hebdomadaires (`sessionsPerWeek`).
 
    > Exemple : SM3 a `sessionsPerWeek: 2`, tags `["SENIOR", "MASCULINE"]`, niveau `HONNEUR`.
 
-3. **Entraîneurs actifs** (`coaches[]`) : récupère tous les entraîneurs avec leurs liens d'encadrement (`TeamCoach`) et leurs indisponibilités.
+3. **Entraîneurs actifs** (`coaches[]`) : récupère tous les entraîneurs, sérialisés avec leur **identité et métadonnées seules** (nom, email, `isEmployee`, `maxDaysOverride`, etc.). Leurs indisponibilités ne sont **pas** portées par l'objet coach : ce sont des contraintes `COACH_AVAILABILITY` dans `constraints[]`. Les liens d'encadrement (`TeamCoach`) sont eux aussi sérialisés en contraintes dédiées.
 
-   > Exemple : Enzo est lié à SM1 (MAIN) et SM2 (ASSISTANT). Il a une indisponibilité `unavailableDays: [5]` (vendredi).
+   > Exemple : l'objet coach d'Enzo ne contient que son identité. Son indisponibilité du vendredi voyage dans `constraints[]` (`COACH_AVAILABILITY`, `{coachId, unavailableDays: [5]}`), et ses encadrements SM1 (MAIN) / SM2 (ASSISTANT) en contraintes issues de `TeamCoach`.
 
 4. **Contraintes utilisateur** (`constraints[]`) : récupère toutes les entités `Constraint` actives. Résout les tags `CLUB` en contraintes `TEAM` individuelles (voir [constraints.md](./constraints.md) section 4). Sérialise au format v2.
 
-5. **Créneaux verrouillés** (`slotTemplates[]`) : récupère les `ScheduleSlotTemplate` existants avec `lockLevel = "LOCK"`. Ces créneaux sont figés, le solveur ne peut pas les déplacer.
+5. **Créneaux existants** (`slotTemplates[]`) : récupère les `ScheduleSlotTemplate` existants avec leur `lockLevel` (enum `NONE` | `SOFT` | `HARD` — il n'existe pas de valeur `LOCK`). Les créneaux `HARD` sont figés, le solveur ne peut pas les déplacer (en pratique seuls `NONE` et `HARD` atteignent le payload : le `SOFT` est rejeté à l'écriture). Les réservations (`Reservation`) sont fusionnées dans la même liste, comme des pins `HARD`.
 
-   > Exemple : le créneau du SM1 le mardi 20h00-22h00 à Matéo est verrouillé par l'administrateur. Le solveur doit le conserver tel quel.
+   > Exemple : le créneau du SM1 le mardi 20h00-22h00 à Matéo est verrouillé (`lockLevel: "HARD"`) par l'administrateur. Le solveur doit le conserver tel quel.
 
-6. **Niveaux de priorité** (`priorityTiers[]`) : récupère les `PriorityTier` du club (S, A, B, C, D) avec leurs poids pour la fonction objectif du solveur.
+6. **Niveaux de priorité** : il n'y a **pas** de clé `priorityTiers` top-level dans le payload. Les `PriorityTier` du club (S, A, B, C, D) sont sérialisés comme des **contraintes** de type `PRIORITY_TIER` dans `constraints[]`. Leurs poids ne sont pas envoyés (`orToolsWeight` volontairement omis) : le solveur applique des poids **codés en dur** côté engine — S=10000, A=1000, B=100, C=10, D=1 — un poids par tier serait accepté puis ignoré.
 
-7. **Métadonnées** : ajoute `version: "2.0"`, `clubId`, `seasonId`.
+7. **Métadonnées** : ajoute `version: "2.1"`, `clubId`, `seasonId`, `solverSeed` et `solverTimeoutSeconds`.
 
 Le payload complet pèse généralement entre 50 et 200 Ko de JSON selon la taille du club.
 
 ### 3c — Snapshot SHA-256
 
-Le payload construit est hashé en SHA-256. Ce hash est stocké sur l'entité `Schedule` dans le champ `inputHash`.
+Le payload construit est hashé en SHA-256. Le hash est stocké sur l'entité `Schedule` dans le champ `snapshotHash`, et le payload lui-même est conservé dans `snapshotData`.
 
 **À quoi ça sert ?**
 
@@ -141,22 +140,20 @@ POST http://engine:8000/generate
 Content-Type: application/json
 
 {
-  "version": "2.0",
+  "version": "2.1",
   "clubId": "bccl-uuid",
   "seasonId": "2025-2026-uuid",
+  "solverSeed": 42,
+  "solverTimeoutSeconds": 650,
   "venues": [
     {
       "id": "uuid-adn",
       "name": "Gymnase ADN",
-      "availabilityWindows": [
-        {"dayOfWeek": 1, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 2, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 3, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 4, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 5, "startTime": "08:00", "endTime": "22:00"},
-        {"dayOfWeek": 6, "startTime": "08:00", "endTime": "22:00"}
-      ],
-      "closedDays": [1]
+      "trainingSlots": [
+        {"dayOfWeek": 2, "startTime": "17:00", "durationMinutes": 300, "capacity": 1},
+        {"dayOfWeek": 3, "startTime": "14:00", "durationMinutes": 480, "capacity": 1},
+        {"dayOfWeek": 5, "startTime": "17:00", "durationMinutes": 300, "capacity": 1}
+      ]
     }
   ],
   "teams": [
@@ -171,12 +168,10 @@ Content-Type: application/json
   "coaches": [
     {
       "id": "uuid-enzo",
-      "name": "Enzo Martin",
-      "unavailableDays": [5],
-      "teams": [
-        {"teamId": "uuid-sm1", "role": "MAIN"},
-        {"teamId": "uuid-sm2", "role": "ASSISTANT"}
-      ]
+      "firstName": "Enzo",
+      "lastName": "Martin",
+      "isActive": true,
+      "isEmployee": false
     }
   ],
   "constraints": [
@@ -185,7 +180,7 @@ Content-Type: application/json
       "scopeTargetId": "uuid-sm3",
       "family": "DAY",
       "ruleType": "HARD",
-      "config": {"preferredDays": [3]}
+      "config": {"allowedDays": [3]}
     },
     {
       "scope": "TEAM",
@@ -193,6 +188,13 @@ Content-Type: application/json
       "family": "TIME",
       "ruleType": "HARD",
       "config": {"minStartTime": "20:00"}
+    },
+    {
+      "scope": "COACH",
+      "scopeTargetId": "uuid-enzo",
+      "family": "COACH_AVAILABILITY",
+      "ruleType": "HARD",
+      "config": {"coachId": "uuid-enzo", "unavailableDays": [5]}
     }
   ],
   "slotTemplates": [
@@ -203,31 +205,33 @@ Content-Type: application/json
       "dayOfWeek": 2,
       "startTime": "20:00",
       "durationMinutes": 120,
-      "lockLevel": "LOCK"
+      "lockLevel": "HARD"
     }
-  ],
-  "priorityTiers": [
-    {"tier": "S", "weight": 10000},
-    {"tier": "A", "weight": 5000},
-    {"tier": "B", "weight": 2000},
-    {"tier": "C", "weight": 1000},
-    {"tier": "D", "weight": 500}
   ]
 }
 ```
 
+Points d'attention sur ce format :
+
+- les salles portent leurs créneaux réels dans `trainingSlots` (`{dayOfWeek, startTime, durationMinutes, capacity}`) — pas de `availabilityWindows` ni de `closedDays` ;
+- les coachs sont réduits à leur **identité** : leurs indisponibilités voyagent en contraintes `COACH_AVAILABILITY`, leurs encadrements en contraintes issues de `TeamCoach` ;
+- il n'y a **pas** de clé `priorityTiers` top-level (les tiers sont des contraintes `PRIORITY_TIER` dans `constraints[]`) ;
+- le schéma Pydantic de l'engine est **`extra="forbid"`** : toute clé inconnue fait rejeter le payload.
+
 ### 4.2 Timeout et gestion d'erreur
 
-Le timeout de l'appel HTTP est fixé à **10 secondes** (durée codée en dur dans l'engine Python, qui utilise `max_time=10s` pour le solveur CP-SAT).
+Le timeout de l'appel HTTP côté backend est de **650 secondes** par défaut (`GenerateScheduleMessage.timeoutSeconds`). Côté engine, le budget du solveur CP-SAT est **adaptatif** selon la taille du problème (`n_teams × n_venues`) : 60 s (≤ 50), 180 s (≤ 200) ou 600 s au-delà — le `solverTimeoutSeconds` du payload (650 par défaut) n'est qu'un **plafond**, jamais le budget effectif.
+
+Note importante sur les réponses HTTP : `EngineClient` lit la réponse avec `toArray(false)` — il ne lève **pas** d'exception sur un statut HTTP d'erreur. Toute réponse JSON sans clé `status` (par exemple un corps d'erreur 422 de Pydantic) est traitée comme `status: "failed"`, donc planning `FAILED` avec un diagnostic `engine_failed`. Il n'existe **pas** de diagnostic `engine_validation_error`.
 
 | Réponse engine | Traitement backend | Diagnostic créé |
 |----------------|-------------------|-----------------|
 | `200 OK` + `status: "completed"` | Import des créneaux | Aucun (ou diagnostics métier) |
 | `200 OK` + `status: "failed"` | Import diagnostics, statut `FAILED` | `conflict` + liste équipes non placées |
 | `200 OK` + `status: "infeasible"` | Import diagnostics, statut `FAILED` | `conflict` + liste équipes non placées |
-| `422 Unprocessable Entity` | Statut `FAILED` | `engine_validation_error` |
-| `500 Internal Server Error` | Statut `FAILED` | `engine_error` |
-| Timeout (> 10s) | Statut `FAILED` | `engine_timeout` |
+| `422 Unprocessable Entity` (corps sans `status`) | Traité comme `failed`, statut `FAILED` | `engine_failed` |
+| `500 Internal Server Error` (corps sans `status`) | Traité comme `failed`, statut `FAILED` | `engine_failed` |
+| Timeout HTTP (> 650 s) | Statut `FAILED` | `engine_timeout` |
 | Host unreachable | Statut `FAILED` | `engine_error` |
 
 > Exemple concret : si le BCCL ajoute une contrainte `HARD` "SM3 uniquement le mercredi après 20h" et que le mercredi soir est déjà saturé par SM1, SM2, SF1 et SF2, le solveur peut déclarer le problème infaisable. Il retourne `status: "infeasible"` avec un diagnostic listant SM3 comme équipe non placée.
@@ -240,12 +244,13 @@ Le timeout de l'appel HTTP est fixé à **10 secondes** (durée codée en dur da
 
 Le moteur a trouvé un planning valide. `ScheduleResultImporter` exécute les opérations suivantes dans une transaction Doctrine :
 
-1. **Suppression des anciens créneaux non verrouillés** : tous les `ScheduleSlotTemplate` existants pour ce planning, dont `lockLevel != "LOCK"`, sont supprimés. Les créneaux verrouillés sont préservés.
+1. **Suppression des anciens créneaux libres non ré-émis** : les `ScheduleSlotTemplate` existants dont `lockLevel = "NONE"` et que l'engine n'a **pas** ré-émis dans sa réponse sont supprimés. Tous les créneaux `lockLevel != "NONE"` (verrouillés) sont préservés.
 
-2. **Import des nouveaux créneaux** : pour chaque `slot` dans la réponse engine, création d'un `ScheduleSlotTemplate` :
+2. **Import des nouveaux créneaux** : pour chaque `slot` dans la réponse engine, création (ou mise à jour) d'un `ScheduleSlotTemplate` :
    - `teamId`, `venueId`, `coachId`, `dayOfWeek`, `startTime`, `durationMinutes`
-   - `lockLevel` = `"NONE"` (les nouveaux créneaux ne sont pas verrouillés par défaut)
-   - `source` = `"engine"`
+   - `lockLevel` repris de la réponse (défaut `"NONE"` : les nouveaux créneaux ne sont pas verrouillés)
+
+   Il n'y a **pas** de champ `source` sur `ScheduleSlotTemplate`.
 
    > Exemple : le moteur place SM3 le mercredi 20h00-22h00 à ADN. Un nouveau `ScheduleSlotTemplate` est créé avec ces valeurs.
 
@@ -295,14 +300,16 @@ club:{clubId}:schedule:{scheduleId}
 
 ### 6.2 Payload SSE
 
+L'update Mercure est **privé** (réservé aux abonnés autorisés du topic club) et porte quatre champs : `status`, `score`, `unplaced`, `warnings`. Il n'y a ni `scheduleId` (déjà porté par le topic), ni `timestamp`, ni liste de `diagnostics` (elles se consultent via l'API).
+
 **Cas succès :**
 
 ```json
 {
-  "scheduleId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "COMPLETED",
   "score": 117679,
-  "timestamp": "2025-09-15T14:32:11+02:00"
+  "unplaced": 0,
+  "warnings": []
 }
 ```
 
@@ -310,12 +317,10 @@ club:{clubId}:schedule:{scheduleId}
 
 ```json
 {
-  "scheduleId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "FAILED",
-  "diagnostics": [
-    {"type": "engine_busy", "severity": "ERROR", "message": "Une génération est déjà en cours pour ce club."}
-  ],
-  "timestamp": "2025-09-15T14:32:05+02:00"
+  "score": null,
+  "unplaced": 2,
+  "warnings": ["Schedule generation timed out."]
 }
 ```
 
@@ -324,7 +329,7 @@ club:{clubId}:schedule:{scheduleId}
 Le frontend maintient une connexion `EventSource` permanente sur `/.well-known/mercure?topic=club:{clubId}:schedule:{scheduleId}`.
 
 Quand il reçoit un événement :
-- Si `status === "COMPLETED"` : il recharge les créneaux via `GET /api/schedule-slot-templates?schedule=...` et rafraîchit le calendrier FullCalendar.
+- Si `status === "COMPLETED"` : il recharge les créneaux via `GET /api/schedule_slot_templates?scheduleId=...` et rafraîchit la grille de planning (grille maison React — pas de FullCalendar).
 - Si `status === "FAILED"` : il affiche une notification d'erreur rouge avec la liste des diagnostics, et propose à l'utilisateur de consulter les détails du conflit.
 
 L'utilisateur n'a pas besoin d'actualiser la page manuellement.
@@ -337,13 +342,13 @@ Voici un tableau récapitulatif de tous les cas d'erreur possibles, avec leur ca
 
 | Cas | Cause | Statut résultant | Diagnostic | Action recommandée |
 |-----|-------|-----------------|------------|-------------------|
-| **Club déjà en génération** | Verrou Redis tenu par un autre worker | `FAILED` | `engine_busy` | Attendre la fin de la génération en cours, ou forcer le déverrouillage via l'admin |
-| **Timeout engine (> 10s)** | Problème trop complexe pour le solveur CP-SAT | `FAILED` | `engine_timeout` | Simplifier les contraintes `HARD`, augmenter le nombre de salles, ou réduire le nombre d'équipes |
-| **Payload invalide (422)** | Contraintes mal formées (ex: `minStartTime` > `maxStartTime`) | `FAILED` | `engine_validation_error` | Corriger la contrainte incriminée via `/api/constraints` |
+| **Club déjà en génération** | Verrou Redis `schedule_generation:club:{clubId}` tenu par un autre worker | `PENDING` (retry Messenger via `RecoverableMessageHandlingException`) | Aucun | Rien à faire : la demande sera rejouée automatiquement à la fin de la génération en cours |
+| **Timeout HTTP (> 650 s)** | Problème trop complexe pour le solveur CP-SAT (budget adaptatif 60/180/600 s dépassé côté engine) | `FAILED` | `engine_timeout` | Simplifier les contraintes `HARD`, augmenter le nombre de salles, ou réduire le nombre d'équipes |
+| **Payload invalide (422)** | Réponse engine sans clé `status` (corps d'erreur Pydantic) — improbable car le payload est construit par `ScheduleConstraintBuilder` | `FAILED` | `engine_failed` | Comparer le `snapshotData` au schéma engine (contrat v2.1) |
 | **Engine inaccessible** | Conteneur `engine` arrêté ou crash | `FAILED` | `engine_error` | Vérifier l'état des conteneurs Docker (`make logs SERVICE=engine`) |
 | **Planning infaisable** | Contraintes `HARD` mutuellement exclusives | `FAILED` | `conflict` + liste équipes non placées | Relâcher une contrainte `HARD` en `PREFERRED`, ou ajouter des ressources (salle, coach) |
 | **Partiellement résolu** | Ressources insuffisantes pour toutes les équipes | `COMPLETED` (score bas) | `unplaced` diagnostics | Accepter le planning incomplet, ou ajouter des créneaux/salles |
-| **Verrou Redis expiré** | Worker crashé après 5 min | `FAILED` (si requête suivante) | `engine_busy` (pour la requête suivante) | Le verrou s'auto-expire, réessayer après 5 minutes |
+| **Verrou Redis expiré** | Worker crashé en cours de génération | — (la génération suivante peut acquérir le verrou) | Aucun | Le verrou s'auto-expire après `timeoutSeconds + 60` s (≈ 710 s par défaut) |
 
 > Exemple concret au BCCL : l'administrateur ajoute une contrainte `HARD` "Aucune équipe féminine à Jean Vilar" et une autre `HARD` "SF3 doit s'entraîner à Jean Vilar". Ces deux contraintes sont contradictoires. Le solveur retourne `infeasible` avec un diagnostic `conflict` indiquant que SF3 est `unplaced`. L'administrateur doit alors choisir : supprimer la contrainte sur Jean Vilar pour SF3, ou changer la règle globale sur les équipes féminines.
 
@@ -351,21 +356,25 @@ Voici un tableau récapitulatif de tous les cas d'erreur possibles, avec leur ca
 
 ## 8. Cycle de vie du statut d'un planning
 
-Le champ `Schedule.status` suit un cycle de vie strict à cinq états.
+Le champ `Schedule.status` suit un cycle de vie strict à **sept** états.
 
 ```
-DRAFT ──► PENDING ──► GENERATING ──► COMPLETED
-                          │
-                          └──────────► FAILED
+DRAFT ──► PENDING ──► GENERATING ──► COMPLETED ──► VALIDATED
+                          │                │
+                          └──► FAILED      └──► ARCHIVED
 ```
 
 | Statut | Signification | Qui le définit |
 |--------|---------------|----------------|
 | `DRAFT` | Planning créé, jamais généré | API Platform (création de l'entité) |
-| `PENDING` | Génération demandée, message en file d'attente Redis | `GenerateScheduleController` |
+| `PENDING` | Génération demandée, message en file d'attente Redis | `GenerateScheduleController` (ou le handler si le verrou club est tenu) |
 | `GENERATING` | Le worker `GenerateScheduleHandler` est en cours d'exécution | `GenerateScheduleHandler` (début du traitement) |
 | `COMPLETED` | Le moteur a retourné un planning valide, les créneaux sont importés | `ScheduleResultImporter` (cas succès) |
-| `FAILED` | Erreur à n'importe quelle étape (verrou, timeout, infaisabilité, etc.) | `GenerateScheduleHandler` ou `ScheduleResultImporter` (cas échec) |
+| `FAILED` | Erreur à n'importe quelle étape (timeout, infaisabilité, engine down, etc.) | `GenerateScheduleHandler` ou `ScheduleResultImporter` (cas échec) |
+| `VALIDATED` | Planning validé par l'administrateur : lecture seule | Côté API (validation explicite), jamais par le worker |
+| `ARCHIVED` | Ancienne version de planning, conservée pour historique | Côté API (gestion des versions), jamais par le worker |
+
+Les états `VALIDATED` et `ARCHIVED` **bloquent tous deux `POST /generate`** : la requête est refusée en `409 Conflict` (il faut rouvrir le planning validé, ou générer une nouvelle version au lieu de toucher une archive).
 
 ### 8.1 Transitions possibles
 
@@ -409,36 +418,33 @@ Le frontend utilise ce statut pour afficher des indicateurs visuels :
 
 ## 10. Commandes utiles pour le debug
 
+> ⚠️ `redis-cli` n'est **pas installé** dans l'image `php-fpm` : les commandes Redis se lancent depuis le conteneur `redis` lui-même (`docker compose exec redis redis-cli …`). Par ailleurs le transport Messenger utilise les **Redis Streams** (stream `messages`), pas une liste — `LRANGE messenger_messages` ne retourne rien.
+
 ### Voir les messages en attente dans Redis
 
 ```bash
-cd backend && make exec
-# Dans le conteneur :
-redis-cli LRANGE messenger_messages 0 10
+docker compose exec redis redis-cli XLEN messages
+docker compose exec redis redis-cli XRANGE messages - + COUNT 10
 ```
 
 ### Forcer la consommation d'un message
 
 ```bash
 cd backend && make exec
-# Dans le conteneur :
+# Dans le conteneur php-fpm :
 php bin/console messenger:consume async --limit=1
 ```
 
 ### Vérifier l'état du verrou Redis
 
 ```bash
-cd backend && make exec
-# Dans le conteneur :
-redis-cli GET club:{clubId}:generation
+docker compose exec redis redis-cli GET schedule_generation:club:{clubId}
 ```
 
 ### Supprimer manuellement un verrou bloqué
 
 ```bash
-cd backend && make exec
-# Dans le conteneur :
-redis-cli DEL club:{clubId}:generation
+docker compose exec redis redis-cli DEL schedule_generation:club:{clubId}
 ```
 
 ### Voir les logs du worker

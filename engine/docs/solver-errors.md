@@ -15,9 +15,11 @@ Ces erreurs sont retournees directement par l'API FastAPI, avant meme que le sol
 **Exemples concrets** :
 - Champ `sessionsPerWeek` manquant pour l'equipe SM1
 - `sessionsPerWeek: "trois"` au lieu d'un entier
-- `lockLevel: "FORT"` au lieu de `HARD`, `SOFT` ou `NONE`
-- `dayOfWeek: 8` (les jours vont de 1 = lundi a 7 = dimanche)
-- `version: "1.0"` alors que le moteur attend `"2.0"`
+- Champ `sportCategoryId` manquant sur une equipe (requis)
+- Cle inconnue dans le payload (les schemas sont `extra=forbid`)
+- `version: "1.0"` alors que le moteur parle le **MAJOR 2** du contrat `2.1` (`"2.0"` comme `"2.1"` passent)
+
+**Attention — deux pieges qui ne provoquent PAS de 422** : `lockLevel` est une **chaine libre**, pas un enum (un `"FORT"` est accepte et simplement traite comme non-`HARD`), et `dayOfWeek` est un entier **sans borne** (un `8` passe la validation).
 
 **Que faire** : corriger le payload. Le detail de l'erreur 422 indique exactement quel champ est en cause et pourquoi.
 
@@ -27,11 +29,9 @@ Ces erreurs sont retournees directement par l'API FastAPI, avant meme que le sol
 
 **Que faire** : verifier que les versions du backend et du moteur sont compatibles. Le endpoint `/implicit-constraints` retourne la liste des contraintes implicites connues du moteur. Le backend la compare a sa propre liste. Si elles different, cela signifie qu'un deploiement partiel a eu lieu.
 
-### `503 Service Unavailable`
+### Generations concurrentes : pas de `503`
 
-**Cause** : une generation est deja en cours pour ce club. Le moteur maintient un verrou asyncio par `clubId` pour eviter les generations concurrentes.
-
-**Que faire** : attendre que la generation en cours se termine, puis reessayer. Le frontend affiche un indicateur de chargement pendant ce temps.
+Le moteur maintient un verrou asyncio par `clubId`, mais une seconde requete pour un club deja en cours de generation n'est **pas** rejetee : elle est **mise en attente** sur le verrou et s'execute des que la premiere se termine. Les generations d'un meme club sont donc simplement serialisees — aucune erreur HTTP n'est retournee pour ce cas.
 
 ### `500 Internal Server Error`
 
@@ -60,10 +60,10 @@ Les diagnostics apparaissent dans le tableau `diagnostics[]` de la reponse. Ils 
 
 | Type | Severite | Signification | Causes courantes | Action corrective |
 |------|----------|---------------|------------------|-------------------|
-| `unplaced` | HIGH | Une equipe n'a recu aucune seance | Aucun creneau disponible ne correspond aux contraintes de l'equipe. Tous les slots des salles sont pris. Les contraintes HARD sont trop restrictives. | Ajouter des disponibilites de salle. Alleger les contraintes HARD (ex. lever l'interdiction du vendredi). Ajouter une nouvelle salle. |
-| `soft_lock_moved` | MEDIUM | Un creneau verrouille en SOFT a ete deplace | Le solveur a trouve une meilleure solution globale en deplacant ce creneau. Ou bien le creneau entrait en conflit avec une autre equipe de priorite superieure. | Accepter le deplacement, ou passer le verrou en HARD si le creneau doit absolument rester a cette place. |
-| `coach_overload` | MEDIUM | Un entraineur est assigne a plus de seances que son seuil | Plusieurs equipes partagent le meme entraineur principal. Le seuil `maxDaysOverride` de l'entraineur est trop bas. | Assigner un entraineur supplementaire a certaines equipes. Augmenter le seuil de l'entraineur. Repartir le coaching (entraineur principal + adjoint). |
-| `conflict` | HIGH | Deux contraintes HARD se contredisent | Une equipe a une contrainte "pas le lundi" et une autre "obligatoirement le lundi". Une salle est fermee le jour ou une equipe y est forcee d'aller. | Revoir les contraintes en conflit. Supprimer l'une des deux regles contradictoires. |
+| `unplaced` | ERROR | Une equipe n'a recu aucune seance | Aucun creneau disponible ne correspond aux contraintes de l'equipe. Tous les slots des salles sont pris. Les contraintes HARD sont trop restrictives. | Ajouter des disponibilites de salle. Alleger les contraintes HARD (ex. lever l'interdiction du vendredi). Ajouter une nouvelle salle. |
+| `soft_lock_moved` | WARNING | Un creneau verrouille en SOFT a ete deplace | Le solveur a trouve une meilleure solution globale en deplacant ce creneau. Ou bien le creneau entrait en conflit avec une autre equipe de priorite superieure. | Accepter le deplacement, ou passer le verrou en HARD si le creneau doit absolument rester a cette place. |
+| `coach_overload` | WARNING | Un entraineur est assigne a plus de seances que son seuil | Plusieurs equipes partagent le meme entraineur principal. Le seuil `maxDaysOverride` de l'entraineur est trop bas. | Assigner un entraineur supplementaire a certaines equipes. Augmenter le seuil de l'entraineur. Repartir le coaching (entraineur principal + adjoint). |
+| `conflict` | ERROR | Deux contraintes HARD se contredisent | Une equipe a une contrainte "pas le lundi" et une autre "obligatoirement le lundi". Une salle est fermee le jour ou une equipe y est forcee d'aller. | Revoir les contraintes en conflit. Supprimer l'une des deux regles contradictoires. |
 
 ---
 
@@ -73,7 +73,7 @@ Ces situations expliquent pourquoi le statut retourne parfois `failed` (INFEASIB
 
 ### 1. Fenetre horaire trop restrictive
 
-**Probleme** : l'equipe U15F1 demande 3 seances par semaine, mais le Gymnase B (sa salle forcee) n'est ouvert que mardi et jeudi, 18h00-21h00. Cela fait 4 creneaux possibles par semaine (mardi 18h, 18h30, 19h, 19h30 ; jeudi idem). Si le SM1 (S) et l'U20M (A) prennent 2 creneaux chacun, il n'en reste que 0 pour l'U15F1.
+**Probleme** : l'equipe U15F1 demande 3 seances par semaine, mais le Gymnase B (sa salle forcee) ne declare que 4 `trainingSlots` par semaine (mardi 18h00 et 19h30, jeudi 18h00 et 19h30). Les candidats du solveur sont **exactement** ces `trainingSlots` explicites — il n'y a pas de decoupage d'une fenetre horaire en departs multiples. Si le SM1 (S) et l'U20M (A) prennent 2 creneaux chacun, il n'en reste que 0 pour l'U15F1.
 
 **Correction** : ajouter des disponibilites au Gymnase B (ouvrir le mercredi soir). Ou reduire `sessionsPerWeek` de l'U15F1 a 2. Ou lever la contrainte de salle forcee.
 
@@ -125,10 +125,10 @@ Le score est un nombre entier qui reflete la qualite globale de la solution.
 La version actuelle de la formule est :
 
 ```
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V1"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"
 ```
 
-Ce code est incremente chaque fois que les poids des tiers changent. Cela permet de comparer des scores entre generations ayant la meme version de formule. Ne pas comparer un score genere avec `T24_LEVEL_2_FIXED_WEIGHTS_V1` a un score genere avec une version anterieure.
+Ce code est incremente chaque fois que les poids de l'objectif changent. Cela permet de comparer des scores entre generations ayant la meme version de formule. Ne pas comparer un score genere avec `T24_LEVEL_2_FIXED_WEIGHTS_V7` a un score genere avec une version anterieure.
 
 ### Exemple de calcul
 
@@ -150,4 +150,4 @@ Score de base = 62 210. Des bonus/penalites s'ajoutent ensuite (preservation des
 2. **Verifier les verrous** : combien de creneaux sont en HARD ? Occupent-ils toutes les places aux heures de pointe ?
 3. **Verifier les ressources** : nombre de salles, heures d'ouverture, nombre d'entraineurs. Suffisants pour le nombre d'equipes et de seances demandees ?
 4. **Verifier les diagnostics** : le moteur retourne-t-il des diagnostics `conflict` ou `unplaced` ? Ils indiquent souvent directement le probleme.
-5. **Consulter les metriques** : `nb_variables` et `nb_constraints` donnent la taille du probleme. `wall_time_ms` indique si le solveur a atteint la limite de 10 secondes (solution FEASIBLE mais peut-etre pas OPTIMAL).
+5. **Consulter les metriques** : `nb_variables` et `nb_constraints` donnent la taille du probleme. `wall_time_ms` se compare au **budget adaptatif** du solveur — 60/180/600 s selon la taille du probleme (`n_teams × n_venues` ≤ 50 / ≤ 200 / au-dela), plafonne par `solverTimeoutSeconds` (defaut 650) : s'il est proche du budget, la solution est FEASIBLE mais peut-etre pas OPTIMAL.
