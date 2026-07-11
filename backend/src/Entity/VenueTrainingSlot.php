@@ -49,6 +49,15 @@ class VenueTrainingSlot implements TenantOwnedInterface
     #[ORM\Column(type: 'integer', options: ['default' => 1])]
     private int $capacity = 1;
 
+    /**
+     * Period-editable structure: a slot scoped to a CalendarEntry (period) exists
+     * ONLY for that period's overlay build (e.g. a gym the city lends just for a
+     * resumption window). null = the permanent seasonal slot. The overlay build
+     * uses seasonal ∪ period slots (additive); the base plan never sees period ones.
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $calendarEntryId = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -184,6 +193,18 @@ class VenueTrainingSlot implements TenantOwnedInterface
     public function setCapacity(int $capacity): self
     {
         $this->capacity = $capacity;
+
+        return $this;
+    }
+
+    public function getCalendarEntryId(): ?string
+    {
+        return $this->calendarEntryId;
+    }
+
+    public function setCalendarEntryId(?string $calendarEntryId): self
+    {
+        $this->calendarEntryId = $calendarEntryId;
 
         return $this;
     }

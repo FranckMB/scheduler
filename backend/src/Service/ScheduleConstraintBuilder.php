@@ -15,6 +15,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
@@ -47,6 +48,14 @@ final class ScheduleConstraintBuilder
 
     /** @var array<string, array<VenueTrainingSlot>> */
     private array $currentAvailabilitiesByVenue = [];
+
+    /**
+     * Period-editable structure: teamId → period sessions-per-week override, set
+     * only during an overlay build (serializeTeam reads it, else the seasonal value).
+     *
+     * @var array<string, int>
+     */
+    private array $currentSessionOverrides = [];
 
     /**
      * BCK-04 (assumed by design): the four enrichment deps are nullable ON
@@ -101,10 +110,12 @@ final class ScheduleConstraintBuilder
         // are excluded from generation. See accueil-cockpit-temporel.md §9ter.c.
         $constraints = $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId);
 
-        // Pre-load venue availabilities to avoid N+1 queries in serializeVenue()
+        // Pre-load venue availabilities to avoid N+1 queries in serializeVenue().
+        // Base plan only: SEASONAL slots (calendarEntryId IS NULL) — a period's own
+        // slots (a gym lent for a window) must never leak into the base generation.
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
-            $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+            $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null]);
             foreach ($rows as $row) {
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
             }
@@ -177,16 +188,39 @@ final class ScheduleConstraintBuilder
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
         };
 
-        // Preload venue availabilities for serializeVenue() (same as base build).
+        // Period-editable structure: the overlay's slots are ADDITIVE — the still-valid
+        // SEASONAL slots (calendarEntryId NULL) plus this period's OWN slots (a gym lent
+        // for the window, calendarEntryId = entry). Fermetures already remove a seasonal
+        // gym via the CLOSURE expansion below.
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
-            foreach ($this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $row) {
+            $slots = array_merge(
+                $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null]),
+                $this->venueTrainingSlotRepository->findBy(['calendarEntryId' => $entry->getId()]),
+            );
+            foreach ($slots as $row) {
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
             }
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
 
-        $teams = $this->findByClubSeason(Team::class, $clubId, $seasonId, $em);
+        // Period-editable structure: sparse per-team overrides for THIS period —
+        // drop deactivated teams, and override sessions/week where set (else seasonal).
+        $overrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $entry->getId()]);
+        $deactivatedTeamIds = [];
+        $this->currentSessionOverrides = [];
+        foreach ($overrides as $override) {
+            if (!$override->isActive()) {
+                $deactivatedTeamIds[$override->getTeamId()] = true;
+            }
+            if (null !== $override->getSessionsPerWeek()) {
+                $this->currentSessionOverrides[$override->getTeamId()] = $override->getSessionsPerWeek();
+            }
+        }
+        $teams = array_values(array_filter(
+            $this->findByClubSeason(Team::class, $clubId, $seasonId, $em),
+            static fn (Team $team): bool => !isset($deactivatedTeamIds[$team->getId()]),
+        ));
 
         $payload = $this->buildPayload(
             clubId: $clubId,
@@ -207,6 +241,7 @@ final class ScheduleConstraintBuilder
         );
 
         $this->currentAvailabilitiesByVenue = [];
+        $this->currentSessionOverrides = [];
 
         if (CalendarEntryPeriodType::CLOSURE === $periodType) {
             $payload['constraints'] = array_merge(
@@ -482,7 +517,7 @@ final class ScheduleConstraintBuilder
             'name' => $team->getName(),
             'gender' => $team->getGender()?->value,
             'level' => $team->getLevel()?->value,
-            'sessionsPerWeek' => $team->getSessionsPerWeek(),
+            'sessionsPerWeek' => $this->currentSessionOverrides[$team->getId()] ?? $team->getSessionsPerWeek(),
             'minSessionsOverride' => $team->getMinSessionsOverride(),
             'matchDay' => $team->getMatchDay(),
             'allowMultipleSessionsPerDay' => $team->getAllowMultipleSessionsPerDay(),

@@ -8046,6 +8046,404 @@
                 ]
             }
         },
+        "/api/team_period_overrides": {
+            "get": {
+                "operationId": "api_team_period_overrides_get_collection",
+                "tags": [
+                    "TeamPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TeamPeriodOverride collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "TeamPeriodOverride.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/TeamPeriodOverride.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TeamPeriodOverride"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TeamPeriodOverride.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of TeamPeriodOverride resources.",
+                "description": "Retrieves the collection of TeamPeriodOverride resources.",
+                "parameters": []
+            },
+            "post": {
+                "operationId": "api_team_period_overrides_post",
+                "tags": [
+                    "TeamPeriodOverride"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "TeamPeriodOverride resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a TeamPeriodOverride resource.",
+                "description": "Creates a TeamPeriodOverride resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new TeamPeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/team_period_overrides/{id}": {
+            "get": {
+                "operationId": "api_team_period_overrides_id_get",
+                "tags": [
+                    "TeamPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TeamPeriodOverride resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a TeamPeriodOverride resource.",
+                "description": "Retrieves a TeamPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "TeamPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_team_period_overrides_id_put",
+                "tags": [
+                    "TeamPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TeamPeriodOverride resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TeamPeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the TeamPeriodOverride resource.",
+                "description": "Replaces the TeamPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "TeamPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated TeamPeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TeamPeriodOverride.TeamPeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_team_period_overrides_id_delete",
+                "tags": [
+                    "TeamPeriodOverride"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "TeamPeriodOverride resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the TeamPeriodOverride resource.",
+                "description": "Removes the TeamPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "TeamPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/team_tags": {
             "get": {
                 "operationId": "api_team_tags_get_collection",
@@ -14716,6 +15114,176 @@
                     }
                 ]
             },
+            "TeamPeriodOverride": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "default": true,
+                        "type": "boolean"
+                    },
+                    "sessionsPerWeek": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "TeamPeriodOverride.TeamPeriodOverrideInput": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched.",
+                "required": [
+                    "calendarEntryId",
+                    "teamId"
+                ],
+                "properties": {
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "teamId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "isActive": {
+                        "default": true,
+                        "type": "boolean"
+                    },
+                    "sessionsPerWeek": {
+                        "minimum": 1,
+                        "maximum": 7,
+                        "description": "null = keep the team's seasonal sessionsPerWeek.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "TeamPeriodOverride.html": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "default": true,
+                        "type": "boolean"
+                    },
+                    "sessionsPerWeek": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "TeamPeriodOverride.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "calendarEntryId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "teamId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "isActive": {
+                                "default": true,
+                                "type": "boolean"
+                            },
+                            "sessionsPerWeek": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched."
+            },
             "TeamTag": {
                 "type": "object",
                 "properties": {
@@ -15681,6 +16249,10 @@
         {
             "name": "TeamCoach",
             "description": "Resource 'TeamCoach' operations."
+        },
+        {
+            "name": "TeamPeriodOverride",
+            "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched."
         },
         {
             "name": "Team",

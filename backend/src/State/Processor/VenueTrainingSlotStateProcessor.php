@@ -34,6 +34,9 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
     protected function createEntityFromInput(object $input): VenueTrainingSlot
     {
         $entity = new VenueTrainingSlot;
+        // Period slot (calendarEntryId set) vs seasonal (null) — set only on create;
+        // a slot never migrates between the seasonal and a period layer.
+        $entity->setCalendarEntryId($input->calendarEntryId);
         if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
@@ -114,10 +117,14 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         $start = $this->minutesOf($entity);
         $end = $start + $entity->getDurationMinutes();
 
+        // Scoped to the SAME layer (seasonal-vs-seasonal, or same period): a period
+        // slot is an independent overlay layer, it may legitimately sit at the same
+        // time as a seasonal slot of another gym — only same-layer stacking is barred.
         /** @var list<VenueTrainingSlot> $sameDay */
         $sameDay = $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy([
             'venueId' => $entity->getVenueId(),
             'dayOfWeek' => $entity->getDayOfWeek(),
+            'calendarEntryId' => $entity->getCalendarEntryId(),
         ]);
 
         foreach ($sameDay as $other) {
