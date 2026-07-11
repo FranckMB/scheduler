@@ -73,6 +73,11 @@ final class RgpdExportService
                 'lastName' => $user->getLastName(),
                 'createdAt' => $user->getCreatedAt()->format('c'),
                 'emailVerifiedAt' => $user->getEmailVerifiedAt()?->format('c'),
+                // Complétude art. 15 : TOUT ce que l'app sait du compte —
+                // preuve de consentement et traces d'activité comprises.
+                'termsAcceptedAt' => $user->getTermsAcceptedAt()?->format('c'),
+                'termsVersion' => $user->getTermsVersion(),
+                'lastLoginAt' => $user->getLastLoginAt()?->format('c'),
             ],
             'memberships' => $memberships,
         ];

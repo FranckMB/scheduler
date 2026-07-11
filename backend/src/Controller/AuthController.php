@@ -49,7 +49,9 @@ use Throwable;
 final class AuthController extends AbstractController
 {
     // Version des textes acceptés au register — à INCRÉMENTER quand les CGU ou
-    // la politique de confidentialité changent substantiellement.
+    // la politique de confidentialité changent substantiellement, ENSEMBLE avec
+    // frontend/src/features/legal/terms.ts (la version affichée à l'utilisateur
+    // doit être celle qu'on estampille).
     public const TERMS_VERSION = '2026-07-11';
 
     public function __construct(

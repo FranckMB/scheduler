@@ -318,7 +318,8 @@
                                     "password",
                                     "firstName",
                                     "lastName",
-                                    "ara"
+                                    "ara",
+                                    "consent"
                                 ],
                                 "properties": {
                                     "email": {

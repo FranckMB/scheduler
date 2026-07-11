@@ -30,6 +30,12 @@ export function RegisterPage() {
       setError(passwordError);
       return;
     }
+    // noValidate rend le `required` de la case inerte : garde explicite avec
+    // un message clair plutôt qu'un bouton désarmé silencieux (revue PR-5).
+    if (!consent) {
+      setError("Vous devez accepter les conditions d'utilisation et la politique de confidentialité.");
+      return;
+    }
     try {
       await register.mutateAsync({ ...form, ara: form.ara.toUpperCase(), consent });
       setSent(true);
@@ -93,14 +99,14 @@ export function RegisterPage() {
           />
           <span>
             J'accepte les{" "}
-            <Link className="text-accent hover:underline" to="/confidentialite" target="_blank">
+            <Link className="text-accent hover:underline" to="/confidentialite" target="_blank" rel="noreferrer">
               conditions d'utilisation et la politique de confidentialité
             </Link>
             .
           </span>
         </label>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="submit" disabled={register.isPending || !consent}>
+        <Button type="submit" disabled={register.isPending}>
           {register.isPending ? <Spinner className="size-4" /> : null}
           Créer le compte
         </Button>

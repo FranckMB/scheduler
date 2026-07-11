@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 
+import { TERMS_VERSION } from "./terms";
+
 /**
  * RGPD — politique de confidentialité + CGU. STRUCTURE définitive, TEXTES
  * provisoires : chaque section marquée « À COMPLÉTER » attend la rédaction
@@ -24,7 +26,7 @@ export function PrivacyPage() {
         <h1 className="border-l-[3px] border-accent pl-3 text-xl font-semibold">
           Politique de confidentialité &amp; conditions d'utilisation
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">Version 2026-07-11 (provisoire)</p>
+        <p className="mt-1 text-sm text-muted-foreground">Version {TERMS_VERSION} (provisoire)</p>
       </div>
 
       <Section title="1. Qui sommes-nous (responsable de traitement)">
@@ -83,7 +85,7 @@ export function PrivacyPage() {
       </Section>
 
       <p className="pt-4 text-sm">
-        <Link className="text-accent hover:underline" to="/login">← Retour à la connexion</Link>
+        <Link className="text-accent hover:underline" to="/">← Retour à l'application</Link>
       </p>
     </div>
   );

@@ -10,6 +10,12 @@ use Doctrine\Migrations\AbstractMigration;
 /**
  * RGPD PR-5 (consentement) : preuve d'acceptation des CGU/politique de
  * confidentialité au register — horodatage + version des textes.
+ *
+ * PAS de backfill : aucun compte de production n'existe (commercialisation
+ * mi-2027, comptes actuels = dev/test) — le consentement est exigé au register
+ * depuis AVANT le premier vrai utilisateur, donc aucun compte réel ne peut
+ * exister sans preuve. Si des comptes pré-consentement existaient au moment de
+ * la GA, un flux de re-consentement au login serait requis (revue PR-5).
  */
 final class Version20260711220000 extends AbstractMigration
 {

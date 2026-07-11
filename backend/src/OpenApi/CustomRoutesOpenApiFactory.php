@@ -56,7 +56,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             summary: 'Register a user (creates an unverified account; sends an email-verification link)',
             requestBody: $this->jsonBody([
                 'type' => 'object',
-                'required' => ['email', 'password', 'firstName', 'lastName', 'ara'],
+                'required' => ['email', 'password', 'firstName', 'lastName', 'ara', 'consent'],
                 'properties' => [
                     'email' => ['type' => 'string', 'format' => 'email'],
                     'password' => ['type' => 'string', 'minLength' => 8],

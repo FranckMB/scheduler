@@ -32,6 +32,24 @@ final class ConsentTest extends WebTestCase
         self::assertStringContainsString('CGU', $body['error']);
     }
 
+    public function testConsentRejectionIsEnumerationSafe(): void
+    {
+        // A3 : la 400 consentement doit être IDENTIQUE que l'email existe ou
+        // non — sinon elle devient un oracle d'énumération de comptes.
+        $existingEmail = $this->register(consent: true);
+        self::assertResponseStatusCodeSame(202);
+
+        $this->registerRaw($existingEmail, consent: false);
+        self::assertResponseStatusCodeSame(400);
+        $bodyExisting = (string) $this->client->getResponse()->getContent();
+
+        $this->registerRaw('fresh-' . $existingEmail, consent: false);
+        self::assertResponseStatusCodeSame(400);
+        $bodyFresh = (string) $this->client->getResponse()->getContent();
+
+        self::assertSame($bodyFresh, $bodyExisting, 'réponse byte-identique : pas d\'oracle');
+    }
+
     public function testRegisterWithConsentStoresTheProof(): void
     {
         $email = $this->register(consent: true);
@@ -66,6 +84,22 @@ final class ConsentTest extends WebTestCase
         ], json_encode($payload, \JSON_THROW_ON_ERROR));
 
         return $email;
+    }
+
+    private function registerRaw(string $email, bool $consent): void
+    {
+        $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
+        $payload = [
+            'email' => $email, 'password' => 'Password123!',
+            'firstName' => 'Con', 'lastName' => 'Sent',
+            'ara' => 'ENUM' . strtoupper(substr(md5($email), 0, 8)), 'club_name' => 'Club Enum',
+        ];
+        if ($consent) {
+            $payload['consent'] = true;
+        }
+        $this->client->request('POST', '/api/register', [], [], [
+            'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
+        ], json_encode($payload, \JSON_THROW_ON_ERROR));
     }
 
     private function em(): EntityManagerInterface
