@@ -3,11 +3,9 @@ import { useNavigate } from "react-router-dom";
 
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { versionLabels, visibleSeasonPlans } from "@/features/planning/lib/versions";
-import { useSetBaseline } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
-import { toast } from "@/shared/stores/toastStore";
 
 interface SeasonSchedulesModalProps {
   schedules: Schedule[];
@@ -15,11 +13,14 @@ interface SeasonSchedulesModalProps {
   onClose: () => void;
 }
 
-/** Lists the season's visible WORK VERSIONS (planning-versions; ARCHIVED hidden). Open one in consultation, or set it as the main plan. */
+/**
+ * Lists the season's visible WORK VERSIONS (planning-versions; ARCHIVED hidden),
+ * opened in consultation. The main plan (★) is the first validated one — a fact,
+ * not a choice — so there is no "set as main" action here.
+ */
 export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const setBaseline = useSetBaseline();
   const visible = visibleSeasonPlans(schedules);
   const labels = versionLabels(schedules);
 
@@ -50,16 +51,6 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
                 <Button variant="outline" size="sm" onClick={() => consult(s.id)}>
                   Consulter
                 </Button>
-                {!isBaseline && (s.status === "COMPLETED" || s.status === "VALIDATED") ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={setBaseline.isPending}
-                    onClick={() => setBaseline.mutate(s.id, { onSuccess: () => toast.success("Planning principal mis à jour") })}
-                  >
-                    Définir principal
-                  </Button>
-                ) : null}
               </div>
             </li>
           );

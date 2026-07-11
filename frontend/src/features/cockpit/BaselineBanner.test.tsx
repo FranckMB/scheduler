@@ -12,7 +12,6 @@ const reopenMutate = vi.fn();
 
 vi.mock("@/features/planning/queries", () => ({
   useReopenSchedule: () => ({ mutate: reopenMutate, isPending: false }),
-  useSetBaseline: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const baseline: Schedule = { id: "b1", name: "Socle", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null };

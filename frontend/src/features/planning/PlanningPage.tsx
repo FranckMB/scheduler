@@ -18,7 +18,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSetBaseline, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -148,7 +148,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const regenerateOverlayMutation = useRegenerateOverlay();
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
-  const setBaselineMutation = useSetBaseline();
   const deleteMutation = useDeleteSchedule();
   const regenerateFromMutation = useRegenerateFromVersion();
   const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
@@ -204,7 +203,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
-  const actionBusy = validateMutation.isPending || reopenMutation.isPending || setBaselineMutation.isPending || deleteMutation.isPending;
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
@@ -351,7 +350,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-4">
             <PlanningToolbar
               schedules={schedules}
               selectedScheduleId={validScheduleId}
@@ -376,15 +375,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               }}
               onValidate={() => setValidateOpen(true)}
               onReopen={() => reopen()}
-              onSetBaseline={() => validScheduleId && setBaselineMutation.mutate(validScheduleId)}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
               baselineScheduleId={baselineScheduleId}
+              rightSlot={
+                <>
+                  {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
+                  <ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
+                </>
+              }
             />
-            <div className="ml-auto flex items-center gap-2">
-              {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
-              <ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
-            </div>
           </div>
 
           {isGenerating ? (
