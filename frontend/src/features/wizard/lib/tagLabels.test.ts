@@ -33,4 +33,11 @@ describe("groupTagsByAxis", () => {
   it("omits an axis with no visible tag", () => {
     expect(groupTagsByAxis([tag({ name: "MIXTE", axis: "GENRE" })]).map((g) => g.label)).toEqual(["Genre"]);
   });
+
+  it("routes a tag whose axis is undefined (API omits null fields) to Autres, never dropping it", () => {
+    const noAxis = { id: "u", name: "U", color: null, isSystem: false } as unknown as TeamTag; // axis absent
+    const groups = groupTagsByAxis([noAxis]);
+    expect(groups.map((g) => g.label)).toEqual(["Autres"]);
+    expect(groups[0].tags).toEqual([noAxis]);
+  });
 });

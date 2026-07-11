@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   resCreate: vi.fn(),
   resDelete: vi.fn(),
   reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
-  tags: [] as { id: string; name: string; color: string | null; isSystem: boolean }[],
+  tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
 
