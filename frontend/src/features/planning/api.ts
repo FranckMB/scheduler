@@ -234,9 +234,6 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
   }
 }
 
-/** Designate a finished schedule as the season's main plan (baseline). */
-export const setBaseline = (id: string): Promise<unknown> => api.post(`schedules/${id}/set-baseline`).json();
-
 /** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();

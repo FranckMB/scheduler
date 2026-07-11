@@ -203,18 +203,6 @@ export function useReopenSchedule() {
   });
 }
 
-/** Designate a schedule as the season's main plan (baseline lives on /me). */
-export function useSetBaseline() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (scheduleId: string) => planningApi.setBaseline(scheduleId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["me"] });
-      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-    },
-  });
-}
-
 export function useRenameSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -246,7 +234,7 @@ export function useRegenerateFromVersion() {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onError: () => toast.error("La régénération aux conditions de cette version a échoué."),
+    onError: () => toast.error("Le chargement de cette version a échoué."),
   });
 }
 

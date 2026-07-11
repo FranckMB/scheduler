@@ -19,7 +19,6 @@ function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
       onRegenerate={noop}
       onValidate={noop}
       onReopen={noop}
-      onSetBaseline={noop}
       onDelete={noop}
       onRegenerateFrom={noop}
       isGenerating={false}
@@ -42,12 +41,22 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
     expect(screen.getByText("Validé")).toBeInTheDocument();
     // The plain "Régénérer" (current structure) is hidden on a read-only version;
-    // "Régénérer aux conditions" (restore this version's structure) may still show.
+    // "Charger cette version" (restore this version's structure) may still show.
     expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
   });
 
   // The « Planning principal » badge moved to the page header (next to the title);
   // its presence is asserted in PlanningPage.test.
+
+  it("never offers a « Définir principal » action (the main plan is the first validated one, not a choice)", () => {
+    renderToolbar(schedule("COMPLETED"), "other");
+    expect(screen.queryByRole("button", { name: /principal/i })).not.toBeInTheDocument();
+  });
+
+  it("stars the version currently being viewed in the selector", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.getByRole("option", { name: /★/ })).toBeInTheDocument();
+  });
 
   it("labels the version « V1 — … » and offers no rename control (versions are not renamable)", () => {
     renderToolbar(schedule("COMPLETED"));
@@ -60,9 +69,9 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
   });
 
-  it("offers « Régénérer aux conditions » on a finished version that has a structure photo", () => {
+  it("offers « Charger cette version » on a finished version that has a structure photo", () => {
     renderToolbar(schedule("COMPLETED"));
-    expect(screen.getByRole("button", { name: /régénérer aux conditions/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /charger cette version/i })).toBeInTheDocument();
   });
 
   it("hides Supprimer on the baseline and on a validated version", () => {

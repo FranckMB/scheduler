@@ -16,7 +16,6 @@ vi.mock("@/features/auth/queries", () => ({
 vi.mock("@/features/planning/queries", () => ({
   useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null }] }),
   useReopenSchedule: () => ({ mutate: vi.fn(), isPending: false }),
-  useSetBaseline: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const publicHolidayWindows: [string, string][] = [];
