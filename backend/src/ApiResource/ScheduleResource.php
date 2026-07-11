@@ -123,6 +123,25 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?int $generatedTeamCount = null;
 
+    /**
+     * planning-versions D3: does this version carry a restorable structure photo
+     * (ScheduleStructureSnapshot, D2)? Only then can "Charger cette version"
+     * succeed — a plan generated before D2 has a solver payload (so
+     * generatedTeamCount is set) but no photo, and must not offer the action.
+     * Set by ScheduleStateProvider (batched); false on the bare fromEntity path.
+     */
+    #[Groups(['read'])]
+    public bool $hasStructurePhoto = false;
+
+    /**
+     * planning-versions: is THIS the version whose structure is the season's
+     * currently loaded context (★)? Set on every COMPLETED season plan and
+     * re-pointed by "Charger cette version". The ★ tracks the loaded context,
+     * not the version being viewed. Set by ScheduleStateProvider (batched).
+     */
+    #[Groups(['read'])]
+    public bool $isLiveContext = false;
+
     public static function fromEntity(Schedule $entity): self
     {
         $dto = new self;

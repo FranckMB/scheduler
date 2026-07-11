@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 import { download } from "@/shared/lib/download";
+import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, Schedule, SlotMovePatch } from "./api";
@@ -206,7 +207,12 @@ export function useDeleteSchedule() {
   });
 }
 
-/** planning-versions D3: regenerate under a version's conditions → a new version. */
+/**
+ * planning-versions "Charger cette version": reload a version's context (restore
+ * its structure, re-point the ★) WITHOUT solving — no new version is created, the
+ * source version's plan is shown as-is. Returns the loaded version's id so the
+ * caller selects it.
+ */
 export function useRegenerateFromVersion() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -220,7 +226,9 @@ export function useRegenerateFromVersion() {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onError: () => toast.error("Le chargement de cette version a échoué."),
+    // Surface the backend's reason (409: "pas de photo de structure", or a
+    // generation in flight) instead of a generic flash.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
 

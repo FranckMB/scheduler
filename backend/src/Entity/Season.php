@@ -51,6 +51,16 @@ class Season implements TenantOwnedInterface
     private ?string $baselineScheduleId = null;
 
     /**
+     * planning-versions: the version whose structure is the CURRENTLY LOADED
+     * context (★). Set to the generated version on every COMPLETED season plan,
+     * and re-pointed to the source version by "Charger cette version" (which
+     * reloads that version's context without solving). Distinct from the
+     * baseline: this tracks "what am I working on now", not "the main plan".
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $liveContextScheduleId = null;
+
+    /**
      * Sticky cockpit-unlock milestone: set once when the baseline schedule is
      * first VALIDATED; NEVER reset (reopen does not re-lock the cockpit).
      * See accueil-cockpit-temporel.md §2ter.
@@ -200,6 +210,18 @@ class Season implements TenantOwnedInterface
     public function getBaselineScheduleId(): ?string
     {
         return $this->baselineScheduleId;
+    }
+
+    public function getLiveContextScheduleId(): ?string
+    {
+        return $this->liveContextScheduleId;
+    }
+
+    public function setLiveContextScheduleId(?string $liveContextScheduleId): self
+    {
+        $this->liveContextScheduleId = $liveContextScheduleId;
+
+        return $this;
     }
 
     public function getSocleValidatedAt(): ?DateTimeImmutable

@@ -5,6 +5,8 @@ interface VersionLike {
   status: string;
   createdAt: string;
   calendarEntryId: string | null;
+  /** Server pointer (season plans only) — the loaded-context version (★). */
+  isLiveContext?: boolean;
 }
 
 /**
@@ -23,6 +25,35 @@ export function visibleSeasonPlans<T extends VersionLike>(schedules: T[]): T[] {
  */
 export function visibleOverlayVersions<T extends VersionLike>(schedules: T[], calendarEntryId: string): T[] {
   return schedules.filter((s) => s.calendarEntryId === calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * The version that is the loaded context (★): the one whose structure is live.
+ * Prefer the server pointer (Schedule.isLiveContext, re-pointed by "Charger cette
+ * version"), else fall back to the latest visible version — a pre-deploy season
+ * (NULL pointer) or a pointer left on a deleted/archived version. Without the
+ * fallback the ★ would vanish AND "Charger" would wrongly enable on the already-
+ * current version (restoring an old photo → silent data loss). Restricted to the
+ * relevant set: the selected overlay's own versions when an overlay is viewed
+ * (overlays carry no pointer → always the latest), else the season versions.
+ */
+export function liveContextScheduleId<T extends VersionLike & { id: string }>(schedules: T[], selectedOverlayEntryId: string | null): string | null {
+  const set = null !== selectedOverlayEntryId ? visibleOverlayVersions(schedules, selectedOverlayEntryId) : visibleSeasonPlans(schedules);
+  return set.find((s) => true === s.isLiveContext)?.id ?? set.at(-1)?.id ?? null;
+}
+
+/**
+ * The version a PLANNING row should represent (cockpit "Tous les plannings"):
+ * the latest FINISHED one (VALIDATED or COMPLETED), so its Eye / Export never
+ * target a FAILED or in-flight (PENDING/GENERATING) version — which would open
+ * an empty planning or export an empty file. Returns null when nothing has
+ * finished yet (a brand-new planning still solving): there is no plan to consult
+ * or export, so the row is omitted rather than pointing at an in-flight version.
+ * Input is a visible* set (sorted createdAt asc, ARCHIVED excluded).
+ */
+export function representativeVersion<T extends VersionLike>(versions: T[]): T | null {
+  const finished = versions.filter((s) => "VALIDATED" === s.status || "COMPLETED" === s.status);
+  return finished.at(-1) ?? null;
 }
 
 /** "V3 — 10 juil. 14:32" stamp shared by season and overlay version labels. */

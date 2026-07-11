@@ -109,6 +109,7 @@ final class SeasonDataPurger
             $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
             if ($season instanceof Season && $season->getClubId() === $clubId) {
                 $season->setBaselineScheduleId(null);
+                $season->setLiveContextScheduleId(null);
                 $season->setSocleValidatedAt(null);
                 $this->entityManager->flush();
             }

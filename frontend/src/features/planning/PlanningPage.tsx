@@ -1,8 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useMe, useRenamePlanning } from "@/features/auth/queries";
+import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -142,6 +144,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { data: coachPlayers = [] } = useCoachPlayers();
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const regenerateMutation = useRegenerate();
@@ -173,6 +176,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         onSuccess: () => {
           setValidateOverlayCount(null);
           setValidateOpen(false);
+          // Validated → land on the (now read-only) planning view.
+          navigate("/planning");
         },
         onError: (error) => {
           if (error instanceof OverlaysExistError) {
@@ -191,7 +196,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     reopenMutation.mutate(
       { id: validScheduleId, confirmDeleteOverlays },
       {
-        onSuccess: () => setReopenOverlayCount(null),
+        onSuccess: () => {
+          setReopenOverlayCount(null);
+          // Reopened to rework the plan → back to the wizard's generation step.
+          useWizardStore.getState().jumpTo("generate");
+          navigate("/wizard");
+        },
         // Generic failures are toasted by the hook (unmount-safe); only the
         // 409 escalation is UI state handled here.
         onError: (error) => {
@@ -206,7 +216,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
-  const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending;
+  // regenerateFromMutation.isPending: "Charger cette version" no longer creates a
+  // PENDING schedule (nothing sets isGenerating), so its own restore must disable
+  // the action here — else a second click double-runs the destructive restore.
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
@@ -381,6 +394,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
               baselineScheduleId={baselineScheduleId}
+              embedded={embedded}
               rightSlot={
                 <>
                   {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
@@ -500,7 +514,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         description={
           "number" === typeof selectedSchedule?.generatedTeamCount ? (
             <>
-              La structure actuelle ({teams.length} équipe{teams.length > 1 ? "s" : ""}) sera remplacée par celle de cette version ({selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""}), puis un nouveau planning sera généré. Les données de structure actuelles seront écrasées.
+              La structure actuelle ({teams.length} équipe{teams.length > 1 ? "s" : ""}) sera remplacée par celle de cette version ({selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""}) et son planning s'affichera. Les données de structure actuelles seront écrasées ; vous pourrez ensuite « Régénérer » pour créer une nouvelle version.
             </>
           ) : null
         }

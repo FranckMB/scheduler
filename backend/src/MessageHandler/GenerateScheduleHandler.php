@@ -305,9 +305,10 @@ final class GenerateScheduleHandler
         $this->resultImporter->import($schedule, $result);
         $this->diagnosticsRecorder->record($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        // An overlay (period plan) must NEVER become the season baseline.
+        // An overlay (period plan) must NEVER become the season baseline nor the
+        // season's loaded context (both are season-plan concepts).
         if (null === $schedule->getCalendarEntryId()) {
-            $this->assignBaselineIfFirst($schedule);
+            $this->anchorSeasonToCompletedPlan($schedule);
         }
         $this->completeOnboarding($schedule);
     }
@@ -331,16 +332,23 @@ final class GenerateScheduleHandler
      * exception plan. The call site already skips overlays; this internal guard is
      * belt-and-suspenders so the method stays safe if ever called from elsewhere.
      */
-    private function assignBaselineIfFirst(Schedule $schedule): void
+    private function anchorSeasonToCompletedPlan(Schedule $schedule): void
     {
         if (null !== $schedule->getCalendarEntryId()) {
-            return; // overlay generation — never the season baseline
+            return; // overlay generation — never a season anchor
         }
 
         $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
-        if ($season instanceof Season && null === $season->getBaselineScheduleId()) {
+        if (!$season instanceof Season) {
+            return;
+        }
+        // First successful season plan wins the baseline; re-designation is explicit.
+        if (null === $season->getBaselineScheduleId()) {
             $season->setBaselineScheduleId($schedule->getId());
         }
+        // Every COMPLETED season plan IS the freshly loaded context (★) — its
+        // structure fed this solve. "Charger cette version" later re-points this.
+        $season->setLiveContextScheduleId($schedule->getId());
     }
 
     private function failSchedule(Schedule $schedule, string $type, string $message): void

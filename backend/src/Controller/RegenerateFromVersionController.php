@@ -5,28 +5,26 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Entity\Season;
 use App\Enum\ScheduleStatus;
-use App\Message\GenerateScheduleMessage;
-use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\StructureRestorer;
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
-use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
 /**
- * planning-versions D3: regenerate the season plan UNDER THE CONDITIONS of an
- * existing version — restore that version's structure photo (D2), then launch a
- * fresh generation → a new linear version (V4, V5…). The current structure is
- * replaced (the client confirms the impact first). Overlays and versions with
- * no photo (pre-D2) are refused.
+ * planning-versions: LOAD a version's context ("Charger cette version"). Restore
+ * that version's structure photo (D2) into the club's live structure and mark it
+ * as the season's loaded context (★) — WITHOUT solving. The manager then works
+ * from that version's plan (already COMPLETED) and hits "Régénérer" to produce a
+ * new version if wanted. The current structure is replaced (the client confirms
+ * the impact first). Overlays and versions with no photo (pre-D2) are refused.
  */
 #[AsController]
 final class RegenerateFromVersionController extends AbstractController implements SeasonScopedWriteInterface
@@ -35,7 +33,6 @@ final class RegenerateFromVersionController extends AbstractController implement
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly MessageBusInterface $messageBus,
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly StructureRestorer $structureRestorer,
@@ -75,60 +72,41 @@ final class RegenerateFromVersionController extends AbstractController implement
         }
 
         // The restore wipes the club structure — refuse while ANY version of the
-        // season is still solving, or its import would land slots referencing
-        // teams/venues the wipe just deleted (the ClubGenerationLock only
-        // serialises solves, it does not guard this destructive write).
+        // season is still solving, or a concurrent import would land slots
+        // referencing teams/venues the wipe just deleted (the ClubGenerationLock
+        // only serialises solves, it does not guard this destructive write).
         $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
             'clubId' => $source->getClubId(),
             'seasonId' => $source->getSeasonId(),
             'status' => self::IN_FLIGHT,
         ]);
         if ($inFlight > 0) {
-            return $this->json(['error' => 'Une génération est en cours — attendez sa fin avant de régénérer aux conditions d\'une version.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Une génération est en cours — attendez sa fin avant de charger une autre version.'], Response::HTTP_CONFLICT);
         }
 
-        // Read the photo (409 if none) and reject an over-complex restored
-        // problem BEFORE any destructive change (A10, same caps as the normal
-        // generation path — the direct dispatch would otherwise bypass it).
+        // Read the photo (409 if none) BEFORE any destructive change.
         $data = $this->structureRestorer->readSnapshot($source);
-        $violation = GenerationComplexityGuard::evaluate(
-            teams: \count($data['Team'] ?? []),
-            venues: \count($data['Venue'] ?? []),
-            coaches: \count($data['Coach'] ?? []),
-            slots: \count($data['VenueTrainingSlot'] ?? []),
-            constraints: \count($data['Constraint'] ?? []),
-        );
-        if (null !== $violation) {
-            return $this->json([
-                'error' => \sprintf('Génération bloquée : trop de %s (%d, limite %d).', $violation['cap'], $violation['count'], $violation['limit']),
-                'cap' => $violation['cap'], 'count' => $violation['count'], 'limit' => $violation['limit'],
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
+        $clubId = $source->getClubId();
+        $seasonId = $source->getSeasonId();
+        $sourceId = $source->getId();
+        $sourceStatus = $source->getStatus();
 
-        // ATOMIC: the destructive restore + the new PENDING version commit
-        // together — a failure never leaves the structure wiped with no version
-        // to show for it. PENDING (not DRAFT) so the frontend polls it and it
-        // is guarded in-flight (no concurrent delete/validate).
-        $newSchedule = (new Schedule)
-            ->setClubId($source->getClubId())
-            ->setSeasonId($source->getSeasonId())
-            ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
-            ->setStatus(ScheduleStatus::PENDING);
-        $this->entityManager->wrapInTransaction(function () use ($source, $data, $newSchedule): void {
-            $this->structureRestorer->apply($source->getClubId(), $source->getSeasonId(), $data);
-            $this->entityManager->persist($newSchedule);
-            $this->entityManager->flush();
+        // ATOMIC: the destructive restore + re-pointing the loaded context (★)
+        // commit together. No solve is launched — the source version is already
+        // COMPLETED, so its plan is shown as-is; "Régénérer" produces a new
+        // version later if wanted.
+        $this->entityManager->wrapInTransaction(function () use ($clubId, $seasonId, $sourceId, $data): void {
+            $this->structureRestorer->apply($clubId, $seasonId, $data);
+            // apply() clears the identity map — reload the season AFTER it to
+            // re-point the ★ (a pre-loaded instance would be detached).
+            $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
+            if ($season instanceof Season) {
+                $season->setLiveContextScheduleId($sourceId);
+                $this->entityManager->flush();
+            }
         });
 
-        // After commit: a dispatch failure only strands a PENDING schedule the
-        // stuck-schedule watchdog reconciles — the structure is already safely
-        // restored with its version (same trade-off as GenerateScheduleController).
-        $this->messageBus->dispatch(new GenerateScheduleMessage(
-            scheduleId: $newSchedule->getId(),
-            clubId: $newSchedule->getClubId(),
-        ));
-
-        return $this->json(['id' => $newSchedule->getId(), 'status' => ScheduleStatus::PENDING->value], Response::HTTP_ACCEPTED);
+        return $this->json(['id' => $sourceId, 'status' => $sourceStatus->value], Response::HTTP_OK);
     }
 
     private function resolveCurrentClubId(): ?string
