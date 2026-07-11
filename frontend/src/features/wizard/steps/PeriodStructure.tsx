@@ -31,8 +31,10 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 
 // Which periods this session has already auto-seeded (Fanion-only). Module-level so
 // it survives a step remount (WizardLayout unmounts inactive steps) — the only signal
-// that distinguishes "fresh period" from "manager cleared all overrides". Cleared on
-// seed FAILURE so the next visit retries.
+// that distinguishes "fresh period" from "manager cleared all overrides". A period is
+// claimed ONCE and never un-claimed (un-claiming on a partial failure would re-run the
+// seed against a still-empty cache and double-write): a failed seed is best-effort, the
+// manager completes it with the "Fanion seul" ramp.
 const seededPeriods = new Set<string>();
 
 /** Test-only: reset the session seed memory so each test starts fresh. */

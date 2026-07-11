@@ -51,6 +51,14 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
+  it("does NOT re-seed on a re-render (idempotent — guards the removed retry double-write)", () => {
+    const { rerender } = render(<PeriodTeams calendarEntryId="fresh-seed" />);
+    expect(createOverride).toHaveBeenCalledTimes(1);
+    // A re-render (effect re-runs) must not fire a second seed for the claimed period.
+    rerender(<PeriodTeams calendarEntryId="fresh-seed" />);
+    expect(createOverride).toHaveBeenCalledTimes(1);
+  });
+
   it("« Tout le club » activates every team", async () => {
     overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
     render(<PeriodTeams calendarEntryId="e1" />);
