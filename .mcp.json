@@ -13,7 +13,9 @@
       "command": "npx",
       "args": [
         "@playwright/mcp@latest",
-        "--headless"
+        "--headless",
+        "--browser",
+        "chromium"
       ],
       "cwd": "/home/marabou/projects/scheduler",
       "type": "stdio"
