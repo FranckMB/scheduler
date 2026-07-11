@@ -27,6 +27,9 @@ export function CockpitPage() {
   // calendar (so summer — and any month outside the season — shows when browsed).
   const { data: holidays, isLoading: holidaysLoading } = useSchoolHolidays();
   const { data: monthHolidays } = useSchoolHolidays(from, to);
+  // Summer is an INFO band only (season boundary, not an exception to plan) — it
+  // shows on the calendar but must never become a radar to-do reminder (revue #204).
+  const radarHolidays = (holidays?.items ?? []).filter((h) => "ete" !== h.holidayType);
   // Two explicit windows (the endpoint 400s without one when no season is active):
   // the visible month grid for the calendar dots, the radar horizon for reminders.
   const { data: publicHolidays } = usePublicHolidays(from, to);
@@ -64,7 +67,7 @@ export function CockpitPage() {
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel
           entries={radarEntries}
-          holidays={holidays?.items ?? []}
+          holidays={radarHolidays}
           publicHolidays={radarPublicHolidays?.items ?? []}
           publicHolidaysLoading={publicHolidaysLoading}
           zone={holidays?.zone ?? null}

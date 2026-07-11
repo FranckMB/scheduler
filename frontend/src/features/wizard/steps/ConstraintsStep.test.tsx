@@ -90,6 +90,19 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(sections).toEqual(["Groupe Adulte", "Fanion", "SM1"]);
   });
 
+  it("never drops a COACH constraint whose coach is absent from the list (revue #204)", async () => {
+    const user = userEvent.setup();
+    h.list = [
+      // co-gone is NOT in useWizardCoaches (removed/deactivated) — must still show.
+      { id: "cx", name: "Coach retiré · indispo vendredi", scope: "COACH", scopeTargetId: "co-gone", family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co-gone" }, isActive: true },
+    ] as Constraint[];
+
+    renderWithProviders(<ConstraintsStep />);
+    await user.click(screen.getByRole("button", { name: "Dispo coach" }));
+    // The constraint is visible under a fallback section — not silently dropped.
+    expect(screen.getByText("Coach retiré · indispo vendredi")).toBeInTheDocument();
+  });
+
   it("offers exactly Obligatoire/Préféré/Verrouillé — BONUS is gone (ENG-12)", () => {
     renderWithProviders(<ConstraintsStep />);
     const rule = screen.getByLabelText("Règle");

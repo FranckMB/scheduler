@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Coach, Constraint, PriorityTier, Team, TeamTag } from "@/features/wizard/api";
+import type { Coach, Constraint, Team, TeamTag } from "@/features/wizard/api";
 
 import { FAMILY_ORDER, makeConstraintRank } from "./constraintOrder";
 
 const teams = [
-  { id: "t-b", name: "SM1", priorityTierId: 3 },
-  { id: "t-s", name: "Fanion", priorityTierId: 1 },
+  { id: "t-b", name: "SM1", priorityTierId: 3, tierOrder: 0 },
+  { id: "t-s", name: "Fanion", priorityTierId: 1, tierOrder: 0 },
 ] as unknown as Team[];
-const tiers = [
-  { id: 1, label: "S", name: "Fanion" },
-  { id: 3, label: "B", name: "Moyenne" },
-] as unknown as PriorityTier[];
 const tags = [
   { id: "g-fem", name: "FEMININE", axis: "GENRE" },
   { id: "g-adulte", name: "SENIOR", axis: "AGE" },
@@ -24,7 +20,7 @@ const coaches = [
 const c = (over: Partial<Constraint>): Constraint => ({ id: "x", name: "n", scope: "TEAM", scopeTargetId: null, family: "TIME", ruleType: "HARD", config: {}, isActive: true, ...over }) as Constraint;
 
 describe("makeConstraintRank", () => {
-  const rank = makeConstraintRank(teams, tiers, tags, coaches, new Set());
+  const rank = makeConstraintRank(teams, tags, coaches, new Set());
 
   it("orders bands: tag → club → team → coach → other", () => {
     const tag = rank(c({ scope: "CLUB", scopeTargetId: null, config: { targetTag: "FEMININE" } }));
@@ -50,7 +46,7 @@ describe("makeConstraintRank", () => {
     expect(rank(c({ scope: "COACH", scopeTargetId: "co-sal" }))).toBeLessThan(rank(c({ scope: "COACH", scopeTargetId: "co-vol" })));
   });
 
-  it("FAMILY_ORDER matches the constraint tabs", () => {
-    expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "COACH_AVAILABILITY"]);
+  it("FAMILY_ORDER covers every constraint family (FACILITY_CAPACITY included)", () => {
+    expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"]);
   });
 });

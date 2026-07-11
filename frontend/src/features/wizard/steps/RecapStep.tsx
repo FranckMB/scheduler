@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -57,18 +59,20 @@ export function RecapStep() {
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
-  // Constraints grouped by family (Horaire/Jours/Gymnase/Dispo coach), each in
-  // the SAME order as its constraint tab (shared makeConstraintRank helper).
-  const constraintRank = makeConstraintRank(teams, tiers, tags, coaches, coachPlayerIds);
-  const isKnownFamily = (f: string): boolean => (FAMILY_ORDER as readonly string[]).includes(f);
-  const constraintFamilies: { family: string; items: typeof constraints }[] = [
-    ...FAMILY_ORDER.map((family) => ({
-      family: family as string,
-      items: constraints.filter((c) => c.family === family).sort((a, b) => constraintRank(a) - constraintRank(b)),
-    })),
-    // Any exotic family not in FAMILY_ORDER still shows, at the end.
-    { family: "OTHER", items: constraints.filter((c) => !isKnownFamily(c.family)) },
-  ].filter((g) => g.items.length > 0);
+  // Constraints grouped by family (Horaire/Jours/Gymnase/…), each in the SAME
+  // order as its constraint tab (shared makeConstraintRank helper). Memoised:
+  // the helper builds 3 Maps + filters per family (revue #204).
+  const constraintFamilies = useMemo(() => {
+    const playerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
+    const rank = makeConstraintRank(teams, tags, coaches, playerIds);
+    const isKnownFamily = (f: string): boolean => (FAMILY_ORDER as readonly string[]).includes(f);
+    const byRank = (a: (typeof constraints)[number], b: (typeof constraints)[number]): number => rank(a) - rank(b);
+    return [
+      ...FAMILY_ORDER.map((family) => ({ family: family as string, items: constraints.filter((c) => c.family === family).sort(byRank) })),
+      // Any exotic family not in FAMILY_ORDER still shows, ordered too, at the end.
+      { family: "OTHER", items: constraints.filter((c) => !isKnownFamily(c.family)).sort(byRank) },
+    ].filter((g) => g.items.length > 0);
+  }, [constraints, teams, tags, coaches, coachPlayers]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);

@@ -9,6 +9,7 @@ import { Select } from "@/shared/components/ui/select";
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
 import { groupedCoaches, orderedCoaches } from "../lib/ranking";
+import { orderedTagNames, RANK_FALLBACK } from "../lib/constraintOrder";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
 
@@ -351,11 +352,11 @@ export function ConstraintsStep() {
       }
     }
     const out: { key: string; label: string; items: Constraint[] }[] = [];
-    // Groups (tags) in the SAME canonical order as the target picker: by axis
-    // (Genre, Niveau, Âge) then label — not raw-name alphabetical.
-    const tagRank = new Map(groupTagsByAxis(tags).flatMap((g) => g.tags).map((t, i) => [t.name, i]));
+    // Groups (tags) in the SAME canonical order as the target picker AND the
+    // recap: by axis (Genre, Niveau, Âge) then label — shared orderedTagNames.
+    const tagRank = new Map(orderedTagNames(tags).map((name, i) => [name, i]));
     [...byTag.entries()]
-      .sort((a, b) => (tagRank.get(a[0]) ?? 999) - (tagRank.get(b[0]) ?? 999) || a[0].localeCompare(b[0]))
+      .sort((a, b) => (tagRank.get(a[0]) ?? RANK_FALLBACK) - (tagRank.get(b[0]) ?? RANK_FALLBACK) || a[0].localeCompare(b[0]))
       .forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tagLabel(tag)}`, items }));
     if (clubWide.length > 0) {
       out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
@@ -367,11 +368,20 @@ export function ConstraintsStep() {
       }
     });
     // Coach sections in the staffing order (salarié → coach-joueur → bénévole,
-    // puis prénom) rather than insertion order.
+    // puis prénom). Coaches present in the list first, THEN any coach still
+    // referenced by a constraint but absent from the list (removed/deactivated)
+    // — never drop a constraint the solver still honors (revue #204).
+    const seenCoach = new Set<string>();
     orderedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))).forEach(({ coach }) => {
       const items = byCoach.get(coach.id);
       if (items && items.length > 0) {
+        seenCoach.add(coach.id);
         out.push({ key: `c:${coach.id}`, label: coachName.get(coach.id) ?? "Coach", items });
+      }
+    });
+    [...byCoach.entries()].forEach(([cid, items]) => {
+      if (!seenCoach.has(cid)) {
+        out.push({ key: `c:${cid}`, label: coachName.get(cid) ?? "Coach (retiré)", items });
       }
     });
     if (other.length > 0) {
