@@ -7,6 +7,7 @@ import { useSchedules } from "@/features/planning/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { BaselineBanner } from "./BaselineBanner";
+import { isAdaptableHoliday } from "./lib/holidays";
 import { MonthCalendar } from "./MonthCalendar";
 import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
 import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
@@ -29,7 +30,7 @@ export function CockpitPage() {
   const { data: monthHolidays } = useSchoolHolidays(from, to);
   // Summer is an INFO band only (season boundary, not an exception to plan) — it
   // shows on the calendar but must never become a radar to-do reminder (revue #204).
-  const radarHolidays = (holidays?.items ?? []).filter((h) => "ete" !== h.holidayType);
+  const radarHolidays = (holidays?.items ?? []).filter(isAdaptableHoliday);
   // Two explicit windows (the endpoint 400s without one when no season is active):
   // the visible month grid for the calendar dots, the radar horizon for reminders.
   const { data: publicHolidays } = usePublicHolidays(from, to);

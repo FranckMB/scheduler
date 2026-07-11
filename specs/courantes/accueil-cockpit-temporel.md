@@ -309,9 +309,17 @@ a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'orig
 > **Règle : annoter = modale ; générer / travailler un plan = écran.**
 
 - **Date vide** → petit **popover** : `[ Événement ]` `[ Indispo salle ]` `[ Période… ]`
-  - **Événement / Indispo** → **mini-formulaire dans le popover** (titre, dates, toggle
-    informatif/perturbant) → enregistrer, on **reste sur le cockpit**. Geste de 2 secondes.
+  - **Événement / Indispo / Coupure** → **mini-formulaire dans le popover** (titre + **plage
+    `Du … Jusqu'au …`** ; l'**Événement** ajoute le toggle informatif/perturbant, l'**Indispo**
+    le gymnase) → enregistrer, on **reste sur le cockpit**. Le **jour cliqué n'est qu'un défaut**
+    pour les deux bornes : début **et** fin sont éditables (`aujourd'hui ≤ début ≤ fin`). Geste de 2 secondes.
   - **Période…** → **navigue vers l'écran dédié** (atelier du calendrier secondaire).
+- **Jour férié / vacances** → la modale affiche un **bandeau info** en tête (« Jour férié — … »
+  pour un férié public ; « Vacances — … » pour des vacances scolaires). Les **vacances** portent
+  en plus un **« Adapter »** directement dans la modale (même action que le radar : crée la période
+  de vacances si absente puis ouvre le wizard en mode période ; « Voir le planning » si l'overlay
+  existe déjà) — pas besoin de passer par le radar. **Exception : les vacances d'été** (`ete`) sont
+  hors saison → **info seulement, jamais d'« Adapter »** (comme le radar, qui les exclut).
 - **Date avec entrée(s)** → le popover **liste** ce qui est là ; chaque entrée porte ses actions
   (voir / éditer / supprimer). Une indispo/période porte un **« Adapter → »** qui ouvre
   l'**écran dédié**.
