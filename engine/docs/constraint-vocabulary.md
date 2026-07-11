@@ -90,6 +90,15 @@
 
 > Une dispo coach reçue en non-HARD est **appliquée dur quand même** + diagnostic INFO (une personne
 > ne peut pas être à deux endroits).
+>
+> **Piège (whitelist INTERSECT, ENG-13)** : deux règles **« disponible uniquement »** sur le **même
+> coach le même jour** s'**intersectent** (les compléments s'unissent) → ex. `dispo lundi 17:00-19:00`
+> **+** `dispo lundi 19:00-21:00` ne donne **pas** « dispo 17-21 » mais **lundi entièrement bloqué**
+> (aucune heure n'est dans les deux fenêtres). Cohérent avec le jour-seul (`dispo lundi` + `dispo mardi`
+> = ∅). Pour un même jour, **une seule** fenêtre « disponible uniquement » ; utiliser `unavailableDays`
+> (UNION) pour cumuler des indisponibilités. **Défensif** : une fenêtre inversée (`from ≥ to`, ex. un
+> overnight `20:00-08:00` que le modèle plat ne wrappe pas) ou une heure malformée retombe sur **journée
+> entière bloquée** (l'indispo est honorée, jamais silencieusement perdue ni crash du solve).
 
 **Exemple BCCL**
 - `Lionel - Indisponible le vendredi` → `{ COACH_AVAILABILITY, HARD, scope:"COACH", scopeTargetId:<Lionel>, config:{ coachId:<Lionel>, unavailableDays:[5] } }`
