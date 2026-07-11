@@ -234,7 +234,7 @@ export function useRegenerateFromVersion() {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onError: () => toast.error("La régénération aux conditions de cette version a échoué."),
+    onError: () => toast.error("Le chargement de cette version a échoué."),
   });
 }
 

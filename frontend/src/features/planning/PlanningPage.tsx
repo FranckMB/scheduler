@@ -472,7 +472,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
 
       <ConfirmDialog
         open={regenerateFromOpen}
-        title="Régénérer aux conditions de cette version ?"
+        title="Charger cette version ?"
         description={
           "number" === typeof selectedSchedule?.generatedTeamCount ? (
             <>
@@ -480,7 +480,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             </>
           ) : null
         }
-        confirmLabel="Régénérer"
+        confirmLabel="Charger"
         destructive
         onConfirm={() => {
           if (null !== validScheduleId) {

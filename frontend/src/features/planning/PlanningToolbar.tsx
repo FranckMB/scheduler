@@ -95,6 +95,7 @@ export function PlanningToolbar({
             <option key={schedule.id} value={schedule.id}>
               {labelOf(schedule)}
               {schedule.id === selectedScheduleId ? " ★" : ""}
+              {schedule.id === baselineScheduleId ? " · principal" : ""}
               {"VALIDATED" === schedule.status ? " · validé" : ""}
               {null !== schedule.calendarEntryId ? " · période" : ""}
             </option>
