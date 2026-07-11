@@ -18,42 +18,45 @@ final class ScheduleResultImporter
     /** @param array<string, mixed> $solverOutput */
     public function import(Schedule $schedule, array $solverOutput): void
     {
-        // Match against THIS schedule's own rows only. The engine returns a
-        // placement-deterministic id shared by every schedule with that placement;
-        // scoping it per schedule (SlotIdScoper) makes each version's row unique,
-        // so loading other schedules' slots would only re-open the P0-5 theft.
+        // Match THIS schedule's own rows only, keyed by PLACEMENT (team:venue:day:
+        // start) — not by the engine's slot id. The engine id is deterministic on
+        // the placement alone, so two schedules sharing a placement would collide
+        // on the primary key (P0-5 theft). Placement-keying preserves a schedule's
+        // HARD locks across regeneration while a fresh, per-schedule row id
+        // (SlotIdScoper) lets sibling versions hold the same placement side by side.
+        // This is transition-safe: a legacy row keyed on the old global id is still
+        // matched by its placement, so no data migration is required.
         $existingSlots = $this->entityManager
             ->getRepository(ScheduleSlotTemplate::class)
             ->findBy(['scheduleId' => $schedule->getId()]);
 
-        $existingById = [];
+        $existingByPlacement = [];
         foreach ($existingSlots as $slot) {
-            $existingById[$slot->getId()] = $slot;
+            $existingByPlacement[$this->placementKey($slot->getTeamId(), $slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'))] = $slot;
         }
 
-        // Re-key the solver output by the PER-SCHEDULE id (uuid5(scheduleId:engineId)):
-        // deterministic within the schedule (HARD-lock rows re-match on regeneration),
-        // distinct across schedules (no cross-version collision).
-        $solverSlots = [];
-        foreach ($this->deduplicateNoneSlots($solverOutput['slots'] ?? []) as $engineId => $slotData) {
-            $solverSlots[SlotIdScoper::scope($schedule->getId(), (string) $engineId)] = $slotData;
+        $solverSlots = $this->deduplicateNoneSlots($solverOutput['slots'] ?? []);
+        $keptPlacements = [];
+        foreach ($solverSlots as $slotData) {
+            $keptPlacements[$this->placementKeyFromData($slotData)] = true;
         }
 
         foreach ($existingSlots as $slot) {
-            if (LockLevel::NONE === $slot->getLockLevel() && !isset($solverSlots[$slot->getId()])) {
+            $placement = $this->placementKey($slot->getTeamId(), $slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'));
+            if (LockLevel::NONE === $slot->getLockLevel() && !isset($keptPlacements[$placement])) {
                 $this->entityManager->remove($slot);
             }
         }
 
-        foreach ($solverSlots as $slotId => $slotData) {
-            $existingSlot = $existingById[$slotId] ?? null;
+        foreach ($solverSlots as $engineId => $slotData) {
+            $existingSlot = $existingByPlacement[$this->placementKeyFromData($slotData)] ?? null;
             // A HARD-locked row of this schedule is preserved untouched (its manual
-            // metadata survives) — only the engine re-emits it with the same placement.
+            // metadata survives) — the engine re-emits it at the same placement.
             if (null !== $existingSlot && LockLevel::NONE !== $existingSlot->getLockLevel()) {
                 continue;
             }
 
-            $slot = $existingSlot ?? (new ScheduleSlotTemplate)->setId($slotId);
+            $slot = $existingSlot ?? (new ScheduleSlotTemplate)->setId(SlotIdScoper::scope($schedule->getId(), (string) $engineId));
             $this->hydrateSlot($slot, $schedule, $slotData);
 
             if (null === $existingSlot) {
@@ -62,6 +65,23 @@ final class ScheduleResultImporter
         }
 
         $this->entityManager->flush();
+    }
+
+    /** Canonical placement key (team:venue:day:HH:MM) — the identity of a slot within a schedule. */
+    private function placementKey(string $teamId, string $venueId, int $dayOfWeek, string $startTime): string
+    {
+        return \sprintf('%s:%s:%d:%s', $teamId, $venueId, $dayOfWeek, substr($startTime, 0, 5));
+    }
+
+    /** @param array<string, mixed> $slotData */
+    private function placementKeyFromData(array $slotData): string
+    {
+        return $this->placementKey(
+            (string) $slotData['teamId'],
+            (string) $slotData['venueId'],
+            (int) $slotData['dayOfWeek'],
+            (string) $slotData['startTime'],
+        );
     }
 
     /** @return array<string, mixed> */

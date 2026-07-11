@@ -74,7 +74,9 @@ final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
         [$club, $season] = $this->seed();
         $a = $this->schedule($club, $season, ScheduleStatus::COMPLETED);
         $this->slot($club, $season, $a, LockLevel::HARD);
-        $this->slot($club, $season, $a, LockLevel::NONE, '44444444-4444-4444-8444-444444444444');
+        // A stale NONE at a DIFFERENT placement (day 3) — the solver output only
+        // keeps the HARD placement (day 2), so this NONE must be pruned.
+        $this->slot($club, $season, $a, LockLevel::NONE, '44444444-4444-4444-8444-444444444444', 3);
         $this->em->flush();
 
         // Re-generate A: HARD placement echoed again, the old NONE dropped.
@@ -121,7 +123,7 @@ final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
         return $schedule;
     }
 
-    private function slot(Club $club, Season $season, Schedule $schedule, LockLevel $lock, string $engineId = self::ENGINE_ID): void
+    private function slot(Club $club, Season $season, Schedule $schedule, LockLevel $lock, string $engineId = self::ENGINE_ID, int $dayOfWeek = 2): void
     {
         $slot = (new ScheduleSlotTemplate)
             ->setId(SlotIdScoper::scope($schedule->getId(), $engineId))
@@ -130,7 +132,7 @@ final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
             ->setScheduleId($schedule->getId())
             ->setTeamId(self::TEAM)
             ->setVenueId(self::VENUE)
-            ->setDayOfWeek(2)
+            ->setDayOfWeek($dayOfWeek)
             ->setStartTime(new DateTimeImmutable('18:00'))
             ->setDurationMinutes(90)
             ->setLockLevel($lock);
