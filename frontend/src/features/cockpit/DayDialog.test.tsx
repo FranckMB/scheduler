@@ -10,13 +10,15 @@ import { DayDialog } from "./DayDialog";
 const deleteMutate = vi.fn();
 const cutoffMutate = vi.fn();
 const closureMutate = vi.fn();
-const holidayMutate = vi.fn();
+// "Adapter" (create branch) uses mutateAsync so the wizard navigation survives a
+// mid-POST modal dismiss — the mock resolves with the created period's id.
+const holidayMutateAsync = vi.fn(() => Promise.resolve({ id: "created-hol" }));
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
-  useCreateHolidayPeriod: () => ({ mutate: holidayMutate, isPending: false }),
+  useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
 }));
 vi.mock("@/features/planning/queries", () => ({
@@ -58,7 +60,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     deleteMutate.mockReset();
     cutoffMutate.mockReset();
     closureMutate.mockReset();
-    holidayMutate.mockReset();
+    holidayMutateAsync.mockClear();
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -175,10 +177,23 @@ describe("DayDialog — deletion is always confirmed", () => {
 
     expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure", startDate: "2026-05-15", endDate: "2026-05-18" }, expect.anything());
   });
+
+  // Moving the start past the end must bump the end so the window never inverts.
+  it("clamps the end forward when the start is moved past it", async () => {
+    renderDialog([]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Coupure (pas d'entraînement)" }));
+    const startInput = screen.getByLabelText("Du");
+    await userEvent.clear(startInput);
+    await userEvent.type(startInput, "2026-05-20"); // later than the default end (2026-05-12)
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(cutoffMutate).toHaveBeenCalledWith({ title: "Coupure", startDate: "2026-05-20", endDate: "2026-05-20" }, expect.anything());
+  });
 });
 
 describe("DayDialog — holiday awareness (Lot B)", () => {
-  beforeEach(() => holidayMutate.mockReset());
+  beforeEach(() => holidayMutateAsync.mockClear());
 
   // item 1: a public holiday (jour férié) shows read-only info.
   it("shows the public-holiday info banner", () => {
@@ -194,7 +209,8 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.getByText(/Vacances de Noël/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
-    expect(holidayMutate).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" }, expect.anything());
+    // mutateAsync (no mutate-scoped options) so the wizard navigation survives a dismiss.
+    expect(holidayMutateAsync).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" });
   });
 
   // item 3: once the holiday overlay is generated, offer "Voir le planning" instead.
@@ -202,6 +218,14 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     const periodEntry = entry({ id: "p9", kind: "period", periodType: "holiday", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20", overlayScheduleId: "ov9" });
     renderDialog([periodEntry], { holiday: schoolHoliday() });
     expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+  });
+
+  // Summer holidays: info only, never adaptable (off-season, no schedule to build).
+  it("shows summer-holiday info but NO « Adapter » action", () => {
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });
+    expect(screen.getByText(/Vacances d'Été/)).toBeInTheDocument();
+    expect(screen.getByText(/hors saison/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 });

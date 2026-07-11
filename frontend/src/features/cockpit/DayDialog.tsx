@@ -168,8 +168,14 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <span className="font-medium">Vacances</span> — {holiday.label}
         </span>
       </p>
-      <div className="flex justify-end">
-        {entry?.overlayScheduleId ? (
+      {/* Summer holidays are off-season — never adapted (a schedule spans one
+          season). Show the info, but offer no "Adapter" (same rule as the radar,
+          which excludes "ete"). */}
+      {holiday.holidayType === "ete" ? (
+        <p className="text-xs text-muted-foreground">Vacances d'été — hors saison, pas de planning à adapter.</p>
+      ) : (
+        <div className="flex justify-end">
+          {entry?.overlayScheduleId ? (
           <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
             Voir le planning
           </Button>
@@ -182,12 +188,24 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
             variant="outline"
             size="sm"
             disabled={createHoliday.isPending}
-            onClick={() => createHoliday.mutate({ schoolHolidayId: holiday.id, label: holiday.label, startDate: holiday.startDate, endDate: holiday.endDate }, { onSuccess: (created) => adapt(created.id) })}
+            onClick={async () => {
+              // mutateAsync (not a mutate-scoped onSuccess): the navigation must
+              // fire even if the modal is dismissed mid-POST — otherwise the hook
+              // still creates the period (hook onSuccess) but the wizard never
+              // opens, leaving an orphan holiday entry. Errors are toasted by the hook.
+              try {
+                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: holiday.startDate, endDate: holiday.endDate });
+                adapt(created.id);
+              } catch {
+                /* surfaced by the hook's onError */
+              }
+            }}
           >
             Adapter
           </Button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -227,27 +245,31 @@ function DateRangeFields({ startDate, endDate, onStart, onEnd }: { startDate: st
   );
 }
 
-/** A start-date setter that keeps the range valid: bumps a now-earlier end to the new start. */
-function makeSetStart(endDate: string, setStartDate: (v: string) => void, setEndDate: (v: string) => void) {
-  return (value: string) => {
+/**
+ * Editable [start, end] range shared by the three creation forms. `today` is
+ * frozen at mount (not re-read each render → a dialog left open past midnight
+ * stays submittable). Moving the start past the end bumps the end so the range
+ * never inverts. `valid` = today ≤ start ≤ end.
+ */
+function useDateRange(iso: string) {
+  const [today] = useState(todayISO);
+  const [startDate, setStartDate] = useState(iso);
+  const [endDate, setEndDate] = useState(iso);
+  const setStart = (value: string) => {
     setStartDate(value);
-    if (endDate < value) {
-      setEndDate(value);
-    }
+    setEndDate((prev) => (prev < value ? value : prev));
   };
+  return { startDate, endDate, setStart, setEnd: setEndDate, valid: startDate >= today && endDate >= startDate };
 }
 
 function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
   const [title, setTitle] = useState("");
-  const [startDate, setStartDate] = useState(iso);
-  const [endDate, setEndDate] = useState(iso);
+  const { startDate, endDate, setStart, setEnd, valid } = useDateRange(iso);
   const [isDisruptive, setDisruptive] = useState(false);
   const createEvent = useCreateEvent();
 
-  const setStart = makeSetStart(endDate, setStartDate, setEndDate);
-  const validRange = startDate >= todayISO() && endDate >= startDate;
   const submit = () => {
-    if (title.trim() === "" || !validRange) return;
+    if (title.trim() === "" || !valid) return;
     createEvent.mutate(
       { title: title.trim(), startDate, endDate, isDisruptive },
       { onSuccess: () => { toast.success("Événement ajouté"); onDone(); } },
@@ -258,12 +280,12 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
     <FormShell onBack={onBack}>
       {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional, better than the neutral panel */}
       <input className={fieldClass} aria-label="Titre de l'événement" placeholder="Titre (AG, tournoi…)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEndDate} />
+      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEnd} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isDisruptive} onChange={(e) => setDisruptive(e.target.checked)} />
         Perturbant (pas d'entraînement ce jour)
       </label>
-      <Button className="w-full" onClick={submit} disabled={createEvent.isPending || title.trim() === "" || !validRange}>
+      <Button className="w-full" onClick={submit} disabled={createEvent.isPending || title.trim() === "" || !valid}>
         Enregistrer
       </Button>
     </FormShell>
@@ -273,15 +295,12 @@ function EventForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; o
 function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
   const { data: venues } = useVenues();
   const [title, setTitle] = useState("");
-  const [startDate, setStartDate] = useState(iso);
-  const [endDate, setEndDate] = useState(iso);
+  const { startDate, endDate, setStart, setEnd, valid } = useDateRange(iso);
   const [venueId, setVenueId] = useState("");
   const createClosure = useCreateVenueClosure();
 
-  const setStart = makeSetStart(endDate, setStartDate, setEndDate);
-  const validRange = startDate >= todayISO() && endDate >= startDate;
   const submit = () => {
-    if (venueId === "" || !validRange) return;
+    if (venueId === "" || !valid) return;
     const venueName = venues?.find((v) => v.id === venueId)?.name ?? "Gymnase";
     // Structured "gymnase — raison" so the calendar tooltip names both the venue
     // and why it's closed. Don't prefix when the typed reason already mentions the
@@ -309,8 +328,8 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
         ))}
       </select>
       <input className={fieldClass} aria-label="Intitulé de l'indisponibilité (optionnel)" placeholder="Intitulé (optionnel)" maxLength={140} value={title} onChange={(e) => setTitle(e.target.value)} />
-      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEndDate} />
-      <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !validRange}>
+      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEnd} />
+      <Button className="w-full" onClick={submit} disabled={createClosure.isPending || venueId === "" || !valid}>
         Enregistrer
       </Button>
     </FormShell>
@@ -320,14 +339,11 @@ function ClosureForm({ iso, onBack, onDone }: { iso: string; onBack: () => void;
 /** A cutoff is a bare period ("no training on the window") — no venue, no constraint, no overlay to generate. */
 function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; onDone: () => void }) {
   const [title, setTitle] = useState("");
-  const [startDate, setStartDate] = useState(iso);
-  const [endDate, setEndDate] = useState(iso);
+  const { startDate, endDate, setStart, setEnd, valid } = useDateRange(iso);
   const createCutoff = useCreateCutoff();
 
-  const setStart = makeSetStart(endDate, setStartDate, setEndDate);
-  const validRange = startDate >= todayISO() && endDate >= startDate;
   const submit = () => {
-    if (!validRange) return;
+    if (!valid) return;
     createCutoff.mutate(
       { title: title.trim() === "" ? "Coupure" : title.trim(), startDate, endDate },
       { onSuccess: () => { toast.success("Coupure enregistrée"); onDone(); } },
@@ -338,9 +354,9 @@ function CutoffForm({ iso, onBack, onDone }: { iso: string; onBack: () => void; 
     <FormShell onBack={onBack}>
       {/* eslint-disable-next-line jsx-a11y/no-autofocus -- inside a Modal: focusing the first field on step change is intentional */}
       <input className={fieldClass} aria-label="Intitulé de la coupure (optionnel)" placeholder="Intitulé (optionnel, ex. Coupure de Noël)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEndDate} />
+      <DateRangeFields startDate={startDate} endDate={endDate} onStart={setStart} onEnd={setEnd} />
       <p className="text-xs text-muted-foreground">Rappel affiché au calendrier (🛑) et au radar — le planning de base reste inchangé, rien à générer.</p>
-      <Button className="w-full" onClick={submit} disabled={createCutoff.isPending || !validRange}>
+      <Button className="w-full" onClick={submit} disabled={createCutoff.isPending || !valid}>
         Enregistrer
       </Button>
     </FormShell>
