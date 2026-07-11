@@ -17,7 +17,7 @@ import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
-import { ReadonlyTeams } from "./StructureSummary";
+import { PeriodTeams } from "./PeriodStructure";
 
 const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "—" },
@@ -204,9 +204,12 @@ function TierZone({ tier, teamIds, teamById, onArrow }: TierZoneProps) {
 const zoneTierId = (id: string): number | null => (id.startsWith("zone-") ? Number(id.slice(5)) : null);
 
 export function TeamsStep() {
-  const periodMode = useWizardStore((s) => s.mode === "period");
-  if (periodMode) {
-    return <ReadonlyTeams />;
+  const mode = useWizardStore((s) => s.mode);
+  const calendarEntryId = useWizardStore((s) => s.calendarEntryId);
+  // Period mode NEVER renders the seasonal editor (which mutates the base plan) —
+  // a null entryId (stale/partial store) shows a recovery hint, not TeamsEditor.
+  if ("period" === mode) {
+    return calendarEntryId ? <PeriodTeams calendarEntryId={calendarEntryId} /> : <EmptyHint>Période introuvable — revenez au cockpit pour l'ouvrir.</EmptyHint>;
   }
   return <TeamsEditor />;
 }

@@ -81,6 +81,8 @@ export interface VenueTrainingSlot {
   startTime: string;
   durationMinutes: number;
   capacity: number;
+  /** null = seasonal slot; set = a slot scoped to that period (additive). */
+  calendarEntryId?: string | null;
 }
 
 export interface VenuePayload {
@@ -96,16 +98,41 @@ export interface SlotPayload {
   startTime: string;
   durationMinutes: number;
   capacity: number;
+  /** Period-editable structure: set to scope the slot to a period (gym lent for the window). */
+  calendarEntryId?: string | null;
 }
 
 export const listVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
 export const listVenueSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
+/** Period-editable structure: the slots scoped to ONE period (the borrowed gyms). */
+export const listPeriodSlots = (calendarEntryId: string): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots", { calendarEntryId });
 export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("venues", { json: { source: "manual", ...body } }).json();
 export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
 export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
 export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
+
+/** Period-editable structure: a sparse per-(period, team) override — off for the period, or a different session count. */
+export interface TeamPeriodOverride {
+  id: string;
+  calendarEntryId: string;
+  teamId: string;
+  isActive: boolean;
+  sessionsPerWeek: number | null;
+}
+
+export interface TeamPeriodOverridePayload {
+  calendarEntryId: string;
+  teamId: string;
+  isActive: boolean;
+  sessionsPerWeek?: number | null;
+}
+
+export const listTeamPeriodOverrides = (calendarEntryId: string): Promise<TeamPeriodOverride[]> => collectionAll<TeamPeriodOverride>("team_period_overrides", { calendarEntryId });
+export const createTeamPeriodOverride = (body: TeamPeriodOverridePayload): Promise<TeamPeriodOverride> => api.post("team_period_overrides", { json: body }).json();
+export const updateTeamPeriodOverride = (id: string, body: TeamPeriodOverridePayload): Promise<TeamPeriodOverride> => api.put(`team_period_overrides/${id}`, { json: body }).json();
+export const deleteTeamPeriodOverride = (id: string): Promise<void> => api.delete(`team_period_overrides/${id}`).then(() => undefined);
 
 /** A persistent team→slot HARD pin (base plan or a period overlay). Server-backed. */
 export interface Reservation {

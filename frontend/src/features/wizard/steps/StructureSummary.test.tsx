@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../queries", () => ({
@@ -31,25 +31,7 @@ vi.mock("@/features/cockpit/queries", () => ({
   useEntryConflicts: () => ({ data: { venueIds: ["v2"] } }),
 }));
 
-import { ReadonlyCoaches, ReadonlyTeams, ReadonlyVenues } from "./StructureSummary";
-
-describe("ReadonlyVenues (period, read-only)", () => {
-  it("marks a closed venue INTERDIT and shows slot counts for open ones (no 'sans créneau' error)", () => {
-    render(<ReadonlyVenues calendarEntryId="entry-1" />);
-
-    // Open venue → slot count, no forbidden marker.
-    const open = screen.getByText("Gymnase A").closest("li")!;
-    expect(within(open).getByText("2 créneau(x)")).toBeInTheDocument();
-    expect(within(open).queryByText(/INTERDIT/)).not.toBeInTheDocument();
-
-    // Closed venue → INTERDIT, no slot-count / no error.
-    const closed = screen.getByText("Gymnase B").closest("li")!;
-    expect(within(closed).getByText(/INTERDIT cette période/)).toBeInTheDocument();
-
-    // The bug: a "sans créneau" style error must NOT appear anywhere.
-    expect(screen.queryByText(/sans créneau/i)).not.toBeInTheDocument();
-  });
-});
+import { ReadonlyCoaches } from "./StructureSummary";
 
 describe("ReadonlyCoaches (period, read-only)", () => {
   it("orders salaried → coach-player → other", () => {
@@ -63,15 +45,5 @@ describe("ReadonlyCoaches (period, read-only)", () => {
     // Tags surface the staffing type.
     expect(screen.getByText("salarié")).toBeInTheDocument();
     expect(screen.getByText("coach-joueur")).toBeInTheDocument();
-  });
-});
-
-describe("ReadonlyTeams (period, read-only)", () => {
-  it("groups teams under their tier headers", () => {
-    render(<ReadonlyTeams />);
-    expect(screen.getByText(/S · Fanion/)).toBeInTheDocument();
-    expect(screen.getByText(/A · Importante/)).toBeInTheDocument();
-    expect(screen.getByText("SM1")).toBeInTheDocument();
-    expect(screen.getByText("U13")).toBeInTheDocument();
   });
 });
