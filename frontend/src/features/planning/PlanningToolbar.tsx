@@ -90,12 +90,13 @@ export function PlanningToolbar({
           className="h-8 rounded-md border border-input bg-background px-3 text-sm"
         >
           {/* Season versions, plus — when an overlay is selected — that period's own
-              overlay versions (V1, V2…). The ★ marks the version being viewed. */}
+              overlay versions (V1, V2…). The ★ marks the version currently loaded
+              (= viewed). No "principal" here: the main plan is a fact carried by the
+              title badge, not a per-version label. */}
           {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
             <option key={schedule.id} value={schedule.id}>
               {labelOf(schedule)}
               {schedule.id === selectedScheduleId ? " ★" : ""}
-              {schedule.id === baselineScheduleId ? " · principal" : ""}
               {"VALIDATED" === schedule.status ? " · validé" : ""}
               {null !== schedule.calendarEntryId ? " · période" : ""}
             </option>

@@ -153,6 +153,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
   const renamePlanning = useRenamePlanning();
   const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
+  // Diagnostics panel collapsed by default (user request): the grid gets the
+  // full width for verification, a compact bar re-opens the aside on demand.
+  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(true);
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
   const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
@@ -327,7 +330,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             {null !== selectedSchedule && selectedSchedule.id === baselineScheduleId ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
-                Planning principal
+                principal
               </span>
             ) : null}
             {workingSeason && !workingSeason.isReadonly ? (
@@ -403,12 +406,33 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             // grid takes the full width; closing the panel returns to full width.
             (() => {
               const showDetail = null !== selectedCell && null !== selectedSlot;
-              const showAside = showDetail || !isReadOnly;
+              // The diagnostics aside only claims grid width when it has content
+              // to show: a selected slot's detail, or the (expanded) diagnostics.
+              const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
+              const showAside = showDetail || showDiagnostics;
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
               return (
                 <div className={`${showAside ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4" : ""} ${height}`}>
-                  <div className="relative min-w-0 lg:h-full">
-                    <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
+                  {/* min-h-0 is essential: without it the flex-1 grid wrapper keeps
+                      its content height and overflows past the container, spilling
+                      under the sticky footer (revue #204 — grille coupée en 2). */}
+                  <div className="relative flex min-h-0 min-w-0 flex-col gap-2 lg:h-full">
+                    {/* Collapsed diagnostics → a compact bar re-opens the aside;
+                        the grid keeps full width until then (user request). */}
+                    {!isReadOnly && diagnosticsCollapsed ? (
+                      <button
+                        type="button"
+                        onClick={() => setDiagnosticsCollapsed(false)}
+                        className="flex shrink-0 items-center gap-2 self-start rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+                      >
+                        <AlertTriangle className={`size-4 ${diagnostics.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
+                        Diagnostics du solveur
+                        {diagnostics.length > 0 ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{diagnostics.length}</span> : null}
+                      </button>
+                    ) : null}
+                    <div className="relative min-h-0 min-w-0 flex-1">
+                      <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
+                    </div>
                   </div>
                   {showAside ? (
                     <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
@@ -426,11 +450,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
                         />
                       ) : null}
-                      {isReadOnly ? null : (
+                      {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} />
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

@@ -24,8 +24,8 @@ export function tagLabel(name: string): string {
   return TAG_LABELS[name] ?? LEVEL_LABELS[name] ?? name;
 }
 
-const AXIS_LABEL: Record<TeamTagAxis, string> = { GENRE: "Genre", NIVEAU: "Niveau", AGE: "Âge" };
-const KNOWN_AXES: TeamTagAxis[] = ["GENRE", "NIVEAU", "AGE"];
+export const AXIS_LABEL: Record<TeamTagAxis, string> = { GENRE: "Genre", NIVEAU: "Niveau", AGE: "Âge" };
+export const KNOWN_AXES: TeamTagAxis[] = ["GENRE", "NIVEAU", "AGE"];
 
 export interface TagAxisGroup {
   label: string;

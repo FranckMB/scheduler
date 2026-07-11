@@ -30,10 +30,15 @@ export function useCalendarEntry(id: string | null) {
   });
 }
 
-export function useSchoolHolidays() {
+/**
+ * School holidays. Without a window → the season default (radar, season-wide).
+ * With a [from, to] → that window (the calendar's visible month, so summer and
+ * any month outside the season are shown when browsed).
+ */
+export function useSchoolHolidays(from?: string, to?: string) {
   return useQuery({
-    queryKey: ["school-holidays"],
-    queryFn: cockpitApi.getSchoolHolidays,
+    queryKey: ["school-holidays", from ?? null, to ?? null],
+    queryFn: () => cockpitApi.getSchoolHolidays(from, to),
     staleTime: 3_600_000,
   });
 }

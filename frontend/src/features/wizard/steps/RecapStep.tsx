@@ -1,15 +1,18 @@
+import { useMemo } from "react";
+
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
+import { FAMILY_LABEL, FAMILY_ORDER, groupConstraints } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
-import { coachMeta, orderedCoaches } from "../lib/ranking";
+import { coachMeta, groupedCoaches } from "../lib/ranking";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -40,6 +43,7 @@ export function RecapStep() {
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: reservations = [] } = useReservations(periodEntryId);
   const { data: tiers = [] } = usePriorityTiers();
+  const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
@@ -51,10 +55,38 @@ export function RecapStep() {
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
+  // Coaches split into staffing groups (Salariés / Coachs-joueurs / Bénévoles),
+  // each shown under its own header (user request — same as the constraint tab).
+  const coachGroups = useMemo(() => {
+    const g = groupedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)));
+    return ([["salaried", "Salariés"], ["player", "Coachs-joueurs"], ["other", "Bénévoles"]] as const).map(([k, label]) => ({ label, coaches: g[k] })).filter((s) => s.coaches.length > 0);
+  }, [coaches, coachPlayers]);
+  // Constraints grouped by FAMILY, then by the family's own grouping dimension
+  // (coach→staffing, gymnase→venue, horaire/jours→axis) — same as each tab.
+  const constraintFamilies = useMemo(() => {
+    const ctx = {
+      teams,
+      tiers,
+      tags,
+      coaches,
+      coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
+      venues,
+      coachName: (id: string) => coachName.get(id) ?? "Coach",
+      venueName: (id: string) => venueName.get(id) ?? "Gymnase",
+    };
+    const isKnownFamily = (f: string): boolean => (FAMILY_ORDER as readonly string[]).includes(f);
+    return [
+      ...FAMILY_ORDER.map((family) => ({ family: family as string, sections: groupConstraints(constraints.filter((c) => c.family === family), family, ctx) })),
+      { family: "OTHER", sections: groupConstraints(constraints.filter((c) => !isKnownFamily(c.family)), "OTHER", ctx) },
+    ].filter((g) => g.sections.length > 0);
+    // coachName/venueName are fresh Maps each render; the real inputs are the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [constraints, teams, tiers, tags, coaches, coachPlayers, venues]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -122,20 +154,39 @@ export function RecapStep() {
         <AccordionSection title={<SectionCountTitle label="Coachs" count={coaches.length} />}>
           {0 === coaches.length
             ? empty
-            : orderedCoaches(coaches, coachPlayerIds).map(({ coach: c }) => {
-                const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
-                const fullName = `${c.firstName} ${c.lastName}`.trim();
-                return (
-                  <SummaryRow
-                    key={c.id}
-                    label={`${fullName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
-                    meta={coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}
-                  />
-                );
-              })}
+            : coachGroups.map((group) => (
+                <div key={group.label} className="mb-2 last:mb-0">
+                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                  {group.coaches.map((c) => {
+                    const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
+                    const fullName = `${c.firstName} ${c.lastName}`.trim();
+                    return (
+                      <SummaryRow
+                        key={c.id}
+                        label={`${fullName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
+                        meta={coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Contraintes" count={constraints.length} />}>
-          {0 === constraints.length ? empty : constraints.map((c) => <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />)}
+          {0 === constraints.length
+            ? empty
+            : constraintFamilies.map((group) => (
+                <div key={group.family} className="mb-3 last:mb-0">
+                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
+                  {group.sections.map((section) => (
+                    <div key={section.key} className="mb-1 last:mb-0">
+                      <p className="px-2 text-[11px] font-medium text-muted-foreground">{section.label}</p>
+                      {section.items.map((c) => (
+                        <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Réservations" count={reservations.length} />}>
           {0 === sortedReservations.length

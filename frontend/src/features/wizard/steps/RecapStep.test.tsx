@@ -19,6 +19,7 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardConstraints: () => ({ data: [] }),
+  useWizardTeamTags: () => ({ data: [] }),
   useReservations: () => ({ data: h.reservations }),
   usePriorityTiers: () => ({
     data: [

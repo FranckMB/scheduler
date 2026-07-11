@@ -6,8 +6,9 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
+import { groupConstraints } from "../lib/constraintOrder";
 import { groupedCoaches } from "../lib/ranking";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
@@ -324,51 +325,25 @@ export function ConstraintsStep() {
 
   const list = constraints.filter((c) => c.family === family);
 
-  // Group the list for readability: GROUP (tag) constraints first, then one
-  // section per team in canonical rank order (Fanion S, A, B…), then club-wide,
-  // coach, and any remainder — instead of a flat, unordered list.
-  const sections = useMemo(() => {
-    const byTag = new Map<string, Constraint[]>();
-    const byTeam = new Map<string, Constraint[]>();
-    const byCoach = new Map<string, Constraint[]>();
-    const clubWide: Constraint[] = [];
-    const other: Constraint[] = [];
-    const push = (m: Map<string, Constraint[]>, k: string, c: Constraint): void => {
-      m.set(k, [...(m.get(k) ?? []), c]);
-    };
-    for (const c of list) {
-      const tag = "string" === typeof c.config?.targetTag ? (c.config.targetTag as string) : null;
-      if ("CLUB" === c.scope && null !== tag) {
-        push(byTag, tag, c);
-      } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
-        push(byTeam, c.scopeTargetId, c);
-      } else if ("COACH" === c.scope && null !== c.scopeTargetId) {
-        push(byCoach, c.scopeTargetId, c);
-      } else if ("CLUB" === c.scope) {
-        clubWide.push(c);
-      } else {
-        other.push(c);
-      }
-    }
-    const out: { key: string; label: string; items: Constraint[] }[] = [];
-    [...byTag.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tag}`, items }));
-    if (clubWide.length > 0) {
-      out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
-    }
-    [...teams].sort(compareTeamsByRank).forEach((t) => {
-      const items = byTeam.get(t.id);
-      if (items && items.length > 0) {
-        out.push({ key: `t:${t.id}`, label: t.name, items });
-      }
-    });
-    [...byCoach.entries()].forEach(([cid, items]) => out.push({ key: `c:${cid}`, label: coachName.get(cid) ?? "Coach", items }));
-    if (other.length > 0) {
-      out.push({ key: "other", label: "Autres", items: other });
-    }
-    return out;
-  // coachName is a fresh Map each render; teams/list are the real inputs.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, teams]);
+  // Sections with a header per group. The grouping DIMENSION depends on the
+  // family (shared groupConstraints helper — same on the recap) : coaches by
+  // staffing group, gymnase by venue, horaire/jours by tag axis then team.
+  const sections = useMemo(
+    () =>
+      groupConstraints(list, family, {
+        teams,
+        tiers,
+        tags,
+        coaches,
+        coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
+        venues,
+        coachName: (id) => coachName.get(id) ?? "Coach",
+        venueName: (id) => venueName.get(id) ?? "Gymnase",
+      }),
+    // coachName/venueName are fresh Maps each render; the real inputs are the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [list, family, teams, tiers, tags, coaches, coachPlayers, venues],
+  );
 
   return (
     <div>
@@ -469,7 +444,7 @@ export function ConstraintsStep() {
             )}
             <Select aria-label="Gymnase" className="h-8 w-44" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
               <option value="">— gymnase —</option>
-              {venues.map((v) => (
+              {[...venues].sort((a, b) => a.name.localeCompare(b.name, "fr")).map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
                 </option>

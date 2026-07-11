@@ -93,7 +93,8 @@ export const createCalendarEntry = (json: Record<string, unknown>): Promise<Cale
 
 export const deleteCalendarEntry = (id: string): Promise<unknown> => api.delete(`calendar_entries/${id}`).json();
 
-export const getSchoolHolidays = (): Promise<SchoolHolidaysResponse> => api.get("school-holidays").json();
+export const getSchoolHolidays = (from?: string, to?: string): Promise<SchoolHolidaysResponse> =>
+  api.get("school-holidays", from && to ? { searchParams: { from, to } } : undefined).json();
 
 /** Explicit window: without from/to the backend needs an active season and 400s otherwise. */
 export const getPublicHolidays = (from: string, to: string): Promise<PublicHolidaysResponse> =>
