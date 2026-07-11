@@ -31,7 +31,8 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:constraint:export-implicit` | Exporte la config des contraintes implicites en JSON (versionnée avec le contrat) |
 | `app:overlays:purge` | Supprime les versions overlay des périodes échues — manuel, jamais auto |
 | `app:seasons:purge` | Supprime les saisons < N-1 (rétention : courante + précédente + futures) — **auto, horaire (cron-runner, RGPD PR-3)** |
-| `app:users:purge-inactive` | RGPD rétention : préavis email à 23 mois d'inactivité, anonymisation à 24 mois (préavis ≥ 14 j exigé) — **auto, horaire (cron-runner)** |
+| `app:users:purge-inactive` | RGPD rétention : préavis email à 23 mois d'inactivité, anonymisation à 24 mois (préavis ≥ 1 mois exigé) — **auto, horaire (cron-runner)** |
+| `app:audit:purge` | RGPD : purge le journal d'audit > 12 mois — **connexion admin** (append-only : le rôle runtime n'a pas de policy DELETE) — **auto, horaire (cron-runner)** |
 | `app:purge-orphans` | Nettoie les orphelins logiques pré-cascade (réservations orphelines, liens pendants) — manuel |
 | `app:users:purge-unverified` | Supprime les comptes non vérifiés > 7 j — **auto, horaire (cron-runner)** |
 | `app:clubs:purge-erased` | RGPD : purge le workspace des clubs dont le délai de grâce d'effacement (30 j) est échu — l'identité publique FFBB survit — **auto, horaire (cron-runner)** |

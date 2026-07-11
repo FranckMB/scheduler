@@ -36,6 +36,7 @@ final class ErasedClubPurger
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SeasonDataPurger $seasonDataPurger,
+        private readonly AuditTrail $auditTrail,
     ) {}
 
     /** @return int nombre de lignes supprimées (workspace complet) */
@@ -80,6 +81,9 @@ final class ErasedClubPurger
             $this->entityManager->flush();
         }
         $this->entityManager->clear();
+
+        // Audit APRÈS le clear (l'insert DBAL ne touche pas l'unit of work).
+        $this->auditTrail->record(\App\Enum\AuditAction::CLUB_PURGED, null, $clubId, 'Club', $clubId, ['rowsDeleted' => $deleted]);
 
         return $deleted;
     }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Enum\AuditAction;
+use App\Service\AuditTrail;
 use App\Service\SeasonDataPurger;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -41,6 +43,7 @@ final class PurgeSeasonsCommand extends Command
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly SeasonResolver $seasonResolver,
         private readonly SeasonDataPurger $seasonDataPurger,
+        private readonly AuditTrail $auditTrail,
     ) {
         parent::__construct();
     }
@@ -121,6 +124,7 @@ final class PurgeSeasonsCommand extends Command
             $io->writeln(\sprintf('  %s purge season %s (%s, club %s)', $dryRun ? '<comment>would</comment>' : '<info>✓</info>', $season->getName(), $season->getId(), $clubId));
             if (!$dryRun) {
                 $this->seasonDataPurger->purge($clubId, $season->getId(), deleteSeasonRow: true);
+                $this->auditTrail->record(AuditAction::SEASON_PURGED, null, $clubId, 'Season', $season->getId());
             }
             ++$purged;
         }

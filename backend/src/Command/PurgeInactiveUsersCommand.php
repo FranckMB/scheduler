@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Service\AccountErasureService;
+use App\Service\AuditTrail;
 use App\Service\InactivityMailBuilder;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -53,6 +55,7 @@ final class PurgeInactiveUsersCommand extends Command
         private readonly MailerInterface $mailer,
         private readonly ClockInterface $clock,
         private readonly ManagerRegistry $managerRegistry,
+        private readonly AuditTrail $auditTrail,
     ) {
         parent::__construct();
     }
@@ -158,6 +161,7 @@ final class PurgeInactiveUsersCommand extends Command
             if (!$dryRun) {
                 try {
                     $this->accountErasureService->erase($user);
+                    $this->auditTrail->record(AuditAction::ACCOUNT_ERASED, null, null, 'User', $userId, ['reason' => 'inactivity']);
                 } catch (Throwable $e) {
                     $failed = true;
                     $io->warning(\sprintf('Erasure of %s failed: %s', $userId, $e->getMessage()));

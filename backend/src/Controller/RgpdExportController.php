@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Repository\ClubUserRepository;
+use App\Service\AuditTrail;
 use App\Service\RgpdExportService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -33,6 +35,7 @@ final class RgpdExportController extends AbstractController
         private readonly ClubUserRepository $clubUserRepository,
         private readonly RequestStack $requestStack,
         private readonly RateLimiterFactory $rgpdExportLimiter,
+        private readonly AuditTrail $auditTrail,
     ) {}
 
     #[Route('/api/me/export', name: 'api_me_export', methods: ['GET'])]
@@ -45,6 +48,8 @@ final class RgpdExportController extends AbstractController
         if (null !== ($throttled = $this->throttle($user))) {
             return $throttled;
         }
+
+        $this->auditTrail->record(AuditAction::EXPORT_USER, $user->getId());
 
         return $this->downloadable($this->exportService->exportUser($user), 'mes-donnees');
     }
@@ -75,6 +80,8 @@ final class RgpdExportController extends AbstractController
         if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {
             return $this->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
         }
+
+        $this->auditTrail->record(AuditAction::EXPORT_CLUB, $user->getId(), $clubId);
 
         return $this->downloadable($this->exportService->exportClub($clubId), 'donnees-club');
     }
