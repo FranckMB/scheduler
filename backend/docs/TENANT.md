@@ -95,7 +95,7 @@ services:
 | HTTP (no club_id resolvable) | No | Cleared at request start | Yes | Fail-closed: tenant tables return 0 rows |
 | Register (anonymous) | No | Yes, inside the transaction (AuthController) | Yes | WITH CHECK would reject the seeding otherwise |
 | Messenger worker | No | Yes — handler sets it from the message `clubId` | Yes | `GenerateScheduleHandler` / `ExportPdfHandler`, cleared in `finally` |
-| CLI (`doctrine:query:sql` default) | No | No | Yes | 0 rows on tenant tables — use `--connection admin` for ops |
+| CLI (`dbal:run-sql` default) | No | No | Yes | 0 rows on tenant tables — use `--connection admin` for ops |
 | Tests | Yes | Yes | Yes | dama rollback also reverts the GUC (`set_config(..., false)` is transactional) |
 
 ## Security Considerations

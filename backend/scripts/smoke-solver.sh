@@ -42,7 +42,7 @@ fi
 #    USER_EMAIL's membership — a bare "club LIMIT 1" can return a club the
 #    token user isn't a member of, yielding a 403 at generate time.
 club_for_user() {
-  php "php bin/console doctrine:query:sql \"SELECT c.id FROM club c JOIN club_user cu ON cu.club_id = c.id JOIN app_user u ON u.id = cu.user_id WHERE u.email = '$USER_EMAIL' LIMIT 1\"" \
+  php "php bin/console dbal:run-sql \"SELECT c.id FROM club c JOIN club_user cu ON cu.club_id = c.id JOIN app_user u ON u.id = cu.user_id WHERE u.email = '$USER_EMAIL' LIMIT 1\"" \
     | grep -oiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true
 }
 CLUB_ID=$(club_for_user)

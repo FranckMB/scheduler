@@ -3,24 +3,22 @@ doctrine:
         default_connection: default
         connections:
             # Runtime connection — RLS-restricted app_user. All ORM traffic.
+            # use_savepoints removed: DBAL 4 always uses savepoints for nested
+            # transactions (doctrine-bundle 3 dropped the option).
             default:
                 url: '%env(resolve:DATABASE_URL)%'
                 profiling_collect_backtrace: '%kernel.debug%'
-                use_savepoints: true
             # Admin connection — clubscheduler (superuser, bypasses RLS).
             # Used ONLY by migrations, database create/drop and ops/debug
             # (--connection admin). This is the superadmin supervision door.
             admin:
                 url: '%env(resolve:DATABASE_ADMIN_URL)%'
                 profiling_collect_backtrace: '%kernel.debug%'
-                use_savepoints: true
     orm:
-        # Native PHP 8.4 lazy objects (ORM 3.5+ recommended path). The legacy
-        # enable_lazy_ghost_objects relied on symfony/var-exporter LazyGhost,
-        # removed in var-exporter 8 (pulled transitively by the 2026-07 bumps).
-        # auto_generate_proxy_classes is ignored when this option is on.
-        enable_native_lazy_objects: true
-        report_fields_where_declared: true
+        # doctrine-bundle 3 (DBAL 4, ORM 3.4+): native PHP 8.4 lazy objects are
+        # ALWAYS on (LazyGhost/proxy generation removed — no option left), and the
+        # legacy toggles report_fields_where_declared / controller_resolver /
+        # auto_generate_proxy_classes no longer exist (their behaviour is the default).
         validate_xml_mapping: true
         naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
         identity_generation_preferences:
@@ -33,8 +31,6 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Entity'
                 prefix: 'App\Entity'
                 alias: App
-        controller_resolver:
-            auto_mapping: false
         filters:
             tenant_filter:
                 class: App\Doctrine\Filter\TenantFilter
@@ -57,8 +53,6 @@ when@test:
 when@prod:
     doctrine:
         orm:
-            auto_generate_proxy_classes: false
-            proxy_dir: '%kernel.build_dir%/doctrine/orm/Proxies'
             query_cache_driver:
                 type: pool
                 pool: doctrine.system_cache_pool
