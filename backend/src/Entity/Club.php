@@ -64,6 +64,17 @@ class Club
     #[ORM\Column(type: 'boolean')]
     private bool $onboardingCompleted = false;
 
+    // RGPD (droit à l'effacement) : non-null = purge du workspace programmée à
+    // cette date (dernier admin effacé + délai de grâce 30 j). Annulable en la
+    // remettant à null tant que app:clubs:purge-erased n'est pas passé.
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $erasureScheduledAt = null;
+
+    // Posé par la purge RGPD : le workspace a été vidé, seule l'identité
+    // publique FFBB du club subsiste (référentiel adverse / win-back).
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $unsubscribedAt = null;
+
     #[ORM\Column(type: 'string', length: 64, unique: true, nullable: true)]
     private ?string $ffbbClubCode = null;
 
@@ -328,6 +339,30 @@ class Club
     public function isOnboardingCompleted(): bool
     {
         return $this->onboardingCompleted;
+    }
+
+    public function getErasureScheduledAt(): ?DateTimeImmutable
+    {
+        return $this->erasureScheduledAt;
+    }
+
+    public function setErasureScheduledAt(?DateTimeImmutable $erasureScheduledAt): self
+    {
+        $this->erasureScheduledAt = $erasureScheduledAt;
+
+        return $this;
+    }
+
+    public function getUnsubscribedAt(): ?DateTimeImmutable
+    {
+        return $this->unsubscribedAt;
+    }
+
+    public function setUnsubscribedAt(?DateTimeImmutable $unsubscribedAt): self
+    {
+        $this->unsubscribedAt = $unsubscribedAt;
+
+        return $this;
     }
 
     public function setOnboardingCompleted(bool $onboardingCompleted): self

@@ -7,9 +7,12 @@ namespace App\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
+use App\Entity\Competition;
 use App\Entity\Constraint;
 use App\Entity\ConstraintConflict;
+use App\Entity\Fixture;
 use App\Entity\PeriodReminderLog;
+use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
@@ -69,6 +72,11 @@ final class SeasonDataPurger
             \App\Entity\ScheduleStructureSnapshot::class,
             ScheduleSlotTemplate::class,
             Constraint::class,
+            Reservation::class,
+            // Module matchs (ajouté après ce purger — gap RGPD constaté PR-1) :
+            // Fixture avant Competition (competitionId y pointe).
+            Fixture::class,
+            Competition::class,
             TeamCoach::class,
             CoachPlayerMembership::class,
             CalendarEntry::class,

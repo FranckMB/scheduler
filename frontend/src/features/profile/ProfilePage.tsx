@@ -10,7 +10,7 @@ import { isPasswordValid, PASSWORD_REQUIREMENT } from "@/shared/lib/passwordPoli
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
-import { useChangePassword, useUpdateProfile } from "./queries";
+import { useChangePassword, useDeleteAccount, useUpdateProfile } from "./queries";
 
 function ProfileForm({ firstName, lastName, email }: { firstName: string; lastName: string; email: string }) {
   const update = useUpdateProfile();
@@ -115,6 +115,66 @@ function PasswordForm() {
   );
 }
 
+/**
+ * RGPD — droit à l'effacement, self-service. Confirmation forte : l'adresse
+ * e-mail exacte du compte doit être re-saisie avant que le bouton ne s'arme.
+ * L'anonymisation est immédiate ; sans autre gestionnaire, les données du club
+ * sont supprimées après un délai de grâce de 30 jours.
+ */
+function DangerZone({ email }: { email: string }) {
+  const deleteAccount = useDeleteAccount();
+  const logout = useLogout();
+  const [confirm, setConfirm] = useState("");
+
+  const armed = confirm.trim().toLowerCase() === email.toLowerCase();
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    deleteAccount.mutate(confirm.trim().toLowerCase(), {
+      onSuccess: (result) => {
+        toast.info(
+          result.clubPurgeScheduled
+            ? `Compte supprimé. Sans autre gestionnaire, les données du club seront effacées dans ${result.gracePeriodDays} jours.`
+            : "Compte supprimé.",
+        );
+        logout();
+      },
+    });
+  };
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="text-destructive">Supprimer mon compte</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-3" onSubmit={submit}>
+          <p className="text-sm text-muted-foreground">
+            Action <strong>irréversible</strong> : vos données personnelles sont anonymisées immédiatement. Si vous êtes
+            le dernier gestionnaire, les données du club seront supprimées après un délai de 30 jours (seule la fiche
+            publique FFBB du club est conservée).
+          </p>
+          <div className="space-y-1">
+            <Label htmlFor="confirmEmail">Confirmez en saisissant votre e-mail</Label>
+            <Input
+              id="confirmEmail"
+              type="email"
+              autoComplete="off"
+              placeholder={email}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          </div>
+          <Button type="submit" variant="destructive" disabled={!armed || deleteAccount.isPending}>
+            {deleteAccount.isPending ? <Spinner className="size-4" /> : null}
+            Supprimer définitivement mon compte
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ProfilePage() {
   const { data, isLoading } = useMe();
 
@@ -132,6 +192,7 @@ export function ProfilePage() {
       </div>
       <ProfileForm firstName={data.firstName} lastName={data.lastName} email={data.email} />
       <PasswordForm />
+      <DangerZone email={data.email} />
     </div>
   );
 }

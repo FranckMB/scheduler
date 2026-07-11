@@ -22,3 +22,11 @@ export function useChangePassword() {
     onSuccess: () => toast.success("Mot de passe modifié."),
   });
 }
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: (email: string) => profileApi.deleteAccount(email),
+    // Pas de toast succès ici : l'appelant déconnecte immédiatement (le compte
+    // n'existe plus) et affiche la conséquence club si elle s'applique.
+  });
+}

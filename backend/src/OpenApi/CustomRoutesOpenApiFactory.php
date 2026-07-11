@@ -149,6 +149,29 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'email' => ['type' => 'string', 'format' => 'email'],
                 ],
             ]),
+        ), delete: new Operation(
+            operationId: 'deleteApiMe',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Account anonymized (RGPD erasure)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'message' => ['type' => 'string'],
+                        'clubPurgeScheduled' => ['type' => 'boolean'],
+                        'gracePeriodDays' => ['type' => 'integer'],
+                    ],
+                ]),
+                '400' => new Response('Confirmation email mismatch'),
+                '401' => new Response('Unauthorized'),
+            ],
+            summary: 'RGPD erasure: anonymize the connected account (confirmation = exact account email in body); if last manager, schedule the club workspace purge (30-day grace)',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'required' => ['email'],
+                'properties' => [
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                ],
+            ]),
         )));
 
         $paths->addPath('/api/me/password', new PathItem(post: new Operation(

@@ -45,6 +45,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $emailVerifiedAt = null;
 
+    // RGPD (droit à l'effacement) : non-null = compte anonymisé — l'identité a
+    // été écrasée (email/nom/hash) et ne peut plus servir à s'authentifier.
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $anonymizedAt = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -151,6 +156,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getEmailVerifiedAt(): ?DateTimeImmutable
     {
         return $this->emailVerifiedAt;
+    }
+
+    public function getAnonymizedAt(): ?DateTimeImmutable
+    {
+        return $this->anonymizedAt;
+    }
+
+    public function setAnonymizedAt(?DateTimeImmutable $anonymizedAt): self
+    {
+        $this->anonymizedAt = $anonymizedAt;
+
+        return $this;
     }
 
     public function setEmailVerifiedAt(?DateTimeImmutable $emailVerifiedAt): self
