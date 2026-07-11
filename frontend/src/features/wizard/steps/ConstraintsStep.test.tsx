@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   resCreate: vi.fn(),
   resDelete: vi.fn(),
   reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
-  tags: [] as { id: string; name: string; color: string | null; isSystem: boolean }[],
+  tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
 
@@ -59,8 +59,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
   it("only offers groups (tags) that have at least one assigned team", () => {
     h.tags = [
-      { id: "tag-fem", name: "FEMININE", color: null, isSystem: true },
-      { id: "tag-sen", name: "SENIOR", color: null, isSystem: true },
+      { id: "tag-fem", name: "FEMININE", color: null, isSystem: true, axis: "GENRE" },
+      { id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" },
     ];
     // Only SENIOR is assigned to a team — FEMININE concerns no team.
     h.tagAssignments = [{ id: "a1", teamId: "t1", tagId: "tag-sen", seasonId: "s1" }];
@@ -68,7 +68,10 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     renderWithProviders(<ConstraintsStep />);
     const target = screen.getByRole("combobox", { name: "Cible" });
     const options = Array.from(target.querySelectorAll("option")).map((o) => o.textContent);
-    expect(options).toContain("SENIOR");
+    // SENIOR is shown under the Âge axis, labelled « Adulte »; FEMININE (unassigned) is absent.
+    expect(within(target).getByRole("group", { name: "Âge" })).toBeInTheDocument();
+    expect(options).toContain("Adulte");
+    expect(options).not.toContain("Femme");
     expect(options).not.toContain("FEMININE");
   });
 

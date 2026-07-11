@@ -1,7 +1,7 @@
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
-import type { TeamLevel } from "../api";
+import { LEVEL_LABEL } from "../lib/labels";
 import { coachMeta, orderedCoaches } from "../lib/ranking";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
@@ -15,18 +15,6 @@ import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
 
 // Manager-facing labels for the FFBB play levels (mirrors the teams step).
-const LEVEL_LABEL: Record<TeamLevel, string> = {
-  ELITE: "Élite",
-  NATIONAL: "National",
-  REGIONAL: "Régional",
-  PRE_REGION: "Pré-région",
-  DEPARTEMENTAL: "Départemental",
-  HONNEUR: "Honneur",
-  PROMOTION: "Promotion",
-  LOISIR_ADULTE: "Loisir adulte",
-  LOISIR_JEUNE: "Loisir jeune",
-};
-
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
     <Card>

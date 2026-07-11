@@ -10,10 +10,22 @@ use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
+use App\Enum\TeamTagAxis;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class TeamTagService
 {
+    /** Deterministic axis of each system tag, for the constraint target grouping (Lot B). */
+    private const SYSTEM_TAG_AXES = [
+        'FEMININE' => TeamTagAxis::GENRE, 'MASCULINE' => TeamTagAxis::GENRE, 'MIXTE' => TeamTagAxis::GENRE,
+        'EMB' => TeamTagAxis::AGE, 'JEUNE' => TeamTagAxis::AGE, 'SENIOR' => TeamTagAxis::AGE,
+        'U9' => TeamTagAxis::AGE, 'U11' => TeamTagAxis::AGE, 'U13' => TeamTagAxis::AGE,
+        'U15' => TeamTagAxis::AGE, 'U18' => TeamTagAxis::AGE, 'U21' => TeamTagAxis::AGE,
+        'ELITE' => TeamTagAxis::NIVEAU, 'REGIONAL' => TeamTagAxis::NIVEAU, 'NATIONAL' => TeamTagAxis::NIVEAU,
+        'DEPARTEMENTAL' => TeamTagAxis::NIVEAU, 'LOISIR_ADULTE' => TeamTagAxis::NIVEAU, 'LOISIR_JEUNE' => TeamTagAxis::NIVEAU,
+        'HONNEUR' => TeamTagAxis::NIVEAU, 'PROMOTION' => TeamTagAxis::NIVEAU, 'PRE_REGION' => TeamTagAxis::NIVEAU,
+    ];
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
     ) {}
@@ -69,6 +81,10 @@ final class TeamTagService
         $tags = [];
         foreach ($existingTags as $tag) {
             $tags[$tag->getName()] = $tag;
+            // Backfill the axis on a pre-Lot-B tag (idempotent).
+            if (null === $tag->getAxis() && isset(self::SYSTEM_TAG_AXES[$tag->getName()])) {
+                $tag->setAxis(self::SYSTEM_TAG_AXES[$tag->getName()]);
+            }
         }
 
         $requiredTags = [
@@ -102,6 +118,7 @@ final class TeamTagService
                 $tag->setName($name);
                 $tag->setColor($color);
                 $tag->setIsSystem(true);
+                $tag->setAxis(self::SYSTEM_TAG_AXES[$name]);
 
                 $this->entityManager->persist($tag);
                 $tags[$name] = $tag;
