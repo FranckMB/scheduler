@@ -1,7 +1,7 @@
 # Backlog priorisé — effort × impact (cap commercialisation mi-2027)
 
 > **Statut** : vue de pilotage, régénérée le 2026-07-11 (SHA `main` au moment de l'écriture).
-> **Nature** : `roadmap.md` est la **carte** (tout ce que la vision contient) ; **ce fichier est la coupe priorisée** — quoi faire, dans quel ordre, à quel coût. Un item livré **quitte** ce fichier (il reste tracé dans `roadmap.md` / specs courantes).
+> **Nature** : `roadmap.md` est la **carte** (tout ce que la vision contient) ; **ce fichier est la coupe priorisée** — quoi faire, dans quel ordre, à quel coût. Un item livré **quitte** ce fichier (il reste tracé dans `roadmap.md` / specs courantes) ; **les ids sont stables et non réutilisés** (un « trou » dans la numérotation = un item livré, pas un oubli — ex. P0-5 vol de créneau inter-version, livré le 2026-07-11, cf. `planning-versions.md` §D3quater).
 > **Source** : agrégat des specs `evolution/`, `docs/technical-debt.md`, et des audits `specs/audit/` (dernier : 2026-07-10, global **79/100**, 4 impasses GA ouvertes).
 
 ## Légende
@@ -21,7 +21,6 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 | P0-2 | **Config prod** — profil prod distinct, secrets managés, `APP_ENV=prod`/`DEBUG=0` durci, healthchecks, limites RAM appliquées. | 🔴 | M | Aucune config prod n'existe → pas déployable proprement. | — |
 | P0-3 | **Backups PostgreSQL** — `pg_dump` planifié + restauration testée. | 🔴 | S | Zéro backup = perte totale sur incident. Trivial techniquement, impardonnable si absent. | P0-2 |
 | P0-4 | **Observabilité** — Sentry (erreurs) + logs structurés sans PII + métriques. | 🔴 | M | Zéro visibilité prod ; un incident client = aveugle. | P0-2 |
-| ~~P0-5~~ | **Vol de créneau inter-version** — ✅ **livré 2026-07-11**. L'import matche par **placement** (plus par id global) et scope l'id des nouvelles lignes par schedule → l'import ne vole plus le créneau HARD d'une version sœur. Backend seul, sans migration (engine/contrat/golden inchangés). Voir planning-versions §D3quater. | 🔴 | ~~M~~ | Fait. | — |
 
 ## P1 — Enablers à fort levier (débloquent plusieurs features)
 
@@ -45,10 +44,10 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P3-1 | **Matchs — reste palier A** : volet joueur (`CoachPlayerMembership`), `Team.preferredMatchWindow`, envelope HARD jour/coup d'envoi | 🟡 | M | Paliers B (dérogation/trajet/annuaire adverse) / C plus tard |
-| P3-2 | **Overlays cockpit** — reste ouvert : DayDialog période `custom` **générante** (aujourd'hui 422, mitigé par bouton désactivé) | 🟡 | M | `cutoff` = **✅ livré** (reliquats 2026-07-06) ; `mutualisation` moteur = **❌ abandonné** (résolu via réservation, salle divisible + capacité 2) ; **versions d'overlay = ✅ livré (2026-07-11)** — cf. P3-5 |
+| P3-2 | **Overlays cockpit** — DayDialog période `custom` **générante** (aujourd'hui 422, mitigé par bouton désactivé) | 🟡 | M | Le reste des overlays est soldé (cutoff livré, mutualisation via réservation, versions d'overlay livrées) — seul `custom` générant reste. |
 | P3-3 | **Modèle « templates → occurrences »** | 🟡 | L | Fondation absente ; débloque « éditer baseline ⇒ répercuter sur secondaires » (cascade reportée) |
 | P3-4 | **Enregistrement FFBB** (légitimité / anti-squatting du code club) | 🟡 | M | spec'd (#145) ; A5/A6 déjà fermés |
-| P3-5 | **Versions — diff/comparaison · restaurer une ARCHIVED** | 🟡 | L | hors périmètre D assumé. *(**versions d'overlay = ✅ livré 2026-07-11**, planning-versions §D3ter)* |
+| P3-5 | **Versions — diff/comparaison · restaurer une ARCHIVED** | 🟡 | L | hors périmètre D assumé (les versions d'overlay, elles, sont livrées). |
 | P3-6 | **`solver_metrics` — persistance + partition + purge 6 mois** | 🟡 | M | déjà calculées (`SolverMetricsMapper`), pas persistées ; alimente la console superadmin |
 | P3-7 | **Import équipes Excel — UI wizard** | ⚪ | S | backend `FfbbExcelImporter` existe ; l'API FFBB doit à terme remplacer l'import manuel |
 
@@ -76,7 +75,7 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 
 ## Ordre d'attaque conseillé
 
-1. **P0 en premier** — sans RGPD + prod + backups + observabilité, l'app n'est pas vendable, quel que soit le produit. P0-5 (intégrité versions) en parallèle car structurant.
+1. **P0 en premier** — sans RGPD + prod + backups + observabilité, l'app n'est pas vendable, quel que soit le produit.
 2. **P1-1 (rôles)** ensuite — c'est le verrou qui débloque le plus de valeur aval (P2-1, salle convivialité, comptes coach).
 3. **P1-2 (superadmin SA0)** — solde d'un coup toute la colonne « manuel aujourd'hui » (crons, refresh FFBB, purge, métriques).
 4. Puis **P2** (différenciateurs) selon l'appétit commercial, **P3/P4** par lots opportunistes.
