@@ -59,6 +59,9 @@ vi.mock("./api", () => {
   };
 });
 
+const navigate = vi.fn();
+vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
+
 const { meState } = vi.hoisted(() => ({ meState: { socleValidatedAt: null as string | null } }));
 
 vi.mock("@/features/auth/queries", () => ({
@@ -74,6 +77,7 @@ vi.mock("@/features/auth/queries", () => ({
 
 beforeEach(() => {
   meState.socleValidatedAt = null;
+  navigate.mockClear();
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
 });
 
@@ -138,6 +142,10 @@ describe("PlanningPage (integration)", () => {
   describe("reopen escalation (validated plan with overlays)", () => {
     const validated = [{ id: SID, name: "Planning A", status: "VALIDATED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
 
+    beforeEach(() => {
+      vi.mocked(reopenSchedule).mockReset(); // per-test call count + queued once-values
+    });
+
     afterEach(() => {
       vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }]);
     });
@@ -156,6 +164,31 @@ describe("PlanningPage (integration)", () => {
       await user.click(screen.getByRole("button", { name: "Rouvrir et supprimer" }));
       expect(vi.mocked(reopenSchedule)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(reopenSchedule).mock.calls[1]).toEqual([SID, { confirmDeleteOverlays: true }]);
+      // Reopened → back to the wizard's generation step.
+      expect(navigate).toHaveBeenCalledWith("/wizard");
     });
+
+    it("« Rouvrir » (no overlays) → wizard generation step", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listSchedules).mockResolvedValue(validated);
+      vi.mocked(reopenSchedule).mockResolvedValueOnce({});
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      await user.click(screen.getByRole("button", { name: /rouvrir/i }));
+      expect(vi.mocked(reopenSchedule)).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith("/wizard");
+    });
+  });
+
+  it("« Valider » → lands on the planning view", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+
+    // Toolbar "Valider" opens the confirm dialog; confirm inside it.
+    await user.click(screen.getByRole("button", { name: /valider/i }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Valider" }));
+    expect(navigate).toHaveBeenCalledWith("/planning");
   });
 });

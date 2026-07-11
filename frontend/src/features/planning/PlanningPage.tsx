@@ -1,8 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useMe, useRenamePlanning } from "@/features/auth/queries";
+import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -142,6 +144,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { data: coachPlayers = [] } = useCoachPlayers();
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
   const regenerateMutation = useRegenerate();
@@ -173,6 +176,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         onSuccess: () => {
           setValidateOverlayCount(null);
           setValidateOpen(false);
+          // Validated → land on the (now read-only) planning view.
+          navigate("/planning");
         },
         onError: (error) => {
           if (error instanceof OverlaysExistError) {
@@ -191,7 +196,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     reopenMutation.mutate(
       { id: validScheduleId, confirmDeleteOverlays },
       {
-        onSuccess: () => setReopenOverlayCount(null),
+        onSuccess: () => {
+          setReopenOverlayCount(null);
+          // Reopened to rework the plan → back to the wizard's generation step.
+          useWizardStore.getState().jumpTo("generate");
+          navigate("/wizard");
+        },
         // Generic failures are toasted by the hook (unmount-safe); only the
         // 409 escalation is UI state handled here.
         onError: (error) => {
