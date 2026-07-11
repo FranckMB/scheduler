@@ -9,6 +9,7 @@ import { Select } from "@/shared/components/ui/select";
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
 import { groupedCoaches } from "../lib/ranking";
+import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
@@ -289,15 +290,16 @@ export function ConstraintsStep() {
   const teamPicker = (
     <Select aria-label="Cible" title="Qui est concerné : tout le club, un groupe (tag), ou une équipe précise" className="h-8 w-48" value={target} onChange={(e) => setTarget(e.target.value)}>
       <option value="">Toutes les équipes</option>
-      {visibleTags.length > 0 ? (
-        <optgroup label="Groupes">
-          {visibleTags.map((t) => (
+      {/* Groups by axis: Genre, Niveau, Âge (Lot B) — then the teams by tier below. */}
+      {groupTagsByAxis(visibleTags).map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.tags.map((t) => (
             <option key={t.id} value={`tag:${t.name}`}>
-              {t.name}
+              {tagLabel(t.name)}
             </option>
           ))}
         </optgroup>
-      ) : null}
+      ))}
       {groupTeamsByTier(teams, tiers).map((group) => (
         <optgroup key={group.tier?.id ?? "orphan"} label={tierGroupLabel(group.tier)}>
           {group.teams.map((t) => (

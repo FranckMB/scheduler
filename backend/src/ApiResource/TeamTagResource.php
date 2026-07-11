@@ -39,6 +39,10 @@ class TeamTagResource
     #[Groups(['read'])]
     public bool $isSystem = false;
 
+    /** GENRE / NIVEAU / AGE — the axis grouping the constraint target picker (null when unclassified). */
+    #[Groups(['read'])]
+    public ?string $axis = null;
+
     public static function fromEntity(TeamTag $entity): self
     {
         $dto = new self;
@@ -49,6 +53,7 @@ class TeamTagResource
         $dto->name = $entity->getName();
         $dto->color = $entity->getColor();
         $dto->isSystem = $entity->getIsSystem();
+        $dto->axis = $entity->getAxis()?->value;
 
         return $dto;
     }

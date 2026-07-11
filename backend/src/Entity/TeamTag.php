@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\TeamTagAxis;
 use App\Repository\TeamTagRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
@@ -39,6 +40,10 @@ class TeamTag implements TenantOwnedInterface
 
     #[ORM\Column(type: 'boolean', options: ['default' => false])]
     private bool $isSystem = false;
+
+    /** GENRE / NIVEAU / AGE for the constraint target grouping — null when the tag fits no axis. */
+    #[ORM\Column(length: 20, nullable: true, enumType: TeamTagAxis::class)]
+    private ?TeamTagAxis $axis = null;
 
     public function __construct()
     {
@@ -144,6 +149,18 @@ class TeamTag implements TenantOwnedInterface
     public function setIsSystem(bool $isSystem): self
     {
         $this->isSystem = $isSystem;
+
+        return $this;
+    }
+
+    public function getAxis(): ?TeamTagAxis
+    {
+        return $this->axis;
+    }
+
+    public function setAxis(?TeamTagAxis $axis): self
+    {
+        $this->axis = $axis;
 
         return $this;
     }

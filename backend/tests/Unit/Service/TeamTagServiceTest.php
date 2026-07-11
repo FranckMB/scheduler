@@ -10,6 +10,7 @@ use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
+use App\Enum\TeamTagAxis;
 use App\Service\TeamTagService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -192,6 +193,16 @@ final class TeamTagServiceTest extends TestCase
         self::assertContains('MASCULINE', $tagNames);
         self::assertContains('LOISIR_ADULTE', $tagNames);
         self::assertContains('LOISIR_JEUNE', $tagNames);
+
+        // Lot B: each system tag is created with its deterministic axis.
+        $byName = [];
+        foreach ($persistedTags as $tag) {
+            $byName[$tag->getName()] = $tag;
+        }
+        self::assertSame(TeamTagAxis::GENRE, $byName['MASCULINE']->getAxis());
+        self::assertSame(TeamTagAxis::AGE, $byName['U15']->getAxis());
+        self::assertSame(TeamTagAxis::AGE, $byName['SENIOR']->getAxis());
+        self::assertSame(TeamTagAxis::NIVEAU, $byName['DEPARTEMENTAL']->getAxis());
     }
 
     protected function setUp(): void

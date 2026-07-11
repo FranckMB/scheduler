@@ -209,11 +209,15 @@ export interface ConstraintPayload {
   calendarEntryId?: string;
 }
 
+export type TeamTagAxis = "GENRE" | "NIVEAU" | "AGE";
+
 export interface TeamTag {
   id: string;
   name: string;
   color: string | null;
   isSystem: boolean;
+  /** Constraint-target grouping axis; null when the tag fits none of the three. */
+  axis: TeamTagAxis | null;
 }
 
 export const listTeamTags = (): Promise<TeamTag[]> => collectionAll<TeamTag>("team_tags");
