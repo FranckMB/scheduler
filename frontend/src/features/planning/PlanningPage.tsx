@@ -216,7 +216,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
-  const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending;
+  // regenerateFromMutation.isPending: "Charger cette version" no longer creates a
+  // PENDING schedule (nothing sets isGenerating), so its own restore must disable
+  // the action here — else a second click double-runs the destructive restore.
+  const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
@@ -391,6 +394,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
               baselineScheduleId={baselineScheduleId}
+              embedded={embedded}
               rightSlot={
                 <>
                   {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}

@@ -8,11 +8,11 @@ const noop = () => {};
 
 const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
 
-function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
+function renderToolbar(schedules: Schedule | Schedule[], { baselineScheduleId = null, embedded = true, selectedScheduleId = "s1" }: { baselineScheduleId?: string | null; embedded?: boolean; selectedScheduleId?: string } = {}) {
   return render(
     <PlanningToolbar
-      schedules={[s]}
-      selectedScheduleId="s1"
+      schedules={Array.isArray(schedules) ? schedules : [schedules]}
+      selectedScheduleId={selectedScheduleId}
       onSelectSchedule={noop}
       viewMode="gymnase"
       onViewMode={noop}
@@ -24,6 +24,7 @@ function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
       isGenerating={false}
       actionBusy={false}
       baselineScheduleId={baselineScheduleId}
+      embedded={embedded}
     />,
   );
 }
@@ -45,11 +46,8 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
   });
 
-  // The « Planning principal » badge moved to the page header (next to the title);
-  // its presence is asserted in PlanningPage.test.
-
   it("never offers a « Définir principal » action (the main plan is the first validated one, not a choice)", () => {
-    renderToolbar(schedule("COMPLETED"), "other");
+    renderToolbar(schedule("COMPLETED"), { baselineScheduleId: "other" });
     expect(screen.queryByRole("button", { name: /principal/i })).not.toBeInTheDocument();
   });
 
@@ -58,9 +56,10 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("option", { name: /★/ })).toBeInTheDocument();
   });
 
-  it("does not star a version that is not the loaded context", () => {
-    renderToolbar(schedule("COMPLETED", { isLiveContext: false }));
-    expect(screen.queryByRole("option", { name: /★/ })).not.toBeInTheDocument();
+  it("stars exactly ONE version — falls back to the latest when no pointer is set", () => {
+    // Neither carries the server pointer → fallback to the latest visible (s2).
+    renderToolbar([schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01", isLiveContext: false }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01", isLiveContext: false })]);
+    expect(screen.getAllByRole("option", { name: /★/ })).toHaveLength(1);
   });
 
   it("labels the version « V1 — … » and offers no rename control (versions are not renamable)", () => {
@@ -70,35 +69,19 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   });
 
   it("offers Supprimer on a plain work version, but not on the baseline", () => {
-    renderToolbar(schedule("COMPLETED"), "other");
+    renderToolbar(schedule("COMPLETED"), { baselineScheduleId: "other" });
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
   });
 
   it("greys « Charger cette version » on the live-context (★) version — reloading it is a no-op", () => {
-    // A single schedule is necessarily the live context (latest generated).
+    // A single schedule is necessarily the live context (fallback to latest).
     renderToolbar(schedule("COMPLETED"));
     expect(screen.getByRole("button", { name: /charger cette version/i })).toBeDisabled();
   });
 
   it("enables « Charger cette version » on a non-live version", () => {
     // s1 (selected) is NOT the loaded context — s2 carries the ★.
-    render(
-      <PlanningToolbar
-        schedules={[schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01", isLiveContext: false }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01", isLiveContext: true })]}
-        selectedScheduleId="s1"
-        onSelectSchedule={noop}
-        viewMode="gymnase"
-        onViewMode={noop}
-        onRegenerate={noop}
-        onValidate={noop}
-        onReopen={noop}
-        onDelete={noop}
-        onRegenerateFrom={noop}
-        isGenerating={false}
-        actionBusy={false}
-        baselineScheduleId={null}
-      />,
-    );
+    renderToolbar([schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01", isLiveContext: false }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01", isLiveContext: true })]);
     expect(screen.getByRole("button", { name: /charger cette version/i })).toBeEnabled();
   });
 
@@ -108,9 +91,18 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   });
 
   it("hides Supprimer on the baseline and on a validated version", () => {
-    renderToolbar(schedule("COMPLETED"), "s1");
+    renderToolbar(schedule("COMPLETED"), { baselineScheduleId: "s1" });
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
-    renderToolbar(schedule("VALIDATED"), "other");
+    renderToolbar(schedule("VALIDATED"), { baselineScheduleId: "other" });
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
+  });
+
+  it("standalone /planning (not embedded) hides the version selector, status badge and score", () => {
+    renderToolbar(schedule("COMPLETED"), { embedded: false });
+    expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Terminé")).not.toBeInTheDocument();
+    expect(screen.queryByText(/score/i)).not.toBeInTheDocument();
+    // View modes remain (consultation still switches gym/coach/team views).
+    expect(screen.getByRole("button", { name: "Par coach" })).toBeInTheDocument();
   });
 });

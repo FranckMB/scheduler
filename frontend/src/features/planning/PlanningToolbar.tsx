@@ -6,7 +6,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
-import { liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
+import { liveContextScheduleId, overlayVersionLabels, seasonLiveContextId, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -31,6 +31,10 @@ interface PlanningToolbarProps {
   baselineScheduleId: string | null;
   /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
   rightSlot?: ReactNode;
+  /** Wizard-embedded (generation step) vs standalone /planning consultation. The
+   *  standalone view hides the version selector, the status badge and the score
+   *  — version management lives in the wizard, /planning is for consulting. */
+  embedded?: boolean;
 }
 
 /**
@@ -58,18 +62,22 @@ export function PlanningToolbar({
   actionBusy,
   baselineScheduleId,
   rightSlot,
+  embedded = false,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
   const isBaseline = null !== selected && selected.id === baselineScheduleId;
   const isValidated = null !== selected && "VALIDATED" === selected.status;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && null !== selected.calendarEntryId;
-  // ★ = the version whose structure is the currently LOADED context. For season
-  // plans this is a server-tracked fact (Schedule.isLiveContext, re-pointed by
-  // "Charger cette version"); overlays have no such pointer, so their ★ is the
-  // latest version of the period (derived).
+  // ★ = the version whose structure is the currently LOADED context. Season plans:
+  // the server pointer (seasonLiveContextId, with a latest-visible fallback for a
+  // NULL/stale pointer). Overlays: the latest version of the period (derived).
+  // Exactly ONE ★: in overlay context only the period's overlay is starred (never
+  // a season plan too), else only the season live-context plan.
+  const seasonLiveId = seasonLiveContextId(schedules);
   const overlayLiveId = isOverlay && null !== selected?.calendarEntryId ? liveContextScheduleId(schedules, selected.calendarEntryId) : null;
-  const isStarred = (schedule: Schedule): boolean => (null !== schedule.calendarEntryId ? schedule.id === overlayLiveId : true === schedule.isLiveContext);
+  const isStarred = (schedule: Schedule): boolean =>
+    isOverlay ? null !== schedule.calendarEntryId && schedule.id === overlayLiveId : null === schedule.calendarEntryId && schedule.id === seasonLiveId;
   const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -88,39 +96,44 @@ export function PlanningToolbar({
   const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && true === selected.hasStructurePhoto;
   // Reloading the version that IS the live context (★) is a no-op — its structure
   // is already the current one (that would just be "Régénérer"). Keep the button
-  // visible but greyed with a reason, so the state reads as deliberate.
-  const isLiveContext = null !== selected && true === selected.isLiveContext;
+  // visible but greyed with a reason, so the state reads as deliberate. Uses the
+  // fallback id so a NULL/stale pointer still disables it on the current version.
+  const isLiveContext = null !== selected && null === selected.calendarEntryId && selected.id === seasonLiveId;
 
   return (
     <div className="flex w-full flex-col gap-2">
-      {/* Row 1 — which version, its state, and how to view it. */}
+      {/* Row 1 — which version, its state, and how to view it. Standalone /planning
+          (consultation) hides the version selector, status badge and score:
+          version management lives in the wizard's generation step (embedded). */}
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          aria-label="Version du planning"
-          value={selectedScheduleId ?? ""}
-          onChange={(event) => onSelectSchedule(event.target.value)}
-          className="h-8 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          {/* Season versions, plus — when an overlay is selected — that period's own
-              overlay versions (V1, V2…). The ★ marks the LOADED context (the version
-              whose structure is live), NOT the one being viewed: it stays put when you
-              consult an older version, and "Charger cette version" moves it. No
-              "principal" here: the main plan is a fact carried by the title badge. */}
-          {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
-            <option key={schedule.id} value={schedule.id}>
-              {labelOf(schedule)}
-              {isStarred(schedule) ? " ★" : ""}
-              {"VALIDATED" === schedule.status ? " · validé" : ""}
-              {null !== schedule.calendarEntryId ? " · période" : ""}
-            </option>
-          ))}
-        </select>
-        {canDelete ? (
+        {embedded ? (
+          <select
+            aria-label="Version du planning"
+            value={selectedScheduleId ?? ""}
+            onChange={(event) => onSelectSchedule(event.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {/* Season versions, plus — when an overlay is selected — that period's own
+                overlay versions (V1, V2…). The ★ marks the LOADED context (the version
+                whose structure is live), NOT the one being viewed: it stays put when you
+                consult an older version, and "Charger cette version" moves it. No
+                "principal" here: the main plan is a fact carried by the title badge. */}
+            {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
+              <option key={schedule.id} value={schedule.id}>
+                {labelOf(schedule)}
+                {isStarred(schedule) ? " ★" : ""}
+                {"VALIDATED" === schedule.status ? " · validé" : ""}
+                {null !== schedule.calendarEntryId ? " · période" : ""}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {embedded && canDelete ? (
           <Button size="sm" variant="ghost" className="h-8 px-2 text-destructive" disabled={actionBusy} onClick={() => setConfirmDelete(true)} aria-label="Supprimer cette version" title="Supprimer cette version">
             <Trash2 className="size-4" />
           </Button>
         ) : null}
-        {selected ? (
+        {embedded && selected ? (
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
               {isValidated ? <Lock className="size-3" /> : null}
@@ -174,7 +187,7 @@ export function PlanningToolbar({
             className="h-8"
             disabled={actionBusy || isGenerating || isLiveContext}
             onClick={onRegenerateFrom}
-            title={isLiveContext ? "Déjà le contexte courant — rien à recharger (utilisez « Régénérer »)" : "Recharge les données (structure) de cette version et relance une génération"}
+            title={isLiveContext ? "Déjà le contexte courant — rien à recharger (utilisez « Régénérer »)" : "Recharge la structure de cette version (sans régénérer) et affiche son planning"}
           >
             <History className="size-4" />
             Charger cette version

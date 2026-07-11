@@ -39,6 +39,19 @@ export function liveContextScheduleId<T extends VersionLike & { id: string }>(sc
 }
 
 /**
+ * The season version that is the loaded context (★). Prefer the server pointer
+ * (Schedule.isLiveContext, re-pointed by "Charger cette version"); fall back to
+ * the latest visible season plan when NO visible version carries it — a pre-deploy
+ * season (NULL pointer), or a pointer left on a deleted/archived version. Without
+ * this fallback the ★ would vanish AND "Charger" would wrongly enable on the
+ * already-current version (restoring an old photo → silent data loss).
+ */
+export function seasonLiveContextId(schedules: Schedule[]): string | null {
+  const plans = visibleSeasonPlans(schedules);
+  return plans.find((s) => true === s.isLiveContext)?.id ?? plans.at(-1)?.id ?? null;
+}
+
+/**
  * The version a PLANNING row should represent (cockpit "Tous les plannings"):
  * the latest FINISHED one (VALIDATED or COMPLETED), so its Eye / Export never
  * target a FAILED or in-flight (PENDING/GENERATING) version — which would open

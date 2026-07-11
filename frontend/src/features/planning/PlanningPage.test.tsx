@@ -91,7 +91,9 @@ describe("PlanningPage (integration)", () => {
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
     expect(screen.getByText("principal")).toBeInTheDocument();
-    expect(screen.getByText(/score 9051/i)).toBeInTheDocument();
+    // Standalone /planning (consultation) hides the toolbar's version selector,
+    // status badge and score — see PlanningToolbar.test.
+    expect(screen.queryByText(/score 9051/i)).not.toBeInTheDocument();
     // A COMPLETED schedule offers validation (→ VALIDATED, read-only).
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
   });

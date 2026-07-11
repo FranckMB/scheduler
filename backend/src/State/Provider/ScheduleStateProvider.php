@@ -69,21 +69,7 @@ class ScheduleStateProvider extends AbstractStateProvider
      */
     private function scheduleIdsWithPhoto(array $scheduleIds): array
     {
-        /** @var list<array{scheduleId: string}> $rows */
-        $rows = $this->entityManager->createQueryBuilder()
-            ->select('sss.scheduleId')
-            ->from(ScheduleStructureSnapshot::class, 'sss')
-            ->where('sss.scheduleId IN (:ids)')
-            ->setParameter('ids', $scheduleIds)
-            ->getQuery()
-            ->getScalarResult();
-
-        $set = [];
-        foreach ($rows as $row) {
-            $set[$row['scheduleId']] = true;
-        }
-
-        return $set;
+        return $this->idSetFromColumn(ScheduleStructureSnapshot::class, 'scheduleId', $scheduleIds);
     }
 
     /**
@@ -93,20 +79,33 @@ class ScheduleStateProvider extends AbstractStateProvider
      */
     private function liveContextScheduleIds(array $scheduleIds): array
     {
-        /** @var list<array{liveContextScheduleId: string|null}> $rows */
+        return $this->idSetFromColumn(Season::class, 'liveContextScheduleId', $scheduleIds);
+    }
+
+    /**
+     * The set of `$ids` that appear in `$entityClass.$column` — one tenant-scoped
+     * batch query folded into a lookup set. (A NULL column value never matches an
+     * IN (:ids) clause, so no null guard is needed.).
+     *
+     * @param class-string $entityClass
+     * @param list<string> $ids
+     *
+     * @return array<string, true>
+     */
+    private function idSetFromColumn(string $entityClass, string $column, array $ids): array
+    {
+        /** @var list<array<string, string>> $rows */
         $rows = $this->entityManager->createQueryBuilder()
-            ->select('s.liveContextScheduleId')
-            ->from(Season::class, 's')
-            ->where('s.liveContextScheduleId IN (:ids)')
-            ->setParameter('ids', $scheduleIds)
+            ->select('e.' . $column)
+            ->from($entityClass, 'e')
+            ->where('e.' . $column . ' IN (:ids)')
+            ->setParameter('ids', $ids)
             ->getQuery()
             ->getScalarResult();
 
         $set = [];
         foreach ($rows as $row) {
-            if (null !== $row['liveContextScheduleId']) {
-                $set[$row['liveContextScheduleId']] = true;
-            }
+            $set[$row[$column]] = true;
         }
 
         return $set;
