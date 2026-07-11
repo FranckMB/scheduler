@@ -11,6 +11,7 @@ use App\Repository\SchoolHolidayPeriodRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use JsonException;
+use RuntimeException;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
@@ -44,9 +45,9 @@ final class HolidaySeeder
     }
 
     /**
-     * @return SeedResult
-     *
      * @throws JsonException
+     *
+     * @return SeedResult
      */
     public function seedSchool(?string $file = null): array
     {
@@ -84,9 +85,9 @@ final class HolidaySeeder
     }
 
     /**
-     * @return SeedResult
-     *
      * @throws JsonException
+     *
+     * @return SeedResult
      */
     public function seedPublic(?string $file = null): array
     {
@@ -120,18 +121,18 @@ final class HolidaySeeder
     }
 
     /**
-     * @return array<string, mixed>
-     *
      * @throws JsonException
+     *
+     * @return array<string, mixed>
      */
     private function readJson(string $file): array
     {
         if (!is_file($file)) {
-            throw new \RuntimeException(\sprintf('Holiday source file not found: %s', $file));
+            throw new RuntimeException(\sprintf('Holiday source file not found: %s', $file));
         }
         $raw = file_get_contents($file);
         if (false === $raw) {
-            throw new \RuntimeException(\sprintf('Could not read holiday source file: %s', $file));
+            throw new RuntimeException(\sprintf('Could not read holiday source file: %s', $file));
         }
 
         /** @var array<string, mixed> $data */

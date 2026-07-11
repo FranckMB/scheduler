@@ -8,6 +8,7 @@ use App\Entity\Season;
 use App\Entity\Team;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -149,7 +150,7 @@ final class ImportFixturesApiTest extends WebTestCase
         // the season's main plan is validated — stamp it like the real flow would
         // (opt-out for the test covering the 409 branch itself).
         if ($validateSocle) {
-            $season->setSocleValidatedAt(new \DateTimeImmutable);
+            $season->setSocleValidatedAt(new DateTimeImmutable);
         }
 
         $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
