@@ -31,6 +31,8 @@ use Throwable;
 #[AsController]
 final class RegenerateFromVersionController extends AbstractController implements SeasonScopedWriteInterface
 {
+    private const IN_FLIGHT = [ScheduleStatus::PENDING, ScheduleStatus::GENERATING];
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly MessageBusInterface $messageBus,
@@ -38,8 +40,6 @@ final class RegenerateFromVersionController extends AbstractController implement
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly StructureRestorer $structureRestorer,
     ) {}
-
-    private const IN_FLIGHT = [ScheduleStatus::PENDING, ScheduleStatus::GENERATING];
 
     #[Route('/api/schedules/{id}/regenerate-from', name: 'api_schedule_regenerate_from', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse

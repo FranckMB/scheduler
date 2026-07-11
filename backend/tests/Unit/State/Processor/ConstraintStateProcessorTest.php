@@ -21,17 +21,6 @@ use ReflectionProperty;
 #[Group('unit')]
 final class ConstraintStateProcessorTest extends TestCase
 {
-    private function invokeUpdate(Constraint $entity, ConstraintInput $input): void
-    {
-        // updateEntityFromInput touches only the entity + input (never the ctor
-        // services), so bypass the constructor — its deps (SeasonResolver, guards)
-        // are all final and unmockable.
-        $processor = (new ReflectionClass(ConstraintStateProcessor::class))->newInstanceWithoutConstructor();
-        $method = new ReflectionMethod($processor, 'updateEntityFromInput');
-        $method->setAccessible(true);
-        $method->invoke($processor, $entity, $input);
-    }
-
     /**
      * Review NR (PR #120, F4): widening a TEAM constraint to CLUB via PUT sends
      * scopeTargetId=null, but a null input field means "leave unchanged" — so the
@@ -92,8 +81,8 @@ final class ConstraintStateProcessorTest extends TestCase
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('find')->willReturn($entity);
 
-        $processor = (new ReflectionClass(ConstraintStateProcessor::class))->newInstanceWithoutConstructor();
-        (new ReflectionProperty(AbstractStateProcessor::class, 'entityManager'))->setValue($processor, $em);
+        $processor = new ReflectionClass(ConstraintStateProcessor::class)->newInstanceWithoutConstructor();
+        new ReflectionProperty(AbstractStateProcessor::class, 'entityManager')->setValue($processor, $em);
 
         $input = new ConstraintInput;
         $input->name = 'renamed';
@@ -104,5 +93,16 @@ final class ConstraintStateProcessorTest extends TestCase
         $method->invoke($processor, $input, ['id' => 'c-1'], 'club-1', 'season-B');
 
         self::assertSame('season-A', $entity->getSeasonId(), 'a PUT must not migrate the entity to the request season');
+    }
+
+    private function invokeUpdate(Constraint $entity, ConstraintInput $input): void
+    {
+        // updateEntityFromInput touches only the entity + input (never the ctor
+        // services), so bypass the constructor — its deps (SeasonResolver, guards)
+        // are all final and unmockable.
+        $processor = new ReflectionClass(ConstraintStateProcessor::class)->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod($processor, 'updateEntityFromInput');
+        $method->setAccessible(true);
+        $method->invoke($processor, $entity, $input);
     }
 }

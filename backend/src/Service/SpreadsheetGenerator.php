@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Schedule;
-use App\Entity\ScheduleSlotTemplate;
-use App\Export\ExportEmptyWindow;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use DateInterval;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Security;
 
 use App\Entity\User;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Core\User\UserCheckerInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -22,7 +23,8 @@ final class UserChecker implements UserCheckerInterface
 {
     public function checkPreAuth(UserInterface $user): void {}
 
-    public function checkPostAuth(UserInterface $user): void
+    // $token added by symfony/security-core 7.4.14 (UserCheckerInterface change).
+    public function checkPostAuth(UserInterface $user, ?TokenInterface $token = null): void
     {
         if ($user instanceof User && null === $user->getEmailVerifiedAt()) {
             throw new CustomUserMessageAuthenticationException('Invalid credentials.');
