@@ -152,7 +152,9 @@ final class StructureRestorer
         $this->deleteFamily(Reservation::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Constraint::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Team::class, $clubId, $seasonId);
-        $this->deleteFamily(VenueTrainingSlot::class, $clubId, $seasonId);
+        // permanentOnly: a period's own slots (calendarEntryId set) belong to the
+        // calendar, not the base structure — a base-version restore must not wipe them.
+        $this->deleteFamily(VenueTrainingSlot::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Venue::class, $clubId, $seasonId);
         $this->deleteFamily(Coach::class, $clubId, $seasonId);
         $this->deleteFamily(SportCategory::class, $clubId, null);

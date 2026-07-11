@@ -117,25 +117,35 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         $start = $this->minutesOf($entity);
         $end = $start + $entity->getDurationMinutes();
 
-        // Scoped to the SAME layer (seasonal-vs-seasonal, or same period): a period
-        // slot is an independent overlay layer, it may legitimately sit at the same
-        // time as a seasonal slot of another gym — only same-layer stacking is barred.
         /** @var list<VenueTrainingSlot> $sameDay */
         $sameDay = $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy([
             'venueId' => $entity->getVenueId(),
             'dayOfWeek' => $entity->getDayOfWeek(),
-            'calendarEntryId' => $entity->getCalendarEntryId(),
         ]);
 
         foreach ($sameDay as $other) {
             if ($other->getId() === $entity->getId()) {
                 continue; // an edit does not conflict with itself
             }
+            // Layers that are NEVER generated together may share a time: two DIFFERENT
+            // periods (both calendarEntryId set and distinct) never union. But the
+            // overlay build unions SEASONAL ∪ one period, so a period slot must not
+            // overlap a seasonal one (else the same court is double-booked at solve).
+            if ($this->neverGeneratedTogether($entity, $other)) {
+                continue;
+            }
             $otherStart = $this->minutesOf($other);
             if ($start < $otherStart + $other->getDurationMinutes() && $otherStart < $end) {
                 throw new ValidationException('This slot overlaps another slot of the same venue on that day.');
             }
         }
+    }
+
+    private function neverGeneratedTogether(VenueTrainingSlot $a, VenueTrainingSlot $b): bool
+    {
+        return null !== $a->getCalendarEntryId()
+            && null !== $b->getCalendarEntryId()
+            && $a->getCalendarEntryId() !== $b->getCalendarEntryId();
     }
 
     private function minutesOf(VenueTrainingSlot $slot): int

@@ -63,6 +63,8 @@ final class EntityCascadeDeleter
             $this->deleteByField(Competition::class, 'teamId', $teamId, $clubId, $seasonId);
             // TeamTagAssignment has a season_id but NO club_id (scoped by season).
             $this->deleteByField(TeamTagAssignment::class, 'teamId', $teamId, null, $seasonId);
+            // Period-editable structure (B1): a team's per-period overrides key on teamId.
+            $this->deleteByField(\App\Entity\TeamPeriodOverride::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
             $this->clearParentRef(Team::class, 'parentTeamId', $teamId, $clubId, $seasonId);
         });

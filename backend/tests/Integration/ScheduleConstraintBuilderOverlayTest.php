@@ -199,6 +199,24 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertSame(0, $baseVenues[$cityVenue->getId()], 'period slot never leaks into the base plan');
     }
 
+    public function testSessionOverrideDoesNotLeakIntoASubsequentBaseBuild(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'U11'); // seasonal sessionsPerWeek = 2
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $team, true, 1);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        // Overlay build sets the session-override map on the shared builder instance…
+        $this->builder->buildForOverlay($schedule, $entry);
+        // …a later base build on the SAME instance must NOT inherit it.
+        $baseTeams = $this->builder->buildForClubSeason($club->getId(), $season->getId())['teams'];
+        $serialized = array_values(array_filter($baseTeams, static fn (array $t): bool => $t['id'] === $team->getId()))[0];
+
+        self::assertSame(2, $serialized['sessionsPerWeek'], 'the base plan keeps the seasonal volume — no override leak');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();

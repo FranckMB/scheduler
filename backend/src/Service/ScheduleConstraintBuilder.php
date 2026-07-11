@@ -122,6 +122,10 @@ final class ScheduleConstraintBuilder
         }
 
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
+        // The base plan has no period session overrides. Reset here (not just at the
+        // end of buildForOverlay) so a prior overlay build that threw mid-payload on
+        // the long-lived worker can never leak its overrides into a base generation.
+        $this->currentSessionOverrides = [];
 
         $payload = $this->buildPayload(
             clubId: $clubId,

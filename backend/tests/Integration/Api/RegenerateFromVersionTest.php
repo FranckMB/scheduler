@@ -66,6 +66,30 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertSame($v1->getId(), $this->em->getRepository(Season::class)->find($this->season->getId())?->getLiveContextScheduleId());
     }
 
+    public function testLoadVersionKeepsPeriodTrainingSlots(): void
+    {
+        $this->persistTeam('SM1');
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        self::getContainer()->get(StructureSnapshotter::class)->store($v1, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
+
+        // A period's own training slot (calendarEntryId set) is calendar/overlay, not
+        // base structure — a base-version restore must not wipe it.
+        $periodSlot = (new \App\Entity\VenueTrainingSlot)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setVenueId('11111111-1111-4111-8111-111111111111')
+            ->setDayOfWeek(1)->setStartTime(new DateTimeImmutable('20:00'))->setDurationMinutes(90)->setCapacity(1)
+            ->setCalendarEntryId('22222222-2222-4222-8222-222222222222');
+        $this->em->persist($periodSlot);
+        $this->em->flush();
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+        self::assertResponseStatusCodeSame(200);
+
+        $this->em->clear();
+        self::assertCount(1, $this->em->getRepository(\App\Entity\VenueTrainingSlot::class)->findBy(['calendarEntryId' => '22222222-2222-4222-8222-222222222222']), 'the period slot survives a base-version restore');
+    }
+
     public function testRegenerateFromANonCompletedSourceIsRefused(): void
     {
         // A VALIDATED (read-only) version's conditions cannot be replayed —

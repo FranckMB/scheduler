@@ -67,6 +67,16 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         self::assertSame(3, $body['sessionsPerWeek']);
     }
 
+    public function testDuplicateOverrideIsRejectedWithValidationNotServerError(): void
+    {
+        $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
+        self::assertResponseStatusCodeSame(201);
+
+        // A second POST for the same (period, team) → clean 422, not a 500 from the DB unique index.
+        $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 2]);
+        self::assertResponseStatusCodeSame(422);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

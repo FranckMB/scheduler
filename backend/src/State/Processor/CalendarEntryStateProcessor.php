@@ -8,6 +8,8 @@ use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\TeamPeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
@@ -152,6 +154,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             $dated = $this->entityManager->getRepository(Constraint::class)->findBy(['calendarEntryId' => $id]);
             foreach ($dated as $constraint) {
                 $this->entityManager->remove($constraint);
+            }
+            // Period-editable structure (B1): the period's own training slots and
+            // team overrides are keyed on this entry — remove them too, else they orphan.
+            foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['calendarEntryId' => $id]) as $slot) {
+                $this->entityManager->remove($slot);
+            }
+            foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
+                $this->entityManager->remove($override);
             }
             $this->entityManager->flush();
         }

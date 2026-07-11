@@ -85,7 +85,9 @@ final class GenerationComplexityGuard
             $this->teamRepository->count($scope),
             $this->venueRepository->count($scope),
             $this->coachRepository->count($scope),
-            $this->venueTrainingSlotRepository->count($scope),
+            // Base plan uses SEASONAL slots only — period slots (calendarEntryId set)
+            // must not inflate the base availability_slots cap.
+            $this->venueTrainingSlotRepository->count($scope + ['calendarEntryId' => null]),
             // Permanent constraints only — the exact set the base-plan payload carries.
             $this->constraintRepository->count($scope + ['calendarEntryId' => null]),
         );
