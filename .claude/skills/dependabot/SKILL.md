@@ -55,12 +55,22 @@ règle « jamais merger sans go » reste en vigueur pour tout le reste).
 2. `git checkout main && git pull` avant la PR suivante (chaque verdict se rend sur main à jour).
 3. La CI GitHub ne gate pas le merge (double-contrôle) — le verdict local fait foi.
 
-## Étape 4 — Bilan
+## Étape 4 — Bilan + journal des upgrades (obligatoire)
 
-Tableau final : PR · paquet(s) · verdict (mergée / réparée+mergée / laissée ouverte+pourquoi).
-Signaler explicitement toute PR laissée ouverte et la raison (migration lourde, axe structurant,
-breaking irréparable). Si un correctif a touché du code produit (pas seulement lockfile/config),
-le mentionner — c'est un candidat à revue.
+1. **Tableau final** : PR · paquet(s) · verdict (mergée / réparée+mergée / laissée ouverte+pourquoi).
+   Signaler explicitement toute PR laissée ouverte et la raison (migration lourde, axe structurant,
+   breaking irréparable). Si un correctif a touché du code produit (pas seulement lockfile/config),
+   le mentionner — c'est un candidat à revue.
+2. **Mettre à jour `docs/upgrades.md`** (le journal du pourquoi) : une section datée par lot,
+   une entrée par upgrade notable (les mineurs sans impact peuvent être groupés). Chaque entrée,
+   **écrite pour le fondateur, pas pour l'agent**, répond à trois questions en français simple :
+   - **C'est quoi** — ce que fait le paquet dans l'application (une phrase, zéro jargon non défini) ;
+   - **Ça apporte** — ce que la mise à jour change concrètement (perf, sécu, pérennité, features)
+     et pourquoi la faire maintenant plutôt que la subir plus tard ;
+   - **Adapté chez nous** — ce que l'upgrade a forcé à changer dans NOTRE code (ou « rien »).
+   Ce journal se committe **dans la même PR** que les correctifs quand il y en a, sinon sur une
+   branche doc dédiée. Une dette découverte au passage (paquet installé jamais utilisé, config
+   morte) → ligne P4 dans `specs/evolution/roadmap.md`, référencée depuis l'entrée.
 
 ## Gardes-fous
 
