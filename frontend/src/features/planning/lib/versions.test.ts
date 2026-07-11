@@ -69,13 +69,22 @@ describe("overlayVersionLabels", () => {
 });
 
 describe("liveContextScheduleId — the ★ (latest generated, = live context)", () => {
-  it("is the LATEST season version, stable when an older version is viewed", () => {
+  it("is the LATEST season version when no server pointer is set (fallback)", () => {
     const list = [
       plan({ id: "v1", createdAt: "2026-07-01T10:00:00+00:00" }),
       plan({ id: "v2", createdAt: "2026-07-02T10:00:00+00:00" }),
     ];
-    // V2 is latest → ★ on V2, regardless of which one is being viewed.
+    // No isLiveContext pointer → fall back to the latest (V2).
     expect(liveContextScheduleId(list, null)).toBe("v2");
+  });
+
+  it("honors the server pointer (isLiveContext) over the latest — « Charger V1 » moves the ★", () => {
+    const list = [
+      plan({ id: "v1", createdAt: "2026-07-01T10:00:00+00:00", isLiveContext: true }),
+      plan({ id: "v2", createdAt: "2026-07-02T10:00:00+00:00" }),
+    ];
+    // V1 is the loaded context even though V2 is newer.
+    expect(liveContextScheduleId(list, null)).toBe("v1");
   });
 
   it("ignores ARCHIVED versions", () => {

@@ -226,8 +226,8 @@ export function useRegenerateFromVersion() {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    // Surface the backend's reason (e.g. "pas de photo de structure", in-flight,
-    // complexity cap) instead of a generic flash.
+    // Surface the backend's reason (409: "pas de photo de structure", or a
+    // generation in flight) instead of a generic flash.
     onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }

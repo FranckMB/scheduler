@@ -6,7 +6,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
-import { liveContextScheduleId, overlayVersionLabels, seasonLiveContextId, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
+import { liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -74,7 +74,7 @@ export function PlanningToolbar({
   // NULL/stale pointer). Overlays: the latest version of the period (derived).
   // Exactly ONE ★: in overlay context only the period's overlay is starred (never
   // a season plan too), else only the season live-context plan.
-  const seasonLiveId = seasonLiveContextId(schedules);
+  const seasonLiveId = liveContextScheduleId(schedules, null);
   const overlayLiveId = isOverlay && null !== selected?.calendarEntryId ? liveContextScheduleId(schedules, selected.calendarEntryId) : null;
   const isStarred = (schedule: Schedule): boolean =>
     isOverlay ? null !== schedule.calendarEntryId && schedule.id === overlayLiveId : null === schedule.calendarEntryId && schedule.id === seasonLiveId;

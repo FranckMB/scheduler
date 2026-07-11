@@ -22,6 +22,7 @@ interface PlanningRow {
   label: string;
   status: Schedule["status"];
   isBaseline: boolean;
+  isOverlay: boolean;
 }
 
 /**
@@ -34,7 +35,7 @@ function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | nul
   const rows: PlanningRow[] = [];
   const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
   if (null !== seasonMain) {
-    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId });
+    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId, isOverlay: false });
   }
   // One row per period overlay (its latest finished version), sorted by period name.
   const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
@@ -42,7 +43,7 @@ function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | nul
   for (const entryId of periodIds) {
     const version = representativeVersion(visibleOverlayVersions(schedules, entryId));
     if (null !== version) {
-      periods.push({ id: version.id, label: version.name, status: version.status, isBaseline: false });
+      periods.push({ id: version.id, label: version.name, status: version.status, isBaseline: false, isOverlay: true });
     }
   }
   periods.sort((a, b) => a.label.localeCompare(b.label));
@@ -106,11 +107,13 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const rows = seasonPlannings(schedules, baselineScheduleId);
 
-  // Same routing as the banner's "Ouvrir": a validated planning opens the
-  // read-only planning page; one still in progress opens the wizard's
-  // generation step to finish/validate it.
+  // Routing like the banner's "Ouvrir": a period overlay or a VALIDATED season
+  // plan is a finished plan → open it read-only on the planning page. Only a
+  // season plan still IN PROGRESS (COMPLETED-not-yet-validated) opens the
+  // wizard's generation step to finish/validate it — an overlay is never sent
+  // there (the wizard's generate step renders the season plan, not the overlay).
   const consult = (row: PlanningRow) => {
-    if ("VALIDATED" === row.status) {
+    if (row.isOverlay || "VALIDATED" === row.status) {
       setSelectedScheduleId(row.id);
       navigate("/planning");
       return;

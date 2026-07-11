@@ -142,10 +142,9 @@ class ScheduleResource
     #[Groups(['read'])]
     public bool $isLiveContext = false;
 
-    public static function fromEntity(Schedule $entity, bool $hasStructurePhoto = false): self
+    public static function fromEntity(Schedule $entity): self
     {
         $dto = new self;
-        $dto->hasStructurePhoto = $hasStructurePhoto;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

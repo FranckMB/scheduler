@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schedule } from "@/features/planning/api";
 
@@ -16,6 +16,13 @@ vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run,
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
 import { SeasonSchedulesModal, seasonPlanningCount } from "./SeasonSchedulesModal";
+
+beforeEach(() => {
+  setSelectedScheduleId.mockClear();
+  jumpTo.mockClear();
+  navigate.mockClear();
+  run.mockClear();
+});
 
 const plan = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", calendarEntryId: null, ...over });
 
@@ -63,11 +70,21 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
-  it("eye on an in-progress planning opens the wizard's generation step", async () => {
+  it("eye on an in-progress SEASON planning opens the wizard's generation step", async () => {
     open([plan({ id: "v1", status: "COMPLETED" })], null);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(jumpTo).toHaveBeenCalledWith("generate");
     expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+
+  it("eye on a finished PERIOD overlay opens it on the planning page (never the wizard)", async () => {
+    // A COMPLETED overlay is a finished period plan → consult it, not the wizard
+    // (whose generate step renders the season plan, not the overlay).
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", calendarEntryId: "p1" })], null);
+    await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
+    expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
+    expect(navigate).toHaveBeenCalledWith("/planning");
+    expect(jumpTo).not.toHaveBeenCalled();
   });
 
   it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {
