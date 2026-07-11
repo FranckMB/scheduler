@@ -21,11 +21,15 @@ use Symfony\Component\Console\Tester\CommandTester;
 /**
  * RGPD PR-1 non-regression (axe auth & memberships) : le droit à l'effacement.
  *
- * (a) un compte effacé ne peut plus s'authentifier (login KO, JWT inerte) ;
- * (b) dernier gestionnaire effacé → purge du club programmée (+30 j) ;
- * (c) un gestionnaire actif restant → club PAS programmé ;
+ * (a) un compte effacé ne peut plus s'authentifier (login KO, JWT inerte) —
+ *     et l'effacement exige une ré-authentification (mot de passe) ;
+ * (b) dernier membre actif effacé → purge du club programmée (+30 j) ;
+ * (c) un membre actif restant — MÊME non-management (editor) → PAS programmé ;
  * (d) app:clubs:purge-erased vide le workspace du club échu SANS toucher un
- *     autre club (tenant) et ÉPARGNE l'identité publique FFBB (fiche club).
+ *     autre club (tenant) et ÉPARGNE l'identité publique FFBB (fiche club) ;
+ * (e) la commande REVALIDE à l'échéance : un membre actif revenu → annulation ;
+ * (f) win-back : ré-inscription sur l'ARA d'un club purgé (sans membre) →
+ *     reprise directe du club (owner actif), pas de pending inapprouvable.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -40,11 +44,12 @@ final class AccountErasureTest extends WebTestCase
     {
         [$token, , $email] = $this->registerVerified('ERAA');
 
-        // Confirmation exigée : un body sans le bon email est rejeté.
-        $this->request('DELETE', '/api/me', $token, ['email' => 'wrong@test.fr']);
+        // Ré-authentification exigée : un mauvais mot de passe est rejeté —
+        // un JWT volé ne suffit pas à détruire le compte.
+        $this->request('DELETE', '/api/me', $token, ['password' => 'WrongPassword1!']);
         self::assertResponseStatusCodeSame(400);
 
-        $this->request('DELETE', '/api/me', $token, ['email' => $email]);
+        $this->request('DELETE', '/api/me', $token, ['password' => 'Password123!']);
         self::assertResponseIsSuccessful();
 
         // Login avec les anciens identifiants → 401 (l'email n'existe plus).
@@ -65,7 +70,7 @@ final class AccountErasureTest extends WebTestCase
         $em = $this->em();
         $clubId = $this->clubIdOf($userId);
 
-        $this->request('DELETE', '/api/me', $token, ['email' => $email]);
+        $this->request('DELETE', '/api/me', $token, ['password' => 'Password123!']);
         self::assertResponseIsSuccessful();
         $payload = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertTrue($payload['clubPurgeScheduled']);
@@ -83,30 +88,17 @@ final class AccountErasureTest extends WebTestCase
         self::assertSame('Compte', $user->getFirstName());
     }
 
-    public function testRemainingManagerPreventsTheClubPurge(): void
+    public function testRemainingActiveMemberEvenNonManagementPreventsTheClubPurge(): void
     {
         [$token, $userId, $email] = $this->registerVerified('ERAC');
         $em = $this->em();
         $clubId = $this->clubIdOf($userId);
 
-        // Un second gestionnaire actif (inséré directement : le flux
-        // d'approbation complet est couvert par MembershipTest).
-        $other = new User;
-        $other->setEmail('other-' . strtolower($email));
-        $other->setFirstName('Autre');
-        $other->setLastName('Admin');
-        $other->setPasswordHash('x');
-        $other->setEmailVerifiedAt(new DateTimeImmutable);
-        $em->persist($other);
-        $membership = new ClubUser;
-        $membership->setClubId($clubId);
-        $membership->setUserId($other->getId());
-        $membership->setRole('admin');
-        $membership->setIsActive(true);
-        $em->persist($membership);
-        $em->flush();
+        // Un membre actif NON-management (editor) : il utilise le workspace —
+        // sa présence doit suffire à bloquer la programmation de la purge.
+        $this->insertActiveMember($clubId, 'other-' . strtolower($email), 'editor');
 
-        $this->request('DELETE', '/api/me', $token, ['email' => $email]);
+        $this->request('DELETE', '/api/me', $token, ['password' => 'Password123!']);
         self::assertResponseIsSuccessful();
         $payload = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertFalse($payload['clubPurgeScheduled']);
@@ -114,7 +106,89 @@ final class AccountErasureTest extends WebTestCase
         $em->clear();
         $club = $em->getRepository(Club::class)->find($clubId);
         self::assertInstanceOf(Club::class, $club);
-        self::assertNull($club->getErasureScheduledAt(), 'un admin actif reste → pas de purge programmée');
+        self::assertNull($club->getErasureScheduledAt(), 'un membre actif reste (editor) → pas de purge programmée');
+    }
+
+    public function testDuePurgeIsCancelledWhenAnActiveMemberReturned(): void
+    {
+        [, $userId, $email] = $this->registerVerified('ERAF');
+        $em = $this->em();
+        $clubId = $this->clubIdOf($userId);
+        $seasonId = $this->currentSeasonId($clubId);
+
+        // Club programmé, échéance passée… mais un membre actif est revenu
+        // (réactivation support pendant la grâce).
+        $club = $em->getRepository(Club::class)->find($clubId);
+        self::assertInstanceOf(Club::class, $club);
+        $club->setErasureScheduledAt(new DateTimeImmutable('-1 hour'));
+        $em->flush();
+        $this->insertActiveMember($clubId, 'back-' . strtolower($email), 'admin');
+        $em->clear();
+
+        $application = new Application(self::$kernel);
+        $tester = new CommandTester($application->find('app:clubs:purge-erased'));
+        self::assertSame(0, $tester->execute([]));
+
+        $em->clear();
+        $club = $em->getRepository(Club::class)->find($clubId);
+        self::assertInstanceOf(Club::class, $club);
+        self::assertNull($club->getErasureScheduledAt(), 'membre revenu → programmation auto-annulée');
+        self::assertNull($club->getUnsubscribedAt(), 'pas de purge exécutée');
+        $this->scopeGucToClub($clubId);
+        self::assertNotNull(
+            $this->em()->getConnection()->fetchOne('SELECT id FROM season WHERE club_id = :cid AND id = :sid', ['cid' => $clubId, 'sid' => $seasonId]),
+            'workspace intact',
+        );
+    }
+
+    public function testMemberlessPurgedClubIsResurrectedOnReRegister(): void
+    {
+        [, $userA, $emailA] = $this->registerVerified('ERAG');
+        $clubId = $this->clubIdOf($userA);
+        $ara = strtoupper(explode('@', $emailA)[0]);
+        $em = $this->em();
+
+        // Purge complète du club (comme en (d)).
+        $club = $em->getRepository(Club::class)->find($clubId);
+        self::assertInstanceOf(Club::class, $club);
+        $club->setErasureScheduledAt(new DateTimeImmutable('-1 hour'));
+        // Désactive le membre (l'effacement l'aurait fait) pour rendre le club orphelin.
+        $this->scopeGucToClub($clubId);
+        $em->getConnection()->executeStatement('UPDATE club_user SET is_active = false WHERE club_id = :cid', ['cid' => $clubId]);
+        $this->clearGuc();
+        $em->flush();
+        $em->clear();
+        $application = new Application(self::$kernel);
+        $tester = new CommandTester($application->find('app:clubs:purge-erased'));
+        self::assertSame(0, $tester->execute([]));
+
+        // Win-back : un nouveau compte s'inscrit avec le MÊME code FFBB → il
+        // reprend le club directement (owner actif), pas de pending sans issue.
+        $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
+        $newEmail = 'winback-' . strtolower($ara) . '@test.fr';
+        $this->client->request('POST', '/api/register', [], [], [
+            'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
+        ], json_encode([
+            'email' => $newEmail, 'password' => 'Password123!',
+            'firstName' => 'Win', 'lastName' => 'Back', 'ara' => $ara, 'club_name' => 'Reprise',
+        ], \JSON_THROW_ON_ERROR));
+        $token = $this->verifyRegistration($this->client, $newEmail);
+        self::assertNotSame('', $token);
+
+        $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        $me = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('active', $me['membershipStatus'], 'reprise directe, pas de pending inapprouvable');
+        self::assertSame($clubId, $me['club']['id'] ?? null, 'même fiche club (identité FFBB conservée)');
+
+        $em->clear();
+        $resurrected = $em->getRepository(Club::class)->find($clubId);
+        self::assertInstanceOf(Club::class, $resurrected);
+        self::assertNull($resurrected->getUnsubscribedAt(), 'club réactivé');
+        $this->scopeGucToClub($clubId);
+        self::assertNotFalse(
+            $this->em()->getConnection()->fetchOne('SELECT id FROM season WHERE club_id = :cid LIMIT 1', ['cid' => $clubId]),
+            'workspace re-seedé (saison)',
+        );
     }
 
     public function testPurgeErasedWipesTheWorkspaceSparesFfbbIdentityAndOtherClubs(): void
@@ -136,6 +210,11 @@ final class AccountErasureTest extends WebTestCase
         self::assertInstanceOf(Club::class, $club);
         $club->setName('B CHARPENNES TEST');
         $club->setErasureScheduledAt(new DateTimeImmutable('-1 hour'));
+        // Le vrai flux (erase) désactive les memberships — sans quoi la
+        // revalidation de la commande auto-annulerait (un membre actif reste).
+        $this->scopeGucToClub($clubA);
+        $em->getConnection()->executeStatement('UPDATE club_user SET is_active = false WHERE club_id = :cid', ['cid' => $clubA]);
+        $this->clearGuc();
         $em->flush();
         $em->clear();
 
@@ -225,6 +304,28 @@ final class AccountErasureTest extends WebTestCase
         self::assertIsString($seasonId, 'le register/verify matérialise une saison');
 
         return $seasonId;
+    }
+
+    /** Membre actif inséré directement (le flux d'approbation est couvert par MembershipTest). */
+    private function insertActiveMember(string $clubId, string $email, string $role): void
+    {
+        $em = $this->em();
+        $other = new User;
+        $other->setEmail($email);
+        $other->setFirstName('Autre');
+        $other->setLastName('Membre');
+        $other->setPasswordHash('x');
+        $other->setEmailVerifiedAt(new DateTimeImmutable);
+        $em->persist($other);
+        $this->scopeGucToClub($clubId);
+        $membership = new ClubUser;
+        $membership->setClubId($clubId);
+        $membership->setUserId($other->getId());
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $em->persist($membership);
+        $em->flush();
+        $this->clearGuc();
     }
 
     private function insertCoach(string $clubId, string $seasonId, string $name): void

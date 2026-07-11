@@ -25,7 +25,7 @@ export function useChangePassword() {
 
 export function useDeleteAccount() {
   return useMutation({
-    mutationFn: (email: string) => profileApi.deleteAccount(email),
+    mutationFn: (password: string) => profileApi.deleteAccount(password),
     // Pas de toast succès ici : l'appelant déconnecte immédiatement (le compte
     // n'existe plus) et affiche la conséquence club si elle s'applique.
   });

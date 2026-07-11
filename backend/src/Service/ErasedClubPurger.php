@@ -63,14 +63,20 @@ final class ErasedClubPurger
                 ->execute();
         }
 
-        // 3. La fiche club survit (identité publique FFBB) — on marque le
-        //    désabonnement et on referme l'onboarding ; la programmation est
-        //    consommée.
+        // 3. La fiche club survit (identité publique FFBB : nom, code, logo,
+        //    ligue/comité, contacts FFBB) — mais l'état d'ABONNEMENT n'est pas
+        //    de l'identité publique : plan, cycle de facturation et compteurs
+        //    sont remis à zéro (revue sécurité PR-1 — « seule l'identité FFBB
+        //    survit » doit être vrai à la lettre).
         $club = $this->entityManager->getRepository(Club::class)->find($clubId);
         if ($club instanceof Club) {
             $club->setErasureScheduledAt(null);
             $club->setUnsubscribedAt(new DateTimeImmutable);
             $club->setOnboardingCompleted(false);
+            $club->setPlanId(null);
+            $club->setBillingCycle(null);
+            $club->setPlanExpiresAt(null);
+            $club->setGenerationCountSeason(0);
             $this->entityManager->flush();
         }
         $this->entityManager->clear();

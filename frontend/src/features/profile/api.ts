@@ -32,6 +32,7 @@ export interface DeleteAccountResult {
 
 /**
  * RGPD erasure (DELETE /api/me): anonymise immédiatement le compte connecté.
- * Confirmation forte : l'email exact du compte doit être re-saisi.
+ * Confirmation = ré-authentification : le mot de passe courant est exigé
+ * (un JWT volé ne suffit pas à détruire le compte).
  */
-export const deleteAccount = (email: string): Promise<DeleteAccountResult> => api.delete("me", { json: { email } }).json();
+export const deleteAccount = (password: string): Promise<DeleteAccountResult> => api.delete("me", { json: { password } }).json();

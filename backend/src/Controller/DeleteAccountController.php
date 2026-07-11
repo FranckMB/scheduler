@@ -10,22 +10,26 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * RGPD — droit à l'effacement, self-service (DELETE /api/me).
  *
  * Self-only : la cible est TOUJOURS l'utilisateur du JWT — aucun id en entrée,
- * donc aucun IDOR possible. Confirmation forte : le body doit re-saisir l'email
- * exact du compte (même patron de friction que la suppression d'entités côté
- * UI). L'anonymisation est immédiate et irréversible ; la purge du club
- * orphelin part avec un délai de grâce de 30 j (AccountErasureService).
+ * donc aucun IDOR possible. Confirmation = RÉ-AUTHENTIFICATION : le mot de
+ * passe courant est exigé (patron changePassword) — un JWT volé ne suffit pas
+ * à détruire le compte (revue sécurité PR-1 ; l'email, lui, se lit via
+ * GET /api/me avec le même JWT). L'anonymisation est immédiate et
+ * irréversible ; la purge du club orphelin part avec un délai de grâce de 30 j
+ * (AccountErasureService).
  */
 #[AsController]
 final class DeleteAccountController extends AbstractController
 {
     public function __construct(
         private readonly AccountErasureService $accountErasureService,
+        private readonly UserPasswordHasherInterface $passwordHasher,
     ) {}
 
     #[Route('/api/me', name: 'api_me_delete', methods: ['DELETE'])]
@@ -37,9 +41,9 @@ final class DeleteAccountController extends AbstractController
         }
 
         $data = json_decode($request->getContent(), true);
-        $confirm = \is_array($data) && \is_string($data['email'] ?? null) ? strtolower(trim($data['email'])) : '';
-        if ($confirm !== $user->getEmail()) {
-            return $this->json(['error' => 'Confirmez en saisissant l\'adresse e-mail exacte du compte.'], 400);
+        $password = \is_array($data) && \is_string($data['password'] ?? null) ? $data['password'] : '';
+        if ('' === $password || !$this->passwordHasher->isPasswordValid($user, $password)) {
+            return $this->json(['error' => 'Mot de passe incorrect.'], 400);
         }
 
         $scheduledClubs = $this->accountErasureService->erase($user);

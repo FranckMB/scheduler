@@ -130,25 +130,24 @@
                         }
                     },
                     "400": {
-                        "description": "Confirmation email mismatch"
+                        "description": "Wrong password"
                     },
                     "401": {
                         "description": "Unauthorized"
                     }
                 },
-                "summary": "RGPD erasure: anonymize the connected account (confirmation = exact account email in body); if last manager, schedule the club workspace purge (30-day grace)",
+                "summary": "RGPD erasure: anonymize the connected account (re-authentication: current password required); if no active member remains, schedule the club workspace purge (30-day grace, auto-cancelled if a member returns)",
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
                                 "required": [
-                                    "email"
+                                    "password"
                                 ],
                                 "properties": {
-                                    "email": {
-                                        "type": "string",
-                                        "format": "email"
+                                    "password": {
+                                        "type": "string"
                                     }
                                 }
                             }

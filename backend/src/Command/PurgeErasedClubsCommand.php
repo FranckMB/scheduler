@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Service\AccountErasureService;
 use App\Service\ErasedClubPurger;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -34,10 +36,12 @@ final class PurgeErasedClubsCommand extends Command
     private bool $hadFailure = false;
 
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
+        private EntityManagerInterface $entityManager,
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly ErasedClubPurger $erasedClubPurger,
+        private readonly AccountErasureService $accountErasureService,
         private readonly ClockInterface $clock,
+        private readonly ManagerRegistry $managerRegistry,
     ) {
         parent::__construct();
     }
@@ -67,19 +71,48 @@ final class PurgeErasedClubsCommand extends Command
             \assert($club instanceof Club);
             $clubId = $club->getId();
             try {
-                $io->writeln(\sprintf('  %s purge workspace of club %s (%s, scheduled %s)', $dryRun ? '<comment>would</comment>' : '<info>✓</info>', $club->getName(), $clubId, $club->getErasureScheduledAt()?->format('Y-m-d') ?? '?'));
-                if (!$dryRun) {
-                    $this->tenantConnectionContext->setClubId($clubId);
-                    $freshClub = $this->entityManager->getRepository(Club::class)->find($clubId);
-                    if ($freshClub instanceof Club) {
-                        $this->erasedClubPurger->purge($freshClub);
-                    }
+                if ($dryRun) {
+                    $io->writeln(\sprintf('  <comment>would</comment> purge workspace of club %s (%s, scheduled %s)', $club->getName(), $clubId, $club->getErasureScheduledAt()?->format('Y-m-d') ?? '?'));
+                    ++$purged;
+                    continue;
                 }
+
+                $this->tenantConnectionContext->setClubId($clubId);
+                $freshClub = $this->entityManager->getRepository(Club::class)->find($clubId);
+                if (!$freshClub instanceof Club) {
+                    continue;
+                }
+                // REVALIDATION à l'échéance (revue sécurité PR-1) : la liste
+                // due a pu vieillir — la programmation a pu être annulée entre
+                // temps, ou un membre actif est revenu (réactivation support).
+                // Un membre actif = le workspace est utilisé → auto-annulation,
+                // jamais de destruction sous les pieds de quelqu'un.
+                $scheduledAt = $freshClub->getErasureScheduledAt();
+                if (null === $scheduledAt || $scheduledAt > $now) {
+                    continue;
+                }
+                if ($this->accountErasureService->hasActiveMember($clubId)) {
+                    $io->writeln(\sprintf('  <info>↺</info> club %s has an active member again — erasure cancelled', $clubId));
+                    $freshClub->setErasureScheduledAt(null);
+                    $this->entityManager->flush();
+                    continue;
+                }
+
+                $io->writeln(\sprintf('  <info>✓</info> purge workspace of club %s (%s, scheduled %s)', $freshClub->getName(), $clubId, $scheduledAt->format('Y-m-d')));
+                $this->erasedClubPurger->purge($freshClub);
                 ++$purged;
             } catch (Throwable $e) {
                 $this->hadFailure = true;
                 $io->warning(\sprintf('Club %s skipped: %s', $clubId, $e->getMessage()));
             } finally {
+                // Un flush raté FERME l'EntityManager : sans reset, tous les
+                // clubs suivants échoueraient en « EntityManager is closed ».
+                if (!$this->entityManager->isOpen()) {
+                    $this->managerRegistry->resetManager();
+                    $manager = $this->managerRegistry->getManager();
+                    \assert($manager instanceof EntityManagerInterface);
+                    $this->entityManager = $manager;
+                }
                 $this->entityManager->clear();
                 $this->tenantConnectionContext->clear();
             }

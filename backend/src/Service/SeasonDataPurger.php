@@ -74,7 +74,11 @@ final class SeasonDataPurger
             Constraint::class,
             Reservation::class,
             // Module matchs (ajouté après ce purger — gap RGPD constaté PR-1) :
-            // Fixture avant Competition (competitionId y pointe).
+            // Fixture avant Competition (competitionId y pointe). Changement
+            // ASSUMÉ pour ResetSeasonController aussi : « réinitialiser la
+            // saison » supprime désormais matchs/compétitions/réservations —
+            // l'ancien comportement les gardait ORPHELINS (fixtures pointant
+            // des équipes supprimées), ce qui était le vrai bug.
             Fixture::class,
             Competition::class,
             TeamCoach::class,

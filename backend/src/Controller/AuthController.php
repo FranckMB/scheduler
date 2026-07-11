@@ -214,7 +214,26 @@ final class AuthController extends AbstractController
                 $user->setEmailVerifiedAt($this->clock->now());
                 // Re-resolve under the lock: the ARA may have been created since the outer read.
                 $existingClub = $this->clubRepository->findOneBy(['ffbbClubCode' => $ara]);
-                if (null !== $existingClub) {
+                if (null !== $existingClub && $this->clubIsMemberless($existingClub->getId())) {
+                    // RGPD win-back : le club existe mais n'a PLUS AUCUN membre
+                    // actif (workspace purgé après effacement, seule la fiche
+                    // FFBB a survécu). Un "pending" serait inapprouvable à
+                    // jamais (le gate d'approbation exige un manager actif) et
+                    // l'ARA unique interdirait de recréer le club → l'inscrit
+                    // reprend le club directement (même confiance que la
+                    // création : premier arrivé sur un ARA sans propriétaire).
+                    $this->tenantConnectionContext->setClubId($existingClub->getId());
+                    $this->createMembership($existingClub->getId(), $user->getId(), true);
+                    $existingClub->setUnsubscribedAt(null);
+                    $existingClub->setErasureScheduledAt(null);
+                    // Re-seed uniquement si le workspace a réellement été purgé
+                    // (repreneur PENDANT le délai de grâce → saisons intactes,
+                    // un seed dupliquerait saison + catégories).
+                    if ($this->clubHasNoSeason($existingClub->getId())) {
+                        $this->seedNewClub($existingClub);
+                    }
+                    $status = 'active';
+                } elseif (null !== $existingClub) {
                     $this->tenantConnectionContext->setClubId($existingClub->getId());
                     $this->createMembership($existingClub->getId(), $user->getId(), false);
                     $status = 'pending';
@@ -564,6 +583,28 @@ final class AuthController extends AbstractController
         $this->entityManager->persist($club);
 
         return $club;
+    }
+
+    /** Aucun membre actif, tous rôles confondus (raw DBAL — club_user se lit cross-tenant). */
+    private function clubIsMemberless(string $clubId): bool
+    {
+        $count = $this->entityManager->getConnection()->fetchOne(
+            'SELECT COUNT(*) FROM club_user WHERE club_id = :cid AND is_active = true',
+            ['cid' => $clubId],
+        );
+
+        return 0 === (int) $count;
+    }
+
+    /** Le GUC du club doit déjà être posé (season est RLS-gardée). */
+    private function clubHasNoSeason(string $clubId): bool
+    {
+        $count = $this->entityManager->getConnection()->fetchOne(
+            'SELECT COUNT(*) FROM season WHERE club_id = :cid',
+            ['cid' => $clubId],
+        );
+
+        return 0 === (int) $count;
     }
 
     private function createMembership(string $clubId, string $userId, bool $isActive): void

@@ -27,28 +27,22 @@ describe("ProfilePage — zone de danger (RGPD)", () => {
     logoutFn.mockClear();
   });
 
-  it("désarme la suppression tant que l'email exact n'est pas re-saisi", async () => {
-    const user = userEvent.setup();
+  it("désarme la suppression tant que le mot de passe n'est pas saisi (ré-authentification)", () => {
     render(<ProfilePage />);
-
-    const button = screen.getByRole("button", { name: /Supprimer définitivement mon compte/ });
-    expect(button).toBeDisabled();
-
-    await user.type(screen.getByLabelText(/Confirmez en saisissant votre e-mail/), "autre@club.fr");
-    expect(button).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Supprimer définitivement mon compte/ })).toBeDisabled();
     expect(deleteMut).not.toHaveBeenCalled();
   });
 
-  it("arme et appelle la mutation avec l'email confirmé (insensible à la casse)", async () => {
+  it("arme et appelle la mutation avec le mot de passe saisi", async () => {
     const user = userEvent.setup();
     render(<ProfilePage />);
 
-    await user.type(screen.getByLabelText(/Confirmez en saisissant votre e-mail/), "FLO@club.fr");
+    await user.type(screen.getByLabelText(/Confirmez avec votre mot de passe/), "Password123!");
     const button = screen.getByRole("button", { name: /Supprimer définitivement mon compte/ });
     expect(button).toBeEnabled();
 
     await user.click(button);
-    expect(deleteMut).toHaveBeenCalledWith("flo@club.fr", expect.anything());
+    expect(deleteMut).toHaveBeenCalledWith("Password123!", expect.anything());
   });
 
   it("annonce la conséquence : anonymisation immédiate + purge club à 30 jours", () => {

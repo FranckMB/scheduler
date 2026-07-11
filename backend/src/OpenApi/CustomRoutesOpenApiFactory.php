@@ -161,15 +161,15 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'gracePeriodDays' => ['type' => 'integer'],
                     ],
                 ]),
-                '400' => new Response('Confirmation email mismatch'),
+                '400' => new Response('Wrong password'),
                 '401' => new Response('Unauthorized'),
             ],
-            summary: 'RGPD erasure: anonymize the connected account (confirmation = exact account email in body); if last manager, schedule the club workspace purge (30-day grace)',
+            summary: 'RGPD erasure: anonymize the connected account (re-authentication: current password required); if no active member remains, schedule the club workspace purge (30-day grace, auto-cancelled if a member returns)',
             requestBody: $this->jsonBody([
                 'type' => 'object',
-                'required' => ['email'],
+                'required' => ['password'],
                 'properties' => [
-                    'email' => ['type' => 'string', 'format' => 'email'],
+                    'password' => ['type' => 'string'],
                 ],
             ]),
         )));
