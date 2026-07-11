@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Repository\ClubUserRepository;
+use App\Service\AuditTrail;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonDataPurger;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,6 +26,7 @@ final class ResetSeasonController extends AbstractController
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonDataPurger $seasonDataPurger,
         private readonly SeasonAccessGuard $seasonAccessGuard,
+        private readonly AuditTrail $auditTrail,
     ) {}
 
     public function __invoke(): JsonResponse
@@ -57,6 +60,7 @@ final class ResetSeasonController extends AbstractController
         // Wipe the season's contents but KEEP the Season row (the club keeps
         // its current season, only re-emptied).
         $deleted = $this->seasonDataPurger->purge($clubId, $seasonId, deleteSeasonRow: false);
+        $this->auditTrail->record(AuditAction::SEASON_RESET, $user->getId(), $clubId, 'Season', $seasonId, ['rowsDeleted' => $deleted]);
 
         return $this->json([
             'status' => 'ok',

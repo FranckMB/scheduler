@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Service\AccountErasureService;
+use App\Service\AuditTrail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -30,6 +32,7 @@ final class DeleteAccountController extends AbstractController
     public function __construct(
         private readonly AccountErasureService $accountErasureService,
         private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly AuditTrail $auditTrail,
     ) {}
 
     #[Route('/api/me', name: 'api_me_delete', methods: ['DELETE'])]
@@ -47,6 +50,11 @@ final class DeleteAccountController extends AbstractController
         }
 
         $scheduledClubs = $this->accountErasureService->erase($user);
+        // Après l'anonymisation : l'id suffit, l'audit ne porte jamais de PII.
+        $this->auditTrail->record(AuditAction::ACCOUNT_ERASED, $user->getId(), null, 'User', $user->getId(), [
+            'reason' => 'self_service',
+            'clubPurgesScheduled' => \count($scheduledClubs),
+        ]);
 
         return $this->json([
             'message' => 'Compte anonymisé. Vos données personnelles ont été effacées.',

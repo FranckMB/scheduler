@@ -9,11 +9,16 @@ use ApiPlatform\Metadata\HttpOperation;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Entity\TenantOwnedInterface;
+use App\Entity\User;
+use App\Enum\AuditAction;
+use App\Service\AuditTrail;
 use App\Service\EntityCascadeDeleter;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
+use ReflectionClass;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -34,6 +39,10 @@ abstract class AbstractStateProcessor implements ProcessorInterface
      */
     protected ?EntityCascadeDeleter $cascadeDeleter = null;
 
+    protected ?AuditTrail $auditTrail = null;
+
+    protected ?Security $actorSecurity = null;
+
     public function __construct(
         protected readonly EntityManagerInterface $entityManager,
         protected readonly RequestStack $requestStack,
@@ -46,6 +55,18 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     public function setCascadeDeleter(EntityCascadeDeleter $cascadeDeleter): void
     {
         $this->cascadeDeleter = $cascadeDeleter;
+    }
+
+    #[Required]
+    public function setAuditTrail(AuditTrail $auditTrail): void
+    {
+        $this->auditTrail = $auditTrail;
+    }
+
+    #[Required]
+    public function setActorSecurity(Security $actorSecurity): void
+    {
+        $this->actorSecurity = $actorSecurity;
     }
 
     public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
@@ -215,6 +236,17 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
         $this->entityManager->remove($entity);
         $this->entityManager->flush();
+
+        // RGPD audit trail : toute suppression API d'entité passe ici — un seul
+        // point d'écriture couvre coach/équipe/gymnase/planning/contrainte….
+        $actor = $this->actorSecurity?->getUser();
+        $this->auditTrail?->record(
+            AuditAction::ENTITY_DELETED,
+            $actor instanceof User ? $actor->getId() : null,
+            $clubId,
+            new ReflectionClass($this->getEntityClass())->getShortName(),
+            \is_string($id) ? $id : null,
+        );
     }
 
     /** Purge the logical children of $entity before it is removed. No-op unless overridden. */

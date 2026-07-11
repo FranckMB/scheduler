@@ -54,6 +54,17 @@ class ReservationStateProcessor extends AbstractStateProcessor
 
         $this->entityManager->remove($reservation);
         $this->entityManager->flush();
+
+        // Ce override court-circuite parent::processDelete → il doit émettre
+        // lui-même la trace RGPD (revue PR-4 : angle mort du choke point).
+        $actor = $this->actorSecurity?->getUser();
+        $this->auditTrail?->record(
+            \App\Enum\AuditAction::ENTITY_DELETED,
+            $actor instanceof \App\Entity\User ? $actor->getId() : null,
+            $clubId,
+            'Reservation',
+            $reservation->getId(),
+        );
     }
 
     /**

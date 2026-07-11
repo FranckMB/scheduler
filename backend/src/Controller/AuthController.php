@@ -13,12 +13,14 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Message\PopulateClubFromFfbbMessage;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\FfbbCommitteeRepository;
 use App\Repository\FfbbLeagueRepository;
 use App\Repository\SportRepository;
+use App\Service\AuditTrail;
 use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
@@ -67,6 +69,7 @@ final class AuthController extends AbstractController
         private readonly MessageBusInterface $messageBus,
         private readonly FfbbLeagueRepository $ffbbLeagues,
         private readonly FfbbCommitteeRepository $ffbbCommittees,
+        private readonly AuditTrail $auditTrail,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -535,6 +538,9 @@ final class AuthController extends AbstractController
         $user->setLastName($lastName);
         $user->setPasswordHash($this->passwordHasher->hashPassword($user, $password));
         $this->entityManager->persist($user);
+        // RGPD audit : événement GLOBAL (pas encore de tenant) — l'id seul,
+        // jamais l'email (règle no-PII du journal).
+        $this->auditTrail->record(AuditAction::AUTH_REGISTER, $user->getId(), null, 'User', $user->getId());
 
         return $user;
     }
