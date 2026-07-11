@@ -8,7 +8,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
-import { groupCoaches } from "../lib/coaches";
+import { groupedCoaches } from "../lib/ranking";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
@@ -103,7 +103,7 @@ export function ConstraintsStep() {
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Group the coach picker: Salariés, then Coachs-joueurs, then Bénévoles (batch item 1).
-  const coachGroups = groupCoaches(coaches, coachPlayers);
+  const coachGroups = useMemo(() => groupedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))), [coaches, coachPlayers]);
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
 
   // Resolve the target into scope + optional tag (CLUB+targetTag → N team constraints backend-side).
@@ -472,9 +472,9 @@ export function ConstraintsStep() {
               <option value="">— coach —</option>
               {(
                 [
-                  ["Salariés", coachGroups.salaries],
-                  ["Coachs-joueurs", coachGroups.coachJoueurs],
-                  ["Bénévoles", coachGroups.benevoles],
+                  ["Salariés", coachGroups.salaried],
+                  ["Coachs-joueurs", coachGroups.player],
+                  ["Bénévoles", coachGroups.other],
                 ] as const
               ).map(([label, group]) =>
                 group.length > 0 ? (

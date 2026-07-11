@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Coach, PriorityTier, Team } from "../api";
-import { coachMeta, orderedCoaches, orderedTeams, teamsOfTier, usedTiers } from "./ranking";
+import { coachMeta, groupedCoaches, orderedCoaches, orderedTeams, teamsOfTier, usedTiers } from "./ranking";
 
 function team(over: Partial<Team>): Team {
   return { id: "id", name: "T", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true, ...over };
@@ -58,6 +58,16 @@ describe("orderedCoaches", () => {
   it("treats a salaried coach-player as salaried (salaried wins)", () => {
     const coaches = [coach({ id: "sp", isEmployee: true })];
     expect(orderedCoaches(coaches, new Set(["sp"]))[0].group).toBe("salaried");
+  });
+});
+
+describe("groupedCoaches", () => {
+  it("splits coaches into the three ordered buckets", () => {
+    const coaches = [coach({ id: "o", firstName: "Zoe" }), coach({ id: "p", firstName: "Bob" }), coach({ id: "s", firstName: "Ana", isEmployee: true })];
+    const groups = groupedCoaches(coaches, new Set(["p"]));
+    expect(groups.salaried.map((c) => c.id)).toEqual(["s"]);
+    expect(groups.player.map((c) => c.id)).toEqual(["p"]);
+    expect(groups.other.map((c) => c.id)).toEqual(["o"]);
   });
 });
 

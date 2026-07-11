@@ -23,7 +23,7 @@ import {
   useWizardTeamCoaches,
   useWizardTeams,
 } from "../queries";
-import { compareByFirstName } from "../lib/coaches";
+import { groupedCoaches } from "../lib/ranking";
 import { useWizardStore } from "../store";
 import { ReadonlyCoaches } from "./StructureSummary";
 
@@ -69,46 +69,62 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
     }
   };
 
+  const actions = (
+    <div className="flex shrink-0 items-center gap-1">
+      <Button size="sm" variant={editing ? "outline" : "ghost"} className="h-8" aria-label={editing ? "Terminer l'édition" : "Éditer le coach"} onClick={() => setEditing((e) => !e)}>
+        {editing ? <Check className="size-4" /> : <Pencil className="size-4" />}
+        {editing ? "Terminé" : "Éditer"}
+      </Button>
+      <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => setConfirmDelete(true)}>
+        <Trash2 className="size-4" />
+      </Button>
+    </div>
+  );
+
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {editing ? (
-          <>
-            <Input
-              aria-label="Prénom"
-              className="h-8 w-32"
-              value={first}
-              onChange={(e) => setFirst(e.target.value)}
-              onBlur={() => first.trim() && first !== coach.firstName && update.mutate({ id: coach.id, body: payload(coach, { firstName: first.trim() }) })}
-            />
-            <Input
-              aria-label="Nom"
-              className="h-8 w-32"
-              value={last}
-              onChange={(e) => setLast(e.target.value)}
-              onBlur={() => last !== coach.lastName && update.mutate({ id: coach.id, body: payload(coach, { lastName: last }) })}
-            />
-            <label className="flex items-center gap-1 text-xs text-muted-foreground">
-              <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
-              Salarié
-            </label>
-          </>
-        ) : (
-          <>
-            <span className="text-sm font-medium">{`${coach.firstName} ${coach.lastName}`.trim()}</span>
-            {coach.isEmployee ? <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Salarié</span> : null}
-          </>
-        )}
-        <div className="ml-auto flex items-center gap-1">
-          <Button size="sm" variant={editing ? "outline" : "ghost"} className="h-8" aria-label={editing ? "Terminer l'édition" : "Éditer le coach"} onClick={() => setEditing((e) => !e)}>
-            {editing ? <Check className="size-4" /> : <Pencil className="size-4" />}
-            {editing ? "Terminé" : "Éditer"}
-          </Button>
-          <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => setConfirmDelete(true)}>
-            <Trash2 className="size-4" />
-          </Button>
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="Prénom"
+            className="h-8 w-32"
+            value={first}
+            onChange={(e) => setFirst(e.target.value)}
+            onBlur={() => first.trim() && first !== coach.firstName && update.mutate({ id: coach.id, body: payload(coach, { firstName: first.trim() }) })}
+          />
+          <Input
+            aria-label="Nom"
+            className="h-8 w-32"
+            value={last}
+            onChange={(e) => setLast(e.target.value)}
+            onBlur={() => last !== coach.lastName && update.mutate({ id: coach.id, body: payload(coach, { lastName: last }) })}
+          />
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
+            Salarié
+          </label>
+          <div className="ml-auto">{actions}</div>
         </div>
-      </div>
+      ) : (
+        // Read-only: everything on a single line — name, salarié, team links, actions.
+        <div className="flex items-center gap-2">
+          <span className="whitespace-nowrap text-sm font-medium">{`${coach.firstName} ${coach.lastName}`.trim()}</span>
+          {coach.isEmployee ? <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Salarié</span> : null}
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+            {coachLinks.map((link) => (
+              <span key={link.id} className="whitespace-nowrap rounded-full bg-accent/15 px-2 py-0.5 text-xs">
+                {teamName.get(link.teamId) ?? "?"} · {link.role === "MAIN" ? "coach" : "adjoint"}
+              </span>
+            ))}
+            {playerLinks.map((link) => (
+              <span key={link.id} className="whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-xs">
+                {teamName.get(link.teamId) ?? "?"} · joueur
+              </span>
+            ))}
+          </div>
+          {actions}
+        </div>
+      )}
 
       <DeleteConfirm
         open={confirmDelete}
@@ -124,44 +140,42 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
         onCancel={() => setConfirmDelete(false)}
       />
 
-      {coachLinks.length > 0 || playerLinks.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {coachLinks.map((link) => (
-            <span key={link.id} className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs">
-              {teamName.get(link.teamId) ?? "?"} · {link.role === "MAIN" ? "coach" : "adjoint"}
-              {editing ? (
-                <button type="button" aria-label="Retirer" onClick={() => delTeamCoach.mutate(link.id)}>
-                  <X className="size-3" />
-                </button>
-              ) : null}
-            </span>
-          ))}
-          {playerLinks.map((link) => (
-            <span key={link.id} className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
-              {teamName.get(link.teamId) ?? "?"} · joueur
-              {editing ? (
-                <button type="button" aria-label="Retirer" onClick={() => delPlayer.mutate(link.id)}>
-                  <X className="size-3" />
-                </button>
-              ) : null}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       {editing ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <TeamSelect aria-label="Équipe" className="h-8 w-40" teams={teams} tiers={tiers} value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)} />
-          <Select aria-label="Rôle" className="h-8 w-28" value={linkRole} onChange={(e) => setLinkRole(e.target.value as TeamCoachRole | "PLAYER")}>
-            <option value="MAIN">Coach</option>
-            <option value="ASSISTANT">Adjoint</option>
-            <option value="PLAYER">Joueur</option>
-          </Select>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={addLink} disabled={0 === teams.length}>
-            <Plus className="size-4" />
-            Lier
-          </Button>
-        </div>
+        <>
+          {coachLinks.length > 0 || playerLinks.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {coachLinks.map((link) => (
+                <span key={link.id} className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs">
+                  {teamName.get(link.teamId) ?? "?"} · {link.role === "MAIN" ? "coach" : "adjoint"}
+                  <button type="button" aria-label="Retirer" onClick={() => delTeamCoach.mutate(link.id)}>
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+              {playerLinks.map((link) => (
+                <span key={link.id} className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
+                  {teamName.get(link.teamId) ?? "?"} · joueur
+                  <button type="button" aria-label="Retirer" onClick={() => delPlayer.mutate(link.id)}>
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <TeamSelect aria-label="Équipe" className="h-8 w-40" teams={teams} tiers={tiers} value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)} />
+            <Select aria-label="Rôle" className="h-8 w-28" value={linkRole} onChange={(e) => setLinkRole(e.target.value as TeamCoachRole | "PLAYER")}>
+              <option value="MAIN">Coach</option>
+              <option value="ASSISTANT">Adjoint</option>
+              <option value="PLAYER">Joueur</option>
+            </Select>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={addLink} disabled={0 === teams.length}>
+              <Plus className="size-4" />
+              Lier
+            </Button>
+          </div>
+        </>
       ) : null}
     </div>
   );
@@ -190,6 +204,9 @@ function CoachesEditor() {
   const firstRef = useRef<HTMLInputElement>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
+  // Same taxonomy as the recap/constraint picker (ranking.ts): Salariés / Coachs-joueurs / Bénévoles.
+  const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
+  const groups = groupedCoaches(coaches, coachPlayerIds);
 
   const add = (event: FormEvent) => {
     event.preventDefault();
@@ -246,18 +263,33 @@ function CoachesEditor() {
       {0 === coaches.length ? (
         <EmptyHint>Aucun coach pour le moment.</EmptyHint>
       ) : (
-        <div className="flex flex-col gap-3">
-          {[...coaches].sort(compareByFirstName).map((coach) => (
-            <CoachCard
-              key={coach.id}
-              coach={coach}
-              teams={teams}
-              tiers={tiers}
-              teamName={teamName}
-              coachLinks={teamCoaches.filter((l) => l.coachId === coach.id)}
-              playerLinks={coachPlayers.filter((l) => l.coachId === coach.id)}
-            />
-          ))}
+        <div className="flex flex-col gap-4">
+          {(
+            [
+              ["Salariés", groups.salaried],
+              ["Coachs-joueurs", groups.player],
+              ["Bénévoles", groups.other],
+            ] as const
+          ).map(([label, list]) =>
+            list.length > 0 ? (
+              <section key={label}>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</h3>
+                <div className="flex flex-col gap-3">
+                  {list.map((coach) => (
+                    <CoachCard
+                      key={coach.id}
+                      coach={coach}
+                      teams={teams}
+                      tiers={tiers}
+                      teamName={teamName}
+                      coachLinks={teamCoaches.filter((l) => l.coachId === coach.id)}
+                      playerLinks={coachPlayers.filter((l) => l.coachId === coach.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null,
+          )}
         </div>
       )}
     </div>

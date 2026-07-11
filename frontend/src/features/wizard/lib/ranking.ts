@@ -53,6 +53,18 @@ export function orderedCoaches(coaches: Coach[], coachPlayerIds: Set<string>): R
     .sort((a, b) => COACH_GROUP_RANK[a.group] - COACH_GROUP_RANK[b.group] || fullName(a.coach).localeCompare(fullName(b.coach), "fr"));
 }
 
+/**
+ * orderedCoaches split into its three buckets (each already ordered), for
+ * section/optgroup rendering. `coachPlayerIds` = ids with an active player membership.
+ */
+export function groupedCoaches(coaches: Coach[], coachPlayerIds: Set<string>): Record<CoachGroup, Coach[]> {
+  const groups: Record<CoachGroup, Coach[]> = { salaried: [], player: [], other: [] };
+  for (const { coach, group } of orderedCoaches(coaches, coachPlayerIds)) {
+    groups[group].push(coach);
+  }
+  return groups;
+}
+
 /** Coach staffing tags ("salarié · coach-joueur") — undefined when neither. */
 export function coachMeta(isEmployee: boolean, isPlayer: boolean): string | undefined {
   return [isEmployee ? "salarié" : null, isPlayer ? "coach-joueur" : null].filter(Boolean).join(" · ") || undefined;
