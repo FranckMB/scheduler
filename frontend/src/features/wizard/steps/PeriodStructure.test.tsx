@@ -8,6 +8,7 @@ const deleteOverride = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
+const conflictState: { venueIds: string[] } = { venueIds: [] };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
@@ -16,22 +17,23 @@ vi.mock("../queries", () => ({
   ] }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
   useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: false }),
-  useCreateTeamPeriodOverride: () => ({ mutate: createOverride, isPending: false }),
-  useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, isPending: false }),
-  useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, isPending: false }),
+  useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
+  useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
+  useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: false, isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
   usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
 }));
-vi.mock("@/features/cockpit/queries", () => ({ useEntryConflicts: () => ({ data: { venueIds: [] } }) }));
+vi.mock("@/features/cockpit/queries", () => ({ useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }) }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { PeriodTeams, PeriodVenues } from "./PeriodStructure";
 
 afterEach(() => {
   overridesState.data = [];
+  conflictState.venueIds = [];
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
@@ -56,6 +58,17 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
   });
 });
 
+describe("PeriodTeams — session guard", () => {
+  it("ignores an emptied sessions field instead of persisting 0", async () => {
+    overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // suppress the seed
+    render(<PeriodTeams calendarEntryId="e1" />);
+    const input = screen.getByLabelText("Séances de SM1 cette période");
+    await userEvent.clear(input); // → Number("") === 0
+    expect(createOverride).not.toHaveBeenCalled();
+    expect(updateOverride).not.toHaveBeenCalled();
+  });
+});
+
 describe("PeriodVenues — borrowed period slots", () => {
   it("lists the period's borrowed slots and adds a new one", async () => {
     render(<PeriodVenues calendarEntryId="e1" />);
@@ -64,5 +77,11 @@ describe("PeriodVenues — borrowed period slots", () => {
     await userEvent.selectOptions(screen.getByLabelText("Gymnase"), "v1");
     await userEvent.click(screen.getByRole("button", { name: "Ajouter" }));
     expect(createSlot).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOfWeek: 1, capacity: 1 }), expect.anything());
+  });
+
+  it("marks a gym closed for the period as INTERDIT", () => {
+    conflictState.venueIds = ["v1"];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(screen.getByText(/INTERDIT cette période/)).toBeInTheDocument();
   });
 });

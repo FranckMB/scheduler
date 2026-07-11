@@ -44,58 +44,67 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const update = useUpdateTeamPeriodOverride(calendarEntryId);
   const del = useDeleteTeamPeriodOverride(calendarEntryId);
   const seeded = useRef(false);
+  const [busy, setBusy] = useState(false);
 
   const groups = groupTeamsByTier(teams, tiers);
   const topTierId = groups[0]?.tier?.id ?? null;
   const overrideOf = new Map<string, TeamPeriodOverride>(overrides.map((o) => [o.teamId, o]));
 
-  // Fanion-only default: on a FRESH period (no overrides yet) deactivate every team
-  // below the top tier, once. The manager then re-activates as the club ramps up.
-  useEffect(() => {
-    if (seeded.current || isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId) {
-      return;
-    }
-    seeded.current = true;
-    for (const t of teams) {
-      if (t.priorityTierId !== topTierId) {
-        create.mutate({ calendarEntryId, teamId: t.id, isActive: false });
-      }
-    }
-  }, [isLoading, teams, overrides, topTierId, calendarEntryId, create]);
-
   const isActive = (t: Team): boolean => overrideOf.get(t.id)?.isActive ?? true;
   const sessionsOf = (t: Team): number => overrideOf.get(t.id)?.sessionsPerWeek ?? t.sessionsPerWeek;
 
   // Upsert the override, or DELETE it when the state is back to the seasonal default
-  // (active + seasonal session count) — keeps the table sparse.
-  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => {
+  // (active + seasonal session count) — keeps the table sparse. Returns the mutation
+  // promise so batch actions (seed / ramp) can await the whole set.
+  const upsertAsync = (t: Team, next: { isActive: boolean; sessions: number | null }): Promise<unknown> => {
     const existing = overrideOf.get(t.id);
     const backToSeasonal = next.isActive && (null === next.sessions || next.sessions === t.sessionsPerWeek);
     if (backToSeasonal) {
-      if (existing) {
-        del.mutate(existing.id);
-      }
-      return;
+      return existing ? del.mutateAsync(existing.id) : Promise.resolve();
     }
     const body = { calendarEntryId, teamId: t.id, isActive: next.isActive, sessionsPerWeek: next.sessions };
-    if (existing) {
-      update.mutate({ id: existing.id, body });
-    } else {
-      create.mutate(body);
-    }
+    return existing ? update.mutateAsync({ id: existing.id, body }) : create.mutateAsync(body);
   };
+  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next);
+
+  // Fanion-only default: on a FRESH period (no overrides yet) deactivate every team
+  // below the top tier, ONCE. Controls stay disabled (busy) until the async seed
+  // settles so a first click can't race the in-flight writes (and get dropped).
+  useEffect(() => {
+    if (seeded.current || busy || isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId) {
+      return;
+    }
+    seeded.current = true;
+    const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
+    if (0 === belowTop.length) {
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
+    setBusy(true);
+    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
+  }, [busy, isLoading, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
-  const setSessions = (t: Team, n: number) => upsert(t, { isActive: isActive(t), sessions: n === t.sessionsPerWeek ? null : n });
+  const setSessions = (t: Team, raw: number) => {
+    // Ignore an emptied / out-of-range field (Number("") === 0) rather than persist 0.
+    if (!Number.isInteger(raw) || raw < 1 || raw > 7) {
+      return;
+    }
+    upsert(t, { isActive: isActive(t), sessions: raw === t.sessionsPerWeek ? null : raw });
+  };
 
-  // Ramp presets: activate every team up to (and including) a tier group index.
-  const rampTo = (upToIndex: number) => {
-    groups.forEach((g, i) => {
-      for (const t of g.teams) {
-        upsert(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
-      }
-    });
-    toast.success("Sélection appliquée");
+  // Ramp presets: activate every team up to (and including) a tier group index —
+  // awaited as a batch, controls disabled meanwhile.
+  const rampTo = async (upToIndex: number) => {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (0 === groups.length) {
@@ -108,15 +117,15 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
         Choisissez qui reprend sur cette période. Par défaut seul le <strong>Fanion</strong> est actif — cochez les équipes au fur et à mesure de la montée en charge.
       </p>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={() => rampTo(0)}>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(0)}>
           Fanion seul
         </Button>
         {groups.length > 2 ? (
-          <Button size="sm" variant="outline" onClick={() => rampTo(1)}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(1)}>
             + importantes
           </Button>
         ) : null}
-        <Button size="sm" variant="outline" onClick={() => rampTo(groups.length - 1)}>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(groups.length - 1)}>
           Tout le club
         </Button>
       </div>
@@ -129,7 +138,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
               return (
                 <div key={t.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={active} onChange={(e) => toggle(t, e.target.checked)} aria-label={`${t.name} active cette période`} />
+                    <input type="checkbox" checked={active} disabled={busy} onChange={(e) => toggle(t, e.target.checked)} aria-label={`${t.name} active cette période`} />
                     <span className={cn(!active && "text-muted-foreground line-through")}>{t.name}</span>
                   </label>
                   <label className={cn("flex items-center gap-1 text-xs text-muted-foreground", !active && "opacity-50")}>
@@ -140,7 +149,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
                       max={7}
                       className={cn(fieldClass, "w-14")}
                       value={sessionsOf(t)}
-                      disabled={!active}
+                      disabled={!active || busy}
                       onChange={(e) => setSessions(t, Number(e.target.value))}
                       aria-label={`Séances de ${t.name} cette période`}
                     />

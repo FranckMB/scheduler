@@ -206,8 +206,10 @@ const zoneTierId = (id: string): number | null => (id.startsWith("zone-") ? Numb
 export function TeamsStep() {
   const mode = useWizardStore((s) => s.mode);
   const calendarEntryId = useWizardStore((s) => s.calendarEntryId);
-  if ("period" === mode && null !== calendarEntryId) {
-    return <PeriodTeams calendarEntryId={calendarEntryId} />;
+  // Period mode NEVER renders the seasonal editor (which mutates the base plan) —
+  // a null entryId (stale/partial store) shows a recovery hint, not TeamsEditor.
+  if ("period" === mode) {
+    return calendarEntryId ? <PeriodTeams calendarEntryId={calendarEntryId} /> : <EmptyHint>Période introuvable — revenez au cockpit pour l'ouvrir.</EmptyHint>;
   }
   return <TeamsEditor />;
 }

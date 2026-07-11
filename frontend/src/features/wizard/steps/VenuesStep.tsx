@@ -202,8 +202,9 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
 
 export function VenuesStep() {
   const { mode, calendarEntryId } = useWizardStore();
-  if ("period" === mode && null !== calendarEntryId) {
-    return <PeriodVenues calendarEntryId={calendarEntryId} />;
+  // Period mode never renders the seasonal editor (base-plan writes) — see TeamsStep.
+  if ("period" === mode) {
+    return calendarEntryId ? <PeriodVenues calendarEntryId={calendarEntryId} /> : <EmptyHint>Période introuvable — revenez au cockpit pour l'ouvrir.</EmptyHint>;
   }
   return <VenuesEditor />;
 }
