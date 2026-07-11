@@ -2,6 +2,12 @@ Last verified @ feat/rgpd-consent-privacy 2026-07-11
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
 Changements récents :
+- **structure de période éditable (2026-07-12)** : `VenueTrainingSlot` gagne
+  `calendarEntryId` (créneau scopé période, additif ; listing par défaut = saisonnier
+  `IS NULL`, `?calendarEntryId=` liste ceux d'une période). Nouvelle ressource
+  **`TeamPeriodOverride`** (`/api/team_period_overrides`) — surcharge sparse par
+  (période, équipe) : `isActive` + `sessionsPerWeek?`. Le build overlay résout
+  saisonnier→période (créneaux additifs, équipe off = 0 séance, séances override).
 - **planning-versions étoile = contexte chargé (2026-07-11)** : `Schedule` expose
   `isLiveContext` (read-only, ★) — la version dont la structure est le contexte
   actuellement chargé (posé sur chaque plan de saison COMPLETED, re-pointé par

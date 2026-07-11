@@ -52,6 +52,16 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
             if (null !== $seasonId && '' !== $seasonId) {
                 $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
             }
+
+            // Period-editable structure: ?calendarEntryId=<id> lists that period's own
+            // slots; ABSENT ⇒ SEASONAL only (calendarEntryId IS NULL) so the wizard's
+            // seasonal editor never shows a period's borrowed slots.
+            $calendarEntryId = $request->query->get('calendarEntryId');
+            if (null !== $calendarEntryId && '' !== $calendarEntryId) {
+                $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
+            } else {
+                $qb->andWhere('e.calendarEntryId IS NULL');
+            }
         }
 
         // Deterministic total order: dayOfWeek/startTime are not unique, so add the

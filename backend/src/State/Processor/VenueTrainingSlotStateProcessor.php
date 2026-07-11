@@ -34,6 +34,9 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
     protected function createEntityFromInput(object $input): VenueTrainingSlot
     {
         $entity = new VenueTrainingSlot;
+        // Period slot (calendarEntryId set) vs seasonal (null) — set only on create;
+        // a slot never migrates between the seasonal and a period layer.
+        $entity->setCalendarEntryId($input->calendarEntryId);
         if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
@@ -124,11 +127,25 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
             if ($other->getId() === $entity->getId()) {
                 continue; // an edit does not conflict with itself
             }
+            // Layers that are NEVER generated together may share a time: two DIFFERENT
+            // periods (both calendarEntryId set and distinct) never union. But the
+            // overlay build unions SEASONAL ∪ one period, so a period slot must not
+            // overlap a seasonal one (else the same court is double-booked at solve).
+            if ($this->neverGeneratedTogether($entity, $other)) {
+                continue;
+            }
             $otherStart = $this->minutesOf($other);
             if ($start < $otherStart + $other->getDurationMinutes() && $otherStart < $end) {
                 throw new ValidationException('This slot overlaps another slot of the same venue on that day.');
             }
         }
+    }
+
+    private function neverGeneratedTogether(VenueTrainingSlot $a, VenueTrainingSlot $b): bool
+    {
+        return null !== $a->getCalendarEntryId()
+            && null !== $b->getCalendarEntryId()
+            && $a->getCalendarEntryId() !== $b->getCalendarEntryId();
     }
 
     private function minutesOf(VenueTrainingSlot $slot): int

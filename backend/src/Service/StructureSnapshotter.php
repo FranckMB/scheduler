@@ -123,7 +123,7 @@ final class StructureSnapshotter
             default => ['clubId' => $clubId, 'seasonId' => $seasonId],
         };
         // Only the PERMANENT structure: dated rows belong to the calendar.
-        if (Constraint::class === $entityClass || Reservation::class === $entityClass) {
+        if (Constraint::class === $entityClass || Reservation::class === $entityClass || VenueTrainingSlot::class === $entityClass) {
             $criteria['calendarEntryId'] = null;
         }
 

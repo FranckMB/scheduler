@@ -33,4 +33,9 @@ class VenueTrainingSlotInput
     #[Assert\Range(min: 1, max: 2)]
     #[Groups(['write'])]
     public ?int $capacity = 1;
+
+    /** Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive). */
+    #[Assert\Uuid]
+    #[Groups(['write'])]
+    public ?string $calendarEntryId = null;
 }

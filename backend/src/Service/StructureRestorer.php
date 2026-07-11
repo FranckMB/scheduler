@@ -109,36 +109,57 @@ final class StructureRestorer
 
     private function purgeDanglingCalendarRefs(string $clubId, string $seasonId): void
     {
-        // Two-step (SELECT ids → DELETE … WHERE id IN): a DQL DELETE with a
-        // correlated subquery on the reserved-word `constraint` table emits
-        // invalid SQL (the target has no alias to correlate against). SELECT
-        // supports the alias, so resolve the ids first.
-        $deadConstraintIds = $this->entityManager->createQuery(
+        $tenant = ['c' => $clubId, 's' => $seasonId];
+
+        // A dated Constraint whose scope target (team/coach/venue) is gone.
+        $this->deleteDangling(
             'SELECT c.id FROM App\Entity\Constraint c WHERE c.clubId = :c AND c.seasonId = :s AND c.calendarEntryId IS NOT NULL AND ('
             . '(c.scope = :team AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = c.scopeTargetId)) '
             . 'OR (c.scope = :coach AND NOT EXISTS (SELECT 1 FROM App\Entity\Coach co WHERE co.id = c.scopeTargetId)) '
             . 'OR (c.scope = :facility AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = c.scopeTargetId)))',
-        )
-            ->setParameter('c', $clubId)->setParameter('s', $seasonId)
-            ->setParameter('team', \App\Enum\ConstraintScope::TEAM)
-            ->setParameter('coach', \App\Enum\ConstraintScope::COACH)
-            ->setParameter('facility', \App\Enum\ConstraintScope::FACILITY)
-            ->getSingleColumnResult();
-        if ([] !== $deadConstraintIds) {
-            $this->entityManager->createQuery('DELETE App\Entity\Constraint c WHERE c.id IN (:ids)')
-                ->setParameter('ids', $deadConstraintIds)->execute();
-        }
+            $tenant + ['team' => \App\Enum\ConstraintScope::TEAM, 'coach' => \App\Enum\ConstraintScope::COACH, 'facility' => \App\Enum\ConstraintScope::FACILITY],
+            'DELETE App\Entity\Constraint c WHERE c.id IN (:ids)',
+        );
 
-        $deadReservationIds = $this->entityManager->createQuery(
+        // A dated Reservation whose team or venue is gone.
+        $this->deleteDangling(
             'SELECT r.id FROM App\Entity\Reservation r WHERE r.clubId = :c AND r.seasonId = :s AND r.calendarEntryId IS NOT NULL AND ('
-            . 'NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = r.teamId) '
-            . 'OR NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = r.venueId))',
-        )
-            ->setParameter('c', $clubId)->setParameter('s', $seasonId)
-            ->getSingleColumnResult();
-        if ([] !== $deadReservationIds) {
-            $this->entityManager->createQuery('DELETE App\Entity\Reservation r WHERE r.id IN (:ids)')
-                ->setParameter('ids', $deadReservationIds)->execute();
+            . 'NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = r.teamId) OR NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = r.venueId))',
+            $tenant,
+            'DELETE App\Entity\Reservation r WHERE r.id IN (:ids)',
+        );
+
+        // Period-editable structure: a period's team override / borrowed slot whose
+        // target team/venue is gone after the restore — mirror the E1 cascade
+        // (team/venue delete) on the restore path.
+        $this->deleteDangling(
+            'SELECT o.id FROM App\Entity\TeamPeriodOverride o WHERE o.clubId = :c AND o.seasonId = :s AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = o.teamId)',
+            $tenant,
+            'DELETE App\Entity\TeamPeriodOverride o WHERE o.id IN (:ids)',
+        );
+        $this->deleteDangling(
+            'SELECT vts.id FROM App\Entity\VenueTrainingSlot vts WHERE vts.clubId = :c AND vts.seasonId = :s AND vts.calendarEntryId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = vts.venueId)',
+            $tenant,
+            'DELETE App\Entity\VenueTrainingSlot vts WHERE vts.id IN (:ids)',
+        );
+    }
+
+    /**
+     * Two-step ghost cleanup: resolve dangling ids via `$selectDql` (a correlated
+     * DQL DELETE on the reserved-word `constraint` table emits invalid SQL — SELECT
+     * supports the alias, so resolve ids first), then `DELETE … WHERE id IN`.
+     *
+     * @param array<string, mixed> $params
+     */
+    private function deleteDangling(string $selectDql, array $params, string $deleteDql): void
+    {
+        $query = $this->entityManager->createQuery($selectDql);
+        foreach ($params as $key => $value) {
+            $query->setParameter($key, $value);
+        }
+        $ids = $query->getSingleColumnResult();
+        if ([] !== $ids) {
+            $this->entityManager->createQuery($deleteDql)->setParameter('ids', $ids)->execute();
         }
     }
 
@@ -152,7 +173,9 @@ final class StructureRestorer
         $this->deleteFamily(Reservation::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Constraint::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Team::class, $clubId, $seasonId);
-        $this->deleteFamily(VenueTrainingSlot::class, $clubId, $seasonId);
+        // permanentOnly: a period's own slots (calendarEntryId set) belong to the
+        // calendar, not the base structure — a base-version restore must not wipe them.
+        $this->deleteFamily(VenueTrainingSlot::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Venue::class, $clubId, $seasonId);
         $this->deleteFamily(Coach::class, $clubId, $seasonId);
         $this->deleteFamily(SportCategory::class, $clubId, null);

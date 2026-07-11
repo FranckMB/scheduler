@@ -175,6 +175,41 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertCount(35, array_unique($ids), 'every slot must be returned across pages — stable pagination order.');
     }
 
+    public function testPeriodSlotIsScopedAndSeasonalListingExcludesIt(): void
+    {
+        $period = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $venue = $this->createVenue(false);
+        // Seasonal slot at 18:00; a period slot for the SAME gym at a DIFFERENT time.
+        $this->postSlot($venue->getId(), 1, '18:00', 90);
+        self::assertResponseStatusCodeSame(201);
+        $this->postPeriodSlot($venue->getId(), 1, '20:00', 90, $period);
+        self::assertResponseStatusCodeSame(201);
+
+        // Default listing = SEASONAL only (the wizard's seasonal editor).
+        self::assertSame([null], $this->listCalendarEntryIds(''), 'default listing excludes period slots');
+        // Period listing = that period's slots only.
+        self::assertSame([$period], $this->listCalendarEntryIds('?calendarEntryId=' . $period), 'period listing returns only period slots');
+    }
+
+    public function testPeriodSlotOverlappingSeasonalIsRejectedButDifferentPeriodAllowed(): void
+    {
+        $venue = $this->createVenue(false);
+        $this->postSlot($venue->getId(), 1, '18:00', 90); // seasonal 18:00–19:30
+        self::assertResponseStatusCodeSame(201);
+
+        // A period slot on the SAME gym/time as the seasonal one WOULD double-book the
+        // court at overlay solve (seasonal ∪ period) → rejected.
+        $this->postPeriodSlot($venue->getId(), 1, '18:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+        self::assertResponseStatusCodeSame(422);
+
+        // Two DIFFERENT periods never generate together → same time is fine, on a
+        // day/time with NO seasonal slot (day 3, 20:00).
+        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+        self::assertResponseStatusCodeSame(201);
+        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+        self::assertResponseStatusCodeSame(201);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -190,6 +225,32 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         // Stateless JWT firewall → every request carries a Bearer (loginUser only
         // authenticates the first request; the overlap tests fire several).
         $this->token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->user);
+    }
+
+    private function postPeriodSlot(string $venueId, int $day, string $start, int $duration, string $calendarEntryId): void
+    {
+        $this->client->request('POST', '/api/venue_training_slots', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['venueId' => $venueId, 'dayOfWeek' => $day, 'startTime' => $start, 'durationMinutes' => $duration, 'capacity' => 1, 'calendarEntryId' => $calendarEntryId], \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @return list<string|null> the calendarEntryId of every listed slot
+     */
+    private function listCalendarEntryIds(string $query): array
+    {
+        $this->client->request('GET', '/api/venue_training_slots' . $query, [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_X-Season-Id' => $this->season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+        ]);
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        /** @var list<array{calendarEntryId?: string|null}> $members */
+        $members = \is_array($body) && \is_array($body['member'] ?? null) ? $body['member'] : [];
+
+        return array_values(array_unique(array_map(static fn (array $s): ?string => $s['calendarEntryId'] ?? null, $members)));
     }
 
     private function postSlot(string $venueId, int $day, string $start, int $duration): void

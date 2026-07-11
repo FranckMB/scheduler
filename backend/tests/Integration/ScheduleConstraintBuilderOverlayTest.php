@@ -145,11 +145,153 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertNotContains($overlayVenue, $venues, 'overlay slots must NOT leak into the base build');
     }
 
+    public function testOverlayExcludesDeactivatedTeam(): void
+    {
+        [$club, $season] = $this->seed();
+        $teamA = $this->team($club, $season, 'U11');
+        $teamB = $this->team($club, $season, 'U13');
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $teamB, false, null); // B off for the period
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $ids = array_map(static fn (array $t): string => $t['id'], $this->builder->buildForOverlay($schedule, $entry)['teams']);
+
+        self::assertContains($teamA->getId(), $ids, 'an active team is placed');
+        self::assertNotContains($teamB->getId(), $ids, 'a team deactivated for the period gets no sessions');
+    }
+
+    public function testOverlayHonorsSessionsPerWeekOverride(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'U11'); // seasonal sessionsPerWeek defaults to 2
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $team, true, 1); // reduced to 1 for the period
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $teams = $this->builder->buildForOverlay($schedule, $entry)['teams'];
+        $serialized = array_values(array_filter($teams, static fn (array $t): bool => $t['id'] === $team->getId()))[0];
+
+        self::assertSame(1, $serialized['sessionsPerWeek'], 'the period override replaces the seasonal volume');
+    }
+
+    public function testOverlaySlotsAreAdditiveAndBaseExcludesPeriodSlots(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $seasonalVenue = $this->venue($club, $season, '10000000-0000-4000-8000-000000000011', 'Gym socle');
+        $cityVenue = $this->venue($club, $season, '20000000-0000-4000-8000-000000000022', 'Gym mairie');
+        $this->venueSlot($club, $season, $seasonalVenue->getId(), null); // seasonal
+        $this->venueSlot($club, $season, $cityVenue->getId(), $entry->getId()); // period-only
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        // Overlay build: seasonal ∪ period (additive).
+        $overlayVenues = $this->venuesBySlotCount($this->builder->buildForOverlay($schedule, $entry)['venues']);
+        self::assertSame(1, $overlayVenues[$seasonalVenue->getId()], 'seasonal slot kept in the overlay');
+        self::assertSame(1, $overlayVenues[$cityVenue->getId()], 'the city-lent period slot is added');
+
+        // Base build: the period slot must NOT leak in.
+        $baseVenues = $this->venuesBySlotCount($this->builder->buildForClubSeason($club->getId(), $season->getId())['venues']);
+        self::assertSame(1, $baseVenues[$seasonalVenue->getId()], 'seasonal slot feeds the base');
+        self::assertSame(0, $baseVenues[$cityVenue->getId()], 'period slot never leaks into the base plan');
+    }
+
+    public function testSessionOverrideDoesNotLeakIntoASubsequentBaseBuild(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'U11'); // seasonal sessionsPerWeek = 2
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $team, true, 1);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        // Overlay build sets the session-override map on the shared builder instance…
+        $this->builder->buildForOverlay($schedule, $entry);
+        // …a later base build on the SAME instance must NOT inherit it.
+        $baseTeams = $this->builder->buildForClubSeason($club->getId(), $season->getId())['teams'];
+        $serialized = array_values(array_filter($baseTeams, static fn (array $t): bool => $t['id'] === $team->getId()))[0];
+
+        self::assertSame(2, $serialized['sessionsPerWeek'], 'the base plan keeps the seasonal volume — no override leak');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->builder = self::getContainer()->get(ScheduleConstraintBuilder::class);
+    }
+
+    /**
+     * @param list<array{id: string, trainingSlots: list<mixed>}> $venues
+     *
+     * @return array<string, int> venueId → number of training slots in the payload
+     */
+    private function venuesBySlotCount(array $venues): array
+    {
+        $counts = [];
+        foreach ($venues as $venue) {
+            $counts[$venue['id']] = \count($venue['trainingSlots']);
+        }
+
+        return $counts;
+    }
+
+    private function holidayPeriod(Club $club, Season $season): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setTitle('Reprise');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $this->em->persist($entry);
+
+        return $entry;
+    }
+
+    private function teamOverride(Club $club, Season $season, CalendarEntry $entry, Team $team, bool $isActive, ?int $sessions): void
+    {
+        $o = new \App\Entity\TeamPeriodOverride;
+        $o->setClubId($club->getId());
+        $o->setSeasonId($season->getId());
+        $o->setCalendarEntryId($entry->getId());
+        $o->setTeamId($team->getId());
+        $o->setIsActive($isActive);
+        $o->setSessionsPerWeek($sessions);
+        $this->em->persist($o);
+    }
+
+    private function venue(Club $club, Season $season, string $id, string $name): \App\Entity\Venue
+    {
+        $venue = new \App\Entity\Venue;
+        $venue->setId($id);
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName($name);
+        $venue->setCanSplit(false);
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+
+        return $venue;
+    }
+
+    private function venueSlot(Club $club, Season $season, string $venueId, ?string $calendarEntryId): void
+    {
+        $slot = new \App\Entity\VenueTrainingSlot;
+        $slot->setClubId($club->getId());
+        $slot->setSeasonId($season->getId());
+        $slot->setVenueId($venueId);
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $slot->setCapacity(1);
+        $slot->setCalendarEntryId($calendarEntryId);
+        $this->em->persist($slot);
     }
 
     private function slot(Schedule $schedule, string $venueId): void

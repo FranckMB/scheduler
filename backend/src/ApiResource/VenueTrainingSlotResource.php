@@ -56,6 +56,10 @@ class VenueTrainingSlotResource
     #[Groups(['read'])]
     public int $capacity = 1;
 
+    /** Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive). */
+    #[Groups(['read'])]
+    public ?string $calendarEntryId = null;
+
     public static function fromEntity(VenueTrainingSlot $entity): self
     {
         $dto = new self;
@@ -68,6 +72,7 @@ class VenueTrainingSlotResource
         $dto->startTime = $entity->getStartTime();
         $dto->durationMinutes = $entity->getDurationMinutes();
         $dto->capacity = $entity->getCapacity();
+        $dto->calendarEntryId = $entity->getCalendarEntryId();
 
         return $dto;
     }
