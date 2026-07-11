@@ -4,6 +4,7 @@ from ortools.sat.python import cp_model
 
 from app.solver.constraints import (
     AssignmentVariable,
+    add_coach_unavailability_constraints,
     add_level_1_hard_constraints,
     add_team_no_overlap,
     parse_v2_constraints,
@@ -242,7 +243,7 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         assert len(result["time_windows"]) == 1
 
     def test_coach_availability_family(self):
-        # Days are weekday ints (as the wizard sends them), stored as a set.
+        # Days are weekday ints; a day-only config → whole-day (0..1440) intervals.
         constraints = [
             {
                 "id": "c1",
@@ -253,7 +254,37 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["coach_unavailability"] == {"coach-1": {1, 3}}
+        assert result["coach_unavailability"] == {"coach-1": {(1, 0, 1440), (3, 0, 1440)}}
+
+    def test_coach_availability_time_window(self):
+        # Lot C: an unavailable day with a time window → a bounded interval.
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "COACH_AVAILABILITY",
+                "scopeTargetId": "coach-1",
+                "config": {"unavailableDays": [2], "fromTime": "20:00"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        # from 20:00 → blocked [1200, 1440); no untilTime → end of day.
+        assert result["coach_unavailability"] == {"coach-1": {(2, 1200, 1440)}}
+
+    def test_coach_unavailability_apply_blocks_only_the_window(self):
+        # Lot C semantic: "coach c1 unavailable Tue from 20:00" blocks a Tue 20:30
+        # slot but NOT a Tue 18:00 slot nor a Wed 20:30 slot.
+        class _Model:
+            def Add(self, *_args):
+                return None
+
+        rules = {"c1": {(2, 1200, 1440)}}  # Tuesday, 20:00 → end of day
+        avs = [
+            AssignmentVariable(var=1, team_id="t", coach_id="c1", slot_id="2:20:30"),  # blocked
+            AssignmentVariable(var=1, team_id="t", coach_id="c1", slot_id="2:18:00"),  # free (before 20:00)
+            AssignmentVariable(var=1, team_id="t", coach_id="c1", slot_id="3:20:30"),  # free (Wednesday)
+        ]
+        assert add_coach_unavailability_constraints(_Model(), avs, rules) == 1
 
     def test_facility_with_date_range_is_ignored(self):
         # venue_closures (dateStart) is removed — a dated closure has no meaning
@@ -364,7 +395,7 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             }
         ]
         result = parse_v2_constraints(constraints)
-        assert result["coach_unavailability"] == {"coach-2": {5}}
+        assert result["coach_unavailability"] == {"coach-2": {(5, 0, 1440)}}
 
 
 if __name__ == "__main__":

@@ -86,6 +86,7 @@
 | `coachId` (uuid) | le coach visé | — |
 | `unavailableDays` (`[int]`) | **indisponible** ces jours | jours interdits pour toute équipe du coach. **UNION** si plusieurs contraintes sur le même coach |
 | `availableDays` (`[int]`) | **disponible uniquement** ces jours | whitelist. **INTERSECTION** si plusieurs contraintes |
+| `fromTime` / `untilTime` (`"HH:MM"`, optionnels) | **fenêtre horaire** sur ces jours (Lot C) | absent = journée entière (comportement legacy). Bloque un créneau dont le **début** ∈ `[from, until)` sur le jour visé. En interne : la disponibilité est un ensemble d'**intervalles bloqués `(jour, from, to)`** avec sémantique UNION (par De Morgan, couvre à la fois l'UNION des indispos et l'INTERSECTION des whitelists) |
 
 > Une dispo coach reçue en non-HARD est **appliquée dur quand même** + diagnostic INFO (une personne
 > ne peut pas être à deux endroits).

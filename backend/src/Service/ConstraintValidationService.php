@@ -79,6 +79,17 @@ final class ConstraintValidationService
                 if (!isset($config['coachId']) && !isset($config['targetTag'])) {
                     $errors[] = 'COACH_AVAILABILITY family requires coachId or targetTag in config.';
                 }
+                // Lot C: optional time window (fromTime / untilTime, HH:MM). Absent = whole day.
+                $from = $config['fromTime'] ?? null;
+                $until = $config['untilTime'] ?? null;
+                foreach (['fromTime' => $from, 'untilTime' => $until] as $key => $value) {
+                    if (null !== $value && (!\is_string($value) || 1 !== preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value))) {
+                        $errors[] = \sprintf('%s must be a HH:MM time.', $key);
+                    }
+                }
+                if (\is_string($from) && \is_string($until) && $from >= $until) {
+                    $errors[] = 'fromTime must be before untilTime.';
+                }
                 break;
 
             case ConstraintFamily::FACILITY_CAPACITY:
@@ -168,7 +179,6 @@ final class ConstraintValidationService
             && 'HARD' === $c1->getRuleType()->value
             && 'HARD' === $c2->getRuleType()->value
         ) {
-
             // Contradictory day constraints — checked BOTH ways (allowed on one side
             // forbidden on the other) so the verdict does not depend on array order.
             if (ConstraintFamily::DAY === $c1->getFamily()) {

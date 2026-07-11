@@ -20,8 +20,8 @@
 | **FACILITY** « évite » | `forbiddenVenueId` | sélecteur | Vétérans interdits |
 | **FACILITY** « impose » | `forcedVenueId` | **HARD** (épinglé) | SM4 → Jean Vilar |
 | **FACILITY** « au moins N » | `minAtVenueId` + `minAtVenueCount` (défaut 1) | **HARD** (épinglé) | au moins 1 séance à Armand |
-| **COACH_AVAILABILITY** « indisponible » | `coachId` + `unavailableDays` | **HARD** (épinglé) | Lionel indispo vendredi |
-| **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) | **HARD** (épinglé) | coach dispo seulement le mardi |
+| **COACH_AVAILABILITY** « indisponible » | `coachId` + `unavailableDays` (+ `fromTime`/`untilTime` optionnels, Lot C) | **HARD** (épinglé) | Lionel indispo vendredi ; indispo mardi à partir de 20:00 |
+| **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) (+ `fromTime`/`untilTime` optionnels) | **HARD** (épinglé) | coach dispo seulement le mardi de 20:00 à 22:00 |
 | **Cible** | `targetTag` si groupe (sinon `scope`/`scopeTargetId`) | — | groupe FEMININE / REGIONAL |
 | **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** | — | épingle 1 séance sur un créneau |
 | **Écran Gymnases** (hors onglet contraintes) | `FACILITY_CAPACITY` `maxTeams` (`canSplit`) | — | ADN divisible |

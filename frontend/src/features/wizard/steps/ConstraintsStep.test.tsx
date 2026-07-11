@@ -135,6 +135,19 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", availableDays: [2] } });
   });
 
+  it("coach availability emits an optional time window (Lot C: fromTime/untilTime)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Dispo coach" }));
+    await user.selectOptions(screen.getByLabelText("Coach"), "co1");
+    await user.click(screen.getByRole("button", { name: "Mar" }));
+    await user.type(screen.getByLabelText("Heure de début"), "20:00");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", config: { coachId: "co1", unavailableDays: [2], fromTime: "20:00" } });
+  });
+
   it("DAY emits forbiddenDays (the matrix key) whatever the ruleType", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);

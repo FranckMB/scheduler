@@ -45,6 +45,34 @@ final class ConstraintValidationServiceTest extends TestCase
         self::assertContains('Scope COACH requires a scope_target_id.', $errors);
     }
 
+    public function testCoachAvailabilityAcceptsAValidTimeWindow(): void
+    {
+        $constraint = new Constraint;
+        $constraint->setScope(ConstraintScope::COACH);
+        $constraint->setScopeTargetId('coach-1');
+        $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['coachId' => 'coach-1', 'unavailableDays' => [2], 'fromTime' => '20:00']);
+
+        self::assertSame([], $this->service->validate($constraint));
+    }
+
+    public function testCoachAvailabilityRejectsAMalformedOrInvertedWindow(): void
+    {
+        $constraint = new Constraint;
+        $constraint->setScope(ConstraintScope::COACH);
+        $constraint->setScopeTargetId('coach-1');
+        $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['coachId' => 'coach-1', 'unavailableDays' => [2], 'fromTime' => '25:99', 'untilTime' => '20:00']);
+
+        $errors = $this->service->validate($constraint);
+        self::assertContains('fromTime must be a HH:MM time.', $errors);
+
+        $constraint->setConfig(['coachId' => 'coach-1', 'fromTime' => '20:00', 'untilTime' => '18:00']);
+        self::assertContains('fromTime must be before untilTime.', $this->service->validate($constraint));
+    }
+
     public function testFacilityScopeRequiresScopeTargetId(): void
     {
         $constraint = new Constraint;

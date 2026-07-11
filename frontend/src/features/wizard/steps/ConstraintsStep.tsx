@@ -97,6 +97,9 @@ export function ConstraintsStep() {
   // "indisponible" (unavailableDays, blacklist) vs "disponible uniquement"
   // (availableDays, whitelist — l'engine intersecte les whitelists d'un coach).
   const [coachMode, setCoachMode] = useState<"unavailable" | "available">("unavailable");
+  // Lot C: optional time window on the selected days ("" = whole day).
+  const [coachFrom, setCoachFrom] = useState("");
+  const [coachUntil, setCoachUntil] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
   // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -174,14 +177,17 @@ export function ConstraintsStep() {
       return null;
     }
     const coachDaysKey = "available" === coachMode ? "availableDays" : "unavailableDays";
+    // Lot C: optional time window on those days ("" = whole day).
+    const window = "" !== coachFrom || "" !== coachUntil ? { ...(coachFrom ? { fromTime: coachFrom } : {}), ...(coachUntil ? { untilTime: coachUntil } : {}) } : {};
+    const windowLabel = coachFrom && coachUntil ? ` de ${coachFrom} à ${coachUntil}` : coachFrom ? ` à partir de ${coachFrom}` : coachUntil ? ` jusqu'à ${coachUntil}` : "";
     return {
-      name: `${coachName.get(coachId)} · ${"available" === coachMode ? "dispo uniquement" : "indispo"} ${dayNames(days)}`,
+      name: `${coachName.get(coachId)} · ${"available" === coachMode ? "dispo uniquement" : "indispo"} ${dayNames(days)}${windowLabel}`,
       scope: "COACH",
       scopeTargetId: coachId,
       family,
       // Always hard: the engine enforces coach availability unconditionally.
       ruleType: "HARD",
-      config: { coachId, [coachDaysKey]: [...days] },
+      config: { coachId, [coachDaysKey]: [...days], ...window },
     };
   }
 
@@ -204,6 +210,8 @@ export function ConstraintsStep() {
     setVenueId("");
     setVenueMinCount(1);
     setCoachId("");
+    setCoachFrom("");
+    setCoachUntil("");
     setRuleType("PREFERRED");
     clearInputs();
   };
@@ -244,6 +252,8 @@ export function ConstraintsStep() {
       const available = Array.isArray(cfg.availableDays);
       setCoachMode(available ? "available" : "unavailable");
       setDays(new Set(asNums(available ? cfg.availableDays : cfg.unavailableDays)));
+      setCoachFrom("string" === typeof cfg.fromTime ? cfg.fromTime : "");
+      setCoachUntil("string" === typeof cfg.untilTime ? cfg.untilTime : "");
     } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
       setTarget(c.scopeTargetId);
     } else {
@@ -495,6 +505,15 @@ export function ConstraintsStep() {
               <option value="available">disponible uniquement</option>
             </Select>
             <DayPicker days={days} toggle={toggleDay} />
+            {/* Lot C: optional time window on the selected days (empty = whole day). */}
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              de
+              <Input type="time" aria-label="Heure de début" className="h-8 w-28" value={coachFrom} onChange={(e) => setCoachFrom(e.target.value)} />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              à
+              <Input type="time" aria-label="Heure de fin" className="h-8 w-28" value={coachUntil} onChange={(e) => setCoachUntil(e.target.value)} />
+            </label>
           </>
         )}
 
