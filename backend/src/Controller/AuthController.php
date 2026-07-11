@@ -48,6 +48,12 @@ use Throwable;
 
 final class AuthController extends AbstractController
 {
+    // Version des textes acceptés au register — à INCRÉMENTER quand les CGU ou
+    // la politique de confidentialité changent substantiellement, ENSEMBLE avec
+    // frontend/src/features/legal/terms.ts (la version affichée à l'utilisateur
+    // doit être celle qu'on estampille).
+    public const TERMS_VERSION = '2026-07-11';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
@@ -91,6 +97,7 @@ final class AuthController extends AbstractController
         $lastName = isset($data['lastName']) && \is_string($data['lastName']) ? trim($data['lastName']) : '';
         $ara = isset($data['ara']) && \is_string($data['ara']) ? strtoupper(trim($data['ara'])) : '';
         $clubName = isset($data['club_name']) && \is_string($data['club_name']) ? trim($data['club_name']) : '';
+        $consent = true === ($data['consent'] ?? false);
 
         // Validation below is HOISTED above the email lookup and depends only on the
         // submitted payload (or the ARA — public FFBB data), NEVER on whether the
@@ -108,6 +115,11 @@ final class AuthController extends AbstractController
         }
         if (!preg_match('/^[A-Z0-9]{3,20}$/', $ara)) {
             return $this->json(['error' => 'ARA must be 3-20 uppercase alphanumeric characters'], 400);
+        }
+        // RGPD : le consentement CGU/politique de confidentialité est requis —
+        // validation payload-only, donc toujours enumeration-safe (A3).
+        if (!$consent) {
+            return $this->json(['error' => 'Vous devez accepter les CGU et la politique de confidentialité.'], 400);
         }
 
         $email = strtolower($email);
@@ -134,6 +146,8 @@ final class AuthController extends AbstractController
                 $existingUser->setPasswordHash($this->passwordHasher->hashPassword($existingUser, $password));
                 $existingUser->setFirstName($firstName);
                 $existingUser->setLastName($lastName);
+                $existingUser->setTermsAcceptedAt($this->clock->now());
+                $existingUser->setTermsVersion(self::TERMS_VERSION);
                 $rawToken = $this->emailVerifier->generateToken($existingUser, $ara, $intentClubName);
                 $this->entityManager->flush();
                 $this->sendVerificationEmail($request, $existingUser->getEmail(), $rawToken);
@@ -537,6 +551,9 @@ final class AuthController extends AbstractController
         $user->setFirstName($firstName);
         $user->setLastName($lastName);
         $user->setPasswordHash($this->passwordHasher->hashPassword($user, $password));
+        // RGPD : preuve de consentement (horodatage + version des textes).
+        $user->setTermsAcceptedAt($this->clock->now());
+        $user->setTermsVersion(self::TERMS_VERSION);
         $this->entityManager->persist($user);
         // RGPD audit : événement GLOBAL (pas encore de tenant) — l'id seul,
         // jamais l'email (règle no-PII du journal).

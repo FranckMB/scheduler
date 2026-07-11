@@ -36,6 +36,11 @@ describe("RegisterPage", () => {
     await user.type(screen.getByLabelText("Mot de passe"), "Sup3rStrongPwd!");
     await user.type(screen.getByLabelText(/code ara/i), "BCCL0123");
     await user.type(screen.getByLabelText(/nom du club/i), "Basket Club");
+    // RGPD : soumettre sans cocher affiche une erreur claire (noValidate rend
+    // le `required` natif inerte) — puis cocher débloque.
+    await user.click(screen.getByRole("button", { name: /créer le compte/i }));
+    expect(screen.getByText(/accepter les conditions/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /j'accepte/i }));
     await user.click(screen.getByRole("button", { name: /créer le compte/i }));
 
     await waitFor(() => expect(screen.getByText(/email de confirmation/i)).toBeInTheDocument());

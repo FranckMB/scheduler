@@ -318,7 +318,8 @@
                                     "password",
                                     "firstName",
                                     "lastName",
-                                    "ara"
+                                    "ara",
+                                    "consent"
                                 ],
                                 "properties": {
                                     "email": {
@@ -342,6 +343,10 @@
                                     "club_name": {
                                         "type": "string",
                                         "description": "Required only when the ARA creates a new club (snake_case)"
+                                    },
+                                    "consent": {
+                                        "type": "boolean",
+                                        "description": "RGPD: acceptance of the terms & privacy policy \u2014 required (400 without)"
                                     }
                                 }
                             }

@@ -50,6 +50,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $anonymizedAt = null;
 
+    // RGPD (consentement) : acceptation CGU + politique de confidentialité au
+    // register (preuve : horodatage + version des textes acceptés).
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $termsAcceptedAt = null;
+
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $termsVersion = null;
+
     // RGPD (rétention) : dernier login réussi — l'inactivité se mesure sur
     // COALESCE(lastLoginAt, createdAt). Posé par LoginSuccessListener.
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
@@ -176,6 +184,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setAnonymizedAt(?DateTimeImmutable $anonymizedAt): self
     {
         $this->anonymizedAt = $anonymizedAt;
+
+        return $this;
+    }
+
+    public function getTermsAcceptedAt(): ?DateTimeImmutable
+    {
+        return $this->termsAcceptedAt;
+    }
+
+    public function setTermsAcceptedAt(?DateTimeImmutable $termsAcceptedAt): self
+    {
+        $this->termsAcceptedAt = $termsAcceptedAt;
+
+        return $this;
+    }
+
+    public function getTermsVersion(): ?string
+    {
+        return $this->termsVersion;
+    }
+
+    public function setTermsVersion(?string $termsVersion): self
+    {
+        $this->termsVersion = $termsVersion;
 
         return $this;
     }

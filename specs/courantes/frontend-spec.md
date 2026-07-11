@@ -464,7 +464,7 @@ override (tests), mais le frontend ne les envoie pas — le tenant est dérivé 
 | Endpoint | Méthode | Body | Réponse | Action frontend |
 |----------|---------|------|---------|-----------------|
 | `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
-| `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name? }` | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
+| `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name?, consent }` (consent obligatoire — RGPD) | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
 | `/api/register/verify` | POST | `{ token }` (du lien email) | `{ token, membershipStatus, user }` | Stocker token ; `pending` → `/waiting`, sinon `/` |
 | `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, baselineScheduleId, hasGenerated }` | Query `["me"]` — source des guards, du thème (accent) et du planning principal |
 

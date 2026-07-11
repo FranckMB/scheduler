@@ -134,7 +134,7 @@ final class ImportFixturesApiTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $suffix . '@test.fr', 'password' => 'Password123!',
-            'firstName' => 'F', 'lastName' => 'Bi', 'ara' => strtoupper($suffix), 'club_name' => $clubName,
+            'firstName' => 'F', 'lastName' => 'Bi', 'ara' => strtoupper($suffix), 'club_name' => $clubName, 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
         $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');
         self::assertNotSame('', $token);

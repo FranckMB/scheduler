@@ -117,7 +117,7 @@ final class MembershipApprovalTest extends WebTestCase
     {
         $this->register([
             'email' => "owner-{$ara}@club.fr", 'password' => 'Password123!',
-            'firstName' => 'Owner', 'lastName' => 'Admin', 'ara' => $ara, 'club_name' => "Club {$ara}",
+            'firstName' => 'Owner', 'lastName' => 'Admin', 'ara' => $ara, 'club_name' => "Club {$ara}", 'consent' => true,
         ]);
 
         return $this->verifyRegistration($this->client, "owner-{$ara}@club.fr");
@@ -127,7 +127,7 @@ final class MembershipApprovalTest extends WebTestCase
     {
         $this->register([
             'email' => $email, 'password' => 'Password123!',
-            'firstName' => 'Join', 'lastName' => 'Er', 'ara' => $ara, 'club_name' => 'x',
+            'firstName' => 'Join', 'lastName' => 'Er', 'ara' => $ara, 'club_name' => 'x', 'consent' => true,
         ]);
 
         return $this->verifyRegistration($this->client, $email);

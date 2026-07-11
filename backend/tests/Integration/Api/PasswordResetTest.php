@@ -79,7 +79,7 @@ final class PasswordResetTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $email, 'password' => 'Password123!',
-            'firstName' => 'Reset', 'lastName' => 'User', 'ara' => $ara, 'club_name' => "Club {$ara}",
+            'firstName' => 'Reset', 'lastName' => 'User', 'ara' => $ara, 'club_name' => "Club {$ara}", 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         // Register no longer verifies (A3): mark the account verified so the reset flow's

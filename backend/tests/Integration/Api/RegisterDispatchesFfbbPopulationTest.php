@@ -65,7 +65,7 @@ final class RegisterDispatchesFfbbPopulationTest extends WebTestCase
     {
         $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = strtolower($ara) . substr(md5(uniqid('', true)), 0, 6);
-        $payload = ['email' => $suffix . '@test.fr', 'password' => 'Password123!', 'firstName' => 'M', 'lastName' => 'R', 'ara' => $ara];
+        $payload = ['email' => $suffix . '@test.fr', 'password' => 'Password123!', 'firstName' => 'M', 'lastName' => 'R', 'ara' => $ara, 'consent' => true];
         if (null !== $clubName) {
             $payload['club_name'] = $clubName;
         }

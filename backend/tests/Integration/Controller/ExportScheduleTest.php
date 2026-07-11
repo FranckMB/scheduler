@@ -65,7 +65,7 @@ final class ExportScheduleTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $suffix . '@test.fr', 'password' => 'Password123!',
-            'firstName' => 'E', 'lastName' => 'Export', 'ara' => strtoupper($suffix), 'club_name' => 'Club Export',
+            'firstName' => 'E', 'lastName' => 'Export', 'ara' => strtoupper($suffix), 'club_name' => 'Club Export', 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');

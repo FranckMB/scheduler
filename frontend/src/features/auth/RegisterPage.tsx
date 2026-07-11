@@ -15,6 +15,7 @@ import { useRegister } from "./queries";
 export function RegisterPage() {
   const register = useRegister();
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", ara: "", club_name: "" });
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
@@ -29,8 +30,14 @@ export function RegisterPage() {
       setError(passwordError);
       return;
     }
+    // noValidate rend le `required` de la case inerte : garde explicite avec
+    // un message clair plutôt qu'un bouton désarmé silencieux (revue PR-5).
+    if (!consent) {
+      setError("Vous devez accepter les conditions d'utilisation et la politique de confidentialité.");
+      return;
+    }
     try {
-      await register.mutateAsync({ ...form, ara: form.ara.toUpperCase() });
+      await register.mutateAsync({ ...form, ara: form.ara.toUpperCase(), consent });
       setSent(true);
     } catch (err) {
       setError(await apiErrorMessage(err));
@@ -81,6 +88,23 @@ export function RegisterPage() {
           <Label htmlFor="club_name">Nom du club <span className="text-muted-foreground">(si nouveau club)</span></Label>
           <Input id="club_name" value={form.club_name} onChange={set("club_name")} />
         </div>
+        {/* RGPD : consentement explicite requis (le backend le refuse sans). */}
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-[var(--accent)]"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            required
+          />
+          <span>
+            J'accepte les{" "}
+            <Link className="text-accent hover:underline" to="/confidentialite" target="_blank" rel="noreferrer">
+              conditions d'utilisation et la politique de confidentialité
+            </Link>
+            .
+          </span>
+        </label>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" disabled={register.isPending}>
           {register.isPending ? <Spinner className="size-4" /> : null}

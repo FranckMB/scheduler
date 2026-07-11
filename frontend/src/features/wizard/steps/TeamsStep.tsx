@@ -213,7 +213,7 @@ export function TeamsStep() {
 
 function TeamsEditor() {
   const { data: teams = [] } = useWizardTeams();
-  const { data: categories = [] } = useSportCategories();
+  const { data: categories = [], isLoading: categoriesLoading } = useSportCategories();
   const { data: tiers = [] } = usePriorityTiers();
   const { data: reservations = [] } = useReservations();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
@@ -501,7 +501,9 @@ function TeamsEditor() {
                 </option>
               ))}
             </Select>
-            <Button type="submit" size="icon" className="ml-auto size-8" disabled={create.isPending} title="Ajouter l'équipe" aria-label="Ajouter l'équipe">
+            {/* Désarmé tant que les catégories chargent : un submit précoce
+                enverrait sportCategoryId undefined → 422 (course vue en e2e). */}
+            <Button type="submit" size="icon" className="ml-auto size-8" disabled={create.isPending || categoriesLoading} title="Ajouter l'équipe" aria-label="Ajouter l'équipe">
               <Plus className="size-4" />
             </Button>
           </form>

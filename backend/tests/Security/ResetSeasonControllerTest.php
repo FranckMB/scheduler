@@ -221,7 +221,7 @@ final class ResetSeasonControllerTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([
             'email' => $suffix . '@test.fr', 'password' => 'Password123!',
-            'firstName' => 'R', 'lastName' => 'Reset', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara,
+            'firstName' => 'R', 'lastName' => 'Reset', 'ara' => strtoupper($suffix), 'club_name' => 'Club ' . $ara, 'consent' => true,
         ], \JSON_THROW_ON_ERROR));
 
         $token = $this->verifyRegistration($this->client, $suffix . '@test.fr');

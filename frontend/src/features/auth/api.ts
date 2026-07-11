@@ -101,6 +101,8 @@ export interface RegisterPayload {
   lastName: string;
   ara: string;
   club_name: string;
+  /** RGPD : acceptation CGU + politique de confidentialité (obligatoire). */
+  consent: boolean;
 }
 
 /** Register never authenticates: it returns an identical neutral 202 for a fresh

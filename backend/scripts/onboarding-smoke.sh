@@ -19,7 +19,7 @@ EMAIL="onb-$ARA@smoke.fr"
 # whose raw token arrives by email → pulled back out of Mailpit here.
 info "register new club $ARA (deferred verification)"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/register" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"firstName\":\"On\",\"lastName\":\"Board\",\"ara\":\"$ARA\",\"club_name\":\"Onb $ARA\"}")
+  -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"firstName\":\"On\",\"lastName\":\"Board\",\"ara\":\"$ARA\",\"club_name\":\"Onb $ARA\",\"consent\":true}")
 [[ "$CODE" == "202" ]] || die "register returned $CODE (expected 202)"
 
 info "pull the verification link from Mailpit"
