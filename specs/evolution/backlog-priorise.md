@@ -45,10 +45,10 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P3-1 | **Matchs — reste palier A** : volet joueur (`CoachPlayerMembership`), `Team.preferredMatchWindow`, envelope HARD jour/coup d'envoi | 🟡 | M | Paliers B (dérogation/trajet/annuaire adverse) / C plus tard |
-| P3-2 | **Overlays cockpit** : `cutoff` (fenêtre vide non générante), `mutualisation` (`team_ids[]` fusionnés), DayDialog période `custom` générante | 🟡 | L | Mutualisation = gros morceau moteur ; cutoff/custom mitigés (bouton désactivé) |
+| P3-2 | **Overlays cockpit** — reste ouvert : DayDialog période `custom` **générante** (aujourd'hui 422, mitigé par bouton désactivé) | 🟡 | M | `cutoff` = **✅ livré** (reliquats 2026-07-06) ; `mutualisation` moteur = **❌ abandonné** (résolu via réservation, salle divisible + capacité 2) ; **versions d'overlay = ✅ livré (2026-07-11)** — cf. P3-5 |
 | P3-3 | **Modèle « templates → occurrences »** | 🟡 | L | Fondation absente ; débloque « éditer baseline ⇒ répercuter sur secondaires » (cascade reportée) |
 | P3-4 | **Enregistrement FFBB** (légitimité / anti-squatting du code club) | 🟡 | M | spec'd (#145) ; A5/A6 déjà fermés |
-| P3-5 | **Versions — diff/comparaison · restaurer une ARCHIVED · versions d'overlay** | 🟡 | L | hors périmètre D assumé |
+| P3-5 | **Versions — diff/comparaison · restaurer une ARCHIVED** | 🟡 | L | hors périmètre D assumé. *(**versions d'overlay = ✅ livré 2026-07-11**, planning-versions §D3ter)* |
 | P3-6 | **`solver_metrics` — persistance + partition + purge 6 mois** | 🟡 | M | déjà calculées (`SolverMetricsMapper`), pas persistées ; alimente la console superadmin |
 | P3-7 | **Import équipes Excel — UI wizard** | ⚪ | S | backend `FfbbExcelImporter` existe ; l'API FFBB doit à terme remplacer l'import manuel |
 

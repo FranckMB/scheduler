@@ -57,6 +57,27 @@ final class CalendarEntryRepository extends ServiceEntityRepository
     }
 
     /**
+     * Period entries of a club whose window already ended (endDate < today) — the
+     * overlay-purge scope. Explicit clubId (no ambient season filter in CLI); the
+     * caller purges every overlay version of each returned entry.
+     *
+     * @return list<CalendarEntry>
+     */
+    public function findEndedPeriods(string $clubId, DateTimeImmutable $today): array
+    {
+        return $this->createQueryBuilder('e')
+            ->andWhere('e.clubId = :clubId')
+            ->andWhere('e.kind = :kind')
+            ->andWhere('e.endDate < :today')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
+            ->setParameter('today', $today->format('Y-m-d'))
+            ->orderBy('e.endDate', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Active period entries of the current tenant scope, ordered deterministically
      * (startDate, then id) so a date covered by two periods always resolves to the
      * same one. Relies on the ambient club+season Doctrine filters for scoping.

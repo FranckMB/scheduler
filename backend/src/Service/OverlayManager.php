@@ -39,18 +39,30 @@ final class OverlayManager
      */
     public function deleteOverlayForEntry(CalendarEntry $entry, bool $force = false): void
     {
-        $overlayId = $entry->getOverlayScheduleId();
-        if (null === $overlayId) {
-            return;
+        // planning-versions: a period may hold SEVERAL overlay versions — delete
+        // them ALL (the pointer only names the active one). Guard every version
+        // first so a refusal never leaves the period half-cleared.
+        $overlays = [];
+        foreach ($this->entityManager->getRepository(Schedule::class)->findBy(['calendarEntryId' => $entry->getId()]) as $schedule) {
+            $overlays[$schedule->getId()] = $schedule;
         }
-
-        $schedule = $this->entityManager->getRepository(Schedule::class)->find($overlayId);
-        if ($schedule instanceof Schedule) {
+        // Legacy overlays (pre-forward-marker) are only reachable via the reverse
+        // pointer — include the active one if the forward set missed it.
+        $activeId = $entry->getOverlayScheduleId();
+        if (null !== $activeId && !isset($overlays[$activeId])) {
+            $active = $this->entityManager->getRepository(Schedule::class)->find($activeId);
+            if ($active instanceof Schedule) {
+                $overlays[$activeId] = $active;
+            }
+        }
+        foreach ($overlays as $schedule) {
             $this->assertNotGenerating($schedule);
             if (!$force && ScheduleStatus::VALIDATED === $schedule->getStatus()) {
                 throw new ConflictHttpException('The period plan is validated (read-only). Reopen it before deleting the period.');
             }
-            $this->purgeArtifacts($overlayId);
+        }
+        foreach ($overlays as $schedule) {
+            $this->purgeArtifacts($schedule->getId());
             $this->entityManager->remove($schedule);
         }
 
@@ -72,9 +84,30 @@ final class OverlayManager
         $entry = null !== $schedule->getCalendarEntryId()
             ? $this->entityManager->getRepository(CalendarEntry::class)->find($schedule->getCalendarEntryId())
             : $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
-        if ($entry instanceof CalendarEntry) {
-            $entry->setOverlayScheduleId(null);
+        // Only touch the pointer when the ACTIVE version is deleted: with several
+        // overlay versions per period, deleting a non-active one must not orphan
+        // the period. Promote the most recent surviving version, else clear.
+        if ($entry instanceof CalendarEntry && $entry->getOverlayScheduleId() === $schedule->getId()) {
+            $entry->setOverlayScheduleId($this->newestOtherOverlayId($entry->getId(), $schedule->getId()));
         }
+    }
+
+    /** Most recent non-archived overlay version of the entry other than $excludeId, or null. */
+    private function newestOtherOverlayId(string $entryId, string $excludeId): ?string
+    {
+        $candidates = $this->entityManager->getRepository(Schedule::class)->findBy(
+            ['calendarEntryId' => $entryId],
+            ['createdAt' => 'DESC'],
+        );
+        foreach ($candidates as $candidate) {
+            if ($candidate->getId() === $excludeId || ScheduleStatus::ARCHIVED === $candidate->getStatus()) {
+                continue;
+            }
+
+            return $candidate->getId();
+        }
+
+        return null;
     }
 
     private function assertNotGenerating(Schedule $schedule): void

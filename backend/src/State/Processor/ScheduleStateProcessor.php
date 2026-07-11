@@ -72,8 +72,19 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             if (!\in_array($entry->getPeriodType(), [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
                 throw new UnprocessableEntityHttpException('Overlay generation is only supported for closure and holiday periods.');
             }
-            if (null !== $entry->getOverlayScheduleId()) {
-                throw new UnprocessableEntityHttpException('This period already has an overlay schedule.');
+            // planning-versions: a period may carry SEVERAL overlay versions
+            // (V1, V2…) like a season plan; the new one becomes the active overlay
+            // (pointer set below). Only refuse while a sibling version of THIS
+            // period is still solving — a running solve must never be overwritten
+            // (mirror of the season in-flight guard).
+            $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
+                'clubId' => $entry->getClubId(),
+                'seasonId' => $entry->getSeasonId(),
+                'calendarEntryId' => $entry->getId(),
+                'status' => [ScheduleStatus::PENDING, ScheduleStatus::GENERATING],
+            ]);
+            if ($inFlight > 0) {
+                throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
             }
             // An overlay is built ON the socle: the season must have a baseline
             // (otherwise the club would be onboarded with only an overlay, no base).

@@ -253,6 +253,11 @@ export const regenerateFromVersion = (id: string): Promise<{ id: string }> => ap
  *  from the current structure, carrying the version's HARD-locked slots. */
 export const regenerate = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate`).json();
 
+/** planning-versions (overlay versions): create a new overlay version (DRAFT) for
+ *  a period — the caller then generates it. A period may hold several versions. */
+export const createOverlayVersion = (calendarEntryId: string): Promise<{ id: string }> =>
+  api.post("schedules", { json: { calendarEntryId, name: "Version de période", status: "DRAFT" } }).json();
+
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. calendarEntryId → every
 // `null === calendarEntryId` overlay check silently fails (UX-02 journey
