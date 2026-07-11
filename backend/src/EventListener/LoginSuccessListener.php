@@ -1,0 +1,64 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\EventListener;
+
+use App\Entity\User;
+use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
+use Throwable;
+
+/**
+ * RGPD (rétention) : trace la dernière ACTIVITÉ authentifiée — l'inactivité
+ * (purge à 24 mois, préavis à 23) se mesure sur COALESCE(lastLoginAt,
+ * createdAt). L'authenticator JWT déclenche LoginSuccessEvent à CHAQUE requête
+ * authentifiée (pas seulement au login interactif) : c'est la bonne sémantique
+ * d'activité, mais un flush par requête serait ruineux → l'écriture est
+ * THROTTLÉE à une par jour (sauf préavis en cours, toujours annulé aussitôt).
+ *
+ * UPDATE DBAL ciblé + best-effort (revue PR-3) : un flush() global de l'EM
+ * committerait n'importe quel état dirty laissé par d'autres listeners, et une
+ * DB momentanément read-only ferait 500 sur du pur GET pour une télémétrie —
+ * l'échec de cette écriture ne doit jamais casser la requête.
+ */
+#[AsEventListener(event: LoginSuccessEvent::class)]
+final class LoginSuccessListener
+{
+    private const REFRESH_AFTER = '-1 day';
+
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly ClockInterface $clock,
+    ) {}
+
+    public function __invoke(LoginSuccessEvent $event): void
+    {
+        $user = $event->getUser();
+        if (!$user instanceof User) {
+            return;
+        }
+
+        $now = DateTimeImmutable::createFromInterface($this->clock->now());
+        $stale = null === $user->getLastLoginAt() || $user->getLastLoginAt() < $now->modify(self::REFRESH_AFTER);
+        if (!$stale && null === $user->getInactivityWarnedAt()) {
+            return; // trace du jour déjà posée, rien à annuler → zéro écriture.
+        }
+
+        try {
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE app_user SET last_login_at = :now, inactivity_warned_at = NULL WHERE id = :id',
+                ['now' => $now->format('Y-m-d H:i:s'), 'id' => $user->getId()],
+            );
+            // Aligne l'entité managée (déjà hydratée par le provider) pour que
+            // la suite de la requête voie la même vérité que la DB.
+            $user->setLastLoginAt($now);
+            $user->setInactivityWarnedAt(null);
+        } catch (Throwable) {
+            // Best-effort : la trace d'activité ne casse jamais la requête.
+        }
+    }
+}

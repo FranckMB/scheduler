@@ -182,6 +182,8 @@ services:
           php bin/console app:schedules:reconcile-stuck --older-than=60 --no-interaction || true;
           php bin/console app:users:purge-unverified --no-interaction || true;
           php bin/console app:clubs:purge-erased --no-interaction || true;
+          php bin/console app:users:purge-inactive --no-interaction || true;
+          php bin/console app:seasons:purge --no-interaction || true;
         fi;
         sleep 3600;
       done'
