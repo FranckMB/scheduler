@@ -59,6 +59,31 @@ Même patron que les contraintes datées (déjà en place) : un `calendarEntryId
 5. **Mutualisation par réservation** sur créneau à capacité 2 — **pas** de réécriture engine.
 6. **Équipe désactivée** pour la période → absente de l'overlay ; son plan de base reste intact hors vacances.
 
+## 6bis. Autre déclencheur : reprise progressive (validé 2026-07-11)
+
+Le **même mécanisme P1** (structure de période éditable par override `calendarEntryId`) sert un
+2ᵉ déclencheur : la **reprise progressive** — rentrée après vacances d'été / Noël, où le club
+redémarre en **montée en charge** (Fanion d'abord, puis les importantes, puis tout le club — ~2
+semaines de planning allégé), souvent sur des créneaux prêtés par la mairie « selon les besoins des
+équipes ». **Ce n'est pas un cas à part** : c'est une période éditable de plus.
+
+- **Cas simple par nature** : en général **< 8 équipes**, créneaux simples, peu de gymnases → le
+  **solveur n'a aucun souci** (confirme le *zéro changement engine* de P1 ; l'effort est backend
+  override + frontend éditeur, pas la perf moteur).
+- **Créneaux additifs** : les créneaux prêtés par la mairie s'**ajoutent** au socle encore valide
+  (moins les fermetures/indispos de la fenêtre) — exactement le patron `VenueTrainingSlot.calendarEntryId`
+  (le jeu période **complète** le saisonnier).
+- **Coachs read-only, lien préservé** : on ne touche jamais au lien équipe↔coach (cohérent P1).
+- **Rampe = 2 overlays** (S1 = Fanion / S2 = + important), puis le **socle reprend** pour tout le club
+  (pas de 3ᵉ overlay). Un flux guidé « Reprise » pourrait pré-créer la rampe d'un clic (bonus, plus tard).
+
+**Deux additions à P1** (au-delà du plan de vacances) :
+
+| Ajout | Détail |
+|---|---|
+| **Défaut équipes par rang** | À l'ouverture, pré-cocher les équipes **par rang** (Fanion/S d'abord), ajustable — au lieu du défaut « toutes/saisonnier ». Réutilise les tiers existants (`priorityTierId`). Frontend only. |
+| **Toggle des contraintes de période** | Activer/**désactiver par contrainte** pour la fenêtre, **sans modifier** le socle (on désactive, on n'édite pas). Au build overlay, les contraintes désactivées sont **omises du payload** — simple filtre, **zéro engine**. Défaut : toutes actives. Axe *constraint semantics* → NR (contrainte off ⇒ non honorée sur la période, toujours active sur le socle). |
+
 ## 7. Hors scope
 
 - **Gymnases dispo seulement aux vacances** — cas réel mais aucun club connu ne le demande → **différé**. Le patron `calendarEntryId` s'étend à `Venue` plus tard **sans rework** (le design ne le bloque pas).
