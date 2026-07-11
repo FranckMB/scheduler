@@ -5,7 +5,7 @@ import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
-import { SeasonSchedulesModal, seasonOverlayCount, seasonPlanningCount } from "./SeasonSchedulesModal";
+import { SeasonSchedulesModal, seasonPlanCounts } from "./SeasonSchedulesModal";
 
 interface BaselineBannerProps {
   schedules: Schedule[];
@@ -24,9 +24,9 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
   const baseline = schedules.find((s) => s.id === baselineScheduleId) ?? null;
   // Distinct plannings = the season main plan (1) + one per period overlay
   // (versions are navigated inside the planning, not counted here).
-  const planCount = seasonPlanningCount(schedules);
-  // Finished period plannings only — consistent with what the modal lists.
-  const overlayCount = seasonOverlayCount(schedules);
+  // Both counts from one derivation (finished period plannings only, consistent
+  // with what the modal lists).
+  const { total: planCount, overlays: overlayCount } = seasonPlanCounts(schedules);
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
   // wizard's generation step to finish/validate it.

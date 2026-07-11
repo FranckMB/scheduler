@@ -51,18 +51,15 @@ function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | nul
   return [...rows, ...periods];
 }
 
-/** The count shown on the banner ("Tous les plannings (N)") — distinct plannings, not versions. */
-export function seasonPlanningCount(schedules: Schedule[]): number {
-  return seasonPlannings(schedules, null).length;
-}
-
 /**
- * Distinct PERIOD plannings that have a finished (consultable) version — matches
- * exactly what the modal lists, so the banner's "N planning secondaire" never
- * advertises a period the modal omits (e.g. one still mid-first-generation).
+ * Banner counts — derived from the SAME row list the modal shows (distinct
+ * plannings, not versions), in ONE pass: `total` drives "Tous les plannings (N)",
+ * `overlays` drives "N planning secondaire" (finished periods only, so it never
+ * advertises a period the modal omits — e.g. one still mid-first-generation).
  */
-export function seasonOverlayCount(schedules: Schedule[]): number {
-  return seasonPlannings(schedules, null).filter((row) => row.isOverlay).length;
+export function seasonPlanCounts(schedules: Schedule[]): { total: number; overlays: number } {
+  const rows = seasonPlannings(schedules, null);
+  return { total: rows.length, overlays: rows.filter((row) => row.isOverlay).length };
 }
 
 const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [

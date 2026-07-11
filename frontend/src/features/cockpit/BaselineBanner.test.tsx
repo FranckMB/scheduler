@@ -13,8 +13,7 @@ vi.mock("./SeasonSchedulesModal", () => ({
       <button onClick={onClose}>Fermer</button>
     </div>
   ),
-  seasonPlanningCount: () => 2,
-  seasonOverlayCount: () => 1,
+  seasonPlanCounts: () => ({ total: 2, overlays: 1 }),
 }));
 
 const navigate = vi.fn();

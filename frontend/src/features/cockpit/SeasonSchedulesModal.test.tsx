@@ -15,7 +15,7 @@ vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }) }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
-import { SeasonSchedulesModal, seasonOverlayCount, seasonPlanningCount } from "./SeasonSchedulesModal";
+import { SeasonSchedulesModal, seasonPlanCounts } from "./SeasonSchedulesModal";
 
 beforeEach(() => {
   setSelectedScheduleId.mockClear();
@@ -44,13 +44,13 @@ function open(list: Schedule[], baselineScheduleId: string | null = "v2") {
 
 describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("counts distinct plannings: 1 season plan + 1 overlay = 2 (not 4 versions)", () => {
-    expect(seasonPlanningCount(schedules)).toBe(2);
+    expect(seasonPlanCounts(schedules)).toEqual({ total: 2, overlays: 1 });
   });
 
-  it("seasonOverlayCount counts only FINISHED periods (matches the modal, unlike a raw Set)", () => {
-    // One finished period (p1) + one period (p2) still mid-first-generation → count 1.
+  it("counts only FINISHED periods as overlays (matches the modal, unlike a raw Set)", () => {
+    // One finished period (p1) + one period (p2) still mid-first-generation → 1 overlay.
     const withInFlight = [...schedules, plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", calendarEntryId: "p2", createdAt: "2026-07-05T10:00:00+00:00" })];
-    expect(seasonOverlayCount(withInFlight)).toBe(1);
+    expect(seasonPlanCounts(withInFlight)).toEqual({ total: 2, overlays: 1 });
   });
 
   it("lists one row per PLANNING (principal + overlay), each with view + export", () => {
