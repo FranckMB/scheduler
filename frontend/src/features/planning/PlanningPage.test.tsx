@@ -1,9 +1,10 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+import { listSchedules, OverlaysExistError, reopenSchedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
 
@@ -12,7 +13,18 @@ import { usePlanningStore } from "./store";
 // logic, the grid + all its panels — with fixture data.
 const SID = "sched-1";
 
-vi.mock("./api", () => ({
+vi.mock("./api", () => {
+  // A real error class so PlanningPage's `error instanceof OverlaysExistError`
+  // escalation branch fires from the mocked reopen/validate rejections.
+  class OverlaysExistError extends Error {
+    constructor(public count: number, public overlays: unknown[]) {
+      super("overlays");
+      this.name = "OverlaysExistError";
+    }
+  }
+  return {
+  OverlaysExistError,
+  reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }])),
   getSlots: vi.fn(() =>
     Promise.resolve([
@@ -44,7 +56,8 @@ vi.mock("./api", () => ({
   generateSchedule: vi.fn(),
   validateSchedule: vi.fn(),
   STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec", VALIDATED: "Validé" },
-}));
+  };
+});
 
 const { meState } = vi.hoisted(() => ({ meState: { socleValidatedAt: null as string | null } }));
 
@@ -118,5 +131,31 @@ describe("PlanningPage (integration)", () => {
     await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
     const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
+  });
+
+  // planning lifecycle (§7.1): reopening a VALIDATED plan that has period overlays
+  // 409s; the UI escalates to a proportional confirm, then re-sends with the flag.
+  describe("reopen escalation (validated plan with overlays)", () => {
+    const validated = [{ id: SID, name: "Planning A", status: "VALIDATED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
+
+    afterEach(() => {
+      vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }]);
+    });
+
+    it("409 → confirm naming the overlay count → re-sends confirmDeleteOverlays", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listSchedules).mockResolvedValue(validated);
+      vi.mocked(reopenSchedule).mockRejectedValueOnce(new OverlaysExistError(2, [])).mockResolvedValueOnce({});
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      await user.click(screen.getByRole("button", { name: /rouvrir/i }));
+      // First reopen (no flag) → 409 → proportional confirm dialog.
+      expect(await screen.findByText(/supprimera 2 plannings secondaires/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Rouvrir et supprimer" }));
+      expect(vi.mocked(reopenSchedule)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(reopenSchedule).mock.calls[1]).toEqual([SID, { confirmDeleteOverlays: true }]);
+    });
   });
 });

@@ -38,6 +38,19 @@ export function liveContextScheduleId<T extends VersionLike & { id: string }>(sc
   return set.at(-1)?.id ?? null; // sorted createdAt asc → last = latest generated.
 }
 
+/**
+ * The version a PLANNING row should represent (cockpit "Tous les plannings"):
+ * the latest FINISHED one (VALIDATED or COMPLETED), so its Eye / Export never
+ * target a FAILED or in-flight (PENDING/GENERATING) version — which would open
+ * an empty planning or export an empty file. Falls back to the latest visible
+ * version only when none has finished yet (a brand-new planning still solving).
+ * Input is a visible* set (sorted createdAt asc, ARCHIVED excluded).
+ */
+export function representativeVersion<T extends VersionLike>(versions: T[]): T | null {
+  const finished = versions.filter((s) => "VALIDATED" === s.status || "COMPLETED" === s.status);
+  return finished.at(-1) ?? versions.at(-1) ?? null;
+}
+
 /** "V3 — 10 juil. 14:32" stamp shared by season and overlay version labels. */
 function versionStamp(createdAt: string, index: number): string {
   const date = new Date(createdAt);

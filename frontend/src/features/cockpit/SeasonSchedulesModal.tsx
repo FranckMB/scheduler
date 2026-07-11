@@ -1,11 +1,12 @@
-import { Eye, Star } from "lucide-react";
+import { Download, Eye, Loader2, Star } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
-import { ExportMenu } from "@/features/planning/ExportMenu";
-import { liveContextScheduleId, visibleOverlayVersions } from "@/features/planning/lib/versions";
-import { useVenues } from "@/features/planning/queries";
+import { representativeVersion, visibleOverlayVersions, visibleSeasonPlans } from "@/features/planning/lib/versions";
+import { type ExportFormat, useScheduleExport } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
+import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 
@@ -26,31 +27,73 @@ interface PlanningRow {
 /**
  * The season's distinct PLANNINGS — the main season plan (1) plus one per period
  * overlay — NOT their internal versions (V1/V2… are navigated inside the
- * planning). Each is represented by its live-context (latest) version.
+ * planning). Each is represented by its latest FINISHED version, so its
+ * Eye/Export never target a failed or in-flight one.
  */
 function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | null): PlanningRow[] {
   const rows: PlanningRow[] = [];
-  const seasonMain = liveContextScheduleId(schedules, null);
+  const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
   if (null !== seasonMain) {
-    const s = schedules.find((x) => x.id === seasonMain);
-    if (s) {
-      rows.push({ id: s.id, label: "Planning principal", status: s.status, isBaseline: null !== baselineScheduleId });
-    }
+    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId });
   }
-  // One row per period overlay (its latest version), sorted by period name.
+  // One row per period overlay (its latest finished version), sorted by period name.
   const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
+  const periods: PlanningRow[] = [];
   for (const entryId of periodIds) {
-    const latest = visibleOverlayVersions(schedules, entryId).at(-1);
-    if (latest) {
-      rows.push({ id: latest.id, label: latest.name, status: latest.status, isBaseline: false });
+    const version = representativeVersion(visibleOverlayVersions(schedules, entryId));
+    if (null !== version) {
+      periods.push({ id: version.id, label: version.name, status: version.status, isBaseline: false });
     }
   }
-  return rows;
+  periods.sort((a, b) => a.label.localeCompare(b.label));
+
+  return [...rows, ...periods];
 }
 
 /** The count shown on the banner ("Tous les plannings (N)") — distinct plannings, not versions. */
 export function seasonPlanningCount(schedules: Schedule[]): number {
   return seasonPlannings(schedules, null).length;
+}
+
+const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [
+  { key: "pdf", label: "PDF" },
+  { key: "xlsx", label: "Excel" },
+  { key: "png", label: "PNG" },
+];
+
+/**
+ * Compact export: an icon-only trigger that expands an INLINE format row (no
+ * absolute dropdown — it would be clipped by the modal's scroll container). The
+ * export always covers every gym (venue scope lives on the planning page).
+ */
+function CompactExport({ scheduleId, label }: { scheduleId: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const { run, busy } = useScheduleExport(scheduleId);
+
+  return (
+    <div className="flex items-center gap-1">
+      <Button variant="ghost" size="icon" className="size-8" aria-haspopup="menu" aria-expanded={open} aria-label={`Exporter ${label}`} title="Exporter" onClick={() => setOpen((o) => !o)}>
+        <Download className="size-4" />
+      </Button>
+      {open ? (
+        <div role="menu" className="flex items-center gap-1">
+          {EXPORT_FORMATS.map(({ key, label: fmt }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              disabled={null !== busy}
+              onClick={() => void run(key, null)}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            >
+              {busy === key ? <Loader2 className="size-3 animate-spin" /> : null}
+              {fmt}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -61,12 +104,19 @@ export function seasonPlanningCount(schedules: Schedule[]): number {
 export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const { data: venues = [] } = useVenues();
   const rows = seasonPlannings(schedules, baselineScheduleId);
 
-  const consult = (id: string) => {
-    setSelectedScheduleId(id);
-    navigate("/planning");
+  // Same routing as the banner's "Ouvrir": a validated planning opens the
+  // read-only planning page; one still in progress opens the wizard's
+  // generation step to finish/validate it.
+  const consult = (row: PlanningRow) => {
+    if ("VALIDATED" === row.status) {
+      setSelectedScheduleId(row.id);
+      navigate("/planning");
+      return;
+    }
+    useWizardStore.getState().jumpTo("generate");
+    navigate("/wizard");
   };
 
   return (
@@ -82,10 +132,10 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
               <p className="text-xs text-muted-foreground">{STATUS_LABELS[row.status]}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <Button variant="ghost" size="icon" className="size-8" aria-label={`Consulter ${row.label}`} title="Consulter" onClick={() => consult(row.id)}>
+              <Button variant="ghost" size="icon" className="size-8" aria-label={`Consulter ${row.label}`} title="Consulter" onClick={() => consult(row)}>
                 <Eye className="size-4" />
               </Button>
-              <ExportMenu scheduleId={row.id} venues={venues} />
+              <CompactExport scheduleId={row.id} label={row.label} />
             </div>
           </li>
         ))}

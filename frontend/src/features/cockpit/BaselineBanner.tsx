@@ -2,12 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
-import { seasonPlanningCount } from "./SeasonSchedulesModal";
+import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
-import { useWizardStore } from "@/features/wizard/store";
-
-import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
+import { SeasonSchedulesModal, seasonPlanningCount } from "./SeasonSchedulesModal";
 
 interface BaselineBannerProps {
   schedules: Schedule[];
