@@ -271,6 +271,39 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         # from 20:00 → blocked [1200, 1440); no untilTime → end of day.
         assert result["coach_unavailability"] == {"coach-1": {(2, 1200, 1440)}}
 
+    def test_coach_availability_inverted_window_falls_back_to_whole_day(self):
+        # Lot C review: an inverted window (from >= until, e.g. an overnight
+        # "20:00–08:00" the flat model can't wrap) reaches the solver ungated on
+        # the write/generate paths → must HONOR the unavailability by blocking the
+        # whole day, never build a from>=to interval that matches no slot.
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "COACH_AVAILABILITY",
+                "scopeTargetId": "coach-1",
+                "config": {"unavailableDays": [2], "fromTime": "20:00", "untilTime": "08:00"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["coach_unavailability"] == {"coach-1": {(2, 0, 1440)}}
+
+    def test_coach_availability_malformed_time_does_not_crash_and_blocks_whole_day(self):
+        # Lot C review: a malformed HH:MM (bypassing / predating the backend
+        # check) must not raise out of parse_v2_constraints and abort the whole
+        # solve; it degrades to a whole-day block for that unavailable day.
+        constraints = [
+            {
+                "id": "c1",
+                "isActive": True,
+                "family": "COACH_AVAILABILITY",
+                "scopeTargetId": "coach-1",
+                "config": {"unavailableDays": [2], "fromTime": "9h"},
+            }
+        ]
+        result = parse_v2_constraints(constraints)
+        assert result["coach_unavailability"] == {"coach-1": {(2, 0, 1440)}}
+
     def test_coach_unavailability_apply_blocks_only_the_window(self):
         # Lot C semantic: "coach c1 unavailable Tue from 20:00" blocks a Tue 20:30
         # slot but NOT a Tue 18:00 slot nor a Wed 20:30 slot.

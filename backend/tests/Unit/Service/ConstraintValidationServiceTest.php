@@ -68,6 +68,9 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
         self::assertContains('fromTime must be a HH:MM time.', $errors);
+        // A malformed bound must NOT also trigger the "before" comparison — that
+        // would emit a second, misleading error for one bad field (Lot C review).
+        self::assertNotContains('fromTime must be before untilTime.', $errors);
 
         $constraint->setConfig(['coachId' => 'coach-1', 'fromTime' => '20:00', 'untilTime' => '18:00']);
         self::assertContains('fromTime must be before untilTime.', $this->service->validate($constraint));

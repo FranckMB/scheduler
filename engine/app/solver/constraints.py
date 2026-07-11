@@ -769,28 +769,25 @@ def add_forbidden_assignments(
     return added
 
 
-def _assignment_day(assignment: AssignmentVariable) -> int | None:
-    """Weekday number of an assignment, from its slot_id ("3:18:00" → 3)."""
-    slot_id = _assignment_time_key(assignment)
-    if isinstance(slot_id, str) and ":" in slot_id:
-        head = slot_id.split(":", 1)[0]
-        try:
-            return int(head)
-        except ValueError:
-            return None
-    return None
+def _assignment_day_start(assignment: AssignmentVariable) -> tuple[int | None, int | None]:
+    """Weekday + start-of-day minutes from ONE slot_id parse ("3:18:00" → (3, 1080)).
 
-
-def _assignment_start_minutes(assignment: AssignmentVariable) -> int | None:
-    """Start-of-day in minutes, from the slot_id ("3:18:00" → 1080). Lot C."""
+    Combined so the coach-unavailability hot loop splits each slot_id once, not
+    twice (Lot C review). Either component is ``None`` when it cannot be parsed.
+    """
     slot_id = _assignment_time_key(assignment)
-    if isinstance(slot_id, str) and ":" in slot_id:
-        _, _, rest = slot_id.partition(":")
-        try:
-            return _time_to_minutes(rest)
-        except (ValueError, TypeError):
-            return None
-    return None
+    if not isinstance(slot_id, str) or ":" not in slot_id:
+        return None, None
+    head, _, rest = slot_id.partition(":")
+    try:
+        day: int | None = int(head)
+    except ValueError:
+        day = None
+    try:
+        start: int | None = _time_to_minutes(rest)
+    except (ValueError, TypeError):
+        start = None
+    return day, start
 
 
 def add_coach_unavailability_constraints(
@@ -823,8 +820,7 @@ def add_coach_unavailability_constraints(
             if not coach_ids:
                 single = assignment.coach_id
                 coach_ids = [str(single)] if single is not None else []
-            day = _assignment_day(assignment)
-            start = _assignment_start_minutes(assignment)
+            day, start = _assignment_day_start(assignment)
             if day is not None and start is not None:
                 blocked = any(
                     iv_day == day and iv_from <= start < iv_to
@@ -1637,6 +1633,34 @@ def _day_int_set(values: Any) -> set[int]:
     return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
 
 
+def _coach_window_minutes(config: Mapping[str, Any]) -> tuple[int, int]:
+    """Blocked-window bounds (minutes) for a COACH_AVAILABILITY config (Lot C).
+
+    Defensive on purpose (audit review): the backend HH:MM / from<until check
+    runs ONLY on the advisory /api/constraints/validate gate — the write,
+    generate and regenerate paths reach the solver ungated. So a MALFORMED time
+    (e.g. "9h", "25:00") or an INVERTED window (from >= to, e.g. an overnight
+    "20:00–08:00" the flat model can't wrap) must not crash the whole solve nor
+    silently drop the rule: both fall back to the whole day (0, 1440), which
+    HONORS the coach's declared unavailability conservatively. A missing bound
+    defaults to whole-day (0 / 1440) = legacy day-level behaviour.
+    """
+    def _bound(key: str, default: int) -> int | None:
+        raw = config.get(key)
+        if not raw:
+            return default
+        try:
+            return _time_to_minutes(raw)
+        except (ValueError, TypeError):
+            return None
+
+    from_min = _bound("fromTime", 0)
+    to_min = _bound("untilTime", 1440)
+    if from_min is None or to_min is None or from_min >= to_min:
+        return 0, 1440
+    return from_min, to_min
+
+
 def _set_venue_rule(
     rules: dict[str, str],
     team_id: str,
@@ -1770,16 +1794,16 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # complement. An empty/absent availableDays adds no restriction (an
             # empty whitelist is treated as "unconfigured", never "blocked every
             # day" — which would force the team to zero sessions).
-            # Combine multiple constraints on one coach with the right algebra
-            # (ENG-13 — assignment was last-wins): blacklists UNION ("unavailable
-            # Monday" + "unavailable Wednesday" = both blocked); whitelists
-            # INTERSECT ("available Monday" + "available Tuesday" must not union
-            # complements into "unavailable every day"). Merged after the loop.
+            # Multiple constraints on one coach combine as a UNION of blocked
+            # (day, from, to) intervals accumulated inline in coach_blocked_intervals
+            # (ENG-13 — assignment used to be last-wins). By De Morgan this single
+            # representation covers BOTH the UNION of unavailable rules AND the
+            # INTERSECTION of "available only" whitelists (whose blocked complements
+            # union up), so no separate post-loop merge is needed.
             coach_key = str(scope_target_id)
             # Optional time window (Lot C): absent → whole day (0..1440), i.e. the
             # legacy day-level behaviour, so old configs stay byte-identical.
-            from_min = _time_to_minutes(config["fromTime"]) if config.get("fromTime") else 0
-            to_min = _time_to_minutes(config["untilTime"]) if config.get("untilTime") else 1440
+            from_min, to_min = _coach_window_minutes(config)
             intervals = coach_blocked_intervals.setdefault(coach_key, set())
             for day in _day_int_set(config.get("unavailableDays")):
                 intervals.add((day, from_min, to_min))

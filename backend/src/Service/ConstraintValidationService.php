@@ -82,12 +82,19 @@ final class ConstraintValidationService
                 // Lot C: optional time window (fromTime / untilTime, HH:MM). Absent = whole day.
                 $from = $config['fromTime'] ?? null;
                 $until = $config['untilTime'] ?? null;
+                $bothValid = true;
                 foreach (['fromTime' => $from, 'untilTime' => $until] as $key => $value) {
-                    if (null !== $value && (!\is_string($value) || 1 !== preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value))) {
+                    if (null === $value) {
+                        continue;
+                    }
+                    if (!\is_string($value) || 1 !== preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value)) {
                         $errors[] = \sprintf('%s must be a HH:MM time.', $key);
+                        $bothValid = false;
                     }
                 }
-                if (\is_string($from) && \is_string($until) && $from >= $until) {
+                // Only compare bounds once both parse as HH:MM — otherwise a
+                // malformed "25:99" would emit a second, misleading "before" error.
+                if ($bothValid && \is_string($from) && \is_string($until) && $from >= $until) {
                     $errors[] = 'fromTime must be before untilTime.';
                 }
                 break;
