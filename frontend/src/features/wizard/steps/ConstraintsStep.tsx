@@ -6,10 +6,10 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
-import { groupedCoaches, orderedCoaches } from "../lib/ranking";
-import { orderedTagNames, RANK_FALLBACK } from "../lib/constraintOrder";
+import { groupConstraints } from "../lib/constraintOrder";
+import { groupedCoaches } from "../lib/ranking";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
 
@@ -325,72 +325,24 @@ export function ConstraintsStep() {
 
   const list = constraints.filter((c) => c.family === family);
 
-  // Group the list for readability: GROUP (tag) constraints first, then one
-  // section per team in canonical rank order (Fanion S, A, B…), then club-wide,
-  // coach, and any remainder — instead of a flat, unordered list.
-  const sections = useMemo(() => {
-    const byTag = new Map<string, Constraint[]>();
-    const byTeam = new Map<string, Constraint[]>();
-    const byCoach = new Map<string, Constraint[]>();
-    const clubWide: Constraint[] = [];
-    const other: Constraint[] = [];
-    const push = (m: Map<string, Constraint[]>, k: string, c: Constraint): void => {
-      m.set(k, [...(m.get(k) ?? []), c]);
-    };
-    for (const c of list) {
-      const tag = "string" === typeof c.config?.targetTag ? (c.config.targetTag as string) : null;
-      if ("CLUB" === c.scope && null !== tag) {
-        push(byTag, tag, c);
-      } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
-        push(byTeam, c.scopeTargetId, c);
-      } else if ("COACH" === c.scope && null !== c.scopeTargetId) {
-        push(byCoach, c.scopeTargetId, c);
-      } else if ("CLUB" === c.scope) {
-        clubWide.push(c);
-      } else {
-        other.push(c);
-      }
-    }
-    const out: { key: string; label: string; items: Constraint[] }[] = [];
-    // Groups (tags) in the SAME canonical order as the target picker AND the
-    // recap: by axis (Genre, Niveau, Âge) then label — shared orderedTagNames.
-    const tagRank = new Map(orderedTagNames(tags).map((name, i) => [name, i]));
-    [...byTag.entries()]
-      .sort((a, b) => (tagRank.get(a[0]) ?? RANK_FALLBACK) - (tagRank.get(b[0]) ?? RANK_FALLBACK) || a[0].localeCompare(b[0]))
-      .forEach(([tag, items]) => out.push({ key: `g:${tag}`, label: `Groupe ${tagLabel(tag)}`, items }));
-    if (clubWide.length > 0) {
-      out.push({ key: "club", label: "Toutes les équipes", items: clubWide });
-    }
-    [...teams].sort(compareTeamsByRank).forEach((t) => {
-      const items = byTeam.get(t.id);
-      if (items && items.length > 0) {
-        out.push({ key: `t:${t.id}`, label: t.name, items });
-      }
-    });
-    // Coach sections in the staffing order (salarié → coach-joueur → bénévole,
-    // puis prénom). Coaches present in the list first, THEN any coach still
-    // referenced by a constraint but absent from the list (removed/deactivated)
-    // — never drop a constraint the solver still honors (revue #204).
-    const seenCoach = new Set<string>();
-    orderedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))).forEach(({ coach }) => {
-      const items = byCoach.get(coach.id);
-      if (items && items.length > 0) {
-        seenCoach.add(coach.id);
-        out.push({ key: `c:${coach.id}`, label: coachName.get(coach.id) ?? "Coach", items });
-      }
-    });
-    [...byCoach.entries()].forEach(([cid, items]) => {
-      if (!seenCoach.has(cid)) {
-        out.push({ key: `c:${cid}`, label: coachName.get(cid) ?? "Coach (retiré)", items });
-      }
-    });
-    if (other.length > 0) {
-      out.push({ key: "other", label: "Autres", items: other });
-    }
-    return out;
-  // coachName is a fresh Map each render; the real inputs are list/teams/tags/coaches.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list, teams, tags, coaches, coachPlayers]);
+  // Sections with a header per group. The grouping DIMENSION depends on the
+  // family (shared groupConstraints helper — same on the recap) : coaches by
+  // staffing group, gymnase by venue, horaire/jours by tag axis then team.
+  const sections = useMemo(
+    () =>
+      groupConstraints(list, family, {
+        teams,
+        tags,
+        coaches,
+        coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
+        venues,
+        coachName: (id) => coachName.get(id) ?? "Coach",
+        venueName: (id) => venueName.get(id) ?? "Gymnase",
+      }),
+    // coachName/venueName are fresh Maps each render; the real inputs are the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [list, family, teams, tags, coaches, coachPlayers, venues],
+  );
 
   return (
     <div>

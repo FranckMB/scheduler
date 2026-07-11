@@ -75,7 +75,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(options).not.toContain("FEMININE");
   });
 
-  it("groups the constraints list: group (tag) sections first, then teams in rank order", () => {
+  it("groups horaire/jours constraints by AXIS (Âge…) then per team in rank order", () => {
+    h.tags = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
     h.list = [
       { id: "cg", name: "Groupe SENIOR · pas après 21:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { targetTag: "SENIOR" }, isActive: true },
       { id: "cb", name: "SM1 · pas après 21:00", scope: "TEAM", scopeTargetId: "t1", family: "TIME", ruleType: "PREFERRED", config: {}, isActive: true }, // t1 = tier B
@@ -84,10 +85,36 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
 
     renderWithProviders(<ConstraintsStep />);
 
-    // Groups first (human label, like the picker: SENIOR → Adulte), then the
-    // teams in canonical rank order (Fanion=S before SM1=B).
+    // The SENIOR (axis AGE) group under « Âge », then teams in rank order
+    // (Fanion=S before SM1=B).
     const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
-    expect(sections).toEqual(["Groupe Adulte", "Fanion", "SM1"]);
+    expect(sections).toEqual(["Âge", "Fanion", "SM1"]);
+  });
+
+  it("groups gymnase constraints by VENUE (A→Z)", async () => {
+    const user = userEvent.setup();
+    h.list = [
+      { id: "cf1", name: "Fanion · préfère Gymnase B", scope: "TEAM", scopeTargetId: "t2", family: "FACILITY", ruleType: "PREFERRED", config: { preferredVenueId: "v2" }, isActive: true },
+      { id: "cf2", name: "SM1 · impose Gymnase A", scope: "TEAM", scopeTargetId: "t1", family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v1" }, isActive: true },
+    ] as Constraint[];
+
+    renderWithProviders(<ConstraintsStep />);
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    // Sections are the venue names, sorted A→Z (Gymnase A before Gymnase B).
+    const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
+    expect(sections).toEqual(["Gymnase A", "Gymnase B"]);
+  });
+
+  it("groups coach constraints by staffing group (Salariés / Coachs-joueurs / Bénévoles)", async () => {
+    const user = userEvent.setup();
+    h.list = [
+      { id: "cc", name: "Jean Dupont · indispo vendredi", scope: "COACH", scopeTargetId: "co1", family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1" }, isActive: true },
+    ] as Constraint[];
+
+    renderWithProviders(<ConstraintsStep />);
+    await user.click(screen.getByRole("button", { name: "Dispo coach" }));
+    // co1 (isEmployee false, not a player) → « Bénévoles ».
+    expect(screen.getByTestId("constraint-section")).toHaveTextContent("Bénévoles");
   });
 
   it("never drops a COACH constraint whose coach is absent from the list (revue #204)", async () => {

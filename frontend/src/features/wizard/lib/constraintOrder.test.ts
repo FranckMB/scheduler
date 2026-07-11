@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { Coach, Constraint, Team, TeamTag } from "@/features/wizard/api";
+import type { Coach, Constraint, Team, TeamTag, Venue } from "@/features/wizard/api";
 
-import { FAMILY_ORDER, makeConstraintRank } from "./constraintOrder";
+import { FAMILY_ORDER, groupConstraints } from "./constraintOrder";
 
 const teams = [
   { id: "t-b", name: "SM1", priorityTierId: 3, tierOrder: 0 },
@@ -16,37 +16,70 @@ const coaches = [
   { id: "co-vol", firstName: "Zoe", lastName: "V", isEmployee: false },
   { id: "co-sal", firstName: "Ana", lastName: "S", isEmployee: true },
 ] as unknown as Coach[];
+const venues = [
+  { id: "v-camus", name: "Camus" },
+  { id: "v-mateo", name: "Matéo" },
+] as unknown as Venue[];
 
-const c = (over: Partial<Constraint>): Constraint => ({ id: "x", name: "n", scope: "TEAM", scopeTargetId: null, family: "TIME", ruleType: "HARD", config: {}, isActive: true, ...over }) as Constraint;
+const ctx = {
+  teams,
+  tags,
+  coaches,
+  coachPlayerIds: new Set<string>(),
+  venues,
+  coachName: (id: string) => coaches.find((c) => c.id === id)?.firstName ?? "Coach",
+  venueName: (id: string) => venues.find((v) => v.id === id)?.name ?? "Gymnase",
+};
 
-describe("makeConstraintRank", () => {
-  const rank = makeConstraintRank(teams, tags, coaches, new Set());
+const c = (over: Partial<Constraint>): Constraint => ({ id: Math.random().toString(), name: "n", scope: "TEAM", scopeTargetId: null, family: "TIME", ruleType: "HARD", config: {}, isActive: true, ...over }) as Constraint;
 
-  it("orders bands: tag → club → team → coach → other", () => {
-    const tag = rank(c({ scope: "CLUB", scopeTargetId: null, config: { targetTag: "FEMININE" } }));
-    const club = rank(c({ scope: "CLUB", scopeTargetId: null, config: {} }));
-    const team = rank(c({ scope: "TEAM", scopeTargetId: "t-s" }));
-    const coach = rank(c({ scope: "COACH", scopeTargetId: "co-sal" }));
-    expect(tag).toBeLessThan(club);
-    expect(club).toBeLessThan(team);
-    expect(team).toBeLessThan(coach);
-  });
-
-  it("within teams, follows the rank (S before B)", () => {
-    expect(rank(c({ scope: "TEAM", scopeTargetId: "t-s" }))).toBeLessThan(rank(c({ scope: "TEAM", scopeTargetId: "t-b" })));
-  });
-
-  it("within tags, follows axis order (Genre before Âge)", () => {
-    expect(rank(c({ scope: "CLUB", scopeTargetId: null, config: { targetTag: "FEMININE" } }))).toBeLessThan(
-      rank(c({ scope: "CLUB", scopeTargetId: null, config: { targetTag: "SENIOR" } })),
-    );
-  });
-
-  it("within coaches, salaried before volunteer", () => {
-    expect(rank(c({ scope: "COACH", scopeTargetId: "co-sal" }))).toBeLessThan(rank(c({ scope: "COACH", scopeTargetId: "co-vol" })));
-  });
-
+describe("groupConstraints", () => {
   it("FAMILY_ORDER covers every constraint family (FACILITY_CAPACITY included)", () => {
     expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"]);
+  });
+
+  it("TIME/DAY → groups by tag axis (Genre before Âge), then club, then teams by rank", () => {
+    const sections = groupConstraints(
+      [
+        c({ scope: "CLUB", config: { targetTag: "SENIOR" } }), // axis AGE
+        c({ scope: "CLUB", config: { targetTag: "FEMININE" } }), // axis GENRE
+        c({ scope: "TEAM", scopeTargetId: "t-b" }), // SM1 (tier B)
+        c({ scope: "TEAM", scopeTargetId: "t-s" }), // Fanion (tier S)
+      ],
+      "TIME",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Genre", "Âge", "Fanion", "SM1"]);
+  });
+
+  it("FACILITY → groups by venue, A→Z", () => {
+    const sections = groupConstraints(
+      [
+        c({ family: "FACILITY", config: { preferredVenueId: "v-mateo" } }),
+        c({ family: "FACILITY", config: { forcedVenueId: "v-camus" } }),
+      ],
+      "FACILITY",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Camus", "Matéo"]);
+  });
+
+  it("COACH_AVAILABILITY → groups by staffing (Salariés before Bénévoles)", () => {
+    const sections = groupConstraints(
+      [
+        c({ family: "COACH_AVAILABILITY", scope: "COACH", scopeTargetId: "co-vol" }),
+        c({ family: "COACH_AVAILABILITY", scope: "COACH", scopeTargetId: "co-sal" }),
+      ],
+      "COACH_AVAILABILITY",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Salariés", "Bénévoles"]);
+  });
+
+  it("never drops a coach constraint whose coach is absent (→ « Coach retiré »)", () => {
+    const sections = groupConstraints([c({ family: "COACH_AVAILABILITY", scope: "COACH", scopeTargetId: "co-gone" })], "COACH_AVAILABILITY", ctx);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].label).toBe("Coach retiré");
+    expect(sections[0].items).toHaveLength(1);
   });
 });

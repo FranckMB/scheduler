@@ -3,9 +3,9 @@ import { useMemo } from "react";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
-import { FAMILY_LABEL, FAMILY_ORDER, makeConstraintRank } from "../lib/constraintOrder";
+import { FAMILY_LABEL, FAMILY_ORDER, groupConstraints } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
-import { coachMeta, orderedCoaches } from "../lib/ranking";
+import { coachMeta, groupedCoaches } from "../lib/ranking";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
@@ -55,24 +55,37 @@ export function RecapStep() {
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
-  // Constraints grouped by family (Horaire/Jours/Gymnase/…), each in the SAME
-  // order as its constraint tab (shared makeConstraintRank helper). Memoised:
-  // the helper builds 3 Maps + filters per family (revue #204).
+  // Coaches split into staffing groups (Salariés / Coachs-joueurs / Bénévoles),
+  // each shown under its own header (user request — same as the constraint tab).
+  const coachGroups = useMemo(() => {
+    const g = groupedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)));
+    return ([["salaried", "Salariés"], ["player", "Coachs-joueurs"], ["other", "Bénévoles"]] as const).map(([k, label]) => ({ label, coaches: g[k] })).filter((s) => s.coaches.length > 0);
+  }, [coaches, coachPlayers]);
+  // Constraints grouped by FAMILY, then by the family's own grouping dimension
+  // (coach→staffing, gymnase→venue, horaire/jours→axis) — same as each tab.
   const constraintFamilies = useMemo(() => {
-    const playerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
-    const rank = makeConstraintRank(teams, tags, coaches, playerIds);
+    const ctx = {
+      teams,
+      tags,
+      coaches,
+      coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
+      venues,
+      coachName: (id: string) => coachName.get(id) ?? "Coach",
+      venueName: (id: string) => venueName.get(id) ?? "Gymnase",
+    };
     const isKnownFamily = (f: string): boolean => (FAMILY_ORDER as readonly string[]).includes(f);
-    const byRank = (a: (typeof constraints)[number], b: (typeof constraints)[number]): number => rank(a) - rank(b);
     return [
-      ...FAMILY_ORDER.map((family) => ({ family: family as string, items: constraints.filter((c) => c.family === family).sort(byRank) })),
-      // Any exotic family not in FAMILY_ORDER still shows, ordered too, at the end.
-      { family: "OTHER", items: constraints.filter((c) => !isKnownFamily(c.family)).sort(byRank) },
-    ].filter((g) => g.items.length > 0);
-  }, [constraints, teams, tags, coaches, coachPlayers]);
+      ...FAMILY_ORDER.map((family) => ({ family: family as string, sections: groupConstraints(constraints.filter((c) => c.family === family), family, ctx) })),
+      { family: "OTHER", sections: groupConstraints(constraints.filter((c) => !isKnownFamily(c.family)), "OTHER", ctx) },
+    ].filter((g) => g.sections.length > 0);
+    // coachName/venueName are fresh Maps each render; the real inputs are the data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [constraints, teams, tags, coaches, coachPlayers, venues]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -140,26 +153,36 @@ export function RecapStep() {
         <AccordionSection title={<SectionCountTitle label="Coachs" count={coaches.length} />}>
           {0 === coaches.length
             ? empty
-            : orderedCoaches(coaches, coachPlayerIds).map(({ coach: c }) => {
-                const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
-                const fullName = `${c.firstName} ${c.lastName}`.trim();
-                return (
-                  <SummaryRow
-                    key={c.id}
-                    label={`${fullName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
-                    meta={coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}
-                  />
-                );
-              })}
+            : coachGroups.map((group) => (
+                <div key={group.label} className="mb-2 last:mb-0">
+                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p>
+                  {group.coaches.map((c) => {
+                    const teamsOf = coachTeamNames(c.id, teamCoaches, teamName);
+                    const fullName = `${c.firstName} ${c.lastName}`.trim();
+                    return (
+                      <SummaryRow
+                        key={c.id}
+                        label={`${fullName}${teamsOf.length > 0 ? ` (${teamsOf.join(", ")})` : ""}`}
+                        meta={coachMeta(c.isEmployee, coachPlayerIds.has(c.id))}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
         </AccordionSection>
         <AccordionSection title={<SectionCountTitle label="Contraintes" count={constraints.length} />}>
           {0 === constraints.length
             ? empty
             : constraintFamilies.map((group) => (
-                <div key={group.family} className="mb-2 last:mb-0">
-                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
-                  {group.items.map((c) => (
-                    <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
+                <div key={group.family} className="mb-3 last:mb-0">
+                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
+                  {group.sections.map((section) => (
+                    <div key={section.key} className="mb-1 last:mb-0">
+                      <p className="px-2 text-[11px] font-medium text-muted-foreground">{section.label}</p>
+                      {section.items.map((c) => (
+                        <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
+                      ))}
+                    </div>
                   ))}
                 </div>
               ))}
