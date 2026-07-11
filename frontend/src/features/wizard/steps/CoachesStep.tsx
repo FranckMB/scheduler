@@ -1,4 +1,4 @@
-import { Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -23,6 +23,7 @@ import {
   useWizardTeamCoaches,
   useWizardTeams,
 } from "../queries";
+import { compareByFirstName } from "../lib/coaches";
 import { useWizardStore } from "../store";
 import { ReadonlyCoaches } from "./StructureSummary";
 
@@ -52,6 +53,8 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
   const [linkTeam, setLinkTeam] = useState("");
   const [linkRole, setLinkRole] = useState<TeamCoachRole | "PLAYER">("MAIN");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Cards are read-only by default; « Éditer » reveals the fields (batch item 4).
+  const [editing, setEditing] = useState(false);
 
   const firstTeam = teams[0]?.id ?? "";
   const addLink = () => {
@@ -69,27 +72,42 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="Prénom"
-          className="h-8 w-32"
-          value={first}
-          onChange={(e) => setFirst(e.target.value)}
-          onBlur={() => first.trim() && first !== coach.firstName && update.mutate({ id: coach.id, body: payload(coach, { firstName: first.trim() }) })}
-        />
-        <Input
-          aria-label="Nom"
-          className="h-8 w-32"
-          value={last}
-          onChange={(e) => setLast(e.target.value)}
-          onBlur={() => last !== coach.lastName && update.mutate({ id: coach.id, body: payload(coach, { lastName: last }) })}
-        />
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
-          Salarié
-        </label>
-        <Button size="icon" variant="ghost" className="ml-auto size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => setConfirmDelete(true)}>
-          <Trash2 className="size-4" />
-        </Button>
+        {editing ? (
+          <>
+            <Input
+              aria-label="Prénom"
+              className="h-8 w-32"
+              value={first}
+              onChange={(e) => setFirst(e.target.value)}
+              onBlur={() => first.trim() && first !== coach.firstName && update.mutate({ id: coach.id, body: payload(coach, { firstName: first.trim() }) })}
+            />
+            <Input
+              aria-label="Nom"
+              className="h-8 w-32"
+              value={last}
+              onChange={(e) => setLast(e.target.value)}
+              onBlur={() => last !== coach.lastName && update.mutate({ id: coach.id, body: payload(coach, { lastName: last }) })}
+            />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
+              Salarié
+            </label>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-medium">{`${coach.firstName} ${coach.lastName}`.trim()}</span>
+            {coach.isEmployee ? <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Salarié</span> : null}
+          </>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant={editing ? "outline" : "ghost"} className="h-8" aria-label={editing ? "Terminer l'édition" : "Éditer le coach"} onClick={() => setEditing((e) => !e)}>
+            {editing ? <Check className="size-4" /> : <Pencil className="size-4" />}
+            {editing ? "Terminé" : "Éditer"}
+          </Button>
+          <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer le coach" onClick={() => setConfirmDelete(true)}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
 
       <DeleteConfirm
@@ -106,37 +124,45 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
         onCancel={() => setConfirmDelete(false)}
       />
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {coachLinks.map((link) => (
-          <span key={link.id} className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs">
-            {teamName.get(link.teamId) ?? "?"} · {link.role === "MAIN" ? "coach" : "adjoint"}
-            <button type="button" aria-label="Retirer" onClick={() => delTeamCoach.mutate(link.id)}>
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-        {playerLinks.map((link) => (
-          <span key={link.id} className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
-            {teamName.get(link.teamId) ?? "?"} · joueur
-            <button type="button" aria-label="Retirer" onClick={() => delPlayer.mutate(link.id)}>
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-      </div>
+      {coachLinks.length > 0 || playerLinks.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {coachLinks.map((link) => (
+            <span key={link.id} className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs">
+              {teamName.get(link.teamId) ?? "?"} · {link.role === "MAIN" ? "coach" : "adjoint"}
+              {editing ? (
+                <button type="button" aria-label="Retirer" onClick={() => delTeamCoach.mutate(link.id)}>
+                  <X className="size-3" />
+                </button>
+              ) : null}
+            </span>
+          ))}
+          {playerLinks.map((link) => (
+            <span key={link.id} className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
+              {teamName.get(link.teamId) ?? "?"} · joueur
+              {editing ? (
+                <button type="button" aria-label="Retirer" onClick={() => delPlayer.mutate(link.id)}>
+                  <X className="size-3" />
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <TeamSelect aria-label="Équipe" className="h-8 w-40" teams={teams} tiers={tiers} value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)} />
-        <Select aria-label="Rôle" className="h-8 w-28" value={linkRole} onChange={(e) => setLinkRole(e.target.value as TeamCoachRole | "PLAYER")}>
-          <option value="MAIN">Coach</option>
-          <option value="ASSISTANT">Adjoint</option>
-          <option value="PLAYER">Joueur</option>
-        </Select>
-        <Button size="sm" variant="outline" className="ml-auto" onClick={addLink} disabled={0 === teams.length}>
-          <Plus className="size-4" />
-          Lier
-        </Button>
-      </div>
+      {editing ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <TeamSelect aria-label="Équipe" className="h-8 w-40" teams={teams} tiers={tiers} value={linkTeam || firstTeam} onChange={(e) => setLinkTeam(e.target.value)} />
+          <Select aria-label="Rôle" className="h-8 w-28" value={linkRole} onChange={(e) => setLinkRole(e.target.value as TeamCoachRole | "PLAYER")}>
+            <option value="MAIN">Coach</option>
+            <option value="ASSISTANT">Adjoint</option>
+            <option value="PLAYER">Joueur</option>
+          </Select>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={addLink} disabled={0 === teams.length}>
+            <Plus className="size-4" />
+            Lier
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -221,7 +247,7 @@ function CoachesEditor() {
         <EmptyHint>Aucun coach pour le moment.</EmptyHint>
       ) : (
         <div className="flex flex-col gap-3">
-          {coaches.map((coach) => (
+          {[...coaches].sort(compareByFirstName).map((coach) => (
             <CoachCard
               key={coach.id}
               coach={coach}
