@@ -21,7 +21,7 @@ Les « 4 impasses GA » sont ouvertes **depuis 4 éditions d'audit** — aucune 
 | P0-2 | **Config prod** — profil prod distinct, secrets managés, `APP_ENV=prod`/`DEBUG=0` durci, healthchecks, limites RAM appliquées. | 🔴 | M | Aucune config prod n'existe → pas déployable proprement. | — |
 | P0-3 | **Backups PostgreSQL** — `pg_dump` planifié + restauration testée. | 🔴 | S | Zéro backup = perte totale sur incident. Trivial techniquement, impardonnable si absent. | P0-2 |
 | P0-4 | **Observabilité** — Sentry (erreurs) + logs structurés sans PII + métriques. | 🔴 | M | Zéro visibilité prod ; un incident client = aveugle. | P0-2 |
-| P0-5 | **Ids de créneau par-schedule** — les ids déterministes globaux (`uuid5(placement)`) font que l'import **vole** le créneau HARD d'une version sœur (perte de données inter-version). | 🔴 | M | Découvert à la revue #186 ; « Régénérer » rend le bug fréquent. Bloque la fiabilité de la comparaison de versions. Axe structurant (engine + importer + contrat). | — |
+| ~~P0-5~~ | **Ids de créneau par-schedule** — ✅ **livré 2026-07-11**. `SlotIdScoper` scope l'id par (schedule, placement) ; l'import ne vole plus le créneau HARD d'une version sœur. Backend seul (engine/contrat/golden inchangés). Voir planning-versions §D3quater. | 🔴 | ~~M~~ | Fait. | — |
 
 ## P1 — Enablers à fort levier (débloquent plusieurs features)
 

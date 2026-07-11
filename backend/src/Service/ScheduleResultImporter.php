@@ -18,42 +18,38 @@ final class ScheduleResultImporter
     /** @param array<string, mixed> $solverOutput */
     public function import(Schedule $schedule, array $solverOutput): void
     {
+        // Match against THIS schedule's own rows only. The engine returns a
+        // placement-deterministic id shared by every schedule with that placement;
+        // scoping it per schedule (SlotIdScoper) makes each version's row unique,
+        // so loading other schedules' slots would only re-open the P0-5 theft.
         $existingSlots = $this->entityManager
             ->getRepository(ScheduleSlotTemplate::class)
             ->findBy(['scheduleId' => $schedule->getId()]);
-
-        $seasonSlots = $this->entityManager
-            ->getRepository(ScheduleSlotTemplate::class)
-            ->findBy([
-                'clubId' => $schedule->getClubId(),
-                'seasonId' => $schedule->getSeasonId(),
-            ]);
 
         $existingById = [];
         foreach ($existingSlots as $slot) {
             $existingById[$slot->getId()] = $slot;
         }
 
-        foreach ($seasonSlots as $slot) {
-            $existingById[$slot->getId()] = $slot;
+        // Re-key the solver output by the PER-SCHEDULE id (uuid5(scheduleId:engineId)):
+        // deterministic within the schedule (HARD-lock rows re-match on regeneration),
+        // distinct across schedules (no cross-version collision).
+        $solverSlots = [];
+        foreach ($this->deduplicateNoneSlots($solverOutput['slots'] ?? []) as $engineId => $slotData) {
+            $solverSlots[SlotIdScoper::scope($schedule->getId(), (string) $engineId)] = $slotData;
         }
 
-        $solverSlots = $this->deduplicateNoneSlots($solverOutput['slots'] ?? []);
-        $solverSlotIds = array_fill_keys(array_keys($solverSlots), true);
-
         foreach ($existingSlots as $slot) {
-            if (LockLevel::NONE === $slot->getLockLevel() && !isset($solverSlotIds[$slot->getId()])) {
+            if (LockLevel::NONE === $slot->getLockLevel() && !isset($solverSlots[$slot->getId()])) {
                 $this->entityManager->remove($slot);
             }
         }
 
         foreach ($solverSlots as $slotId => $slotData) {
             $existingSlot = $existingById[$slotId] ?? null;
-            if (
-                null !== $existingSlot
-                && LockLevel::NONE !== $existingSlot->getLockLevel()
-                && $existingSlot->getScheduleId() === $schedule->getId()
-            ) {
+            // A HARD-locked row of this schedule is preserved untouched (its manual
+            // metadata survives) — only the engine re-emits it with the same placement.
+            if (null !== $existingSlot && LockLevel::NONE !== $existingSlot->getLockLevel()) {
                 continue;
             }
 
