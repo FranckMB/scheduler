@@ -19,6 +19,7 @@ use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
+use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -189,6 +190,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             new SolverMetricsMapper,
             $container->get(ClubGenerationLock::class),
             $container->get(TenantConnectionContext::class),
+            $container->get(StructureSnapshotter::class),
         );
 
         $handler(new GenerateScheduleMessage(scheduleId: $scheduleId, clubId: $clubId));
