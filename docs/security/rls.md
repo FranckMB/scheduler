@@ -21,7 +21,7 @@
 
 `clubscheduler` (owner/superuser de la DB) **bypasse toutes les policies**. C'est voulu : supervision totale via
 - `psql -U clubscheduler`,
-- `php bin/console doctrine:query:sql --connection admin "…"`,
+- `php bin/console dbal:run-sql --connection admin "…"`,
 - le futur dashboard super-admin (P2) devra utiliser cette connexion.
 
 `DATABASE_ADMIN_URL` alimente la connexion Doctrine `admin` — utilisée par les **migrations** (`doctrine_migrations.connection: admin`), `db-init-test`/`db-reset*` et `make fixtures` (le purge DELETE serait silencieusement partiel sous RLS). **Ne jamais pointer `DATABASE_URL` runtime dessus** — `RlsIsolationTest::testConnectionUserIsNotSuperuser` le garde.
@@ -29,7 +29,7 @@
 ## Caveats
 
 - **pgbouncer transaction-pooling incompatible** avec le GUC session-scoped (fuite cross-tenant). À reconcevoir avant d'introduire un pooler (GUC transactionnel + transaction par requête).
-- `doctrine:query:sql` sans `--connection admin` = app_user sans GUC → 0 ligne sur les tables tenant. C'est le comportement attendu, pas un bug.
+- `dbal:run-sql` sans `--connection admin` = app_user sans GUC → 0 ligne sur les tables tenant. C'est le comportement attendu, pas un bug.
 - Tables **sans `club_id`** = hors RLS : `club`/`app_user` (protégés au niveau API, SEC-01/02) ; `team_tag_assignment` (jointure season-scoped, ses deux côtés `team`/`team_tag` sont RLS — résiduel assumé) ; les **tables de référence GLOBALES** enrichies par l'usage, sans donnée club (`public_holiday`, `school_holiday_period`, `league_match_window`) ; les **journaux d'idempotence** keyés sur un uuid globalement unique (`period_reminder_log`, `transition_reminder_log` — **SEC-09 : résiduel assumé**, aucune API de lecture, pas de `club_id`, écrits par le cron ; un `calendar_entry_id` non devinable ne fuit rien sans endpoint) ; l'infra Doctrine/Symfony (`sport`, `priority_tier`, `reset_password_request`, `messenger_*`, `doctrine_migration_versions`). Règle : une table est hors RLS **ssi** elle ne porte pas de `club_id` — cf. `RlsIsolationTest` (énumération dynamique) et `TenantOwnedInterfaceCompletenessTest`.
 - Prod : remplacer les mots de passe `app_user_password` / dev par des secrets réels (env), et rejouer la migration sur la base cible (idempotente côté rôle/grants).
 
