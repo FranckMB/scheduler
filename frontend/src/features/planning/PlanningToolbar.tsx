@@ -82,6 +82,10 @@ export function PlanningToolbar({
   // a pre-D2 plan has a solver payload but no photo, so the restore would 409 —
   // don't offer an action that cannot succeed.
   const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && true === selected.hasStructurePhoto;
+  // Reloading the version that IS the live context (★) is a no-op — its structure
+  // is already the current one (that would just be "Régénérer"). Keep the button
+  // visible but greyed with a reason, so the state reads as deliberate.
+  const isLiveContext = null !== selected && selected.id === liveContextId;
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -160,7 +164,14 @@ export function PlanningToolbar({
           </Button>
         )}
         {canRegenerateFrom ? (
-          <Button size="sm" variant="ghost" className="h-8" disabled={actionBusy || isGenerating} onClick={onRegenerateFrom} title="Recharge les données (structure) de cette version et relance une génération">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8"
+            disabled={actionBusy || isGenerating || isLiveContext}
+            onClick={onRegenerateFrom}
+            title={isLiveContext ? "Déjà le contexte courant — rien à recharger (utilisez « Régénérer »)" : "Recharge les données (structure) de cette version et relance une génération"}
+          >
             <History className="size-4" />
             Charger cette version
           </Button>

@@ -69,9 +69,32 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
   });
 
-  it("offers « Charger cette version » on a finished version that has a structure photo", () => {
+  it("greys « Charger cette version » on the live-context (★) version — reloading it is a no-op", () => {
+    // A single schedule is necessarily the live context (latest generated).
     renderToolbar(schedule("COMPLETED"));
-    expect(screen.getByRole("button", { name: /charger cette version/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /charger cette version/i })).toBeDisabled();
+  });
+
+  it("enables « Charger cette version » on an older (non-live) version", () => {
+    // s1 (selected, older) is NOT the live context — s2 (newer) carries the ★.
+    render(
+      <PlanningToolbar
+        schedules={[schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01" }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01" })]}
+        selectedScheduleId="s1"
+        onSelectSchedule={noop}
+        viewMode="gymnase"
+        onViewMode={noop}
+        onRegenerate={noop}
+        onValidate={noop}
+        onReopen={noop}
+        onDelete={noop}
+        onRegenerateFrom={noop}
+        isGenerating={false}
+        actionBusy={false}
+        baselineScheduleId={null}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /charger cette version/i })).toBeEnabled();
   });
 
   it("hides « Charger cette version » on a pre-D2 version with no structure photo (would 409)", () => {
