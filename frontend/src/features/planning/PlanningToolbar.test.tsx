@@ -85,6 +85,31 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: /charger cette version/i })).toBeEnabled();
   });
 
+  it("disables « Régénérer » during a « Charger » restore (actionBusy) without showing « Génération… »", () => {
+    render(
+      <PlanningToolbar
+        schedules={[schedule("COMPLETED")]}
+        selectedScheduleId="s1"
+        onSelectSchedule={noop}
+        viewMode="gymnase"
+        onViewMode={noop}
+        onRegenerate={noop}
+        onValidate={noop}
+        onReopen={noop}
+        onDelete={noop}
+        onRegenerateFrom={noop}
+        isGenerating={false}
+        actionBusy
+        baselineScheduleId={null}
+        embedded
+      />,
+    );
+    const regen = screen.getByRole("button", { name: "Régénérer" });
+    expect(regen).toBeDisabled();
+    // The busy label keys on isGenerating (false here), not actionBusy → no false spinner text.
+    expect(screen.queryByRole("button", { name: /génération…/i })).not.toBeInTheDocument();
+  });
+
   it("hides « Charger cette version » on a pre-D2 version with no structure photo (would 409)", () => {
     renderToolbar(schedule("COMPLETED", { hasStructurePhoto: false }));
     expect(screen.queryByRole("button", { name: /charger cette version/i })).not.toBeInTheDocument();

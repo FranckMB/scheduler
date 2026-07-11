@@ -14,6 +14,7 @@ vi.mock("./SeasonSchedulesModal", () => ({
     </div>
   ),
   seasonPlanningCount: () => 2,
+  seasonOverlayCount: () => 1,
 }));
 
 const navigate = vi.fn();

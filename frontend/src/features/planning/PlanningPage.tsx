@@ -373,7 +373,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
               onViewMode={setViewMode}
-              isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending || regenerateFromMutation.isPending}
+              isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
               onRegenerate={() => {
                 if (null === validScheduleId) {

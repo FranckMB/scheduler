@@ -56,6 +56,15 @@ export function seasonPlanningCount(schedules: Schedule[]): number {
   return seasonPlannings(schedules, null).length;
 }
 
+/**
+ * Distinct PERIOD plannings that have a finished (consultable) version — matches
+ * exactly what the modal lists, so the banner's "N planning secondaire" never
+ * advertises a period the modal omits (e.g. one still mid-first-generation).
+ */
+export function seasonOverlayCount(schedules: Schedule[]): number {
+  return seasonPlannings(schedules, null).filter((row) => row.isOverlay).length;
+}
+
 const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [
   { key: "pdf", label: "PDF" },
   { key: "xlsx", label: "Excel" },

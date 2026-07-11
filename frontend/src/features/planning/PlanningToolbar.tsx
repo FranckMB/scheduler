@@ -175,7 +175,10 @@ export function PlanningToolbar({
       {/* Row 2 — generation actions, with export + filter right-aligned. */}
       <div className="flex flex-wrap items-center gap-2">
         {isValidated ? null : (
-          <Button size="sm" variant="default" className="h-8" disabled={isGenerating || null === selectedScheduleId} onClick={onRegenerate}>
+          // Disabled during a "Charger" restore too (actionBusy) — but the busy
+          // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
+          // not show a misleading "Génération…".
+          <Button size="sm" variant="default" className="h-8" disabled={isGenerating || actionBusy || null === selectedScheduleId} onClick={onRegenerate}>
             <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
             {isGenerating ? "Génération…" : "Régénérer"}
           </Button>
