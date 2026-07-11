@@ -2,6 +2,10 @@ Last verified @ feat/rgpd-consent-privacy 2026-07-11
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
 Changements récents :
+- **planning-versions D3 gating (2026-07-11)** : `Schedule` expose `hasStructurePhoto`
+  (read-only) — vrai seulement si la version porte une photo de structure (D2)
+  restaurable. Le front n'offre « Charger cette version » que dans ce cas (un plan
+  pré-D2 a un payload solveur mais pas de photo → l'action 409ait).
 - **RGPD PR-5 consentement (2026-07-11)** : `/api/register` exige `consent: true` (400 sinon,
   validation payload-only — enumeration-safe A3) ; preuve stockée (`termsAcceptedAt` +
   `termsVersion`). Page publique `/confidentialite` côté frontend (placeholders juridiques).

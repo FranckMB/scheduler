@@ -107,6 +107,29 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    /**
+     * The Schedule API exposes `hasStructurePhoto` so the client offers "Charger
+     * cette version" ONLY when the restore can succeed — decoupling the button
+     * from generatedTeamCount (which every generated plan carries) fixes the
+     * pre-D2 "flash error" (the button showed then 409'd on a photo-less plan).
+     */
+    public function testScheduleApiExposesHasStructurePhoto(): void
+    {
+        $this->persistTeam('SM1');
+        $withPhoto = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $withoutPhoto = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        self::getContainer()->get(StructureSnapshotter::class)->store($withPhoto, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
+
+        $this->client->request('GET', "/api/schedules/{$withPhoto->getId()}", [], [], $this->headers());
+        self::assertResponseIsSuccessful();
+        self::assertTrue($this->decode()['hasStructurePhoto'], 'a snapshotted version carries a restorable photo');
+
+        $this->client->request('GET', "/api/schedules/{$withoutPhoto->getId()}", [], [], $this->headers());
+        self::assertResponseIsSuccessful();
+        self::assertFalse($this->decode()['hasStructurePhoto'], 'a photo-less version must not offer the restore');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -131,6 +154,12 @@ final class RegenerateFromVersionTest extends WebTestCase
         $this->em->flush();
 
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /** @return array<string, mixed> */
+    private function decode(): array
+    {
+        return json_decode($this->client->getResponse()->getContent() ?: '{}', true, flags: \JSON_THROW_ON_ERROR);
     }
 
     /** @return array<string, string> */

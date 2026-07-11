@@ -123,9 +123,20 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?int $generatedTeamCount = null;
 
-    public static function fromEntity(Schedule $entity): self
+    /**
+     * planning-versions D3: does this version carry a restorable structure photo
+     * (ScheduleStructureSnapshot, D2)? Only then can "Charger cette version"
+     * succeed — a plan generated before D2 has a solver payload (so
+     * generatedTeamCount is set) but no photo, and must not offer the action.
+     * Set by ScheduleStateProvider (batched); false on the bare fromEntity path.
+     */
+    #[Groups(['read'])]
+    public bool $hasStructurePhoto = false;
+
+    public static function fromEntity(Schedule $entity, bool $hasStructurePhoto = false): self
     {
         $dto = new self;
+        $dto->hasStructurePhoto = $hasStructurePhoto;
         $dto->id = $entity->getId();
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();

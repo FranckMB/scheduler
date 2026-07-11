@@ -25,6 +25,19 @@ export function visibleOverlayVersions<T extends VersionLike>(schedules: T[], ca
   return schedules.filter((s) => s.calendarEntryId === calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+/**
+ * The version whose structure = the club's CURRENT context (teams, slots,
+ * constraints) — i.e. the LATEST generated version, not the one being viewed.
+ * The ★ marks THIS one: after adding slots and regenerating (→ V2), the star
+ * stays on V2 even while consulting V1, because V2 is the plan that matches the
+ * live data (user request). Restricted to the relevant set: the selected
+ * overlay's own versions when an overlay is viewed, else the season versions.
+ */
+export function liveContextScheduleId<T extends VersionLike & { id: string }>(schedules: T[], selectedOverlayEntryId: string | null): string | null {
+  const set = null !== selectedOverlayEntryId ? visibleOverlayVersions(schedules, selectedOverlayEntryId) : visibleSeasonPlans(schedules);
+  return set.at(-1)?.id ?? null; // sorted createdAt asc → last = latest generated.
+}
+
 /** "V3 — 10 juil. 14:32" stamp shared by season and overlay version labels. */
 function versionStamp(createdAt: string, index: number): string {
   const date = new Date(createdAt);

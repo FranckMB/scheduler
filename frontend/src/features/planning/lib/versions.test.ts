@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Schedule } from "../api";
-import { overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./versions";
+import { liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./versions";
 
 const plan = (over: Partial<Schedule>): Schedule => ({
   id: "id",
@@ -65,5 +65,38 @@ describe("overlayVersionLabels", () => {
     expect(labels.get("ov1")).toMatch(/^V1 — 8 juil\./);
     expect(labels.get("ov2")).toMatch(/^V2 — 10 juil\./);
     expect(labels.has("other")).toBe(false);
+  });
+});
+
+describe("liveContextScheduleId — the ★ (latest generated, = live context)", () => {
+  it("is the LATEST season version, stable when an older version is viewed", () => {
+    const list = [
+      plan({ id: "v1", createdAt: "2026-07-01T10:00:00+00:00" }),
+      plan({ id: "v2", createdAt: "2026-07-02T10:00:00+00:00" }),
+    ];
+    // V2 is latest → ★ on V2, regardless of which one is being viewed.
+    expect(liveContextScheduleId(list, null)).toBe("v2");
+  });
+
+  it("ignores ARCHIVED versions", () => {
+    const list = [
+      plan({ id: "v1", createdAt: "2026-07-01T10:00:00+00:00" }),
+      plan({ id: "vX", status: "ARCHIVED", createdAt: "2026-07-03T10:00:00+00:00" }),
+    ];
+    expect(liveContextScheduleId(list, null)).toBe("v1");
+  });
+
+  it("scopes to the selected overlay's own versions", () => {
+    const list = [
+      plan({ id: "s1", createdAt: "2026-07-05T10:00:00+00:00" }),
+      plan({ id: "o1", calendarEntryId: "p1", createdAt: "2026-07-01T10:00:00+00:00" }),
+      plan({ id: "o2", calendarEntryId: "p1", createdAt: "2026-07-02T10:00:00+00:00" }),
+    ];
+    expect(liveContextScheduleId(list, "p1")).toBe("o2");
+    expect(liveContextScheduleId(list, null)).toBe("s1");
+  });
+
+  it("is null when there is no version", () => {
+    expect(liveContextScheduleId([], null)).toBeNull();
   });
 });

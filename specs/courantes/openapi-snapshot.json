@@ -12552,6 +12552,11 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "hasStructurePhoto": {
+                        "description": "planning-versions D3: does this version carry a restorable structure photo\n(ScheduleStructureSnapshot, D2)? Only then can \"Charger cette version\"\nsucceed \u2014 a plan generated before D2 has a solver payload (so\ngeneratedTeamCount is set) but no photo, and must not offer the action.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -12727,6 +12732,11 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "hasStructurePhoto": {
+                        "description": "planning-versions D3: does this version carry a restorable structure photo\n(ScheduleStructureSnapshot, D2)? Only then can \"Charger cette version\"\nsucceed \u2014 a plan generated before D2 has a solver payload (so\ngeneratedTeamCount is set) but no photo, and must not offer the action.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -12865,6 +12875,11 @@
                                     "integer",
                                     "null"
                                 ]
+                            },
+                            "hasStructurePhoto": {
+                                "description": "planning-versions D3: does this version carry a restorable structure photo\n(ScheduleStructureSnapshot, D2)? Only then can \"Charger cette version\"\nsucceed \u2014 a plan generated before D2 has a solver payload (so\ngeneratedTeamCount is set) but no photo, and must not offer the action.",
+                                "default": false,
+                                "type": "boolean"
                             }
                         }
                     }

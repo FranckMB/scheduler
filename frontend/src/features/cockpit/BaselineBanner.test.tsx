@@ -1,53 +1,52 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { OverlaysExistError, type Schedule } from "@/features/planning/api";
+import type { Schedule } from "@/features/planning/api";
 
-import { BaselineBanner } from "./BaselineBanner";
-
-const reopenMutate = vi.fn();
-
-vi.mock("@/features/planning/queries", () => ({
-  useReopenSchedule: () => ({ mutate: reopenMutate, isPending: false }),
+// Stub the modal (its own deps — ExportMenu/useVenues/store — are tested apart).
+vi.mock("./SeasonSchedulesModal", () => ({
+  SeasonSchedulesModal: ({ onClose }: { onClose: () => void }) => (
+    <div role="dialog">
+      Plannings de la saison
+      <button onClick={onClose}>Fermer</button>
+    </div>
+  ),
+  seasonPlanningCount: () => 2,
 }));
+
+const navigate = vi.fn();
+vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
 const baseline: Schedule = { id: "b1", name: "Socle", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null };
 
+import { BaselineBanner } from "./BaselineBanner";
+
 function renderBanner() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <BaselineBanner schedules={[baseline]} baselineScheduleId="b1" socleValidated />
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <BaselineBanner schedules={[baseline]} baselineScheduleId="b1" socleValidated />
+    </MemoryRouter>,
   );
 }
 
-describe("BaselineBanner — destructive reopen", () => {
-  beforeEach(() => reopenMutate.mockReset());
-
-  it("confirms first, then reopens when there are no overlays", async () => {
-    reopenMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+describe("BaselineBanner", () => {
+  it("offers only « Ouvrir » (no « Modifier… » — modification happens on the planning page)", () => {
     renderBanner();
-    // "Modifier…" opens a confirmation first (never a silent un-validate).
-    await userEvent.click(screen.getByRole("button", { name: "Modifier…" }));
-    expect(reopenMutate).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Modifier" }));
-    expect(reopenMutate).toHaveBeenCalledWith({ id: "b1" }, expect.anything());
+    expect(screen.getByRole("button", { name: "Ouvrir" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Modifier/ })).not.toBeInTheDocument();
   });
 
-  it("escalates to a proportional confirm on 409, then re-sends with confirm", async () => {
-    reopenMutate.mockImplementationOnce((_vars, opts) => opts?.onError?.(new OverlaysExistError(2, [])));
+  it("« Ouvrir » navigates to the planning (validated socle)", async () => {
     renderBanner();
-    await userEvent.click(screen.getByRole("button", { name: "Modifier…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Modifier" }));
-    expect(screen.getByText(/supprimera 2 plannings secondaires/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ouvrir" }));
+    expect(navigate).toHaveBeenCalledWith("/planning");
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: "Modifier et supprimer" }));
-    expect(reopenMutate).toHaveBeenLastCalledWith({ id: "b1", confirmDeleteOverlays: true }, expect.anything());
+  it("« Tous les plannings (N) » opens the plannings modal, counting distinct plannings", async () => {
+    renderBanner();
+    await userEvent.click(screen.getByRole("button", { name: /Tous les plannings \(2\)/ }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Plannings de la saison");
   });
 });

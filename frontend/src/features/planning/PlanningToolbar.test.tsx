@@ -6,7 +6,7 @@ import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"]): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12 });
+const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, ...over });
 
 function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
   return render(
@@ -72,6 +72,11 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   it("offers « Charger cette version » on a finished version that has a structure photo", () => {
     renderToolbar(schedule("COMPLETED"));
     expect(screen.getByRole("button", { name: /charger cette version/i })).toBeInTheDocument();
+  });
+
+  it("hides « Charger cette version » on a pre-D2 version with no structure photo (would 409)", () => {
+    renderToolbar(schedule("COMPLETED", { hasStructurePhoto: false }));
+    expect(screen.queryByRole("button", { name: /charger cette version/i })).not.toBeInTheDocument();
   });
 
   it("hides Supprimer on the baseline and on a validated version", () => {

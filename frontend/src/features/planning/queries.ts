@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 import { download } from "@/shared/lib/download";
+import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, Schedule, SlotMovePatch } from "./api";
@@ -220,7 +221,9 @@ export function useRegenerateFromVersion() {
         void queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onError: () => toast.error("Le chargement de cette version a échoué."),
+    // Surface the backend's reason (e.g. "pas de photo de structure", in-flight,
+    // complexity cap) instead of a generic flash.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
 

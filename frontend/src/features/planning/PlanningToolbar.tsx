@@ -6,7 +6,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
-import { overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
+import { liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -64,6 +64,8 @@ export function PlanningToolbar({
   const isValidated = null !== selected && "VALIDATED" === selected.status;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && null !== selected.calendarEntryId;
+  // ★ = the version matching the live context (latest generated of the relevant set).
+  const liveContextId = liveContextScheduleId(schedules, isOverlay ? selected?.calendarEntryId ?? null : null);
   const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -76,8 +78,10 @@ export function PlanningToolbar({
   const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
   // "Load this version" (restore its structure + regenerate) is offered only on a
   // finished, non-locked COMPLETED version (a VALIDATED one is read-only — reopen
-  // first; the backend refuses it anyway). generatedTeamCount signals a generated plan.
-  const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && "number" === typeof selected.generatedTeamCount;
+  // first; the backend refuses it anyway) that actually carries a structure photo:
+  // a pre-D2 plan has a solver payload but no photo, so the restore would 409 —
+  // don't offer an action that cannot succeed.
+  const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && true === selected.hasStructurePhoto;
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -90,13 +94,14 @@ export function PlanningToolbar({
           className="h-8 rounded-md border border-input bg-background px-3 text-sm"
         >
           {/* Season versions, plus — when an overlay is selected — that period's own
-              overlay versions (V1, V2…). The ★ marks the version currently loaded
-              (= viewed). No "principal" here: the main plan is a fact carried by the
-              title badge, not a per-version label. */}
+              overlay versions (V1, V2…). The ★ marks the version matching the LIVE
+              context (latest generated), NOT the one being viewed: it stays put when
+              you consult an older version. No "principal" here: the main plan is a
+              fact carried by the title badge, not a per-version label. */}
           {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
             <option key={schedule.id} value={schedule.id}>
               {labelOf(schedule)}
-              {schedule.id === selectedScheduleId ? " ★" : ""}
+              {schedule.id === liveContextId ? " ★" : ""}
               {"VALIDATED" === schedule.status ? " · validé" : ""}
               {null !== schedule.calendarEntryId ? " · période" : ""}
             </option>
