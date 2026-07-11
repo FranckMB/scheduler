@@ -93,4 +93,4 @@ Shared modal a11y is one hook — `useModalA11y` (`src/shared/lib/useModalA11y.t
 Matcher wiring: runtime `expect.extend` in `src/test/setup.ts`; the vitest-v3 type augmentation is `src/test/vitest-axe.d.ts` (vitest-axe ships only a stale global `Vi.Assertion`).
 
 ## 5. Known testing gaps
-- None outstanding. `TenantCacheIsolationTest` is implemented (B3) and the 9 PHPUnit 11 doc-comment deprecations were migrated to attributes (B6) — both resolved 2026-07-01 (see `../technical-debt.md`).
+- None outstanding. `TenantCacheIsolationTest` is implemented (B3) and the 9 PHPUnit 11 doc-comment deprecations were migrated to attributes (B6) — both resolved 2026-07-01 (historique : git log de `docs/technical-debt.md`, absorbé dans `specs/evolution/roadmap.md` §Dette le 2026-07-11).

@@ -39,7 +39,7 @@ test Vitest).
 ## Vocabulaire compris par l'engine mais jamais émis par le wizard (« non proposé »)
 
 `forcedDays` (engine-only : « au moins une séance ces jours-là » — ≠ « uniquement » ; le wizard émet `allowedDays`, cf. ENG-16) · `preferredDays` (lu par l'objectif, jamais émis — la racine d'ENG-10) ·
-`FACILITY_CAPACITY.maxTeams` (émis par le backend, `canSplit`). L'onglet « Réserver » passe par
+`FACILITY_CAPACITY.maxTeams` (pass-through : n'atteint l'engine que si une contrainte explicite est stockée en base — le backend n'en émet **pas** depuis `canSplit`, la divisibilité voyage dans `trainingSlots[].capacity`). L'onglet « Réserver » passe par
 `slotTemplates` (verrou HARD), hors matrice constraints.
 
 > **MàJ 2026-07-08** : `allowedDays` et `forcedVenueId` sont **émis par le wizard**

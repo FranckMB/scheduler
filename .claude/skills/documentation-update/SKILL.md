@@ -17,8 +17,9 @@ Run **only when the user asks**, after work whose **business behaviour, architec
 | `<zone>/README.md` | human | that zone's scope + what/why, **command recap**, **project recap** (structure/entry points), pointers to its structuring/business docs |
 | `<zone>/AGENTS.md` | agent | **pointers + zone-only gotchas.** NOT a re-description of commands, flows, tooling or counts already in CLAUDE.md / project-map / zone README — duplication here is the #1 historical cause of doc rot (audit 2026-07-03, DOC-02). If a fact exists elsewhere, link it. |
 | `CLAUDE.md` (root) | agent | short operational index (< ~200 lines), facts not obvious from filenames |
-| `<zone>/docs/`, `<zone>/doc/` | both | deep-dives (business rules, how-to guides, structuring mechanisms) |
-| `docs/` (root) | both | cross-cutting: project-map, testing, architecture/ADRs, technical-debt |
+| `<zone>/docs/` | both | deep-dives (business rules, how-to guides, structuring mechanisms). **Single dir per zone** — `doc/` merged into `docs/` 2026-07-11; never recreate a `doc/` |
+| `docs/` (root) | both | cross-cutting: project-map, glossary, testing, architecture/ADRs |
+| `specs/evolution/roadmap.md` | both | **single tracking doc**: vision map (§1-§10) + prioritized backlog (P0-P4) + living technical debt (§Dette) + delivered traces (§Livrés) |
 | `specs/` | both | living product specs (see reconciliation below) |
 
 Rule: **README points, it does not recopy.** If a fact is in `docs/` or `AGENTS.md`, the README links to it. Every added line must carry a fact a future reader would otherwise get wrong.
@@ -46,7 +47,7 @@ Each `<zone>/README.md` must let a newcomer answer "what is this, how do I work 
 1. **Scope & role** — 1–2 paragraphs: what this zone owns, its boundaries (what it must never do — e.g. engine never calls backend, frontend never calls engine directly).
 2. **Command recap** — the commands that matter *for this zone*, and the note that backend/engine run **inside Docker** while frontend dev runs **on the host**.
 3. **Project recap** — entry point(s), main structure, key mechanisms in one glance.
-4. **Structuring / business docs** — a pointer list to the docs that explain the core: e.g. backend → `scripts/generate-schedule.sh` (how to drive a generation), tenant isolation (`docs/TENANT.md`, `docs/RLS.md`), the constraints model; engine → `doc/business.md`, `doc/nominal-flow.md`, `doc/solver-errors.md`; frontend → feature workflow (planning work-loop, wizard), component/UX conventions.
+4. **Structuring / business docs** — a pointer list to the docs that explain the core: e.g. backend → `scripts/generate-schedule.sh` (how to drive a generation), tenant isolation (`docs/TENANT.md`, `docs/RLS.md`), the constraints model, `docs/commands.md`, `docs/ffbb-api.md`; engine → `docs/business.md`, `docs/nominal-flow.md`, `docs/solver-errors.md`, `docs/constraint-vocabulary.md`; frontend → feature workflow (planning work-loop, wizard), component/UX conventions. Transverse vocabulary → `docs/glossary.md` (root).
 
 Respect the distinct working style per zone — don't flatten them into one template. The backend README reads like an API/persistence service, the engine like a solver, the frontend like a UI app.
 
@@ -56,6 +57,14 @@ Three buckets, distinct meaning — keep them true:
 - **`initiales/`** — origin specs (v2/v3). **Frozen**: never edit. They are the starting point; the evolution is read as the delta `initiales` → `courantes`.
 - **`courantes/`** — what the app does **today**. Must reflect reality: if a courante spec no longer matches the code, **update it**; if the feature was removed, **delete it**. When an `evolution` item ships, its behaviour lands here.
 - **`evolution/`** — what the app will do **later** (future/vision). When an item is delivered, **remove it from evolution** (it has graduated into `courantes`).
+
+**Purge des items livrés (mandatory each run):** `specs/evolution/roadmap.md` is the single tracking doc (map + backlog P0-P4 + debt). For every item delivered since the last pass:
+1. **Backlog line (P*x-y*)** — delete it from the P0-P4 tables; the id is never reused (a numbering hole = delivered, by design).
+2. **Trace** — add one line to roadmap **§Livrés** (date · id · subject · pointer to the courantes file / doc that now holds the behaviour). A delivered item MUST leave a dated trace — deletion without trace is the failure mode this step blocks.
+3. **Map line (§1-§10)** — flip to ✅ with a pointer (a line, not a spec — behavioural detail goes to `courantes/`).
+4. **Detail file** — if a `specs/evolution/*.md` detail file is now fully delivered, delete it (history lives in git) and keep the roadmap pointer updated.
+
+**Dette technique (same pipeline):** actionable debt lives as **P4-x backlog lines** (proof `file:line` required); deliberate "won't fix" keeps live in roadmap **§Dette** with their rationale. When a debt is resolved: same purge ritual (drop the P4 line, trace in §Livrés). New debt found during any pass → new P4 line, never a separate file.
 
 **Graduation check (mandatory each run, opposable):** for **every roadmap line whose status flips to ✅ (or gains a "Livré" note) in this run**, either **name the `courantes/` file that receives the behaviour** (create or extend it in the same pass) or **state in the change summary why no graduation applies**. Silence is not an option — "updated the roadmap line" alone is the failure mode this check blocks (2026-07-06: school-holidays + public-holidays imports fully specced in roadmap ✅ notes, nothing in courantes, snapshot stale across 2 PRs). Then also sweep `specs/evolution/` for older delivered items (roadmap ✅, merged PR, code present) and graduate them. The audit found shipped features still sitting in evolution/ months later (DOC-04).
 
@@ -72,7 +81,7 @@ No `archive/` bucket — nothing is lost (git + `initiales` hold the history). W
 4. **CLAUDE.md** — update only non-obvious facts; keep it a short index (< ~200 lines).
 5. **Zone docs** (`<zone>/docs`, `docs/project-map.md`, `docs/testing/`, `docs/technique/`) — update the affected deep-dives; add a how-to/business doc if a new structuring mechanism appeared.
 6. **ADR** — if a structural decision was made, add one and reference it in `docs/architecture/adr-index.md`.
-7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
+7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, **run the delivered-items purge** (backlog P-lines dropped + §Livrés traces + debt lines), apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
 8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per roadmap item marked delivered this run: → receiving courantes file, or the explicit reason no graduation applies**.
 
 ### Rules

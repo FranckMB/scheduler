@@ -51,13 +51,13 @@ Les fixtures injectent un jeu de données complet pour tester la génération :
 
 | Entité | Quantité | Détail |
 |--------|----------|--------|
-| Club | 1 | **BCCL** (Basket Club du Centre Loire), UUID `11111111-1111-1111-1111-111111111111` |
+| Club | 1 | **BCCL** (B CHARPENNES CROIX LUIZET), code FFBB `ARA0069036` — l'id est **généré** ; les fixtures retrouvent le club par son `ffbbClubCode`, il n'y a pas d'UUID fixe |
 | Saison | 1 | **2025-2026** (marquée comme active) |
-| Équipes | 21 | U11M1, U11M2, U13F1, U15M1, U15M2, U15F1, U15F2, SM1, SM2, SM3, etc. |
-| Coachs | 15 | Liés aux équipes |
-| Salles | 9 | Gymnase municipal, Salle des fêtes, Complexe sportif, etc. |
-| Contraintes | 15 | Disponibilités, exclusions, préférences |
-| Créneaux verrouillés | 2 | Matchs déjà fixés qui ne doivent pas bouger |
+| Équipes | 49 | U9 à U21 + seniors (SM1, SM2, SM3, SF…), avec tags et tiers de priorité |
+| Coachs | 26 | Liés aux équipes via `TeamCoach` |
+| Salles | 9 | Armand, ADN, Debarros, Annexe, Jean Vilar, Tonkin, JDR, Matéo, Camus (JDR et Matéo divisibles) |
+| Contraintes | ~19 | Disponibilités coachs, exclusions, préférences |
+| Réservations | 1 | Créneau réservé fixe (pin `HARD` pour le solveur) |
 
 Ces données sont suffisantes pour lancer une première génération sans rien configurer toi-même.
 
@@ -72,7 +72,7 @@ Un **Schedule** est l'entité centrale qui représente un planning de matchs pou
 ```bash
 curl -X POST http://localhost:8080/api/schedules \
   -H "Content-Type: application/json" \
-  -H "X-Club-Id: 11111111-1111-1111-1111-111111111111" \
+  -H "Authorization: Bearer <ton-jwt>" \
   -d '{"name": "Planning BCCL 2025-2026", "status": "DRAFT"}'
 ```
 
@@ -90,7 +90,9 @@ curl -X POST http://localhost:8080/api/schedules \
 | Header | Valeur | Rôle |
 |--------|--------|------|
 | `Content-Type` | `application/json` | Format du body |
-| `X-Club-Id` | `11111111-1111-1111-1111-111111111111` | Identifie le club (injecté automatiquement dans l'entité) |
+| `Authorization` | `Bearer <jwt>` | **Toute** route `/api/*` exige un JWT ; le club est dérivé du membership de l'utilisateur authentifié |
+
+Le header `X-Club-Id` n'est **pas** obligatoire (le frontend ne l'envoie jamais) : le backend résout le club depuis le JWT. Un `X-Club-Id` pointant vers un club étranger est rejeté en 403. Attention aussi aux rôles : les **écritures** (création de schedule, génération, export) exigent le rôle **management** dans le club (SEC-07).
 
 ### Réponse
 
@@ -99,7 +101,7 @@ curl -X POST http://localhost:8080/api/schedules \
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "name": "Planning BCCL 2025-2026",
   "status": "DRAFT",
-  "clubId": "11111111-1111-1111-1111-111111111111",
+  "clubId": "<uuid-du-club-généré-par-les-fixtures>",
   "seasonId": "...",
   "createdAt": "2026-06-15T10:00:00+00:00"
 }
@@ -107,7 +109,7 @@ curl -X POST http://localhost:8080/api/schedules \
 
 ### Points importants
 
-- Tu n'as pas besoin d'envoyer `clubId` dans le JSON. Le backend l'extrait automatiquement du header `X-Club-Id`.
+- Tu n'as pas besoin d'envoyer `clubId` dans le JSON. Le backend le dérive du **JWT** (membership `ClubUser` actif de l'utilisateur authentifié).
 - Tu n'as pas besoin d'envoyer `seasonId`. Le backend résout automatiquement la saison active (ici, 2025-2026).
 - Le champ `id` retourné est un UUID. Conserve-le, tu en auras besoin pour les étapes suivantes.
 
@@ -161,14 +163,17 @@ Tu as trois façons de savoir si la génération est terminée.
 La plus simple pour déboguer sans frontend.
 
 ```bash
-# Vérifier le statut
-curl http://localhost:8080/api/schedules/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+# Vérifier le statut (toute route /api exige le JWT)
+curl -H "Authorization: Bearer <ton-jwt>" \
+  http://localhost:8080/api/schedules/a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
 # Si le statut est COMPLETED, lister les créneaux générés
-curl "http://localhost:8080/api/schedule_slot_templates?scheduleId=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+curl -H "Authorization: Bearer <ton-jwt>" \
+  "http://localhost:8080/api/schedule_slot_templates?scheduleId=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 # Si le statut est FAILED, lire les diagnostics
-curl "http://localhost:8080/api/schedule_diagnostics?scheduleId=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+curl -H "Authorization: Bearer <ton-jwt>" \
+  "http://localhost:8080/api/schedule_diagnostics?scheduleId=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
 Répète la première commande toutes les 2-3 secondes jusqu'à obtenir `COMPLETED` ou `FAILED`.
@@ -197,7 +202,7 @@ Le backend publie un événement sur le hub Mercure dès que le statut change. C
 
 ```javascript
 const eventSource = new EventSource(
-  `/.well-known/mercure?topic=club:11111111-1111-1111-1111-111111111111:schedule:a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+  `/.well-known/mercure?topic=club:${clubId}:schedule:a1b2c3d4-e5f6-7890-abcd-ef1234567890`
 );
 
 eventSource.onmessage = (event) => {
@@ -261,7 +266,7 @@ Génération lancée
 [1] Status: FAILED
 PLANNING ÉCHOUÉ
 Diagnostics
-  - [ERROR] engine_timeout: Le solveur a dépassé 10s
+  - [ERROR] engine_timeout: Schedule generation timed out.
   - [WARNING] unplaced: SM3 ne peut pas être placée
 ```
 
@@ -276,26 +281,31 @@ Erreur: Backend unreachable while calling POST http://localhost:8080/api/schedul
 ## 5. Cycle de vie des statuts
 
 ```
-DRAFT ──► PENDING ──► GENERATING ──► COMPLETED
-                          │
-                          ▼
-                        FAILED
+DRAFT ──► PENDING ──► GENERATING ──► COMPLETED ──► VALIDATED
+                          │                │
+                          ▼                ▼
+                        FAILED          ARCHIVED
 ```
+
+Le cycle compte **sept** statuts :
 
 | Statut | Signification | Qui le positionne |
 |--------|---------------|-------------------|
 | **DRAFT** | Planning créé, jamais généré | API Platform (lors du POST `/api/schedules`) |
-| **PENDING** | Génération mise en file d'attente dans Redis | `GenerateScheduleController` |
+| **PENDING** | Génération mise en file d'attente dans Redis | `GenerateScheduleController` (ou le worker si le verrou club est tenu, pour retry) |
 | **GENERATING** | Le worker est en train de traiter la demande | `GenerateScheduleHandler` |
 | **COMPLETED** | Le moteur a retourné un planning valide | `ScheduleResultImporter` |
 | **FAILED** | Une erreur est survenue à n'importe quelle étape | `GenerateScheduleHandler` ou `ScheduleResultImporter` |
+| **VALIDATED** | Planning validé (lecture seule) | **Côté API** (validation explicite) — jamais par le worker |
+| **ARCHIVED** | Ancienne version conservée pour historique | **Côté API** (gestion des versions) — jamais par le worker |
 
 ### Règles de transition
 
 - `DRAFT` peut repasser à `PENDING` si tu relances une génération.
-- `COMPLETED` peut repasser à `PENDING` si tu demandes une nouvelle génération (les anciens créneaux sont écrasés).
+- `COMPLETED` peut repasser à `PENDING` si tu demandes une nouvelle génération (les anciens créneaux non verrouillés sont remplacés).
 - `FAILED` peut repasser à `PENDING` après correction des contraintes.
 - Seul le worker peut écrire `GENERATING`, `COMPLETED` ou `FAILED`.
+- `VALIDATED` et `ARCHIVED` sont posés côté API et **bloquent `POST /generate` en 409** (rouvrir le planning validé, ou générer une nouvelle version).
 
 ---
 
@@ -313,23 +323,23 @@ Voici chaque panne possible, avec son symptôme, sa cause, sa vérification, sa 
 | **Correction** | `docker compose up -d messenger-worker` |
 | **Prévention** | Inclus toujours `messenger-worker` dans ton `docker-compose.yml` ou ton script de démarrage. |
 
-### Cas 2 : FAILED + diagnostic "engine_busy"
+### Cas 2 : le statut retombe en PENDING (verrou club tenu)
 
 | | Détail |
 |---|---|
-| **Symptôme** | Le statut passe à `FAILED`. Le diagnostic indique : "Une génération est déjà en cours pour ce club." |
-| **Cause** | Le verrou Redis `club:{clubId}:generation` n'a pas été libéré. Le worker précédent a probablement crashé avant de faire le `DEL`. |
-| **Vérification** | `docker exec clubscheduler-redis redis-cli GET club:11111111-1111-1111-1111-111111111111:generation` — si ça retourne une valeur (même un timestamp), le verrou est actif. |
-| **Correction** | `docker exec clubscheduler-redis redis-cli DEL club:11111111-1111-1111-1111-111111111111:generation` |
-| **Prévention** | Le verrou expire automatiquement après 300 secondes (5 minutes). Mais surveille les logs du worker pour détecter les crashes récurrents. |
+| **Symptôme** | Le statut repasse (ou reste) en `PENDING` alors qu'une génération a été demandée. Il n'y a **pas** de diagnostic `engine_busy` — ce type n'existe plus. |
+| **Cause** | Une autre génération est en cours pour le même club : le worker n'a pas pu prendre le verrou Redis `schedule_generation:club:{clubId}`, il a remis le statut en `PENDING` et levé une `RecoverableMessageHandlingException` (retry Messenger). |
+| **Vérification** | `docker exec clubscheduler-redis redis-cli GET schedule_generation:club:<club-uuid>` — si ça retourne un token, le verrou est actif. |
+| **Correction** | Normalement rien : le message est rejoué automatiquement. Si le verrou est orphelin (worker crashé), `docker exec clubscheduler-redis redis-cli DEL schedule_generation:club:<club-uuid>`. |
+| **Prévention** | Le verrou expire automatiquement après `timeoutSeconds + 60` secondes (**≈ 710 s** avec le timeout par défaut de 650 s). Surveille les logs du worker pour détecter les crashes récurrents. |
 
 ### Cas 3 : FAILED + diagnostic "engine_timeout"
 
 | | Détail |
 |---|---|
 | **Symptôme** | Le statut passe à `FAILED`. Le diagnostic indique que le moteur a dépassé le temps imparti. |
-| **Cause** | Le problème est trop complexe pour le solveur CP-SAT (limite fixée à 10 secondes). Trop d'équipes, trop de contraintes dures, pas assez de salles. |
-| **Vérification** | `make logs SERVICE=engine` — tu verras une ligne indiquant `max_time=10s` et un abandon. |
+| **Cause** | Le problème est trop complexe pour le solveur CP-SAT. Le budget est **adaptatif** selon la taille du problème (`n_teams × n_venues`) : 60 s (≤ 50), 180 s (≤ 200), 600 s au-delà — plafonné par `solverTimeoutSeconds` (650). Trop d'équipes, trop de contraintes dures, pas assez de salles. |
+| **Vérification** | `make logs SERVICE=engine` — tu verras le budget retenu et un abandon. |
 | **Correction** | Réduis le nombre d'équipes dans le planning, assouplis des contraintes `HARD` en `PREFERRED`, ou ajoute des salles disponibles. |
 | **Prévention** | Surveille les métriques du moteur. Pour les clubs très complexes, envisage de scinder le planning en plusieurs sous-planning. |
 
@@ -353,15 +363,15 @@ Voici chaque panne possible, avec son symptôme, sa cause, sa vérification, sa 
 | **Correction** | Change une contrainte `HARD` en `PREFERRED`, ou ajoute une ressource (salle, coach) pour débloquer le créneau. |
 | **Prévention** | À terme, une validation automatique des contraintes avant envoi au moteur est prévue. |
 
-### Cas 6 : FAILED + diagnostic "engine_validation_error"
+### Cas 6 : FAILED + diagnostic "engine_failed" (réponse anormale du moteur)
 
 | | Détail |
 |---|---|
-| **Symptôme** | Le statut passe à `FAILED`. Le moteur a retourné une erreur 422. |
-| **Cause** | Le payload envoyé au moteur est mal formé. Exemple : `minStartTime` supérieur à `maxStartTime`, ou un champ obligatoire manquant. |
-| **Vérification** | `make logs SERVICE=engine` + inspecte le champ `snapshot_data` de la table `schedule`. |
-| **Correction** | Corrige la contrainte via `PUT /api/constraints/{id}`. |
-| **Prévention** | Ajoute une validation côté frontend pour empêcher la saisie de valeurs incohérentes. |
+| **Symptôme** | Le statut passe à `FAILED` avec un diagnostic `engine_failed`. Il n'existe **pas** de type `engine_validation_error`. |
+| **Cause** | Le moteur a retourné une réponse JSON **sans clé `status`** (par exemple un corps d'erreur 422 de Pydantic). `EngineClient` lit la réponse avec `toArray(false)` (aucune exception sur un statut HTTP d'erreur) et le handler traite toute réponse sans `status` comme `failed`. Un 422 est improbable en pratique : le payload est construit par `ScheduleConstraintBuilder`, pas saisi à la main. |
+| **Vérification** | `make logs SERVICE=engine` + inspecte le champ `snapshot_data` de la table `schedule` (payload exact envoyé). |
+| **Correction** | Compare le `snapshot_data` au schéma du contrat engine (v2.1, `extra="forbid"`) ; corrige la donnée source incriminée. |
+| **Prévention** | `ContractSchemaTest` garde la synchronisation backend ⇄ engine ; le gate `POST /api/constraints/validate` attrape les configs incohérentes avant le solve. |
 
 ### Cas 7 : COMPLETED mais 0 créneau généré
 
@@ -450,17 +460,17 @@ curl -X POST http://localhost:8080/api/schedules/a1b2c3d4-e5f6-7890-abcd-ef12345
 
 - Le backend répond **202 Accepted** (traitement asynchrone, comme pour la génération).
 - Le champ `pdfExportStatus` de l'entité Schedule passe à `pending`.
-- Le worker PDF (conteneur `pdf-worker`) traite la demande.
-- Le statut évolue : `pending` → `processing` → `completed`.
-- En statut `completed`, le champ `pdfExportUrl` contient l'URL de téléchargement.
+- Le worker Messenger traite la demande (`ExportPdfHandler`).
+- Le statut évolue : `pending` → `generating` → `completed` (ou `failed`).
+- En statut `completed`, le champ `pdfExportUrl` contient l'URL du fichier.
 
 ### Téléchargement
 
-```bash
-curl -O http://localhost:8080/api/schedule_pdfs/a1b2c3d4-e5f6-7890-abcd-ef1234567890/download
-```
+Il n'existe **pas** de route de téléchargement dédiée : `pdfExportUrl` pointe directement vers un **fichier statique** servi sous `/exports/…` (répertoire `backend/public/exports`).
 
-Ou utilise directement l'URL retournée dans `pdfExportUrl`.
+```bash
+curl -O "http://localhost:8080<pdfExportUrl>"   # ex. /exports/schedule-a1b2c3d4-….pdf
+```
 
 ### Note importante
 
@@ -551,12 +561,17 @@ docker logs -f clubscheduler-engine --tail 50
 
 ### File Redis
 
+Le transport Messenger utilise les **Redis Streams** (stream `messages`) — pas une liste, donc `LRANGE messenger_messages` ne montre rien.
+
 ```bash
-# Voir les messages en attente
-docker exec clubscheduler-redis redis-cli LRANGE messenger_messages 0 5
+# Compter les messages en attente
+docker exec clubscheduler-redis redis-cli XLEN messages
+
+# Inspecter les messages
+docker exec clubscheduler-redis redis-cli XRANGE messages - + COUNT 5
 
 # Vérifier le verrou de génération
-docker exec clubscheduler-redis redis-cli GET club:11111111-1111-1111-1111-111111111111:generation
+docker exec clubscheduler-redis redis-cli GET schedule_generation:club:<club-uuid>
 ```
 
 ### Forcer la consommation d'un message (mode debug)
@@ -592,13 +607,21 @@ php bin/console debug:router | grep schedule
 
 ### Tester le moteur directement
 
+Le hostname `engine` n'existe que **sur le réseau Docker** (depuis un autre conteneur). Depuis l'hôte, le port est publié sur `127.0.0.1:${ENGINE_PORT}` (8000 par défaut).
+
 ```bash
-curl -X POST http://engine:8000/generate \
+# Depuis l'hôte
+curl -X POST http://127.0.0.1:8000/generate \
   -H "Content-Type: application/json" \
-  -d '{"version":"2.0","clubId":"test","seasonId":"test","venues":[],"teams":[],"coaches":[],"constraints":[],"slotTemplates":[],"priorityTiers":[]}'
+  -d '{"version":"2.1","clubId":"test","seasonId":"test","venues":[],"teams":[],"coaches":[],"constraints":[],"slotTemplates":[]}'
+
+# Ou depuis un conteneur de la stack
+docker compose exec php-fpm curl -X POST http://engine:8000/generate \
+  -H "Content-Type: application/json" \
+  -d '{"version":"2.1","clubId":"test","seasonId":"test","venues":[],"teams":[],"coaches":[],"constraints":[],"slotTemplates":[]}'
 ```
 
-Cela envoie un payload minimal au moteur pour vérifier qu'il répond bien. Tu dois recevoir une réponse JSON (même vide) et non une erreur 502 ou un timeout.
+Cela envoie un payload minimal au moteur pour vérifier qu'il répond bien. Tu dois recevoir une réponse JSON (même vide) et non une erreur 502 ou un timeout. Attention : le schéma est `extra="forbid"`, toute clé inconnue (ex. `priorityTiers`) ferait rejeter le payload.
 
 ### Health check global
 
@@ -646,7 +669,7 @@ Frontend (React)          Backend (Symfony)           Engine (Python)
 
 | Service | Technologie | Rôle |
 |---------|-------------|------|
-| **Frontend** | React 18 + Vite | Interface utilisateur, calendrier, formulaires de contraintes |
+| **Frontend** | React 19 + Vite | Interface utilisateur, calendrier, formulaires de contraintes |
 | **Backend** | Symfony 7 + API Platform | API REST, authentification, orchestration, persistence |
 | **Engine** | Python 3.12 + FastAPI + OR-Tools | Solveur CP-SAT qui calcule le planning optimal |
 | **Messenger Worker** | PHP CLI + Symfony Messenger | Consommateur de file Redis, appelle l'engine et importe le résultat |
@@ -660,7 +683,7 @@ Frontend (React)          Backend (Symfony)           Engine (Python)
 
 | Action | Méthode | URL | Body / Headers |
 |--------|---------|-----|----------------|
-| Créer un planning | POST | `/api/schedules` | `{"name":"...","status":"DRAFT"}` + header `X-Club-Id` |
+| Créer un planning | POST | `/api/schedules` | `{"name":"...","status":"DRAFT"}` + header `Authorization: Bearer <jwt>` |
 | Lancer la génération | POST | `/api/schedules/{id}/generate` | Header `Authorization: Bearer <jwt>` |
 | Vérifier le statut | GET | `/api/schedules/{id}` | — |
 | Lister les créneaux | GET | `/api/schedule_slot_templates?scheduleId={id}` | — |
@@ -671,7 +694,7 @@ Frontend (React)          Backend (Symfony)           Engine (Python)
 
 - `{id}` est toujours l'UUID du schedule (ex. `a1b2c3d4-e5f6-7890-abcd-ef1234567890`).
 - Toutes les routes sous `/api/*` passent par API Platform, sauf `/generate` et `/export-pdf` qui sont des contrôleurs personnalisés.
-- Le header `X-Club-Id` est obligatoire pour la création. Le header `Authorization` est obligatoire pour la génération et l'export.
+- Le header `Authorization: Bearer <jwt>` est obligatoire sur **toutes** les routes `/api/*` (le club est dérivé du JWT — `X-Club-Id` n'est pas requis). Les écritures exigent le rôle management (SEC-07).
 
 ---
 
@@ -684,7 +707,7 @@ Avant chaque génération, parcours cette liste pour éviter les pannes évident
 - [ ] Le worker Messenger tourne (`docker ps \| grep messenger`)
 - [ ] Le moteur Python tourne (`docker ps \| grep engine`)
 - [ ] Le hub Mercure tourne (`docker ps \| grep mercure`)
-- [ ] Le verrou Redis est libéré (`redis-cli GET club:...:generation` retourne `(nil)`)
+- [ ] Le verrou Redis est libéré (`redis-cli GET schedule_generation:club:<club-uuid>` retourne `(nil)`)
 - [ ] Aucun planning précédent en statut `FAILED` n'a laissé de verrou ou de diagnostic bloquant pour le même club
 
 Si tous les items sont cochés, tu peux lancer la génération en toute confiance.

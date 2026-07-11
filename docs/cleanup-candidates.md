@@ -1,6 +1,6 @@
 # Cleanup Candidates — ClubScheduler
 
-Concrete, **proof-backed** removal/simplification candidates surfaced by the onboarding audit. This is a shortlist of the safest items from [`technical-debt.md`](technical-debt.md). **Update 2026-07-01: all candidates below are now resolved** — C1→E1 (aliases deleted), C2→E4 (comment removed), C3→E5 (doc fixed), C4→E2 (`helpers.py`), C5→E3 (documented, ADR-0001). See `technical-debt.md`. Each requires an explicit scoped plan + validation before action. Perimeter: backend + engine (frontend excluded).
+Concrete, **proof-backed** removal/simplification candidates surfaced by the onboarding audit. This is a shortlist of the safest items from `specs/evolution/roadmap.md` §Dette. **Update 2026-07-01: all candidates below are now resolved** — C1→E1 (aliases deleted), C2→E4 (comment removed), C3→E5 (doc fixed), C4→E2 (`helpers.py`), C5→E3 (documented, ADR-0001). Historique : git log de `docs/technical-debt.md` (absorbé roadmap §Dette, 2026-07-11). Each requires an explicit scoped plan + validation before action. Perimeter: backend + engine (frontend excluded).
 
 | # | Candidate | Location | Proof | Suggested action | Risk |
 |---|-----------|----------|-------|------------------|------|
@@ -12,7 +12,7 @@ Concrete, **proof-backed** removal/simplification candidates surfaced by the onb
 
 ## Explicitly NOT cleanup candidates (proven fine)
 - `DevScheduleReportWriter` autowiring exclusion (`backend/config/services.yaml:22`) — intentional dev tool.
-- The 6 solver helpers (`technical-debt.md` E2) — **refactor**, not deletion; they carry behavioural differences that must be reconciled deliberately, not dropped.
+- The 6 solver helpers (roadmap §Dette, E2 résolu) — **refactor**, not deletion; they carry behavioural differences that must be reconciled deliberately, not dropped.
 - The 4 `phase1` blocking tests — keep (guardrails); `TenantCacheIsolationTest` needs *implementing*, not removing.
 
 ## Process reminder

@@ -112,14 +112,16 @@
 | `venueId` (uuid) | le gymnase | **clé stricte** (`scopeTargetId` ne convient pas ici) |
 | `maxTeams` (int) | nb max d'équipes **simultanées** par créneau | appliqué en `min(capacité du créneau, maxTeams)` — **ne peut que resserrer**, jamais élargir |
 
-**Exemple BCCL** — un gymnase divisible (ex. ADN, 3 terrains) est saisi côté **écran Gymnases** (`canSplit`), pas dans l'onglet contraintes ; le backend émet le `FACILITY_CAPACITY`.
+**Exemple BCCL** — un gymnase divisible (ex. ADN, 3 terrains) est saisi côté **écran Gymnases** (`canSplit`), pas dans l'onglet contraintes ; la divisibilité voyage alors dans `trainingSlots[].capacity` (`canSplit ? capacity : 1`), **pas** en contrainte. Le backend n'émet **aucun** `FACILITY_CAPACITY` depuis `canSplit` : cette famille n'atteint l'engine que si une contrainte explicite est stockée en base (pass-through).
 
 ---
 
 ## `type: "PRIORITY_TIER"` — poids de priorité (rang S/A/B/C/D)
 
-Envoyé par le backend depuis les `PriorityTier`. `metadata.id` + `metadata.defaultMinSessions` +
-`orToolsWeight` (S=10000 · A=1000 · B=100 · C=10 · D=1). Le poids exponentiel garantit qu'un rang
+Envoyé par le backend depuis les `PriorityTier` : seuls `metadata.id`, `label` et
+`defaultMinSessions` partent — le backend n'envoie **pas** `orToolsWeight` (retiré volontairement :
+les poids S=10000 · A=1000 · B=100 · C=10 · D=1 sont **codés en dur** côté engine dans
+`LEVEL_2_OBJECTIVE_WEIGHTS`). Le poids exponentiel garantit qu'un rang
 supérieur l'emporte dans l'objectif. Le **minimum de séances** du rang est une **cible soft**
 (bonus objectif), pas un plancher dur (audit ENG-18).
 

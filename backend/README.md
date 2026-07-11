@@ -187,9 +187,13 @@ backend/
 | [`scripts/onboarding-smoke.sh`](scripts/onboarding-smoke.sh) | Flux club neuf : register → données minimales → generate → `COMPLETED`. |
 | [`docs/TENANT.md`](docs/TENANT.md) | **Isolation multi-tenant** (cœur sécurité) — `TenantFilter` + `TenantFilterListener` (priorité 7, après le firewall) + résolution du club depuis le JWT. |
 | [`docs/RLS.md`](docs/RLS.md) | PostgreSQL Row-Level Security : rôles DB, policies, activation sur une nouvelle table. |
+| [`docs/commands.md`](docs/commands.md) | **Référence complète des commandes** — cibles make, console `app:*`, pièges RLS (`dbal:run-sql`), scripts. |
+| [`docs/ffbb-api.md`](docs/ffbb-api.md) | **Intégration FFBB** — les routes des API publiques FFBB utilisées (Meilisearch + api.ffbb.com), confinement SSRF, cache. |
+| [`docs/constraint-coverage.md`](docs/constraint-coverage.md) | Couverture des besoins gestionnaire par le système de contraintes (✅/🟡/❌). |
+| [`docs/constraints.md`](docs/constraints.md) · [`docs/generation-flow.md`](docs/generation-flow.md) · [`docs/schedule-generation-guide.md`](docs/schedule-generation-guide.md) | Docs pédagogiques (contraintes métier, pipeline de génération, guide pas-à-pas) — ex-`doc/`, fusionné 2026-07-11. |
 | [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions CS-Fixer/PHPStan/Rector, flux services, gotchas). |
 
-**Contraintes = cœur métier.** Elles sont *persistées/exposées* ici (`Constraint` + `ScheduleConstraintBuilder` qui construit le payload solveur, dont `resolveTagToTeamIds` pour cibler un groupe) et *résolues* par l'engine — voir [`engine/doc/business.md`](../engine/doc/business.md).
+**Contraintes = cœur métier.** Elles sont *persistées/exposées* ici (`Constraint` + `ScheduleConstraintBuilder` qui construit le payload solveur, dont `resolveTagToTeamIds` pour cibler un groupe) et *résolues* par l'engine — voir [`engine/docs/business.md`](../engine/docs/business.md).
 
 ## Environnement
 

@@ -1,6 +1,6 @@
 # Documentation métier du système de contraintes
 
-> ClubScheduler — Symfony 7 + API Platform. Contexte : BCCL (Basket Club de la Côte du Languedoc).
+> ClubScheduler — Symfony 7 + API Platform. Contexte : BCCL (B CHARPENNES CROIX LUIZET, code FFBB ARA0069036, ligue ARA).
 
 ---
 
@@ -30,7 +30,7 @@ Le champ `scope` (enum `ConstraintScope`) définit la cible de la contrainte.
 | `CLUB` | Toutes les équipes du club (filtrables par tag via `targetTag`) | "Toutes les équipes jeunes finissent avant 19h30" |
 | `TEAM` | Une équipe spécifique (via `scopeTargetId` = UUID de l'équipe) | "SM3 ne s'entraîne que le mercredi" |
 | `COACH` | Un entraîneur spécifique (via `scopeTargetId` = UUID du coach) | "Enzo n'est pas disponible le vendredi" |
-| `FACILITY` | Une salle spécifique (via `scopeTargetId` = UUID du lieu) | "Le gymnase ADN est fermé le lundi" |
+| `FACILITY` | Une salle spécifique (via `scopeTargetId` = UUID du lieu) | "Au gymnase Matéo, 2 équipes simultanées maximum" |
 
 ### 2.2 Family — Quel type de règle ?
 
@@ -47,52 +47,53 @@ Restreint les horaires de début d'entraînement.
 
 > Exemple : `{maxStartTime: "19:30"}` signifie "l'entraînement doit commencer au plus tard à 19h30". Si la séance dure 1h30, elle finira donc à 21h00 au plus tard.
 
-#### `DAY` — Préférence de jour
+#### `DAY` — Jours d'entraînement
 
-Définit les jours autorisés ou préférés pour l'entraînement.
+Définit les jours autorisés, à éviter ou imposés pour l'entraînement. La validation exige **au moins une** de ces trois clés :
 
 | Clé `config` | Type | Description |
 |--------------|------|-------------|
-| `preferredDays` | int[] (1-7) | Jours préférés |
-| `forbiddenDays` | int[] (1-7) | Jours interdits |
+| `allowedDays` | int[] (1-7) | Whitelist **dure** : seuls ces jours sont permis, l'engine interdit tous les autres (mode « uniquement ») |
+| `forbiddenDays` | int[] (1-7) | Jours à éviter : interdiction dure en `HARD`, pénalité (évitement) en règle souple |
+| `forcedDays` | int[] (1-7) | Au moins une séance sur chacun de ces jours (vocabulaire engine, non émis par le wizard) |
 
 Numérotation des jours : `1=Lundi`, `2=Mardi`, `3=Mercredi`, `4=Jeudi`, `5=Vendredi`, `6=Samedi`, `7=Dimanche`.
 
-> Exemple : `{preferredDays: [3]}` force l'entraînement le mercredi uniquement. `{forbiddenDays: [6, 7]}` interdit le week-end.
+> Exemple : `{allowedDays: [3]}` force l'entraînement le mercredi uniquement (tous les autres jours sont interdits). `{forbiddenDays: [6, 7]}` évite le week-end.
+
+À noter : l'engine reconnaît aussi une clé `preferredDays` (bonus **SOFT** sur les jours cités), mais elle n'est **jamais émise par le wizard** et ne suffit pas à elle seule — une contrainte `DAY` dont la config ne contient que `preferredDays` est **rejetée** par la validation (`allowedDays`, `forbiddenDays` ou `forcedDays` requis).
 
 #### `FACILITY` — Affectation de salle
 
-Oriente ou bloque l'utilisation d'une salle spécifique.
+Oriente ou bloque l'utilisation d'une salle spécifique. La validation exige **au moins une** de ces quatre clés :
 
 | Clé `config` | Type | Description |
 |--------------|------|-------------|
-| `preferredVenueId` | UUID | Salle préférée |
+| `forcedVenueId` | UUID | Salle imposée (toutes les séances y ont lieu) |
 | `forbiddenVenueId` | UUID | Salle interdite |
-
-Pour les contraintes de type `FACILITY` avec un scope `FACILITY` (fermetures de salle) :
-
-| Clé `config` | Type | Description |
-|--------------|------|-------------|
-| `dateStart` | string (YYYY-MM-DD) | Début de fermeture |
-| `dateEnd` | string (YYYY-MM-DD) | Fin de fermeture |
-| `closedDay` | int (1-7) | Jour de fermeture récurrent |
-| `onlyDay` | int (1-7) | Jour d'ouverture unique |
+| `preferredVenueId` | UUID | Salle préférée (soft ; forcée si la règle est `HARD`) |
+| `minAtVenueId` | UUID | Au moins N séances dans cette salle (N = `minAtVenueCount`, défaut 1) — exige `HARD`/`LOCK` et scope `TEAM` |
 
 > Exemple : `{forbiddenVenueId: "uuid-jean-vilar"}` empêche toute équipe concernée d'aller au gymnase Jean Vilar.
 
-#### `COACH_AVAILABILITY` — Indisponibilité d'entraîneur
+Il n'existe **pas** de clé `closedDay` ni `onlyDay`. Une fermeture de salle **datée** ne passe pas par une contrainte saisie à la main : elle se déclare dans le **cockpit** (entrée calendrier `venue_closed`), que le backend développe en contraintes `FACILITY` `HARD` `forbiddenVenueId` par équipe au moment de la construction du payload — l'engine ne comprend que `forbiddenVenueId`, pas la sémantique « salle fermée ».
 
-Déclare qu'un entraîneur n'est pas disponible certains jours.
+#### `COACH_AVAILABILITY` — Disponibilité d'entraîneur
+
+Déclare les jours où un entraîneur est indisponible (ou, à l'inverse, les seuls jours où il est disponible). La config exige `coachId` (ou `targetTag`) :
 
 | Clé `config` | Type | Description |
 |--------------|------|-------------|
+| `coachId` | UUID | Coach concerné (**requis**, sauf si `targetTag` est fourni) |
 | `unavailableDays` | int[] (1-7) | Jours où le coach est indisponible |
+| `availableDays` | int[] (1-7) | Whitelist : le coach n'est disponible QUE ces jours-là |
+| `fromTime` / `untilTime` | string (HH:MM) | Fenêtre horaire optionnelle de l'indisponibilité (Lot C) ; absente = journée entière |
 
-> Exemple : `{unavailableDays: [5]}` signifie que l'entraîneur n'est jamais disponible le vendredi.
+> Exemple : `{coachId: "uuid-enzo", unavailableDays: [5]}` signifie que l'entraîneur n'est jamais disponible le vendredi. Avec `fromTime: "18:00"` et `untilTime: "20:00"`, l'indisponibilité ne couvre que ce créneau.
 
 #### `FACILITY_CAPACITY` — Capacité de salle
 
-Réservé pour un usage futur. Permettra de limiter le nombre d'équipes simultanées dans une salle en fonction de son nombre de terrains.
+Limite le nombre d'équipes simultanées dans une salle. La clé `maxTeams` est **requise** ; l'engine borne alors la capacité de chaque créneau de la salle à `min(capacité du créneau, maxTeams)` (la clé ne peut que resserrer la capacité, jamais l'élargir).
 
 ### 2.3 Rule Type — Quelle sévérité ?
 
@@ -134,10 +135,10 @@ Voici huit contraintes réelles ou plausibles pour le BCCL, présentées sous fo
 | U11/U13 — début à 17h30 | `CLUB` | `TIME` | `PREFERRED` | `{minStartTime:"17:30", targetTag:"U11"}` | Les U11 commencent de préférence après 17h30 |
 | Jean Vilar — sans filles | `CLUB` | `FACILITY` | `HARD` | `{forbiddenVenueId:"uuid-jean-vilar", targetTag:"FEMININE"}` | Aucune équipe féminine ne peut aller à Jean Vilar |
 | Matéo — préféré régional | `CLUB` | `FACILITY` | `PREFERRED` | `{preferredVenueId:"uuid-mateo", targetTag:"REGIONAL"}` | Les équipes régionales vont de préférence à Matéo |
-| SM3 — mercredi seulement | `TEAM` | `DAY` | `HARD` | `{preferredDays:[3]}` | SM3 ne s'entraîne que le mercredi |
+| SM3 — mercredi seulement | `TEAM` | `DAY` | `HARD` | `{allowedDays:[3]}` | SM3 ne s'entraîne que le mercredi |
 | SM3 — à partir de 20h | `TEAM` | `TIME` | `HARD` | `{minStartTime:"20:00"}` | SM3 commence au plus tôt à 20h |
-| ADN — fermé le lundi | `FACILITY` | `FACILITY` | `HARD` | `{closedDay:1}` | Le gymnase ADN est fermé le lundi |
-| Coach Enzo — indisponible vendredi | `COACH` | `COACH_AVAILABILITY` | `HARD` | `{unavailableDays:[5]}` | Enzo n'est disponible aucun vendredi |
+| ADN — fermé (période datée) | — (cockpit) | `FACILITY` | `HARD` | `{forbiddenVenueId:"uuid-adn"}` par équipe | Fermeture saisie dans le cockpit (`venue_closed`), développée par le backend en interdictions par équipe |
+| Coach Enzo — indisponible vendredi | `COACH` | `COACH_AVAILABILITY` | `HARD` | `{coachId:"uuid-enzo", unavailableDays:[5]}` | Enzo n'est disponible aucun vendredi |
 
 ### 3.1 Exemple détaillé : "Jeunes — fin à 19h30"
 
@@ -170,7 +171,7 @@ Cette contrainte cible directement l'équipe SM3 (Senior Masculin 3) via le scop
   "family": "DAY",
   "ruleType": "HARD",
   "config": {
-    "preferredDays": [3]
+    "allowedDays": [3]
   }
 }
 ```
@@ -179,25 +180,25 @@ Pour le solveur, cette contrainte `HARD` signifie que seuls les créneaux du mer
 
 C'est une contrainte très forte. Dans la pratique, le BCCL pourrait la déclarer `PREFERRED` plutôt que `HARD` pour laisser une marge de manoeuvre au solveur en cas de saturation des salles le mercredi.
 
-### 3.3 Exemple détaillé : "ADN — fermé le lundi"
+### 3.3 Exemple détaillé : fermeture datée du gymnase ADN
 
-Cette contrainte est particulière car elle porte à la fois sur le scope `FACILITY` et la family `FACILITY`. Elle est attachée au lieu lui-même, pas à une équipe.
+Une fermeture de salle ne se saisit **pas** comme une contrainte à la main (il n'existe pas de clé `closedDay` : une telle config serait rejetée par la validation, qui exige `forcedVenueId`, `forbiddenVenueId`, `preferredVenueId` ou `minAtVenueId`). Elle se déclare dans le **cockpit**, via une entrée de calendrier de type `venue_closed` portant la salle et la période concernées.
+
+Au moment de construire le payload pour l'engine, le backend (`ScheduleConstraintBuilder`) développe cette fermeture en contraintes concrètes : pour **chaque équipe**, une contrainte `FACILITY` `HARD` avec `{forbiddenVenueId: "uuid-adn"}`. L'engine ne connaît en effet que `forbiddenVenueId` (traduit en affectations interdites) — c'est l'expansion backend qui porte la sémantique « salle fermée ».
 
 ```json
 {
-  "scope": "FACILITY",
-  "scopeTargetId": "uuid-adn",
+  "scope": "TEAM",
+  "scopeTargetId": "uuid-equipe",
   "family": "FACILITY",
   "ruleType": "HARD",
   "config": {
-    "closedDay": 1
+    "forbiddenVenueId": "uuid-adn"
   }
 }
 ```
 
-Ici, le gymnase ADN (Albert Dubois-Nauriac) déclare sa propre indisponibilité. Le solveur sait que ce lieu ne peut pas accueillir d'entraînement le lundi, quelle que soit l'équipe. C'est l'équivalent d'une fermeture administrative récurrente.
-
-Contrairement aux contraintes `TEAM` ou `COACH`, cette contrainte réduit l'offre de créneaux disponibles pour **toutes** les équipes. Si ADN est la seule salle disponible le lundi soir, alors aucune équipe ne pourra s'entraîner ce soir-là.
+Contrairement à une contrainte `TEAM` ou `COACH` isolée, cette fermeture réduit l'offre de créneaux disponibles pour **toutes** les équipes. Si ADN est la seule salle disponible le lundi soir pendant la période fermée, alors aucune équipe ne pourra s'entraîner ce soir-là.
 
 ---
 
@@ -247,7 +248,7 @@ Le solveur CP-SAT (OR-Tools) raisonne sur des variables binaires du type "l'équ
 | **Configurables** | Non | Oui (CRUD complet) |
 | **Stockage** | Code de l'engine | Table `Constraint` en base de données |
 | **Exemples** | Un entraîneur = une équipe à la fois. Une salle = une équipe à la fois. | Les jeunes doivent finir avant 19h30. SM3 préfère le mercredi. |
-| **Visibilité API** | Endpoint `/implicit-constraints` (lecture seule) | Endpoint `/api/constraints` (CRUD complet) |
+| **Visibilité API** | Endpoint `POST /implicit-constraints` de l'**engine** (aucune route backend) — consommé par la commande `app:constraint:export-implicit` | Endpoint `/api/constraints` (CRUD complet) |
 | **Impact sur le score** | Toujours `HARD` (violations rendent le planning invalide) | Variable (`HARD`, `PREFERRED`, `BONUS`, `LOCK`) |
 
 Les contraintes implicites sont les fondations du système. Sans elles, le solveur pourrait placer le coach Enzo sur deux terrains simultanément, ou assigner SM1 et SF3 dans la même salle à la même heure. Les contraintes utilisateur viennent affiner ce comportement de base pour refléter les réalités du BCCL : horaires des bus scolaires, disponibilités des salles municipales, préférences des entraîneurs bénévoles.
@@ -256,7 +257,7 @@ Les contraintes implicites sont les fondations du système. Sans elles, le solve
 
 ## 6. Référence rapide des combinaisons valides
 
-Toutes les combinaisons scope + family ne sont pas logiques. Voici les combinaisons supportées :
+Toutes les combinaisons scope + family ne sont pas logiques. Voici les combinaisons qui ont du sens métier (guide indicatif — voir la note sous le tableau sur ce qui est réellement vérifié) :
 
 | Scope | Family | Valide | Exemple |
 |-------|--------|--------|---------|
@@ -278,4 +279,10 @@ Toutes les combinaisons scope + family ne sont pas logiques. Voici les combinais
 | `FACILITY` | `FACILITY` | Oui | ADN fermé le lundi |
 | `FACILITY` | `FACILITY_CAPACITY` | Oui | Limite de terrains au gymnase Matéo |
 
-`ConstraintValidationService` rejette les combinaisons non valides au moment de la création ou de la modification d'une contrainte.
+Attention, ce tableau est un **guide métier**, pas une règle appliquée par le code : `ConstraintValidationService` n'implémente **aucune matrice scope × family**. Ce qu'il vérifie réellement :
+
+- la cohérence `scope` / `scopeTargetId` (un scope autre que `CLUB` exige une cible ; `CLUB` n'en admet pas) ;
+- la présence des clés de `config` attendues par chaque famille (voir §2.2), plus quelques règles de cohérence (ex. `maxEndTime` et `minAtVenueId` exigent `HARD`/`LOCK`) ;
+- `LOCK` réservé aux familles `TIME` et `DAY`.
+
+Et il n'est **pas appelé à la création ni à la modification** d'une contrainte : il n'est exécuté que par `POST /api/constraints/validate` (gate consultatif pré-solve, déclenché avant une génération). Une combinaison « illogique » du tableau ci-dessus peut donc être enregistrée en base — elle sera au pire ignorée par l'engine.

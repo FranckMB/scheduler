@@ -87,7 +87,7 @@ engine/    Python CP-SAT solver (POST /generate)
 frontend/  React UI — auth · wizard (data entry) · work-loop (adjust/regenerate)
 docker/    container + local-env assets
 specs/     living product/spec docs (initiales / courantes / evolution)
-docs/      architecture, testing, technical-debt notes
+docs/      architecture, testing, glossaire, cartes
 ```
 
 ## Documentation
@@ -97,12 +97,12 @@ docs/      architecture, testing, technical-debt notes
 | Zone | README | Docs structurantes |
 |------|--------|--------------------|
 | `backend/` | [`backend/README.md`](backend/README.md) | [`docs/TENANT.md`](backend/docs/TENANT.md) · [`docs/RLS.md`](backend/docs/RLS.md) · [`scripts/generate-schedule.sh`](backend/scripts/generate-schedule.sh) (guide) · [`AGENTS.md`](backend/AGENTS.md) |
-| `engine/` | [`engine/README.md`](engine/README.md) | [`doc/business.md`](engine/doc/business.md) (cœur métier) · [`doc/nominal-flow.md`](engine/doc/nominal-flow.md) · [`doc/solver-errors.md`](engine/doc/solver-errors.md) · [`AGENTS.md`](engine/AGENTS.md) |
+| `engine/` | [`engine/README.md`](engine/README.md) | [`docs/business.md`](engine/docs/business.md) (cœur métier) · [`docs/nominal-flow.md`](engine/docs/nominal-flow.md) · [`docs/solver-errors.md`](engine/docs/solver-errors.md) · [`AGENTS.md`](engine/AGENTS.md) |
 | `frontend/` | [`frontend/README.md`](frontend/README.md) | [`AGENTS.md`](frontend/AGENTS.md) · [`specs/courantes/frontend-wizard.md`](specs/courantes/frontend-wizard.md) |
 
 **Transverse** :
 - **`CLAUDE.md`** — index opérationnel (stack, frontières, conventions) · racine **`AGENTS.md`** y pointe.
-- **`docs/project-map.md`** — carte détaillée · **`docs/architecture/`** — ADRs · **`docs/testing/`** — stratégie de tests · **`docs/technical-debt.md`**.
+- **`docs/project-map.md`** — carte détaillée · **`docs/architecture/`** — ADRs · **`docs/testing/`** — stratégie de tests · **`docs/glossary.md`** (termes & payload) · dette & backlog : **`specs/evolution/roadmap.md`**.
 - **`specs/`** — specs vivantes : `initiales/` (origine figée) · `courantes/` (ce que l'appli fait) · `evolution/` (à venir). Voir [`specs/README.md`](specs/README.md).
 
 ## Status

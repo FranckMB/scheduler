@@ -142,11 +142,14 @@ The MCP server (`.mcp.json`: `uvx code-review-graph serve`) loads at session sta
 
 Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`uvx … serena start-mcp-server`, LSP-based symbol navigation for PHP + Python + TS; `.serena/project.yml` excludes only frontend build artifacts `dist|node_modules|storybook-static`) and **Context7** (`@upstash/context7-mcp`, up-to-date external-library docs). Separately, the **Caveman** plugin is installed user-scope (opt-in compressed communication mode). All are dev-time tooling — no application-code impact.
 
-**Dependabot** (`.github/dependabot.yml`, audit supply-chain) scans the four dependency ecosystems weekly — **pip** (`/engine`), **npm** (`/frontend`), **composer** (`/backend`), **github-actions** (`/`) — opening grouped version-bump PRs (labelled `dependencies` + zone). Security PRs from GHSA alerts require Dependabot security-updates enabled at the repo (Settings → Code security). This is GitHub-side CI automation (not a local hook, not agent automation), so it is orthogonal to the "no hidden agent automation" rule (§7 CLAUDE.md).
+**Dependabot** (`.github/dependabot.yml`, audit supply-chain) scans the four dependency ecosystems weekly — **pip** (`/engine`), **npm** (`/frontend`), **composer** (`/backend`), **github-actions** (`/`) — opening grouped version-bump PRs (labelled `dependencies` + zone). Security PRs from GHSA alerts require Dependabot security-updates enabled at the repo (Settings → Code security). This is GitHub-side CI automation (not a local hook, not agent automation), so it is orthogonal to the "no hidden agent automation" rule (§7 CLAUDE.md). The open PRs are processed by the **manual `/dependabot` skill** (`.claude/skills/dependabot/`): verify → repair our code if the upgrade breaks it → zone test suite → merge; invoking the skill is the user's merge go **for those PRs only**.
 
 ---
 
 ## 6. Cross-references
+- Vocabulaire transverse (termes métier + clés de payload): [`glossary.md`](glossary.md)
+- Commandes backend (make · console `app:*` · pièges RLS): [`../backend/docs/commands.md`](../backend/docs/commands.md) · routes FFBB: [`../backend/docs/ffbb-api.md`](../backend/docs/ffbb-api.md)
+- Journal des upgrades (le pourquoi, pour le fondateur): [`upgrades.md`](upgrades.md) — tenu par le skill `/dependabot`
 - Tests & guardrails: [`testing/testing-strategy.md`](testing/testing-strategy.md)
-- Debt (proof-backed): [`technical-debt.md`](technical-debt.md) · safe deletions: [`cleanup-candidates.md`](cleanup-candidates.md)
+- Debt & backlog priorisé: [`../specs/evolution/roadmap.md`](../specs/evolution/roadmap.md) (§Backlog · §Dette) · safe deletions: [`cleanup-candidates.md`](cleanup-candidates.md)
 - Decisions to formalize: [`architecture/adr-index.md`](architecture/adr-index.md)

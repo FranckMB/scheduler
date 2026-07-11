@@ -30,6 +30,6 @@ These are existing, load-bearing decisions found during onboarding that are curr
 3. **Async generation via Symfony Messenger + Redis + per-club lock**, progress over Mercure (`club:{id}:schedule:{id}`). Why this topology over synchronous generation.
 4. **Solver timeout default 650 s, payload-driven** (`solver_timeout_seconds`). Rationale + the relationship to `pytest-timeout` test limits.
 
-*Formalized / resolved:* the two-pass fallback decision → [ADR-0001](adr-0001-single-pass-solve.md); the Rector 8.3-vs-8.4 mismatch was fixed in code (Rector now targets 8.4), not via ADR — see `technical-debt.md` B1.
+*Formalized / resolved:* the two-pass fallback decision → [ADR-0001](adr-0001-single-pass-solve.md); the Rector 8.3-vs-8.4 mismatch was fixed in code (Rector now targets 8.4), not via ADR — see roadmap §Dette (B1, résolu).
 
-See [`../technical-debt.md`](../technical-debt.md) for the evidence behind item 4.
+See `specs/evolution/roadmap.md` §Dette for the evidence behind item 4.

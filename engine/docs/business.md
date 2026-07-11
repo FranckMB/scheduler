@@ -35,7 +35,7 @@ Une salle est un gymnase ou un terrain. Exemples :
 - `Gymnase B` : disponible uniquement mardi et jeudi, 18h00-21h00
 - `Salle des Fetes` : disponible vendredi soir uniquement
 
-Chaque salle a des **fenetres de disponibilite** (`availability`). Une salle ne peut accueillir qu'une seule equipe a la fois. Si le SM1 occupe le Gymnase A le lundi a 19h00, aucune autre equipe ne peut y etre placee au meme moment.
+Chaque salle declare des **creneaux d'entrainement** (`trainingSlots`), et chaque creneau porte une **capacite** : le nombre d'equipes qu'il peut accueillir simultanement (le backend la derive du gymnase : `canSplit ? capacity : 1`). Un gymnase **non divisible** (capacite 1) ne peut accueillir qu'une seule equipe a la fois : si le SM1 occupe le Gymnase A le lundi a 19h00, aucune autre equipe ne peut y etre placee au meme moment. Un gymnase **divisible** (ex. 3 terrains) accueille plusieurs equipes en parallele — le moteur contraint la somme des equipes placees sur le creneau a `min(capacite, maxTeams)`.
 
 ### Entraineur (`Coach`)
 
@@ -64,7 +64,7 @@ Une regle metier qui faconne l'emploi du temps. Chaque contrainte a :
   - `HARD` : doit absolument etre respectee. Si ce n'est pas possible, le solveur declare l'instance infaisable
   - `PREFERRED` : souhaitable, mais pas obligatoire. Penalisee si non respectee
   - `BONUS` : recompensee si respectee (ex. bonus pour placer une equipe sur son jour prefere)
-  - `LOCK` : fige un creneau. Peut etre `SOFT` (suggere, peut bouger si necessaire) ou `HARD` (fixe, ne peut pas bouger)
+  - `LOCK` : fige un creneau. Toujours applique **en dur** par le moteur — le ruleType `LOCK` n'a pas de variantes SOFT/HARD. Ne pas confondre avec le `lockLevel` des `slotTemplates` (valeurs `NONE`/`SOFT`/`HARD`), qui est un autre mecanisme (voir plus bas)
 
 - **Ciblage par tag** : une contrainte `CLUB` avec `targetTag=JEUNE` s'applique automatiquement a toutes les equipes portant le tag `JEUNE`. Cela evite de creer 15 contraintes identiques pour les 15 equipes jeunes.
 
@@ -78,7 +78,7 @@ Ces regles sont toujours actives, meme si l'utilisateur ne les configure pas :
 | `COACH_NO_OVERLAP` | Un entraineur **principal** = une equipe a la fois. Maxime Dupont ne peut pas diriger le SM1 et l'U15M1 en meme temps. Seul le coach `MAIN` est concerne (l'assistant est optionnel et ne bloque pas) |
 | `COACH_PLAYER_NO_OVERLAP` | Un entraineur-joueur ne peut pas etre a deux endroits simultanement. S'il entraine le SM1 a 19h00, il ne peut pas jouer avec les Seniors 2 a la meme heure |
 | `TEAM_NO_OVERLAP` | Une equipe ne peut pas avoir deux seances en meme temps. Le SM1 ne peut pas s'entrainer a 19h00 au Gymnase A et a 19h00 au Gymnase B simultanement |
-| `MIN_SESSIONS` | Chaque equipe recoit au moins son minimum de seances. Si le SM1 demande 3 seances, il en aura au moins 3 (ou 0 si l'instance est infaisable) |
+| `MIN_SESSIONS` | Chaque equipe **vise** son nombre de seances : c'est une **cible soft** (bonus dans l'objectif, audit ENG-18), jamais une garantie dure — le plancher dur est 0 en production. Si le SM1 demande 3 seances, le moteur est fortement incite a les placer, mais peut en placer moins quand les ressources manquent |
 
 ### Creneau (`ScheduleSlotTemplate`)
 
@@ -91,7 +91,7 @@ SM1 + Gymnase A + Maxime Dupont + Lundi + 19h00-20h30
 Chaque creneau a un niveau de verrouillage (`lockLevel`) :
 
 - `NONE` : libre, le moteur peut le deplacer
-- `SOFT` : suggere, le moteur essaie de le preserver mais peut le deplacer si une meilleure solution existe
+- `SOFT` : purement indicatif — le moteur l'**ignore au moment du solve** (aucun bonus de preservation dans l'objectif). Si le creneau ressort ailleurs, un diagnostic `soft_lock_moved` (severite `WARNING`) est emis **a posteriori** pour signaler le deplacement
 - `HARD` : fige, le moteur ne peut absolument pas le deplacer
 
 ### Niveaux de priorite
