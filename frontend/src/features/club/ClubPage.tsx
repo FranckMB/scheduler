@@ -13,6 +13,8 @@ import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
+import { useDownloadExport } from "@/features/profile/queries";
+
 import { LogoCropper } from "./LogoCropper";
 import { useDeleteLogo, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
 
@@ -430,6 +432,28 @@ function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }
   );
 }
 
+/** RGPD — portabilité : export JSON complet du workspace du club (management). */
+function ExportClubSection() {
+  const exportDownload = useDownloadExport();
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Téléchargez une copie complète des données du club (saisons, équipes, coachs, gymnases, contraintes,
+        plannings, matchs…) au format JSON — conformité RGPD (portabilité).
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={exportDownload.isPending}
+        onClick={() => exportDownload.mutate({ path: "club/export", filename: "donnees-club.json" })}
+      >
+        {exportDownload.isPending ? <Spinner className="size-4" /> : null}
+        Exporter les données du club
+      </Button>
+    </div>
+  );
+}
+
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   return (
@@ -464,6 +488,11 @@ function ClubHub({ me }: { me: MeResponse }) {
               Coordonnées récupérées automatiquement depuis la FFBB (lecture seule).
             </p>
             <ContactsFfbbSection club={me.club} />
+          </AccordionSection>
+        ) : null}
+        {isAdmin ? (
+          <AccordionSection title="Exporter les données">
+            <ExportClubSection />
           </AccordionSection>
         ) : null}
         {isAdmin ? (

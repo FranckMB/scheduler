@@ -30,3 +30,12 @@ export function useDeleteAccount() {
     // n'existe plus) et affiche la conséquence club si elle s'applique.
   });
 }
+
+/** RGPD portabilité — télécharge l'export JSON du périmètre demandé. */
+export function useDownloadExport() {
+  return useMutation({
+    mutationFn: ({ path, filename }: { path: "me/export" | "club/export"; filename: string }) =>
+      profileApi.downloadExport(path, filename),
+    onSuccess: () => toast.success("Export téléchargé."),
+  });
+}

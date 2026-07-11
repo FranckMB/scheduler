@@ -36,3 +36,21 @@ export interface DeleteAccountResult {
  * (un JWT volé ne suffit pas à détruire le compte).
  */
 export const deleteAccount = (password: string): Promise<DeleteAccountResult> => api.delete("me", { json: { password } }).json();
+
+/**
+ * RGPD portabilité : télécharge un export JSON (mes données / données du club).
+ * Blob + ancre : la réponse porte un Content-Disposition attachment.
+ */
+export async function downloadExport(path: "me/export" | "club/export", filename: string): Promise<void> {
+  const blob = await api.get(path).blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Révocation différée : un revoke synchrone peut annuler le téléchargement.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}

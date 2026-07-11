@@ -3,12 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const deleteMut = vi.fn();
+const exportMut = vi.fn();
 const logoutFn = vi.fn();
 
 vi.mock("./queries", () => ({
   useUpdateProfile: () => ({ mutate: vi.fn(), isPending: false }),
   useChangePassword: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteAccount: () => ({ mutate: deleteMut, isPending: false }),
+  useDownloadExport: () => ({ mutate: exportMut, isPending: false }),
 }));
 
 vi.mock("@/features/auth/queries", () => ({
@@ -43,6 +45,13 @@ describe("ProfilePage — zone de danger (RGPD)", () => {
 
     await user.click(button);
     expect(deleteMut).toHaveBeenCalledWith("Password123!", expect.anything());
+  });
+
+  it("expose l'export RGPD de mes données", async () => {
+    const user = userEvent.setup();
+    render(<ProfilePage />);
+    await user.click(screen.getByRole("button", { name: /Exporter mes données/ }));
+    expect(exportMut).toHaveBeenCalledWith({ path: "me/export", filename: "mes-donnees.json" });
   });
 
   it("annonce la conséquence : anonymisation immédiate + purge club à 30 jours", () => {

@@ -1,7 +1,10 @@
-Last verified @ feat/rgpd-account-erasure 2026-07-11
+Last verified @ feat/rgpd-export 2026-07-11
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **65 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
 Changements récents :
+- **RGPD PR-2 portabilité (2026-07-11)** : `GET /api/me/export` (self-only — compte + adhésions,
+  jamais le hash) et `GET /api/club/export` (management SEC-07, tenant du JWT — workspace complet
+  en lignes brutes par table), servis en téléchargement JSON (`Content-Disposition: attachment`).
 - **RGPD PR-1 effacement (2026-07-11)** : `/api/me` gagne **DELETE** (`DeleteAccountController`,
   ajouté à `CustomRoutesOpenApiFactory`) — anonymisation immédiate self-only, confirmation =
   **ré-authentification par mot de passe** (revue sécurité : un JWT volé ne suffit pas) ; si

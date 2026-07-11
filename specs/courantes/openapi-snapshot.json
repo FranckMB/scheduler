@@ -218,6 +218,23 @@
                 }
             }
         },
+        "/api/me/export": {
+            "get": {
+                "operationId": "getApiMeExport",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "RGPD portability export of the connected account (user + memberships), served as a JSON download"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "RGPD portability: export the connected user own account data (self-only)"
+            }
+        },
         "/api/me/password": {
             "post": {
                 "operationId": "postApiMePassword",
@@ -973,6 +990,29 @@
                         "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
                     }
                 ]
+            }
+        },
+        "/api/club/export": {
+            "get": {
+                "operationId": "getApiClubExport",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "RGPD portability export of the current club workspace (raw rows per table), served as a JSON download"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "No active membership in the current club"
+                    }
+                },
+                "summary": "RGPD portability: export the current club full workspace (management only, tenant from JWT)"
             }
         },
         "/api/clubs": {
