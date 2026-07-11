@@ -25,23 +25,26 @@ use Throwable;
  *
  * Inactivité = COALESCE(lastLoginAt, createdAt). Deux étages :
  * - 23 mois → email de PRÉAVIS (inactivityWarnedAt posé, annulé par un login) ;
- * - 24 mois ET préavis envoyé depuis ≥ 14 j → ANONYMISATION via
+ * - 24 mois ET préavis envoyé depuis ≥ 1 MOIS (la promesse de l'email) →
+ *   ANONYMISATION via
  *   AccountErasureService (même routine que DELETE /api/me : memberships
  *   désactivés, club orphelin programmé à +30 j).
- * Le garde-fou « préavis ≥ 14 j » garantit qu'un compte n'est JAMAIS effacé
+ * Le garde-fou « préavis ≥ 1 mois » garantit qu'un compte n'est JAMAIS effacé
  * sans avoir été prévenu, même si le cron est resté down des semaines.
  *
  * Tourne au cron-runner (horaire). Horloge applicative (SimulatedClock en dev).
  */
 #[AsCommand(
     name: 'app:users:purge-inactive',
-    description: 'RGPD retention: warn accounts inactive 23 months, anonymize at 24 months (warning ≥14 days old required).',
+    description: 'RGPD retention: warn accounts inactive 23 months, anonymize at 24 months (warning ≥1 month old required).',
 )]
 final class PurgeInactiveUsersCommand extends Command
 {
     private const WARN_AFTER = '-23 months';
     private const ERASE_AFTER = '-24 months';
-    private const MIN_WARNING_AGE = '-14 days';
+    // « anonymisé dans un mois » (email de préavis) : le garde DOIT matcher la
+    // promesse faite à la personne concernée — revue PR-3.
+    private const MIN_WARNING_AGE = '-1 month';
 
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -88,25 +91,40 @@ final class PurgeInactiveUsersCommand extends Command
             ->setParameter('threshold', $now->modify(self::WARN_AFTER))
             ->getQuery()
             ->getResult();
+        // Ids d'abord : après un resetManager (échec d'un flush), les entités
+        // déjà hydratées seraient détachées — chaque itération refetch frais.
+        $userIds = array_map(static fn (User $u): string => $u->getId(), $users);
+        $this->entityManager->clear();
 
         $count = 0;
         $failed = false;
-        foreach ($users as $user) {
-            \assert($user instanceof User);
-            $io->writeln(\sprintf('  %s warn %s (inactive since %s)', $dryRun ? '<comment>would</comment>' : '<info>✉</info>', $user->getEmail(), ($user->getLastLoginAt() ?? $user->getCreatedAt())->format('Y-m-d')));
-            if (!$dryRun) {
-                try {
-                    $this->mailer->send($this->mailBuilder->build($user->getEmail(), $user->getFirstName()));
-                    $user->setInactivityWarnedAt($now);
-                    $this->entityManager->flush();
-                } catch (Throwable $e) {
-                    // Échec d'envoi → PAS de warnedAt (sinon l'anonymisation
-                    // partirait sans que le préavis ait réellement été émis).
-                    $failed = true;
-                    $io->warning(\sprintf('Warning to %s failed: %s', $user->getEmail(), $e->getMessage()));
-                }
+        foreach ($userIds as $userId) {
+            $user = $this->entityManager->find(User::class, $userId);
+            if (!$user instanceof User) {
+                continue;
             }
-            ++$count;
+            $io->writeln(\sprintf('  %s warn %s (inactive since %s)', $dryRun ? '<comment>would</comment>' : '<info>✉</info>', $user->getEmail(), ($user->getLastLoginAt() ?? $user->getCreatedAt())->format('Y-m-d')));
+            if ($dryRun) {
+                ++$count;
+                continue;
+            }
+            try {
+                $this->mailer->send($this->mailBuilder->build($user->getEmail(), $user->getFirstName()));
+                $user->setInactivityWarnedAt($now);
+                $this->entityManager->flush();
+                // Compté seulement si le préavis est réellement émis ET persisté
+                // (un échec compté « warned » masquerait une panne SMTP au log).
+                ++$count;
+            } catch (Throwable $e) {
+                // Échec d'envoi → PAS de warnedAt (sinon l'anonymisation
+                // partirait sans que le préavis ait réellement été émis).
+                $failed = true;
+                $io->warning(\sprintf('Warning to %s failed: %s', $user->getEmail(), $e->getMessage()));
+                // Un flush raté FERME l'EntityManager : sans reset, tous les
+                // users suivants recevraient l'email SANS persistance du
+                // préavis → doublons à chaque heure (revue PR-3).
+                $this->resetEntityManagerIfClosed();
+            }
         }
 
         return [$count, $failed];
@@ -145,12 +163,7 @@ final class PurgeInactiveUsersCommand extends Command
                     $io->warning(\sprintf('Erasure of %s failed: %s', $userId, $e->getMessage()));
                     // Un flush raté FERME l'EntityManager (leçon PR-1) : sans
                     // reset, tous les users suivants échoueraient en cascade.
-                    if (!$this->entityManager->isOpen()) {
-                        $this->managerRegistry->resetManager();
-                        $manager = $this->managerRegistry->getManager();
-                        \assert($manager instanceof EntityManagerInterface);
-                        $this->entityManager = $manager;
-                    }
+                    $this->resetEntityManagerIfClosed();
                     continue;
                 }
             }
@@ -158,5 +171,16 @@ final class PurgeInactiveUsersCommand extends Command
         }
 
         return [$count, $failed];
+    }
+
+    private function resetEntityManagerIfClosed(): void
+    {
+        if ($this->entityManager->isOpen()) {
+            return;
+        }
+        $this->managerRegistry->resetManager();
+        $manager = $this->managerRegistry->getManager();
+        \assert($manager instanceof EntityManagerInterface);
+        $this->entityManager = $manager;
     }
 }

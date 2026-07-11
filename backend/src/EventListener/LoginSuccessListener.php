@@ -10,6 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
+use Throwable;
 
 /**
  * RGPD (rétention) : trace la dernière ACTIVITÉ authentifiée — l'inactivité
@@ -18,6 +19,11 @@ use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
  * authentifiée (pas seulement au login interactif) : c'est la bonne sémantique
  * d'activité, mais un flush par requête serait ruineux → l'écriture est
  * THROTTLÉE à une par jour (sauf préavis en cours, toujours annulé aussitôt).
+ *
+ * UPDATE DBAL ciblé + best-effort (revue PR-3) : un flush() global de l'EM
+ * committerait n'importe quel état dirty laissé par d'autres listeners, et une
+ * DB momentanément read-only ferait 500 sur du pur GET pour une télémétrie —
+ * l'échec de cette écriture ne doit jamais casser la requête.
  */
 #[AsEventListener(event: LoginSuccessEvent::class)]
 final class LoginSuccessListener
@@ -42,8 +48,17 @@ final class LoginSuccessListener
             return; // trace du jour déjà posée, rien à annuler → zéro écriture.
         }
 
-        $user->setLastLoginAt($now);
-        $user->setInactivityWarnedAt(null);
-        $this->entityManager->flush();
+        try {
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE app_user SET last_login_at = :now, inactivity_warned_at = NULL WHERE id = :id',
+                ['now' => $now->format('Y-m-d H:i:s'), 'id' => $user->getId()],
+            );
+            // Aligne l'entité managée (déjà hydratée par le provider) pour que
+            // la suite de la requête voie la même vérité que la DB.
+            $user->setLastLoginAt($now);
+            $user->setInactivityWarnedAt(null);
+        } catch (Throwable) {
+            // Best-effort : la trace d'activité ne casse jamais la requête.
+        }
     }
 }

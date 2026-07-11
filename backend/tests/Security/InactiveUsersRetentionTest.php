@@ -18,7 +18,7 @@ use Symfony\Component\Console\Tester\CommandTester;
  * RGPD PR-3 non-regression (axe auth & memberships) : rétention des comptes.
  *
  * (a) inactif > 23 mois → préavis email + inactivityWarnedAt ;
- * (b) inactif > 24 mois + préavis ≥ 14 j → anonymisé (routine erase : club
+ * (b) inactif > 24 mois + préavis ≥ 1 MOIS (la promesse de l'email) → anonymisé (routine erase : club
  *     orphelin programmé) ; JAMAIS anonymisé sans préavis suffisant ;
  * (c) un login réussi remet lastLoginAt et annule le préavis ;
  * (d) --dry-run n'écrit rien et n'envoie rien.
@@ -36,33 +36,33 @@ final class InactiveUsersRetentionTest extends WebTestCase
         [, $userId] = $this->registerVerified('INAA');
         $em = $this->em();
 
-        // Recule l'activité à 23,5 mois. last_login_at aussi : l'authenticator
-        // JWT trace l'activité à chaque requête (les appels du register l'ont
-        // déjà posée à maintenant).
+        // 25 mois d'inactivité d'emblée : le MÊME run doit warner SANS anonymiser
+        // (garde same-run). last_login_at aussi : l'authenticator JWT trace
+        // l'activité à chaque requête (le register l'a posée à maintenant).
         $em->getConnection()->executeStatement(
-            'UPDATE app_user SET created_at = NOW() - INTERVAL \'23 months 15 days\', last_login_at = NOW() - INTERVAL \'23 months 15 days\' WHERE id = :id',
+            'UPDATE app_user SET created_at = NOW() - INTERVAL \'25 months\', last_login_at = NOW() - INTERVAL \'25 months\' WHERE id = :id',
             ['id' => $userId],
         );
 
-        // Étage 1 : préavis.
+        // Étage 1 : préavis — et PAS d'anonymisation dans le même run.
         $tester = $this->commandTester();
         self::assertSame(0, $tester->execute([]));
         $em->clear();
         $user = $em->getRepository(User::class)->find($userId);
         self::assertInstanceOf(User::class, $user);
-        self::assertNotNull($user->getInactivityWarnedAt(), 'préavis posé à 23 mois');
-        self::assertNull($user->getAnonymizedAt(), 'PAS anonymisé : préavis trop récent');
+        self::assertNotNull($user->getInactivityWarnedAt(), 'préavis posé');
+        self::assertNull($user->getAnonymizedAt(), 'same-run : jamais warn PUIS erase dans la même exécution');
 
-        // Étage 2 : 24 mois passés ET préavis vieux de 15 j → anonymisation.
+        // Étage 2 : préavis vieux de 5 semaines (> 1 mois promis) → anonymisation.
         $em->getConnection()->executeStatement(
-            'UPDATE app_user SET created_at = NOW() - INTERVAL \'25 months\', last_login_at = NOW() - INTERVAL \'25 months\', inactivity_warned_at = NOW() - INTERVAL \'15 days\' WHERE id = :id',
+            'UPDATE app_user SET inactivity_warned_at = NOW() - INTERVAL \'5 weeks\' WHERE id = :id',
             ['id' => $userId],
         );
         self::assertSame(0, $this->commandTester()->execute([]));
         $em->clear();
         $user = $em->getRepository(User::class)->find($userId);
         self::assertInstanceOf(User::class, $user);
-        self::assertNotNull($user->getAnonymizedAt(), 'anonymisé à 24 mois avec préavis ≥ 14 j');
+        self::assertNotNull($user->getAnonymizedAt(), 'anonymisé : 24 mois passés + préavis ≥ 1 mois');
         self::assertStringEndsWith('@anonymized.invalid', $user->getEmail());
 
         // La routine erase a programmé la purge du club orphelin.
@@ -77,17 +77,17 @@ final class InactiveUsersRetentionTest extends WebTestCase
         [, $userId] = $this->registerVerified('INAB');
         $em = $this->em();
 
-        // 25 mois d'inactivité mais préavis d'hier (cron down puis relancé) :
-        // le compte doit avoir ses 14 j de réaction.
+        // 25 mois d'inactivité mais préavis d'il y a 15 jours : l'email promet
+        // UN MOIS — le compte garde son délai complet (cron down puis relancé).
         $em->getConnection()->executeStatement(
-            'UPDATE app_user SET created_at = NOW() - INTERVAL \'25 months\', last_login_at = NOW() - INTERVAL \'25 months\', inactivity_warned_at = NOW() - INTERVAL \'1 day\' WHERE id = :id',
+            'UPDATE app_user SET created_at = NOW() - INTERVAL \'25 months\', last_login_at = NOW() - INTERVAL \'25 months\', inactivity_warned_at = NOW() - INTERVAL \'15 days\' WHERE id = :id',
             ['id' => $userId],
         );
         self::assertSame(0, $this->commandTester()->execute([]));
         $em->clear();
         $user = $em->getRepository(User::class)->find($userId);
         self::assertInstanceOf(User::class, $user);
-        self::assertNull($user->getAnonymizedAt(), 'préavis < 14 j → pas d\'anonymisation');
+        self::assertNull($user->getAnonymizedAt(), 'préavis < 1 mois → pas d\'anonymisation');
     }
 
     public function testSuccessfulLoginResetsInactivityTracking(): void

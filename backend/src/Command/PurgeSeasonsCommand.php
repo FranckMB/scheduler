@@ -101,6 +101,15 @@ final class PurgeSeasonsCommand extends Command
             return 0;
         }
 
+        // Grâce post-bascule (revue PR-3) : au pivot, N-2 devient purgeable
+        // d'un coup — automatisé, il serait supprimé dans l'heure sans aucun
+        // préavis. On laisse 30 j après le DÉBUT de la saison courante avant de
+        // purger, le temps qu'un gestionnaire consulte/exporte l'historique.
+        $effectiveToday = $today ?? new DateTimeImmutable;
+        if ($current->getStartDate() > $effectiveToday->modify('-30 days')) {
+            return 0;
+        }
+
         $currentYear = SeasonResolver::seasonYear($current->getStartDate());
         // Keep: current, its immediate predecessor (currentYear - 1), and any
         // future (>= currentYear) draft. Purge strictly older than N-1.
