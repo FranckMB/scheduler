@@ -207,7 +207,12 @@ export function useDeleteSchedule() {
   });
 }
 
-/** planning-versions D3: regenerate under a version's conditions → a new version. */
+/**
+ * planning-versions "Charger cette version": reload a version's context (restore
+ * its structure, re-point the ★) WITHOUT solving — no new version is created, the
+ * source version's plan is shown as-is. Returns the loaded version's id so the
+ * caller selects it.
+ */
 export function useRegenerateFromVersion() {
   const queryClient = useQueryClient();
   return useMutation({

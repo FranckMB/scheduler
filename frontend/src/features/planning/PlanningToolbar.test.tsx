@@ -6,7 +6,7 @@ import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, ...over });
+const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
 
 function renderToolbar(s: Schedule, baselineScheduleId: string | null = null) {
   return render(
@@ -53,9 +53,14 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: /principal/i })).not.toBeInTheDocument();
   });
 
-  it("stars the version currently being viewed in the selector", () => {
+  it("stars the loaded-context (isLiveContext) version in the selector", () => {
     renderToolbar(schedule("COMPLETED"));
     expect(screen.getByRole("option", { name: /★/ })).toBeInTheDocument();
+  });
+
+  it("does not star a version that is not the loaded context", () => {
+    renderToolbar(schedule("COMPLETED", { isLiveContext: false }));
+    expect(screen.queryByRole("option", { name: /★/ })).not.toBeInTheDocument();
   });
 
   it("labels the version « V1 — … » and offers no rename control (versions are not renamable)", () => {
@@ -75,11 +80,11 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: /charger cette version/i })).toBeDisabled();
   });
 
-  it("enables « Charger cette version » on an older (non-live) version", () => {
-    // s1 (selected, older) is NOT the live context — s2 (newer) carries the ★.
+  it("enables « Charger cette version » on a non-live version", () => {
+    // s1 (selected) is NOT the loaded context — s2 carries the ★.
     render(
       <PlanningToolbar
-        schedules={[schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01" }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01" })]}
+        schedules={[schedule("COMPLETED", { id: "s1", createdAt: "2026-01-01", isLiveContext: false }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01", isLiveContext: true })]}
         selectedScheduleId="s1"
         onSelectSchedule={noop}
         viewMode="gymnase"

@@ -500,7 +500,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         description={
           "number" === typeof selectedSchedule?.generatedTeamCount ? (
             <>
-              La structure actuelle ({teams.length} équipe{teams.length > 1 ? "s" : ""}) sera remplacée par celle de cette version ({selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""}), puis un nouveau planning sera généré. Les données de structure actuelles seront écrasées.
+              La structure actuelle ({teams.length} équipe{teams.length > 1 ? "s" : ""}) sera remplacée par celle de cette version ({selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""}) et son planning s'affichera. Les données de structure actuelles seront écrasées ; vous pourrez ensuite « Régénérer » pour créer une nouvelle version.
             </>
           ) : null
         }

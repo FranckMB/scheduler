@@ -64,8 +64,12 @@ export function PlanningToolbar({
   const isValidated = null !== selected && "VALIDATED" === selected.status;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && null !== selected.calendarEntryId;
-  // ★ = the version matching the live context (latest generated of the relevant set).
-  const liveContextId = liveContextScheduleId(schedules, isOverlay ? selected?.calendarEntryId ?? null : null);
+  // ★ = the version whose structure is the currently LOADED context. For season
+  // plans this is a server-tracked fact (Schedule.isLiveContext, re-pointed by
+  // "Charger cette version"); overlays have no such pointer, so their ★ is the
+  // latest version of the period (derived).
+  const overlayLiveId = isOverlay && null !== selected?.calendarEntryId ? liveContextScheduleId(schedules, selected.calendarEntryId) : null;
+  const isStarred = (schedule: Schedule): boolean => (null !== schedule.calendarEntryId ? schedule.id === overlayLiveId : true === schedule.isLiveContext);
   const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -85,7 +89,7 @@ export function PlanningToolbar({
   // Reloading the version that IS the live context (★) is a no-op — its structure
   // is already the current one (that would just be "Régénérer"). Keep the button
   // visible but greyed with a reason, so the state reads as deliberate.
-  const isLiveContext = null !== selected && selected.id === liveContextId;
+  const isLiveContext = null !== selected && true === selected.isLiveContext;
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -98,14 +102,14 @@ export function PlanningToolbar({
           className="h-8 rounded-md border border-input bg-background px-3 text-sm"
         >
           {/* Season versions, plus — when an overlay is selected — that period's own
-              overlay versions (V1, V2…). The ★ marks the version matching the LIVE
-              context (latest generated), NOT the one being viewed: it stays put when
-              you consult an older version. No "principal" here: the main plan is a
-              fact carried by the title badge, not a per-version label. */}
+              overlay versions (V1, V2…). The ★ marks the LOADED context (the version
+              whose structure is live), NOT the one being viewed: it stays put when you
+              consult an older version, and "Charger cette version" moves it. No
+              "principal" here: the main plan is a fact carried by the title badge. */}
           {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
             <option key={schedule.id} value={schedule.id}>
               {labelOf(schedule)}
-              {schedule.id === liveContextId ? " ★" : ""}
+              {isStarred(schedule) ? " ★" : ""}
               {"VALIDATED" === schedule.status ? " · validé" : ""}
               {null !== schedule.calendarEntryId ? " · période" : ""}
             </option>

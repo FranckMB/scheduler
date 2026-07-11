@@ -76,6 +76,8 @@ export interface Schedule {
   generatedTeamCount?: number | null;
   /** D3: carries a restorable structure photo → "Charger cette version" can succeed (pre-D2 plans have none). */
   hasStructurePhoto?: boolean;
+  /** ★ : this version's structure is the season's currently loaded context (set server-side). */
+  isLiveContext?: boolean;
 }
 
 /** Export scope: all venues (null) or a single one. */

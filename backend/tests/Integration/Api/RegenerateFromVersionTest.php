@@ -21,9 +21,10 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 /**
- * planning-versions D3 (§7.1): POST /api/schedules/{id}/regenerate-from restores
- * a version's structure photo and queues a fresh generation (a new linear
- * version). Refused for an overlay and for a version with no photo (pre-D2).
+ * planning-versions (§7.1): POST /api/schedules/{id}/regenerate-from ("Charger
+ * cette version") restores a version's structure photo and re-points the season's
+ * loaded context (★) to it — WITHOUT solving (no new version). Refused for an
+ * overlay and for a version with no photo (pre-D2).
  */
 #[Group('phase1')]
 final class RegenerateFromVersionTest extends WebTestCase
@@ -40,27 +41,29 @@ final class RegenerateFromVersionTest extends WebTestCase
 
     private string $token;
 
-    public function testRegenerateFromRestoresStructureAndQueuesANewVersion(): void
+    public function testLoadVersionRestoresStructureAndRepointsLiveContextWithoutSolving(): void
     {
         $this->persistTeam('SM1');
         $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
         $this->em->flush();
         self::getContainer()->get(StructureSnapshotter::class)->store($v1, self::getContainer()->get(StructureSnapshotter::class)->serialize($this->club->getId(), $this->season->getId()));
 
-        // Current structure diverges (add a team) — then regenerate from V1.
+        // A later version V2 is the current loaded context; the structure diverges (add a team).
+        $v2 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->season->setLiveContextScheduleId($v2->getId());
         $this->persistTeam('SM2');
         $this->em->flush();
 
         $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
-        self::assertResponseStatusCodeSame(202);
+        self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        // Structure restored to V1 (only SM1), and a brand-new DRAFT/queued version exists.
+        // Structure restored to V1 (only SM1) — and NO new version was created.
         self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['seasonId' => $this->season->getId()]));
         $schedules = $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $this->season->getId(), 'calendarEntryId' => null]);
-        self::assertCount(2, $schedules, 'the source version plus the newly queued one');
-        $queued = array_values(array_filter($schedules, static fn ($sc) => $sc->getId() !== $v1->getId()))[0];
-        self::assertSame(ScheduleStatus::PENDING, $queued->getStatus(), 'the new version is PENDING so the UI polls it and it is guarded in-flight');
+        self::assertCount(2, $schedules, 'no new version — only V1 and V2 remain');
+        // The ★ moved to V1 (the loaded context).
+        self::assertSame($v1->getId(), $this->em->getRepository(Season::class)->find($this->season->getId())?->getLiveContextScheduleId());
     }
 
     public function testRegenerateFromANonCompletedSourceIsRefused(): void
@@ -128,6 +131,27 @@ final class RegenerateFromVersionTest extends WebTestCase
         $this->client->request('GET', "/api/schedules/{$withoutPhoto->getId()}", [], [], $this->headers());
         self::assertResponseIsSuccessful();
         self::assertFalse($this->decode()['hasStructurePhoto'], 'a photo-less version must not offer the restore');
+    }
+
+    /**
+     * The Schedule API exposes `isLiveContext` (★) — true only for the version the
+     * season points at as its loaded context, so the star tracks the loaded
+     * context regardless of which version is being viewed.
+     */
+    public function testScheduleApiExposesIsLiveContext(): void
+    {
+        $live = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $other = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->season->setLiveContextScheduleId($live->getId());
+        $this->em->flush();
+
+        $this->client->request('GET', "/api/schedules/{$live->getId()}", [], [], $this->headers());
+        self::assertResponseIsSuccessful();
+        self::assertTrue($this->decode()['isLiveContext'], 'the season-pointed version carries the ★');
+
+        $this->client->request('GET', "/api/schedules/{$other->getId()}", [], [], $this->headers());
+        self::assertResponseIsSuccessful();
+        self::assertFalse($this->decode()['isLiveContext'], 'a non-pointed version is not the loaded context');
     }
 
     protected function setUp(): void

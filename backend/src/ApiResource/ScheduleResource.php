@@ -133,6 +133,15 @@ class ScheduleResource
     #[Groups(['read'])]
     public bool $hasStructurePhoto = false;
 
+    /**
+     * planning-versions: is THIS the version whose structure is the season's
+     * currently loaded context (★)? Set on every COMPLETED season plan and
+     * re-pointed by "Charger cette version". The ★ tracks the loaded context,
+     * not the version being viewed. Set by ScheduleStateProvider (batched).
+     */
+    #[Groups(['read'])]
+    public bool $isLiveContext = false;
+
     public static function fromEntity(Schedule $entity, bool $hasStructurePhoto = false): self
     {
         $dto = new self;

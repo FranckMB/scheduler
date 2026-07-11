@@ -8,6 +8,7 @@ use ApiPlatform\Metadata\Operation;
 use App\ApiResource\ScheduleResource;
 use App\Entity\Schedule;
 use App\Entity\ScheduleStructureSnapshot;
+use App\Entity\Season;
 
 /**
  * @extends AbstractStateProvider<Schedule, ScheduleResource>
@@ -15,10 +16,11 @@ use App\Entity\ScheduleStructureSnapshot;
 class ScheduleStateProvider extends AbstractStateProvider
 {
     /**
-     * Enrich the mapped DTO(s) with `hasStructurePhoto` (D3 gating) in ONE batch
-     * query — a per-DTO EXISTS would N+1 the schedules collection. The photo
-     * lookup is tenant-scoped by the Doctrine tenant_filter (ScheduleStructureSnapshot
-     * owns a club_id), so it never crosses clubs.
+     * Enrich the mapped DTO(s) with `hasStructurePhoto` (D3 gating) and
+     * `isLiveContext` (★) in TWO batch queries — a per-DTO EXISTS would N+1 the
+     * schedules collection. Both lookups are tenant-scoped by the Doctrine
+     * tenant_filter (ScheduleStructureSnapshot / Season own a club_id), so they
+     * never cross clubs.
      */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
@@ -38,8 +40,10 @@ class ScheduleStateProvider extends AbstractStateProvider
         }
 
         $withPhoto = $this->scheduleIdsWithPhoto($ids);
+        $liveContext = $this->liveContextScheduleIds($ids);
         foreach ($dtos as $dto) {
             $dto->hasStructurePhoto = isset($withPhoto[$dto->id]);
+            $dto->isLiveContext = isset($liveContext[$dto->id]);
         }
 
         return $result;
@@ -77,6 +81,32 @@ class ScheduleStateProvider extends AbstractStateProvider
         $set = [];
         foreach ($rows as $row) {
             $set[$row['scheduleId']] = true;
+        }
+
+        return $set;
+    }
+
+    /**
+     * @param list<string> $scheduleIds
+     *
+     * @return array<string, true> set of schedule ids that ARE some season's loaded context (★)
+     */
+    private function liveContextScheduleIds(array $scheduleIds): array
+    {
+        /** @var list<array{liveContextScheduleId: string|null}> $rows */
+        $rows = $this->entityManager->createQueryBuilder()
+            ->select('s.liveContextScheduleId')
+            ->from(Season::class, 's')
+            ->where('s.liveContextScheduleId IN (:ids)')
+            ->setParameter('ids', $scheduleIds)
+            ->getQuery()
+            ->getScalarResult();
+
+        $set = [];
+        foreach ($rows as $row) {
+            if (null !== $row['liveContextScheduleId']) {
+                $set[$row['liveContextScheduleId']] = true;
+            }
         }
 
         return $set;
