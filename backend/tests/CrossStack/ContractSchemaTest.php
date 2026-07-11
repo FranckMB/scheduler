@@ -132,7 +132,7 @@ final class ContractSchemaTest extends TestCase
 
     private function assertPayloadShape(array $payload): void
     {
-        self::assertSame('2.0', $payload['version']);
+        self::assertSame('2.1', $payload['version']);
         self::assertSame(self::CLUB_ID, $payload['clubId']);
         self::assertSame(self::SEASON_ID, $payload['seasonId']);
         self::assertIsInt($payload['solverSeed']);

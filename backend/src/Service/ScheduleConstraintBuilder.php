@@ -35,7 +35,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 final class ScheduleConstraintBuilder
 {
     private const CACHE_TTL_SECONDS = 14_400;
-    private const SCHEMA_VERSION = '2.0';
+    private const SCHEMA_VERSION = '2.1';
     private const DEFAULT_SOLVER_SEED = 42;
     /**
      * Upper bound on the solve budget (seconds), aligned with the engine input

@@ -39,7 +39,10 @@ class ParsedConstraints(TypedDict):
 
     fixed_slots: list[str]
     forbidden_assignments: list[dict[str, str | None]]
-    coach_unavailability: dict[str, set[int]]
+    # coach id → set of blocked (weekday, from_minute, to_minute) intervals. A
+    # whole-day block is (day, 0, 1440). Union semantics — a slot is blocked if it
+    # falls in ANY interval (Lot C: coach unavailability with time windows).
+    coach_unavailability: dict[str, set[tuple[int, int, int]]]
     forced_venues: dict[str, str]
     preferred_venues: dict[str, str]
     avoided_venues: list[dict[str, str]]
@@ -766,16 +769,25 @@ def add_forbidden_assignments(
     return added
 
 
-def _assignment_day(assignment: AssignmentVariable) -> int | None:
-    """Weekday number of an assignment, from its slot_id ("3:18:00" → 3)."""
+def _assignment_day_start(assignment: AssignmentVariable) -> tuple[int | None, int | None]:
+    """Weekday + start-of-day minutes from ONE slot_id parse ("3:18:00" → (3, 1080)).
+
+    Combined so the coach-unavailability hot loop splits each slot_id once, not
+    twice (Lot C review). Either component is ``None`` when it cannot be parsed.
+    """
     slot_id = _assignment_time_key(assignment)
-    if isinstance(slot_id, str) and ":" in slot_id:
-        head = slot_id.split(":", 1)[0]
-        try:
-            return int(head)
-        except ValueError:
-            return None
-    return None
+    if not isinstance(slot_id, str) or ":" not in slot_id:
+        return None, None
+    head, _, rest = slot_id.partition(":")
+    try:
+        day: int | None = int(head)
+    except ValueError:
+        day = None
+    try:
+        start: int | None = _time_to_minutes(rest)
+    except (ValueError, TypeError):
+        start = None
+    return day, start
 
 
 def add_coach_unavailability_constraints(
@@ -787,14 +799,15 @@ def add_coach_unavailability_constraints(
 ) -> int:
     """Constraint 7: coach-unavailable assignment variables are fixed to 0.
 
-    ``coach_unavailability`` maps a coach id to a set of weekday numbers the
-    coach cannot work. A slot is blocked when its day is in that set. (The old
-    code compared the day names to the slot_id "3:18:00" and never matched —
-    coach availability entered in the UI was silently ignored: audit ENG-01.)
+    ``coach_unavailability`` maps a coach id to a set of blocked ``(weekday,
+    from_minute, to_minute)`` intervals. A slot is blocked when its day matches
+    and its start time falls in ``[from, to)`` (start-based, like the team time
+    windows). A whole-day block is ``(day, 0, 1440)`` — the legacy day-level
+    behaviour (Lot C added the time dimension; ENG-01 fixed the old no-match bug).
 
     A team can have several required (non-ASSISTANT) coaches; the assignment only
     carries the first. If ``team_coach_map`` is given, EVERY coach of the team is
-    checked — a co-head-coach's unavailability must block the day too (audit
+    checked — a co-head-coach's unavailability must block the slot too (audit
     review), otherwise ENG-01 survives for co-coached teams.
     """
     rules: Mapping[Any, Any] = coach_unavailability if isinstance(coach_unavailability, Mapping) else {}
@@ -807,9 +820,13 @@ def add_coach_unavailability_constraints(
             if not coach_ids:
                 single = assignment.coach_id
                 coach_ids = [str(single)] if single is not None else []
-            day = _assignment_day(assignment)
-            if day is not None:
-                blocked = any(day in (rules.get(str(cid)) or ()) for cid in coach_ids)
+            day, start = _assignment_day_start(assignment)
+            if day is not None and start is not None:
+                blocked = any(
+                    iv_day == day and iv_from <= start < iv_to
+                    for cid in coach_ids
+                    for iv_day, iv_from, iv_to in (rules.get(str(cid)) or ())
+                )
         if blocked:
             model.Add(assignment.var == 0)
             added += 1
@@ -1616,6 +1633,34 @@ def _day_int_set(values: Any) -> set[int]:
     return {d for d in (_to_day_int(v) for v in (values or [])) if d is not None}
 
 
+def _coach_window_minutes(config: Mapping[str, Any]) -> tuple[int, int]:
+    """Blocked-window bounds (minutes) for a COACH_AVAILABILITY config (Lot C).
+
+    Defensive on purpose (audit review): the backend HH:MM / from<until check
+    runs ONLY on the advisory /api/constraints/validate gate — the write,
+    generate and regenerate paths reach the solver ungated. So a MALFORMED time
+    (e.g. "9h", "25:00") or an INVERTED window (from >= to, e.g. an overnight
+    "20:00–08:00" the flat model can't wrap) must not crash the whole solve nor
+    silently drop the rule: both fall back to the whole day (0, 1440), which
+    HONORS the coach's declared unavailability conservatively. A missing bound
+    defaults to whole-day (0 / 1440) = legacy day-level behaviour.
+    """
+    def _bound(key: str, default: int) -> int | None:
+        raw = config.get(key)
+        if not raw:
+            return default
+        try:
+            return _time_to_minutes(raw)
+        except (ValueError, TypeError):
+            return None
+
+    from_min = _bound("fromTime", 0)
+    to_min = _bound("untilTime", 1440)
+    if from_min is None or to_min is None or from_min >= to_min:
+        return 0, 1440
+    return from_min, to_min
+
+
 def _set_venue_rule(
     rules: dict[str, str],
     team_id: str,
@@ -1675,9 +1720,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
     }
 
     # Per-coach availability accumulators (merged after the loop — see the
-    # COACH_AVAILABILITY branch for the union/intersection algebra).
-    coach_blacklists: dict[str, set[int]] = {}
-    coach_whitelists: dict[str, set[int]] = {}
+    # COACH_AVAILABILITY branch — accumulate blocked (day, from, to) intervals with
+    # UNION semantics. By De Morgan this expresses both the blacklist UNION and the
+    # whitelist INTERSECTION (complement of an available window = blocked parts), so
+    # no separate merge step is needed (ENG-13 algebra preserved, now with time).
+    coach_blocked_intervals: dict[str, set[tuple[int, int, int]]] = {}
 
     for c in constraints:
         if not c.get("isActive", True):
@@ -1747,20 +1794,32 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # complement. An empty/absent availableDays adds no restriction (an
             # empty whitelist is treated as "unconfigured", never "blocked every
             # day" — which would force the team to zero sessions).
-            # Combine multiple constraints on one coach with the right algebra
-            # (ENG-13 — assignment was last-wins): blacklists UNION ("unavailable
-            # Monday" + "unavailable Wednesday" = both blocked); whitelists
-            # INTERSECT ("available Monday" + "available Tuesday" must not union
-            # complements into "unavailable every day"). Merged after the loop.
+            # Multiple constraints on one coach combine as a UNION of blocked
+            # (day, from, to) intervals accumulated inline in coach_blocked_intervals
+            # (ENG-13 — assignment used to be last-wins). By De Morgan this single
+            # representation covers BOTH the UNION of unavailable rules AND the
+            # INTERSECTION of "available only" whitelists (whose blocked complements
+            # union up), so no separate post-loop merge is needed.
             coach_key = str(scope_target_id)
-            unavailable = _day_int_set(config.get("unavailableDays"))
-            coach_blacklists.setdefault(coach_key, set()).update(unavailable)
+            # Optional time window (Lot C): absent → whole day (0..1440), i.e. the
+            # legacy day-level behaviour, so old configs stay byte-identical.
+            from_min, to_min = _coach_window_minutes(config)
+            intervals = coach_blocked_intervals.setdefault(coach_key, set())
+            for day in _day_int_set(config.get("unavailableDays")):
+                intervals.add((day, from_min, to_min))
             available_set = _day_int_set(config.get("availableDays"))
             if available_set:
-                if coach_key in coach_whitelists:
-                    coach_whitelists[coach_key] &= available_set
-                else:
-                    coach_whitelists[coach_key] = set(available_set)
+                # Available ONLY on these days within [from, to] → block the
+                # complement: every other day whole, plus the out-of-window parts
+                # of the available days.
+                for day in range(0, 8):
+                    if day not in available_set:
+                        intervals.add((day, 0, 1440))
+                        continue
+                    if from_min > 0:
+                        intervals.add((day, 0, from_min))
+                    if to_min < 1440:
+                        intervals.add((day, to_min, 1440))
             # Coach availability is always enforced HARD (a person cannot be in
             # two places); the UI now forces HARD — surface legacy soft rows.
             if rule_type not in (None, "HARD", "LOCK"):
@@ -1892,14 +1951,9 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                 c.get("id"), c_type, family, rule_type,
             )
 
-    # Merge the coach-availability algebra: blocked = union(blacklists) ∪
-    # complement(intersection(whitelists)).
-    for coach_key in coach_blacklists.keys() | coach_whitelists.keys():
-        blocked = set(coach_blacklists.get(coach_key, set()))
-        whitelist = coach_whitelists.get(coach_key)
-        if whitelist is not None:
-            blocked |= {d for d in range(0, 8) if d not in whitelist}
-        result["coach_unavailability"][coach_key] = blocked
+    # The blocked-interval accumulation IS the coach-availability algebra (union of
+    # every constraint's blocked intervals — see coach_blocked_intervals above).
+    result["coach_unavailability"] = {k: v for k, v in coach_blocked_intervals.items() if v}
 
     return result
 
