@@ -1,0 +1,61 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\State\Provider;
+
+use App\ApiResource\SchedulePlanResource;
+use App\Entity\SchedulePlan;
+use App\Enum\SchedulePlanType;
+use Doctrine\ORM\QueryBuilder;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+
+/**
+ * @extends AbstractStateProvider<SchedulePlan, SchedulePlanResource>
+ */
+class SchedulePlanStateProvider extends AbstractStateProvider
+{
+    protected function getEntityClass(): string
+    {
+        return SchedulePlan::class;
+    }
+
+    /**
+     * @param SchedulePlan $entity
+     */
+    protected function mapEntityToOutput(object $entity): SchedulePlanResource
+    {
+        return SchedulePlanResource::fromEntity($entity);
+    }
+
+    /**
+     * Club scoping = tenant_filter (SchedulePlan owns club_id); season scoping =
+     * season_filter (owns season_id), so the collection is already the active
+     * season's plans — no seasonId param (it would AND-collide with the filter).
+     * Here we only narrow by period and type within that season.
+     */
+    protected function applyRequestFilters(QueryBuilder $qb): bool
+    {
+        $request = $this->requestStack->getCurrentRequest();
+        if (!$request instanceof Request) {
+            return false;
+        }
+
+        $calendarEntryId = $request->query->get('calendarEntryId');
+        if (\is_string($calendarEntryId) && '' !== $calendarEntryId) {
+            $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
+        }
+
+        $type = $request->query->get('type');
+        if (\is_string($type) && '' !== $type) {
+            $typeEnum = SchedulePlanType::tryFrom($type);
+            if (null === $typeEnum) {
+                throw new BadRequestHttpException(\sprintf('Invalid SchedulePlan type "%s".', $type));
+            }
+            $qb->andWhere('e.type = :type')->setParameter('type', $typeEnum);
+        }
+
+        return false;
+    }
+}

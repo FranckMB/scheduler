@@ -233,9 +233,26 @@ final class AccountErasureTest extends WebTestCase
         self::assertNull($survivor->getErasureScheduledAt(), 'programmation consommée');
         self::assertFalse($survivor->isOnboardingCompleted());
 
+        // ADR-0002: the SchedulePlan of club A (seeded at onboarding) is purged
+        // too — a club_id+season_id table must not survive erasure (RGPD).
+        $this->scopeGucToClub($clubA);
+        self::assertSame(
+            0,
+            (int) $em->getConnection()->fetchOne('SELECT COUNT(*) FROM schedule_plan WHERE club_id = :cid', ['cid' => $clubA]),
+            'plans (schedule_plan) du club A purgés',
+        );
+        $this->clearGuc();
+
         // Club B intact (frontière tenant).
         self::assertSame(1, $this->countRows(Coach::class, $clubB), 'club B intact');
         self::assertNotSame([], $em->getRepository(\App\Entity\Season::class)->findBy(['clubId' => $clubB]));
+        $this->scopeGucToClub($clubB);
+        self::assertGreaterThan(
+            0,
+            (int) $em->getConnection()->fetchOne('SELECT COUNT(*) FROM schedule_plan WHERE club_id = :cid', ['cid' => $clubB]),
+            'plan (schedule_plan) du club B intact',
+        );
+        $this->clearGuc();
     }
 
     protected function setUp(): void

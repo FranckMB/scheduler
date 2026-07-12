@@ -28,6 +28,7 @@ use App\Enum\LockLevel;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
 use App\Service\LeagueResolver;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
 use App\Sport\BasketballCategoryCatalog;
 use App\Storage\LogoStorage;
@@ -56,6 +57,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         private readonly SchoolZoneResolver $schoolZoneResolver,
         private readonly LeagueResolver $leagueResolver,
         private readonly LogoStorage $logoStorage,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     public function load(ObjectManager $manager): void
@@ -122,13 +124,13 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         $this->seedDefaultLogo($club, $clubId, $manager);
 
         // --- Sport ---
-        $existingSport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basket']);
+        $existingSport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basketball']);
         if ($existingSport instanceof Sport) {
             $sport = $existingSport;
         } else {
             $sport = new Sport;
-            $sport->setName('Basket');
-            $sport->setSlug('basket');
+            $sport->setName('BasketBall');
+            $sport->setSlug('basketball');
             $sport->setIcon('basketball');
             $sport->setIsActive(true);
             $manager->persist($sport);
@@ -218,6 +220,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $season->setStatus('active');
             $manager->persist($season);
         }
+        // ADR-0002 Lot A: seed the season's empty SEASON plan (idempotent).
+        $this->schedulePlanProvisioner->ensureSeasonPlan($season);
 
         // BCCL is seeded as an INCOMPLETE onboarding (cockpit state 1): all the
         // data is entered but NO plan has been generated yet, so the club lands on
@@ -1014,6 +1018,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $season->setStatus('active');
             $season->setTransitionData([]);
             $manager->persist($season);
+            // ADR-0002 Lot A: seed the season's empty SEASON plan.
+            $this->schedulePlanProvisioner->ensureSeasonPlan($season);
 
             $sport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basketball']);
             if (!$sport instanceof Sport) {

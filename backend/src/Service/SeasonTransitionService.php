@@ -47,6 +47,7 @@ final class SeasonTransitionService
         private readonly EntityManagerInterface $entityManager,
         private readonly SeasonResolver $seasonResolver,
         private readonly ClockInterface $clock,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     /**
@@ -123,6 +124,9 @@ final class SeasonTransitionService
         $target->setStatus('draft');
         $target->setTransitionData([]);
         $this->entityManager->persist($target);
+
+        // ADR-0002 Lot A: the copied season starts with its empty SEASON plan.
+        $this->schedulePlanProvisioner->ensureSeasonPlan($target);
 
         $venueMap = [];
         foreach ($this->rows(Venue::class, $clubId, $sourceId) as $venue) {
