@@ -56,10 +56,6 @@ class SeasonResource
     #[Groups(['read'])]
     public ?string $baselineScheduleId = null;
 
-    /** Manager-chosen name of THE season plan (planning-versions); null → default display. */
-    #[Groups(['read'])]
-    public ?string $planningName = null;
-
     /** @var array<string, mixed> */
     #[Groups(['read'])]
     public array $transitionData = [];
@@ -77,7 +73,6 @@ class SeasonResource
         $dto->status = $entity->getStatus();
         $dto->exportPdfUrl = $entity->getExportPdfUrl();
         $dto->baselineScheduleId = $entity->getBaselineScheduleId();
-        $dto->planningName = $entity->getPlanningName();
         $dto->transitionData = $entity->getTransitionData();
 
         return $dto;

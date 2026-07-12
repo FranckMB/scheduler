@@ -35,7 +35,7 @@ function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | nul
   const rows: PlanningRow[] = [];
   const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
   if (null !== seasonMain) {
-    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId, isOverlay: false });
+    rows.push({ id: seasonMain.id, label: seasonMain.name || "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId, isOverlay: false });
   }
   // One row per period overlay (its latest finished version), sorted by period name.
   const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];

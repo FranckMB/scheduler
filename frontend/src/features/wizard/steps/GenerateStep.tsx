@@ -3,7 +3,7 @@ import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, useEntryConflicts } from "@/features/cockpit/queries";
 import type { ScheduleStatus } from "@/features/planning/api";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
@@ -11,8 +11,9 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 
+import { defaultPlanningName } from "../lib/planningName";
 import { useStepValidation } from "../lib/useStepValidation";
-import { useLaunchGeneration, useScheduleStatus } from "../queries";
+import { useLaunchGeneration, useScheduleStatus, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { BlockerList } from "./BlockerList";
 
@@ -31,6 +32,8 @@ export function GenerateStep() {
   const { mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  const { data: conflicts } = useEntryConflicts(periodMode ? calendarEntryId : null);
+  const { data: venues = [] } = useWizardVenues();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
@@ -107,6 +110,19 @@ export function GenerateStep() {
 
   const initial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
+  // Conforming default name (E6) — used only on a FRESH create; a regenerate reuses the
+  // existing schedule (existingScheduleId), keeping its edited name.
+  const defaultName = (): string =>
+    defaultPlanningName({
+      periodMode,
+      periodType: periodEntry?.periodType,
+      entryTitle: periodEntry?.title,
+      startDate: periodEntry?.startDate,
+      endDate: periodEntry?.endDate,
+      gymName: venues.find((v) => v.id === conflicts?.venueIds?.[0])?.name ?? null,
+      seasonName: me?.seasons.find((s) => s.id === me.currentSeasonId)?.name ?? me?.seasons.find((s) => s.isCurrent)?.name ?? null,
+    });
+
   const start = async () => {
     setTimedOut(false);
     launch.reset();
@@ -115,11 +131,11 @@ export function GenerateStep() {
       const id = await launch.mutateAsync(
         periodMode
           ? {
-              name: periodEntry?.title ?? "Plan de période",
+              name: defaultName(),
               calendarEntryId: calendarEntryId ?? undefined,
               existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
             }
-          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
+          : { name: defaultName() },
       );
       setScheduleId(id);
     } catch {

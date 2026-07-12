@@ -87,13 +87,13 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // global MutationCache already toasts it — this only avoids an unhandledrejection.
   const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next).catch(() => {});
 
-  // Fanion-only default: on a FRESH period (no overrides yet, not already seeded this
-  // session) deactivate every team below the top tier, ONCE — best-effort. Controls
-  // stay disabled (busy) until the async writes settle so a first click can't race
-  // them. The key is claimed BEFORE firing and never un-claimed: un-claiming on a
-  // partial failure re-runs the effect against a still-empty override cache and
-  // double-writes the teams that already succeeded. On a failure the global toast
-  // informs; the manager applies "Fanion seul" (ramp) to complete.
+  // Reprise default = Fanion + importantes: on a FRESH period (no overrides yet, not
+  // already seeded this session) deactivate every team BELOW the top two ranks (S + A),
+  // ONCE — best-effort. Controls stay disabled (busy) until the async writes settle so a
+  // first click can't race them. The key is claimed BEFORE firing and never un-claimed:
+  // un-claiming on a partial failure re-runs the effect against a still-empty override
+  // cache and double-writes the teams that already succeeded. On a failure the global
+  // toast informs; the manager adjusts via the ramp to complete.
   //
   // The DURABLE signal is entry.teamSelectionInitialized (server-set on the first
   // override, survives reload); seededPeriods only guards the in-session window
@@ -107,11 +107,13 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
       return;
     }
     seededPeriods.add(calendarEntryId);
-    const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
+    // Keep the top TWO rank groups (Fanion + importantes) active; deactivate the rest.
+    const topGroupIds = new Set(groups.slice(0, 2).map((g) => g.tier?.id).filter((id): id is number => null != id));
+    const belowTop = teams.filter((t) => !topGroupIds.has(t.priorityTierId));
     if (0 === belowTop.length) {
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion + importantes seed writes settle
     setBusy(true);
     void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
   }, [isLoading, entryLoading, entry, teams, overrides, topTierId, calendarEntryId, create]);
@@ -151,7 +153,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   return (
     <div className="space-y-3" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">
-        Choisissez qui reprend sur cette période. Par défaut seul le <strong>Fanion</strong> est actif — cochez les équipes au fur et à mesure de la montée en charge.
+        Choisissez qui reprend sur cette période. Par défaut le <strong>Fanion</strong> et les <strong>importantes</strong> sont actifs — ajustez au fur et à mesure de la montée en charge.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(0)}>

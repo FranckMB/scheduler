@@ -40,8 +40,8 @@ interface PlanningToolbarProps {
 /**
  * planning-versions: the selector lists the WORK VERSIONS of the season plan
  * ("V3 — 10 juil. 14:32", newest last), never named schedules — the plan's
- * NAME lives in the page header (Season.planningName). Versions are not
- * renamable; a version can be deleted (workspace) behind a DeleteConfirm.
+ * NAME lives in the page header (the displayed Schedule's name). Versions are
+ * not renamable; a version can be deleted (workspace) behind a DeleteConfirm.
  *
  * The season's MAIN plan (baseline) is never chosen here: the first validated
  * plan is the baseline, as a fact — there is no "set as main" action. Two rows:

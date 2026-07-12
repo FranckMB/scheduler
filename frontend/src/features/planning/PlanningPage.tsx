@@ -3,7 +3,7 @@ import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-re
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useMe, useRenamePlanning } from "@/features/auth/queries";
+import { useMe } from "@/features/auth/queries";
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
@@ -20,7 +20,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useRenameSchedule, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
@@ -154,7 +154,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const deleteMutation = useDeleteSchedule();
   const regenerateFromMutation = useRegenerateFromVersion();
   const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
-  const renamePlanning = useRenamePlanning();
+  const renameSchedule = useRenameSchedule();
   const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
   // Diagnostics panel collapsed by default (user request): the grid gets the
   // full width for verification, a compact bar re-opens the aside on demand.
@@ -299,14 +299,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   }
 
   // The season the user is WORKING IN: the explicit selection (X-Season-Id,
-  // seasonStore) first, else the calendar-current one — renaming must target
-  // the season whose planningName is displayed, never silently another one.
+  // seasonStore) first, else the calendar-current one — used for the read-only
+  // guard on the rename pencil.
   const workingSeason =
     me?.seasons.find((sn) => sn.id === selectedSeasonId)
     ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
     ?? me?.seasons.find((sn) => sn.isCurrent)
     ?? null;
-  const planningTitle = me?.planningName ?? (workingSeason ? `Planning ${workingSeason.name}` : "Planning");
+  // Unified naming: THE plan's name lives on the displayed Schedule (socle or overlay),
+  // editable here, shown in the list and used by the export — one source of truth.
+  const planningTitle = selectedSchedule?.name || (workingSeason ? `Planning ${workingSeason.name}` : "Planning");
   const structureDiverged =
     null !== selectedSchedule && null === selectedSchedule.calendarEntryId
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -325,8 +327,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             onChange={(e) => setEditingPlanningName(e.target.value)}
             onKeyDown={(e) => {
               if ("Enter" === e.key) {
-                if (workingSeason) {
-                  renamePlanning.mutate({ seasonId: workingSeason.id, planningName: editingPlanningName.trim() });
+                if (null !== selectedSchedule) {
+                  renameSchedule.mutate({ id: selectedSchedule.id, name: editingPlanningName.trim(), status: selectedSchedule.status });
                 }
                 setEditingPlanningName(null);
               } else if ("Escape" === e.key) {
@@ -338,7 +340,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           />
         ) : (
           <>
-            {/* planning-versions: THE plan's name lives here (Season.planningName), not in the version selector. */}
+            {/* Unified naming: the displayed Schedule's name (socle or overlay), not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
             {null !== selectedSchedule && selectedSchedule.id === baselineScheduleId ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
@@ -346,8 +348,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 principal
               </span>
             ) : null}
-            {workingSeason && !workingSeason.isReadonly ? (
-              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
+            {null !== selectedSchedule && workingSeason && !workingSeason.isReadonly ? (
+              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(selectedSchedule.name ?? "")}>
                 <Pencil className="size-4" />
               </Button>
             ) : null}

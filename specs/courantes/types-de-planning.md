@@ -82,9 +82,9 @@
   (accepte/refuse). Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
 - **État** : 🟡 partiel — le moteur reprise existe (holiday : héritage contraintes +
   défaut intelligent #212, équipes on/off + séances, créneaux prêtés) mais « Adapter »
-  couvre **la fenêtre de vacances entière** (pas le choix de semaines), le défaut équipes
-  est **Fanion seul** (cible : Fanion + importantes), et **l'été est exclu**
-  (`isAdaptableHoliday`). Voir « Écarts » ci-dessous.
+  couvre **la fenêtre de vacances entière** (pas le choix de semaines) et **l'été est exclu**
+  (`isAdaptableHoliday`). Le défaut équipes est **Fanion + importantes** (E3 ✅) et le nom du
+  planning est unifié sur `Schedule.name` (E6 ✅). Voir « Écarts » ci-dessous.
 
 ## Écarts implémentation ↔ cible (actés 2026-07-12)
 
@@ -92,10 +92,10 @@
 |---|---|---|---|
 | E1 | Pas de **découpage hebdomadaire** : overlay = fenêtre d'indispo entière, reprise = fenêtre de vacances entière | 2 + 3 | 1 planning par semaine ; overlay : semaines **auto** (englobantes) + notification des suivants ; reprise : semaines **choisies** (N cochées ensemble = identiques) |
 | E2 | **Été exclu** de « Adapter » (`isAdaptableHoliday`) | 3 | Lever l'exclusion — l'été porte 2 semaines de reprise dégradée |
-| E3 | Défaut équipes reprise = **Fanion seul** | 3 | **Fanion + importantes** (rangs S + A) pré-cochées |
+| ~~E3~~ | ~~Défaut équipes reprise = Fanion seul~~ **✅ livré** (2026-07-12) : seed = Fanion + importantes (2 premiers rangs) | 3 | — |
 | E4 | **Séances/équipe non ajustables dans l'overlay** côté UI (moteur OK) | 2 | Exposer l'ajustement 3→2 / 0 séances dans le flux overlay |
 | E5 | Modale **« Demandes des coachs »** absente | 3 | Bouton → modale vide d'abord, puis TODO-list par coach commune aux vacances (futur) |
-| E6 | **Noms par défaut non conformes** — aujourd'hui : socle = `Planning {date du jour}` (`GenerateStep.tsx`), overlay/reprise = titre de la CalendarEntry (`Vacances de la Toussaint`, `Gym Barros fermé`) | 1 + 2 + 3 | Socle : `Planning de la saison 20XX-20XX` · indispo : `Ajustement {GYMNASE} du {début} au {fin}` · reprise : `Planning de vacances de {nom} du {début} au {fin}` |
+| ~~E6~~ | ~~Noms par défaut non conformes~~ **✅ livré** (2026-07-12) : nom **unifié** sur `Schedule.name` (source unique — pinceau socle + overlays, liste, export) ; défauts conformes posés à la génération ; `Season.planningName` retiré | 1 + 2 + 3 | — |
 
 > Suivi : ces écarts sont des items de backlog dans
 > [`../evolution/roadmap.md`](../evolution/roadmap.md) — ils se cadrent et se livrent

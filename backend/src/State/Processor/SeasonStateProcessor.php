@@ -35,9 +35,6 @@ class SeasonStateProcessor extends AbstractStateProcessor
         if (null !== $input->status) {
             $entity->setStatus($input->status);
         }
-        if (null !== $input->planningName) {
-            $entity->setPlanningName('' === trim($input->planningName) ? null : trim($input->planningName));
-        }
 
         return $entity;
     }
@@ -52,7 +49,7 @@ class SeasonStateProcessor extends AbstractStateProcessor
             $entity->setName($input->name);
         }
         // Partial PUT: absent dates keep the current values — a client updating
-        // one field (e.g. planningName) must not echo (possibly stale) dates.
+        // one field must not echo (possibly stale) dates.
         if (null !== $input->startDate) {
             $entity->setStartDate($input->startDate);
         }
@@ -61,10 +58,6 @@ class SeasonStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->status) {
             $entity->setStatus($input->status);
-        }
-        // Empty string = explicit reset to the default display name.
-        if (null !== $input->planningName) {
-            $entity->setPlanningName('' === trim($input->planningName) ? null : trim($input->planningName));
         }
     }
 

@@ -69,7 +69,7 @@ vi.mock("@/features/auth/queries", () => ({
     data: {
       id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" },
       baselineScheduleId: SID, socleValidatedAt: meState.socleValidatedAt,
-      planningName: null, seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
+      seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
     },
   }),
   useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
@@ -91,6 +91,8 @@ describe("PlanningPage (integration)", () => {
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
     expect(screen.getByText("principal")).toBeInTheDocument();
+    // Unified naming (E6): the header title is the displayed schedule's own name.
+    expect(screen.getByRole("heading", { name: "Planning A" })).toBeInTheDocument();
     // Standalone /planning (consultation) hides the toolbar's version selector,
     // status badge and score — see PlanningToolbar.test.
     expect(screen.queryByText(/score 9051/i)).not.toBeInTheDocument();

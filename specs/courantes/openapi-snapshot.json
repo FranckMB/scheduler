@@ -14552,13 +14552,6 @@
                             "null"
                         ]
                     },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
                     "transitionData": {
                         "type": "object",
                         "additionalProperties": {
@@ -14609,14 +14602,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "planningName": {
-                        "maxLength": 120,
-                        "description": "Name of THE season plan (planning-versions) \u2014 null keeps the current value.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
                     }
                 }
             },
@@ -14662,13 +14647,6 @@
                         ]
                     },
                     "baselineScheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                         "type": [
                             "string",
                             "null"
@@ -14732,13 +14710,6 @@
                                 ]
                             },
                             "baselineScheduleId": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "planningName": {
-                                "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                                 "type": [
                                     "string",
                                     "null"

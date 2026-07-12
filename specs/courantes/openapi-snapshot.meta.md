@@ -2,6 +2,12 @@ Last verified @ feat/period-constraint-toggle 2026-07-12
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **69 paths.**
 Changements récents :
+- **nommage unifié des plannings (2026-07-12)** : `Season.planningName` **retiré** (de la
+  ressource Season et de `/api/me`). Le nom d'un planning vit désormais sur `Schedule.name`
+  (source unique : pinceau écran planning, liste, export) ; défauts conformes posés à la
+  génération (socle `Planning de la saison 20XX-20XX`, indispo `Ajustement {gym} du…au…`,
+  reprise `Planning de vacances de {nom} du…au…`). Migration backfill→drop. Voir
+  `types-de-planning.md` E6.
 - **contraintes désactivables par période (2026-07-12)** : nouvelle ressource
   **`ConstraintPeriodOverride`** (`/api/constraint_period_overrides`) — surcharge sparse
   par (période CLOSURE, contrainte) : `isActive` (false = contrainte permanente

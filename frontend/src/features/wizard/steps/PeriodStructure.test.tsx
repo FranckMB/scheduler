@@ -24,8 +24,9 @@ vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
     { id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
     { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
+    { id: "t3", name: "Loisir", sportCategoryId: "c", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
   ] }),
-  usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
+  usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }, { id: 3, label: "B", name: "Loisir", color: null }] }),
   useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value }),
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
@@ -70,12 +71,12 @@ afterEach(() => {
   deleteConstraintOverride.mockClear();
 });
 
-describe("PeriodTeams — Fanion-only default + toggles", () => {
-  it("seeds a fresh period with only the top tier active (deactivates the rest)", () => {
+describe("PeriodTeams — Fanion + importantes default + toggles", () => {
+  it("seeds a fresh period with the top TWO ranks active (deactivates below)", () => {
     // Unique id: the module-level "already seeded" set persists across tests.
     render(<PeriodTeams calendarEntryId="fresh-seed" />);
-    // U13 (tier 2) is deactivated by default; SM1 (Fanion) is not touched.
-    expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "fresh-seed", teamId: "t2", isActive: false });
+    // Loisir (rank B, tier 3) is deactivated; SM1 (Fanion/S) and U13 (importante/A) are kept.
+    expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "fresh-seed", teamId: "t3", isActive: false });
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 

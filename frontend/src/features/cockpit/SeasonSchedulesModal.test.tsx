@@ -53,9 +53,10 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(seasonPlanCounts(withInFlight)).toEqual({ total: 2, overlays: 1 });
   });
 
-  it("lists one row per PLANNING (principal + overlay), each with view + export", () => {
+  it("lists one row per PLANNING (socle by its name + overlay), each with view + export", () => {
     open(schedules);
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    // Unified naming: the socle row shows the schedule's own name, not a hardcoded label.
+    expect(screen.getByText("Plan")).toBeInTheDocument();
     expect(screen.getByText("Vacances Toussaint")).toBeInTheDocument();
     // Each row offers a consult (eye) + an export — icon-only (aria-label), no visible "Exporter" text.
     expect(screen.getAllByRole("button", { name: /^Consulter/ })).toHaveLength(2);
