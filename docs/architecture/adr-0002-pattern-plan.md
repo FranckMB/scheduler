@@ -160,10 +160,11 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 
 ## Questions ouvertes (non bloquantes, à trancher au cadrage des lots)
 
-1. **Chevauchement CLOSURE × HOLIDAY** : une fermeture de gym pendant une semaine de
-   reprise — interdite par l'invariant 4 (un seul plan sur la fenêtre : les réglages du
-   plan de reprise absorbent la fermeture), ou exception ? *Position par défaut :
-   interdit, le plan de la semaine absorbe.*
+1. ~~Chevauchement CLOSURE × HOLIDAY~~ **Tranché (fondateur, 2026-07-12)** : rien de
+   spécial — l'invariant 4 tient (jamais deux plans qui se chevauchent). Un gym
+   indisponible pendant une semaine de reprise se gère **dans le plan de reprise
+   lui-même** (on y redéfinit les créneaux / une contrainte) — pas de plan CLOSURE
+   concurrent, pas de mécanisme dédié.
 2. **Découpage hebdomadaire (E1)** et notification « 2ᵉ planning à compléter » : portés
    par le modèle (dates propres + N:1 déclencheur) mais **livrés dans un lot ultérieur**.
 3. **Vieilles versions supprimées à la validation** : la photo de la version choisie reste ;
