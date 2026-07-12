@@ -338,7 +338,9 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const isOverlay = isClosure || isReprise;
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
   // Off an overlay period, null disables both queries (no wasted fetch).
-  const { data: overrides = [] } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: overrides = [], isLoading: overridesLoading } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
+  // and dropped from the payload server-side — the checklist must mirror that.
   const { data: teamOverrides = [], isLoading: teamOverridesLoading } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
   const update = useUpdatePeriodConstraintOverride(calendarEntryId);
@@ -367,14 +369,17 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
         return true; // CLUB, COACH
     }
   };
+  // A TEAM constraint whose team is paused can't ship (server-side buildForOverlay drops it) —
+  // show it struck & disabled, never toggle-able, so the checklist matches the payload.
+  const notApplicable = (c: Constraint): boolean => "TEAM" === c.scope && deactivatedTeams.has(c.scopeTargetId ?? "");
   const overrideOf = new Map(overrides.map((o) => [o.constraintId, o]));
-  const activeOf = (c: Constraint): boolean => (inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
+  const activeOf = (c: Constraint): boolean => (notApplicable(c) ? false : inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
   // drops the row (stays sparse); a deviation upserts (create, or PUT if a row exists).
   const toggle = (c: Constraint, desired: boolean) => {
-    if (mutating) {
-      return; // a write is settling — ignore the click (one observer, no duplicate)
+    if (mutating || notApplicable(c)) {
+      return; // a write is settling, or the constraint can't ship — ignore the click
     }
     const settle = () =>
       setInflight((m) => {
@@ -403,19 +408,22 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
       <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
-      {/* In a reprise the default follows the team selection, so wait for team overrides
-          too — else a paused team's constraint flashes CHECKED and a click persists a wrong row. */}
-      {isLoading || (isReprise && teamOverridesLoading) ? null : 0 === constraints.length ? (
+      {/* Wait for ALL three queries: constraints, the period's own overrides (else a toggle
+          takes the create path and 422s on an existing row), and team overrides (the reprise
+          default + the non-applicable strike follow the team selection). */}
+      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
           {constraints.map((c) => {
             const active = activeOf(c);
+            const naf = notApplicable(c);
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} disabled={mutating} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={mutating || naf} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
+                  {naf ? <span className="text-xs text-muted-foreground">(équipe en pause)</span> : null}
                 </label>
                 <span className="shrink-0 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
               </li>
