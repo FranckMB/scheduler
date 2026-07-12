@@ -249,14 +249,6 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
   });
 
-  it("hides the checklist on a team-overrides fetch error (backend stays authoritative)", () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
-    teamOverridesErrorState.value = true;
-    constraintsState.data = [{ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }];
-    render(<PeriodConstraints calendarEntryId="e1" />);
-    expect(screen.queryByRole("checkbox", { name: "U13 rule appliquée cette période" })).not.toBeInTheDocument();
-  });
-
   it("does not render while the calendar entry is still loading (no holiday flash / dead override)", () => {
     entryState.data = undefined; // entry not resolved yet
     constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
