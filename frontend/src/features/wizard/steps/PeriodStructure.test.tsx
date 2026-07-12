@@ -14,6 +14,7 @@ const overridesState: { data: Array<{ id: string; teamId: string; isActive: bool
 const constraintsState: { data: Array<{ id: string; name: string; ruleType: string; scope?: string; scopeTargetId?: string | null }> } = { data: [] };
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
+const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
 const entryState: { data: { teamSelectionInitialized: boolean; periodType: string } | undefined } = { data: { teamSelectionInitialized: false, periodType: "closure" } };
@@ -24,7 +25,7 @@ vi.mock("../queries", () => ({
     { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
   ] }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
-  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value }),
+  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value }),
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
@@ -53,6 +54,7 @@ afterEach(() => {
   constraintsState.data = [];
   constraintOverridesState.data = [];
   teamOverridesLoadingState.value = false;
+  teamOverridesErrorState.value = false;
   constraintOverridesLoadingState.value = false;
   conflictState.venueIds = [];
   entryState.data = { teamSelectionInitialized: false, periodType: "closure" };
@@ -238,6 +240,21 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
     expect(updateConstraintOverride).toHaveBeenCalledWith({ id: "ov1", body: { calendarEntryId: "e1", constraintId: "k1", isActive: false } }, expect.anything());
     expect(createConstraintOverride).not.toHaveBeenCalled();
+  });
+
+  it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {
+    entryState.data = { teamSelectionInitialized: false, periodType: "cutoff" };
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
+  });
+
+  it("hides the checklist on a team-overrides fetch error (backend stays authoritative)", () => {
+    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    teamOverridesErrorState.value = true;
+    constraintsState.data = [{ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.queryByRole("checkbox", { name: "U13 rule appliquée cette période" })).not.toBeInTheDocument();
   });
 
   it("does not render while the calendar entry is still loading (no holiday flash / dead override)", () => {

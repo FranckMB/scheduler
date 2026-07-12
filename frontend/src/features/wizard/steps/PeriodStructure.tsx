@@ -336,12 +336,12 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
-  const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
+  const { data: constraints = [], isLoading, isError: constraintsError } = useWizardConstraints(); // permanent (base) constraints
   // Off an overlay period, null disables both queries (no wasted fetch).
-  const { data: overrides = [], isLoading: overridesLoading } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
   // and dropped from the payload server-side — the checklist must mirror that.
-  const { data: teamOverrides = [], isLoading: teamOverridesLoading } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
+  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
   const update = useUpdatePeriodConstraintOverride(calendarEntryId);
   const del = useDeletePeriodConstraintOverride(calendarEntryId);
@@ -408,10 +408,12 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
       <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
-      {/* Wait for ALL three queries: constraints, the period's own overrides (else a toggle
-          takes the create path and 422s on an existing row), and team overrides (the reprise
-          default + the non-applicable strike follow the team selection). */}
-      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.length ? (
+      {/* Wait for ALL three queries — and hide on ANY error rather than derive a wrong
+          default/strike from an empty fallback (backend stays authoritative on the payload):
+          constraints, the period's own overrides (else a toggle 422s on an existing row),
+          and team overrides (the reprise default + the non-applicable strike follow the team
+          selection). */}
+      {isLoading || overridesLoading || teamOverridesLoading || constraintsError || overridesError || teamOverridesError ? null : 0 === constraints.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
