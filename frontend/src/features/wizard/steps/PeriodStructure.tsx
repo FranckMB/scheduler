@@ -357,7 +357,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   }
 
   const deactivatedTeams = new Set(teamOverrides.filter((o) => !o.isActive).map((o) => o.teamId));
-  // Smart default, mirrored server-side (ScheduleConstraintBuilder::activePermanentForReprise).
+  // Smart default, mirrored server-side (ScheduleConstraintBuilder::inheritedPermanents, reprise predicate).
   const defaultKept = (c: Constraint): boolean => {
     if (isClosure) {
       return true; // fermeture: everything kept by default (B3+F2 unchanged)

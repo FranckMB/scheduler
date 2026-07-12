@@ -304,6 +304,39 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertNotContains('Paused team perm', $names, 'a TEAM constraint targeting a paused team never ships (no ghost teamId), even if explicitly kept');
     }
 
+    public function testRepriseDropsTagExpandedRowForPausedTeam(): void
+    {
+        [$club, $season] = $this->seed();
+        $active = $this->team($club, $season, 'SM1');
+        $paused = $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null); // en pause
+
+        // A club-wide constraint targeting a tag BOTH teams carry → expands per-team.
+        $tag = (new \App\Entity\TeamTag)->setClubId($club->getId())->setName('loisir')->setIsSystem(false);
+        $this->em->persist($tag);
+        $this->em->flush();
+        foreach ([$active, $paused] as $t) {
+            $this->em->persist((new \App\Entity\TeamTagAssignment)->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
+        }
+        $c = new Constraint;
+        $c->setClubId($club->getId());
+        $c->setSeasonId($season->getId());
+        $c->setName('Tag rule');
+        $c->setScope(ConstraintScope::CLUB);
+        $c->setFamily(ConstraintFamily::TIME);
+        $c->setRuleType(ConstraintRuleType::HARD);
+        $c->setConfig(['targetTag' => 'loisir']);
+        $this->em->persist($c);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $rows = $this->builder->buildForOverlay($schedule, $entry)['constraints'];
+        $targets = array_map(static fn (array $r): string => $r['scopeTargetId'] ?? '', $rows);
+        self::assertContains($active->getId(), $targets, 'the tag rule ships for the active team');
+        self::assertNotContains($paused->getId(), $targets, 'the tag-expanded row for a paused team is dropped (no ghost teamId)');
+    }
+
     public function testClosureKeepsFacilityPermanentByDefault(): void
     {
         [$club, $season] = $this->seed();

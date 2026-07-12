@@ -166,7 +166,7 @@ final class ScheduleConstraintBuilder
      *   FACILITY HARD `forbiddenVenueId` constraints — the engine understands
      *   `forbiddenVenueId` (→ forbidden_assignments) but NOT `config.type=venue_closed`.
      * - holiday (reprise): permanent constraints inherited with a SMART default that
-     *   follows the team selection (activePermanentForReprise) + dated.
+     *   follows the team selection (inheritedPermanents, reprise predicate) + dated.
      *
      * In both, a permanent/dated TEAM-scoped constraint whose team was deactivated for
      * the period is dropped (its team is absent from the payload — no ghost teamId).
@@ -221,14 +221,6 @@ final class ScheduleConstraintBuilder
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
         };
 
-        // A TEAM-scoped constraint (permanent kept via override, or dated) whose team was
-        // deactivated for the period targets a team absent from the payload — drop it so
-        // no HARD constraint ships a ghost teamId (which could turn the solve INFEASIBLE).
-        $constraints = array_values(array_filter(
-            $constraints,
-            static fn (Constraint $c): bool => ConstraintScope::TEAM !== $c->getScope() || !isset($deactivatedTeamIds[(string) $c->getScopeTargetId()]),
-        ));
-
         // Period-editable structure: the overlay's slots are ADDITIVE — the still-valid
         // SEASONAL slots (calendarEntryId NULL) plus this period's OWN slots (a gym lent
         // for the window, calendarEntryId = entry). Fermetures already remove a seasonal
@@ -277,6 +269,21 @@ final class ScheduleConstraintBuilder
                 $payload['constraints'],
                 $this->expandClosedVenues($dated, $teams),
             );
+        }
+
+        // Drop any SERIALIZED TEAM row targeting a team deactivated for the period — an
+        // original TEAM constraint, OR a CLUB/tag constraint expanded per-team during
+        // serialization (serializeConstraintRow emits scope=TEAM + scopeTargetId=teamId).
+        // The team is absent from the payload roster, so a ghost teamId here could turn the
+        // solve INFEASIBLE. Filtering the serialized payload (not the entity list) catches
+        // the CLUB+targetTag expansion the entity-level scope check would miss.
+        if ([] !== $deactivatedTeamIds && \is_array($payload['constraints'])) {
+            $payload['constraints'] = array_values(array_filter(
+                $payload['constraints'],
+                static fn (mixed $row): bool => !\is_array($row)
+                    || ConstraintScope::TEAM->value !== ($row['scope'] ?? null)
+                    || !isset($deactivatedTeamIds[(string) ($row['scopeTargetId'] ?? '')]),
+            ));
         }
 
         return $payload;
