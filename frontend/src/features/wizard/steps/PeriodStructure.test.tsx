@@ -132,7 +132,7 @@ describe("PeriodConstraints — toggle permanent constraints off for a closure",
     constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
-    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "k1", isActive: false });
+    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "k1", isActive: false }, expect.anything());
   });
 
   it("toggling a disabled constraint back on deletes its override", async () => {
@@ -141,11 +141,29 @@ describe("PeriodConstraints — toggle permanent constraints off for a closure",
     render(<PeriodConstraints calendarEntryId="e1" />);
     // Rendered unchecked (disabled) → clicking re-activates by removing the row.
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
-    expect(deleteConstraintOverride).toHaveBeenCalledWith("ov1");
+    expect(deleteConstraintOverride).toHaveBeenCalledWith("ov1", expect.anything());
+  });
+
+  it("a rapid second click does NOT fire a duplicate create (in-flight guard)", async () => {
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
+    // The mock mutate never calls onSettled, so the write stays "in flight": the
+    // optimistic state disables the box and a second click is swallowed.
+    await userEvent.click(checkbox);
+    await userEvent.click(checkbox);
+    expect(createConstraintOverride).toHaveBeenCalledTimes(1);
   });
 
   it("does not render outside a closure period (permanent constraints don't apply)", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
+  });
+
+  it("does not render while the calendar entry is still loading (no holiday flash / dead override)", () => {
+    entryState.data = undefined; // entry not resolved yet
     constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();

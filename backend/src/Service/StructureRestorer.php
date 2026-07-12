@@ -137,6 +137,12 @@ final class StructureRestorer
             $tenant,
             'DELETE App\Entity\TeamPeriodOverride o WHERE o.id IN (:ids)',
         );
+        // A period's constraint toggle whose permanent constraint is gone after the restore.
+        $this->deleteDangling(
+            'SELECT o.id FROM App\Entity\ConstraintPeriodOverride o WHERE o.clubId = :c AND o.seasonId = :s AND NOT EXISTS (SELECT 1 FROM App\Entity\Constraint co WHERE co.id = o.constraintId)',
+            $tenant,
+            'DELETE App\Entity\ConstraintPeriodOverride o WHERE o.id IN (:ids)',
+        );
         $this->deleteDangling(
             'SELECT vts.id FROM App\Entity\VenueTrainingSlot vts WHERE vts.clubId = :c AND vts.seasonId = :s AND vts.calendarEntryId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = vts.venueId)',
             $tenant,

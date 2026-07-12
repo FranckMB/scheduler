@@ -7,6 +7,7 @@ namespace App\Tests\Integration\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\Team;
@@ -145,6 +146,37 @@ final class StructureRestorerTest extends KernelTestCase
         $this->restorer->apply($club->getId(), $season->getId(), $this->restorer->readSnapshot($v1));
         $this->em->clear();
         self::assertNull($this->em->getRepository(Constraint::class)->find($ghostId), 'a dated constraint targeting a now-absent team is purged');
+        self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()));
+    }
+
+    public function testRestorePurgesConstraintPeriodOverrideWhosePermanentConstraintIsGone(): void
+    {
+        [$club, $season] = $this->seedClubSeason();
+        // Photo A: no permanent constraint. Capture on V1.
+        $v1 = $this->makeSchedule($club, $season);
+        $this->em->flush();
+        $this->snapshotter->store($v1, $this->snapshotter->serialize($club->getId(), $season->getId()));
+
+        // Later: a permanent constraint, a closure period, and an override disabling it.
+        $entry = (new CalendarEntry)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(\App\Enum\CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $permanent = (new Constraint)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setName('Perm')->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::TIME)->setRuleType(ConstraintRuleType::HARD)->setConfig([]);
+        $this->em->persist($permanent);
+        $this->em->flush();
+        $override = (new ConstraintPeriodOverride)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setCalendarEntryId($entry->getId())->setConstraintId($permanent->getId())->setIsActive(false);
+        $this->em->persist($override);
+        $this->em->flush();
+        $overrideId = $override->getId();
+
+        // Restore V1 (permanent constraint gone) → the override that referenced it is a
+        // ghost and gets purged; the calendar entry itself stays.
+        $this->restorer->apply($club->getId(), $season->getId(), $this->restorer->readSnapshot($v1));
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(ConstraintPeriodOverride::class)->find($overrideId), 'an override whose permanent constraint is now absent is purged');
         self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()));
     }
 

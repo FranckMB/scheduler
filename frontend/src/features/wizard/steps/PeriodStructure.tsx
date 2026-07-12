@@ -327,28 +327,49 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
  */
 export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
+  // Permanent constraints only feed CLOSURE overlays. Gate on a CONFIRMED closure
+  // (entry loaded AND closure) so the checklist never flashes — nor writes a dead
+  // override — for a holiday period during the entry's load window.
+  const isClosure = "closure" === entry?.periodType;
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
-  const { data: overrides = [] } = usePeriodConstraintOverrides(calendarEntryId);
+  // Skip the fetch entirely off a closure (null disables the query).
+  const { data: overrides = [] } = usePeriodConstraintOverrides(isClosure ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
   const del = useDeletePeriodConstraintOverride(calendarEntryId);
+  // Optimistic intended-active state per constraint while its write is in flight:
+  // the sparse row only lands after the refetch, so without this the controlled
+  // checkbox snaps back and a re-click would fire a DUPLICATE create (422). The
+  // in-flight entry also gates re-clicks until the mutation settles.
+  const [inflight, setInflight] = useState<Map<string, boolean>>(new Map());
 
-  // Permanent constraints only feed CLOSURE overlays; nothing to toggle otherwise.
-  if (entry && "closure" !== entry.periodType) {
+  if (!isClosure) {
     return null;
   }
 
   // A constraint is disabled only if an override row turns it off; absent = active.
   const disabledOf = new Map(overrides.filter((o) => !o.isActive).map((o) => [o.constraintId, o.id]));
+  const activeOf = (c: Constraint): boolean => (inflight.has(c.id) ? (inflight.get(c.id) as boolean) : !disabledOf.has(c.id));
   const toggle = (c: Constraint, active: boolean) => {
-    // Swallow the rejection: the global MutationCache already toasts it.
+    if (inflight.has(c.id)) {
+      return; // a write is already settling — ignore the re-click (no duplicate POST)
+    }
+    const settle = () =>
+      setInflight((m) => {
+        const next = new Map(m);
+        next.delete(c.id);
+        return next;
+      });
+    setInflight((m) => new Map(m).set(c.id, active));
     if (active) {
       const overrideId = disabledOf.get(c.id);
-      if (undefined !== overrideId) {
-        del.mutate(overrideId);
+      if (undefined === overrideId) {
+        settle();
+        return;
       }
+      del.mutate(overrideId, { onSettled: settle });
       return;
     }
-    create.mutate({ calendarEntryId, constraintId: c.id, isActive: false });
+    create.mutate({ calendarEntryId, constraintId: c.id, isActive: false }, { onSettled: settle });
   };
 
   return (
@@ -360,11 +381,11 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
       ) : (
         <ul className="flex flex-col gap-1">
           {constraints.map((c) => {
-            const active = !disabledOf.has(c.id);
+            const active = activeOf(c);
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={inflight.has(c.id)} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
                 </label>
                 <span className="shrink-0 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
