@@ -8,6 +8,7 @@ use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Competition;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\ScheduleDiagnostic;
@@ -168,6 +169,32 @@ final class EntityCascadeDeleter
 
     private function deleteScopedConstraint(ConstraintScope $scope, string $targetId, string $clubId, string $seasonId): void
     {
+        // Period toggles keyed on these constraints must go first, else deleting a
+        // team/coach/venue whose permanent scoped constraint had a period override
+        // leaves that override dangling (same no-orphan contract as the direct
+        // constraint delete in ConstraintStateProcessor::cascadeBeforeDelete).
+        $constraintIds = $this->entityManager->createQueryBuilder()
+            ->select('e.id')
+            ->from(Constraint::class, 'e')
+            ->where('e.clubId = :clubId')
+            ->andWhere('e.seasonId = :seasonId')
+            ->andWhere('e.scope = :scope')
+            ->andWhere('e.scopeTargetId = :target')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->setParameter('scope', $scope)
+            ->setParameter('target', $targetId)
+            ->getQuery()
+            ->getSingleColumnResult();
+        if ([] !== $constraintIds) {
+            $this->entityManager->createQueryBuilder()
+                ->delete(ConstraintPeriodOverride::class, 'o')
+                ->where('o.constraintId IN (:ids)')
+                ->setParameter('ids', $constraintIds)
+                ->getQuery()
+                ->execute();
+        }
+
         $this->entityManager->createQueryBuilder()
             ->delete(Constraint::class, 'e')
             ->where('e.clubId = :clubId')

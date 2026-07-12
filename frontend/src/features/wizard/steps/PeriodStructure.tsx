@@ -349,9 +349,14 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   // A constraint is disabled only if an override row turns it off; absent = active.
   const disabledOf = new Map(overrides.filter((o) => !o.isActive).map((o) => [o.constraintId, o.id]));
   const activeOf = (c: Constraint): boolean => (inflight.has(c.id) ? (inflight.get(c.id) as boolean) : !disabledOf.has(c.id));
+  // Serialize toggles: the create/del mutation hooks share ONE observer, so firing a
+  // second write before the first settles would rebind it and drop the first's
+  // onSettled (its inflight entry would never clear). One write at a time keeps every
+  // onSettled reliable — and still bars the duplicate-POST re-click.
+  const mutating = inflight.size > 0;
   const toggle = (c: Constraint, active: boolean) => {
-    if (inflight.has(c.id)) {
-      return; // a write is already settling — ignore the re-click (no duplicate POST)
+    if (mutating) {
+      return; // a write is settling — ignore the click (no duplicate POST, no observer rebind)
     }
     const settle = () =>
       setInflight((m) => {
@@ -385,7 +390,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} disabled={inflight.has(c.id)} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={mutating} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
                 </label>
                 <span className="shrink-0 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>

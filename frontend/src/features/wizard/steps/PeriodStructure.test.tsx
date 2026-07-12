@@ -155,6 +155,21 @@ describe("PeriodConstraints — toggle permanent constraints off for a closure",
     expect(createConstraintOverride).toHaveBeenCalledTimes(1);
   });
 
+  it("blocks a second constraint's toggle while the first write is in flight (one mutation at a time)", async () => {
+    constraintsState.data = [
+      { id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" },
+      { id: "k2", name: "Jamais le lundi", ruleType: "HARD" },
+    ];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    // Toggle k1 off → it stays in flight (mock never settles), so every checkbox
+    // is disabled and k2 cannot fire a concurrent write (which would rebind the
+    // shared mutation observer and strand k1's onSettled).
+    await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
+    expect(screen.getByRole("checkbox", { name: "Jamais le lundi appliquée cette période" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Jamais le lundi appliquée cette période" }));
+    expect(createConstraintOverride).toHaveBeenCalledTimes(1);
+  });
+
   it("does not render outside a closure period (permanent constraints don't apply)", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
     constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];

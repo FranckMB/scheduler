@@ -10,6 +10,7 @@ use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Competition;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\ScheduleDiagnostic;
@@ -76,6 +77,11 @@ final class CascadeDeleteApiTest extends WebTestCase
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setName('SM1 le mardi')->setScope(ConstraintScope::TEAM)->setScopeTargetId($team->getId())
             ->setFamily(ConstraintFamily::DAY)->setRuleType(ConstraintRuleType::HARD)->setConfig([]));
+        // A period had disabled that TEAM-scoped constraint → the override must go
+        // with the constraint when the team's cascade bulk-deletes it (else it orphans).
+        $overrideId = $this->persist((new ConstraintPeriodOverride)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setCalendarEntryId('33333333-3333-4333-8333-333333333333')->setConstraintId($constraintId)->setIsActive(false));
         $fixtureId = $this->persist((new Fixture)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setTeamId($team->getId())
             ->setMatchDate(new DateTimeImmutable('2026-01-10'))->setHomeAway(FixtureHomeAway::HOME)
@@ -97,6 +103,7 @@ final class CascadeDeleteApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(TeamCoach::class)->find($teamCoachId));
         self::assertNull($this->em->getRepository(CoachPlayerMembership::class)->find($coachPlayerId));
         self::assertNull($this->em->getRepository(Constraint::class)->find($constraintId));
+        self::assertNull($this->em->getRepository(ConstraintPeriodOverride::class)->find($overrideId), 'period override of the deleted scoped constraint orphaned');
         self::assertNull($this->em->getRepository(Fixture::class)->find($fixtureId), 'fixture orphaned');
         self::assertNull($this->em->getRepository(Competition::class)->find($competitionId), 'competition orphaned');
         self::assertNull($this->em->getRepository(ScheduleDiagnostic::class)->find($diagnosticId), 'diagnostic dangling');
