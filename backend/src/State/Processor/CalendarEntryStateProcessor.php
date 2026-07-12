@@ -8,6 +8,7 @@ use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
@@ -163,6 +164,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
                 $this->entityManager->remove($slot);
             }
             foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
+                $this->entityManager->remove($override);
+            }
+            // …and the period's constraint toggles (which permanent constraints it disabled).
+            foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
                 $this->entityManager->remove($override);
             }
             // A period's own reservations (dated pins) are keyed on the entry too.

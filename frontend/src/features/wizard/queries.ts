@@ -177,6 +177,32 @@ export function useDeleteTeamPeriodOverride(calendarEntryId: string) {
   });
 }
 
+export function usePeriodConstraintOverrides(calendarEntryId: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "constraint_period_overrides", calendarEntryId],
+    queryFn: () => wizardApi.listConstraintPeriodOverrides(calendarEntryId as string),
+    enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreatePeriodConstraintOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: wizardApi.ConstraintPeriodOverridePayload) => wizardApi.createConstraintPeriodOverride(body),
+    // Return the invalidation promise so mutateAsync awaits the refetch (accurate busy state).
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+  });
+}
+
+export function useDeletePeriodConstraintOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteConstraintPeriodOverride(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+  });
+}
+
 // --- Coaches + links (W3) ---
 
 export function useWizardCoaches() {

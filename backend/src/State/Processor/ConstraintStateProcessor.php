@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\ConstraintResource;
 use App\Dto\ConstraintInput;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -104,6 +105,18 @@ class ConstraintStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ConstraintResource
     {
         return ConstraintResource::fromEntity($entity);
+    }
+
+    /**
+     * @param Constraint $entity
+     */
+    protected function cascadeBeforeDelete(object $entity): void
+    {
+        // A period may have disabled this permanent constraint for its window; those
+        // toggles are keyed on constraintId and would orphan on a bare delete.
+        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['constraintId' => $entity->getId()]) as $override) {
+            $this->entityManager->remove($override);
+        }
     }
 
     private function parseScope(?string $value): ConstraintScope

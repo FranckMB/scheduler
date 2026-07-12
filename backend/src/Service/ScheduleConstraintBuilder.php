@@ -8,6 +8,7 @@ use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
@@ -184,8 +185,10 @@ final class ScheduleConstraintBuilder
 
         $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
         $constraints = match ($periodType) {
+            // Permanent constraints the manager disabled for THIS period are dropped
+            // from the overlay (sparse diff layer — the base plan is never touched).
             CalendarEntryPeriodType::CLOSURE => array_merge(
-                $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
+                $this->activePermanentForPeriod($clubId, $seasonId, $entry->getId(), $em),
                 $dated,
             ),
             CalendarEntryPeriodType::HOLIDAY => $dated,
@@ -364,6 +367,28 @@ final class ScheduleConstraintBuilder
             'constraints' => $serializedConstraints,
             'slotTemplates' => array_values($serializedSlots),
         ];
+    }
+
+    /**
+     * Permanent (seasonal) constraints minus those a ConstraintPeriodOverride disabled
+     * for this period. Absent row = the constraint applies as usual; only isActive=false
+     * drops it. The base plan and the Constraint's own isActive are untouched.
+     *
+     * @return array<Constraint>
+     */
+    private function activePermanentForPeriod(string $clubId, string $seasonId, string $entryId, EntityManagerInterface $em): array
+    {
+        $disabled = [];
+        foreach ($em->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $entryId]) as $override) {
+            if (!$override->isActive()) {
+                $disabled[$override->getConstraintId()] = true;
+            }
+        }
+
+        return array_values(array_filter(
+            $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
+            static fn (Constraint $c): bool => !isset($disabled[$c->getId()]),
+        ));
     }
 
     /**

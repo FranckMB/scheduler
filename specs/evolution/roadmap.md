@@ -310,6 +310,7 @@ Trois impasses GA restantes (P0-1 RGPD livré le 2026-07-11 — cf. §Livrés et
 | P4-9 | **Radar « jour férié » à retravailler** (quels fériés + texte d'impact) | ⚪ | S | décision produit |
 | P4-10 | **#3b — désactiver « Régénérer » si rien n'a changé** | ⚪ | M | détection de changement fiable |
 | P4-11 | **lint-staged installé mais jamais invoqué** (pre-commit = build+tsc, aucune config) — le câbler ou le retirer | ⚪ | S | constaté 2026-07-11 (dependabot #91) |
+| P4-12 | **`*PeriodOverride` — parité miroir à durcir (les 2 jumeaux)** : (a) processor `createEntityFromInput` = check-then-insert non-atomique → POST concurrents dupliqués → 500 au lieu de 422 (guard front supprime le trigger réaliste) ; (b) `#[ApiFilter(SearchFilter)]` inerte (provider custom lit les params à la main — ne sert que le snapshot OpenAPI) ; (c) provider ré-implémente `provideCollection` au lieu du hook `applyRequestFilters` de la base ; (d) `PeriodConstraints` : un override `isActive=true` (jamais créé par l'UI — réactivation = DELETE) rendrait la case cochée et le décocher ferait un create→422. Toucher `TeamPeriodOverride` **et** `ConstraintPeriodOverride` ensemble (ne pas diverger les jumeaux) | ⚪ | S | code-review PR #211 (2026-07-12) |
 
 ### Parking (idées gardées, non cadrées)
 

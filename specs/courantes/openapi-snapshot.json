@@ -3187,6 +3187,404 @@
                 ]
             }
         },
+        "/api/constraint_period_overrides": {
+            "get": {
+                "operationId": "api_constraint_period_overrides_get_collection",
+                "tags": [
+                    "ConstraintPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ConstraintPeriodOverride collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "ConstraintPeriodOverride.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/ConstraintPeriodOverride.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ConstraintPeriodOverride"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ConstraintPeriodOverride.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of ConstraintPeriodOverride resources.",
+                "description": "Retrieves the collection of ConstraintPeriodOverride resources.",
+                "parameters": []
+            },
+            "post": {
+                "operationId": "api_constraint_period_overrides_post",
+                "tags": [
+                    "ConstraintPeriodOverride"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "ConstraintPeriodOverride resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a ConstraintPeriodOverride resource.",
+                "description": "Creates a ConstraintPeriodOverride resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new ConstraintPeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/constraint_period_overrides/{id}": {
+            "get": {
+                "operationId": "api_constraint_period_overrides_id_get",
+                "tags": [
+                    "ConstraintPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ConstraintPeriodOverride resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a ConstraintPeriodOverride resource.",
+                "description": "Retrieves a ConstraintPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ConstraintPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_constraint_period_overrides_id_put",
+                "tags": [
+                    "ConstraintPeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ConstraintPeriodOverride resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintPeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the ConstraintPeriodOverride resource.",
+                "description": "Replaces the ConstraintPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ConstraintPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated ConstraintPeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConstraintPeriodOverride.ConstraintPeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_constraint_period_overrides_id_delete",
+                "tags": [
+                    "ConstraintPeriodOverride"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "ConstraintPeriodOverride resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the ConstraintPeriodOverride resource.",
+                "description": "Removes the ConstraintPeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ConstraintPeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/fixtures": {
             "get": {
                 "operationId": "api_fixtures_get_collection",
@@ -11639,6 +12037,150 @@
                     }
                 ]
             },
+            "ConstraintPeriodOverride": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "constraintId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "default": true,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ConstraintPeriodOverride.ConstraintPeriodOverrideInput": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched.",
+                "required": [
+                    "calendarEntryId",
+                    "constraintId"
+                ],
+                "properties": {
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "constraintId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "isActive": {
+                        "description": "false = the constraint is disabled for this period.",
+                        "default": true,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ConstraintPeriodOverride.html": {
+                "type": "object",
+                "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "constraintId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "default": true,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ConstraintPeriodOverride.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "calendarEntryId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "constraintId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "isActive": {
+                                "default": true,
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                ],
+                "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched."
+            },
             "ConstraintViolation": {
                 "type": "object",
                 "description": "Unprocessable entity",
@@ -16248,6 +16790,10 @@
         {
             "name": "Competition",
             "description": "Resource 'Competition' operations."
+        },
+        {
+            "name": "ConstraintPeriodOverride",
+            "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched."
         },
         {
             "name": "Constraint",

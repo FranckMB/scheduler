@@ -230,6 +230,37 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(\App\Entity\Constraint::class)->find($constraintId));
     }
 
+    public function testDeletingPeriodCascadesConstraintPeriodOverrides(): void
+    {
+        [$user, $club] = $this->seed('CE13b');
+
+        $this->post($user, $club, ['kind' => 'period', 'title' => 'Fermeture', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10', 'periodType' => 'closure']);
+        $entryId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // A permanent constraint (no calendarEntryId) the period disables.
+        $this->client->request('POST', '/api/constraints', [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['name' => 'Perm', 'scope' => 'CLUB', 'family' => 'TIME', 'ruleType' => 'HARD'], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $constraintId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Disable it for the period (sparse override).
+        $this->client->request('POST', '/api/constraint_period_overrides', [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['calendarEntryId' => $entryId, 'constraintId' => $constraintId, 'isActive' => false], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $overrideId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Delete the period → the override keyed on it must go too (else it orphans).
+        $this->client->request('DELETE', "/api/calendar_entries/{$entryId}", [], [], $this->authHeaders($user, $club));
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(\App\Entity\ConstraintPeriodOverride::class)->find($overrideId), 'a period constraint override must not survive its period');
+    }
+
     public function testCollectionScopedToActiveSeason(): void
     {
         [$user, $club] = $this->seed('CE14');
