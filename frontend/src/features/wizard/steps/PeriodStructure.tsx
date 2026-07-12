@@ -116,7 +116,9 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion + importantes seed writes settle
     setBusy(true);
     void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [isLoading, entryLoading, entry, teams, overrides, topTierId, calendarEntryId, create]);
+    // `groups` (Fanion + importantes = the top two rank groups) is read above; the one-shot
+    // seededPeriods claim keeps a fresh `groups` ref from re-seeding.
+  }, [isLoading, entryLoading, entry, teams, overrides, topTierId, groups, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {

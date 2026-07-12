@@ -42,6 +42,7 @@ final class RegenerateTest extends WebTestCase
     public function testRegenerateCreatesANewPendingVersionAndLeavesTheSourceUntouched(): void
     {
         $source = $this->seedSchedule(ScheduleStatus::COMPLETED);
+        $source->setName('Planning de la saison 2025-2026');
         $this->seedSlot($source, LockLevel::HARD);
         $this->seedSlot($source, LockLevel::NONE);
         $this->em->flush();
@@ -56,6 +57,8 @@ final class RegenerateTest extends WebTestCase
         $this->em->clear();
         $new = $this->em->getRepository(Schedule::class)->find($newId);
         self::assertSame(ScheduleStatus::PENDING, $new?->getStatus());
+        // Unified naming (E6): the regenerated version carries the chosen name forward.
+        self::assertSame('Planning de la saison 2025-2026', $new?->getName(), 'the manager-chosen name survives a regenerate');
 
         // The new version starts empty — the solver fills it; the source's HARD
         // pins reach it through the generation payload, not a controller copy.

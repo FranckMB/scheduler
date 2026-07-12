@@ -49,6 +49,23 @@ final class ScheduleReadOnlyGuardTest extends WebTestCase
         self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
     }
 
+    public function testRenameIsAllowedOnValidatedSchedule(): void
+    {
+        [$user, , $season] = $this->seed('GRD9');
+        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+
+        $this->client->loginUser($user);
+        // A rename (name + echoed status) is metadata, not structure — allowed on a validated
+        // (read-only) plan so the unified plan name (types-de-planning.md E6) stays editable.
+        $this->client->request('PUT', "/api/schedules/{$schedule->getId()}", [], [], ['CONTENT_TYPE' => 'application/ld+json'], json_encode(['name' => 'Planning de la saison 2025-2026', 'status' => 'VALIDATED'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
+        self::assertSame('Planning de la saison 2025-2026', $reloaded?->getName());
+        self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus(), 'a rename must not change the status');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

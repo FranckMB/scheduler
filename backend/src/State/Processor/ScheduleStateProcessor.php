@@ -190,8 +190,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        // A validated schedule is read-only: reopen it (POST /reopen) before editing.
-        if (ScheduleStatus::VALIDATED === $entity->getStatus()) {
+        // A rename is metadata-only and allowed even on a validated (read-only) plan —
+        // the unified name (types-de-planning.md E6) must stay editable on the baseline.
+        // Any OTHER edit on a validated schedule requires an explicit reopen first.
+        $nameOnly = null !== $input->name && null === $input->solverSeed;
+        if (ScheduleStatus::VALIDATED === $entity->getStatus() && !$nameOnly) {
             throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
         }
         // Status transitions go through the dedicated endpoints (generate/validate/reopen),
@@ -199,7 +202,9 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // the frontend rename echoes a possibly-stale cached status, so rejecting a
         // mismatch would 409 legitimate renames — while silently ignoring still makes
         // fabricating a COMPLETED plan without generation impossible.
-        if ('VALIDATED' === $input->status) {
+        // A rename ECHOES the current status (the input DTO requires it); allow that, but
+        // never let a PUT TRANSITION a non-validated plan to VALIDATED — that's /validate.
+        if ('VALIDATED' === $input->status && ScheduleStatus::VALIDATED !== $entity->getStatus()) {
             throw new ConflictHttpException('Use POST /schedules/{id}/validate to validate a schedule.');
         }
         if (null !== $input->name) {

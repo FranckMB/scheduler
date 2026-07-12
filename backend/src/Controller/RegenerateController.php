@@ -99,10 +99,13 @@ final class RegenerateController extends AbstractController implements SeasonSco
         // PENDING the watchdog reconciles — same trade-off as
         // GenerateScheduleController). No slot copy: the generation payload
         // re-pins the base versions' HARD locks on its own.
+        // Carry the plan's name forward: a regenerated version keeps the manager-chosen
+        // name (unified naming, types-de-planning.md E6) instead of a machine default.
+        $carriedName = '' !== trim($source->getName()) ? $source->getName() : 'Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i');
         $newSchedule = (new Schedule)
             ->setClubId($source->getClubId())
             ->setSeasonId($source->getSeasonId())
-            ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
+            ->setName($carriedName)
             ->setStatus(ScheduleStatus::PENDING);
         $this->entityManager->wrapInTransaction(function () use ($newSchedule): void {
             $this->entityManager->persist($newSchedule);

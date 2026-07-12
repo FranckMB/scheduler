@@ -15,7 +15,12 @@ export interface PlanningNameInput {
   seasonName?: string | null;
 }
 
-const day = (iso?: string | null): string => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) : "");
+// Format a date-only ISO ("2026-07-12") to "jj/mm" from its parts — NOT via new Date(),
+// which parses date-only as UTC midnight and shifts the day in a negative-offset zone.
+const day = (iso?: string | null): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return m ? `${m[3]}/${m[2]}` : "";
+};
 
 export function defaultPlanningName(input: PlanningNameInput): string {
   if (!input.periodMode) {

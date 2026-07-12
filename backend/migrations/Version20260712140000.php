@@ -22,8 +22,14 @@ final class Version20260712140000 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        // Best-effort backfill: a chosen planningName becomes the baseline schedule's name.
-        $this->addSql('UPDATE schedule s SET name = se.planning_name FROM season se WHERE se.baseline_schedule_id = s.id AND se.planning_name IS NOT NULL AND se.planning_name <> \'\'');
+        // Backfill: a chosen planningName becomes the name of the season's LATEST socle
+        // schedule (calendar_entry_id IS NULL) — not only the baseline, so a name chosen
+        // before any validation (baseline still NULL) is not lost on the drop below.
+        $this->addSql(
+            'UPDATE schedule s SET name = se.planning_name FROM season se '
+            . 'WHERE se.planning_name IS NOT NULL AND se.planning_name <> \'\' '
+            . 'AND s.id = (SELECT s2.id FROM schedule s2 WHERE s2.season_id = se.id AND s2.calendar_entry_id IS NULL ORDER BY s2.created_at DESC LIMIT 1)',
+        );
         $this->addSql('ALTER TABLE season DROP planning_name');
     }
 

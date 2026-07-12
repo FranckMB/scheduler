@@ -238,7 +238,8 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
   }
 }
 
-/** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
+/** Rename a schedule — echoes the current status (required by the input DTO); allowed even on a
+ * VALIDATED plan (metadata, not structure — the server permits the status echo, blocks transitions). */
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();
 

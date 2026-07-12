@@ -72,7 +72,6 @@ vi.mock("@/features/auth/queries", () => ({
       seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
     },
   }),
-  useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 beforeEach(() => {
