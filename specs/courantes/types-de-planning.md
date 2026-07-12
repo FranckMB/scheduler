@@ -18,6 +18,7 @@
 | **Structure** | Saisie complète (wizard) | **Verrouillée** : équipes, gymnases/créneaux, coachs non modifiables — **exception : les séances/équipe sont ajustables** (3→2, 0 = pas de créneau cette semaine) | Équipes **cochables/décochables** (défaut : **Fanion + importantes**), créneaux gym **redéfinissables** (prêts mairie), coachs lecture seule |
 | **Contraintes** | Toutes (permanentes) | **C'est ce qui bouge** : héritées + datées, ajustables pour la semaine | Héritées avec défaut intelligent (suit les équipes) + propres à la période |
 | **Ce que ça comble** | Le plan de base de l'année — le process **le mieux rodé** | **Réparer un souci ponctuel** (gym fermé, coach absent) sans toucher le socle | La **reprise progressive** semaine par semaine (vacances, effectif réduit) |
+| **Nom par défaut** | `Planning de la saison 20XX-20XX` | `Ajustement {NOM DU GYMNASE} du {début} au {fin}` | `Planning de vacances de la Toussaint du {début} au {fin}` |
 
 ## Règle transverse : la SEMAINE est l'unité
 
@@ -94,6 +95,7 @@
 | E3 | Défaut équipes reprise = **Fanion seul** | 3 | **Fanion + importantes** (rangs S + A) pré-cochées |
 | E4 | **Séances/équipe non ajustables dans l'overlay** côté UI (moteur OK) | 2 | Exposer l'ajustement 3→2 / 0 séances dans le flux overlay |
 | E5 | Modale **« Demandes des coachs »** absente | 3 | Bouton → modale vide d'abord, puis TODO-list par coach commune aux vacances (futur) |
+| E6 | **Noms par défaut non conformes** — aujourd'hui : socle = `Planning {date du jour}` (`GenerateStep.tsx`), overlay/reprise = titre de la CalendarEntry (`Vacances de la Toussaint`, `Gym Barros fermé`) | 1 + 2 + 3 | Socle : `Planning de la saison 20XX-20XX` · indispo : `Ajustement {GYMNASE} du {début} au {fin}` · reprise : `Planning de vacances de {nom} du {début} au {fin}` |
 
 > Suivi : ces écarts sont des items de backlog dans
 > [`../evolution/roadmap.md`](../evolution/roadmap.md) — ils se cadrent et se livrent
