@@ -110,6 +110,36 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 | **Réglages de période** | Coches équipes/contraintes + créneaux prêtés d'un plan CLOSURE/HOLIDAY. |
 | **Termes bannis** | *baseline*, *planningName*, *overlayScheduleId*, *liveContext*, statuts *VALIDATED/ARCHIVED*. |
 
+### Règles inter-plans & consommateurs (complétées après sweep exhaustif des ~320 usages)
+
+13. **Créer un plan CLOSURE/HOLIDAY exige que le plan SEASON soit pointé** (version
+    choisie non-null) — reprend la règle actuelle « les plans secondaires attendent la
+    validation du socle ».
+14. **Toucher au socle quand des plans secondaires existent = destruction confirmée** :
+    remettre le pointeur SEASON à null (re-travailler) ou le changer, alors que des plans
+    CLOSURE/HOLIDAY existent → avertissement proportionné (« supprime N plannings ») puis
+    **suppression de ces plans et de leurs versions** (reprend les règles 409+confirm
+    reopen/validate actuelles ; « le premier plan secondaire fige le socle » reste vrai).
+15. **Module matchs & radars de conflits** : ils se calculent sur la **version choisie**
+    du plan SEASON ; si le pointeur est null (espace de travail), **repli sur la dernière
+    version terminée** *(défaut proposé — à confirmer au cadrage du lot matchs)*.
+    Consommateurs recensés : `MatchConflictDetector`, `FixtureConflictsController`,
+    `CalendarEntryConflictsController`.
+16. **Onboarding / mode guidé du wizard** : même règle dérivée que le cockpit (inv. 8) —
+    le mode guidé s'arrête quand le plan SEASON a ≥ 1 version terminée (aujourd'hui gaté
+    sur la baseline auto, qui disparaît).
+17. **L'auto-★ reste, l'auto-pointeur meurt** : chaque génération COMPLETED du socle
+    continue de pointer la ★ (sa photo EST la structure chargée) ; c'est l'ancrage
+    automatique du **pointeur de plan** qui disparaît (inv. 2).
+18. **Supprimés avec la reconstruction** : `SetBaselineController` (désigner une baseline
+    sans valider n'a plus de sens — valider = pointer) ; `Season.exportPdfUrl` (orphelin,
+    l'export est par version) ; `PurgeOverlaysCommand` → devient une purge de **plans**
+    échus ; l'erreur 409 `overlays_exist` renvoie des **plans**, plus des schedules.
+19. **RGPD** : la table `plan` entre dans l'export club (`RgpdExportService`) et dans les
+    purges (`SeasonDataPurger`, cascades) comme toute donnée club.
+20. **Validation pré-solve** (`ValidateConstraintsController`) : filtre par **plan**
+    (ses réglages + datées du fait), plus par entry — absorbe la dette P4-13.
+
 ## Mapping actuel → cible
 
 | Aujourd'hui | Cible |
@@ -165,7 +195,15 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
    indisponible pendant une semaine de reprise se gère **dans le plan de reprise
    lui-même** (on y redéfinit les créneaux / une contrainte) — pas de plan CLOSURE
    concurrent, pas de mécanisme dédié.
-2. **Découpage hebdomadaire (E1)** et notification « 2ᵉ planning à compléter » : portés
-   par le modèle (dates propres + N:1 déclencheur) mais **livrés dans un lot ultérieur**.
-3. **Vieilles versions supprimées à la validation** : la photo de la version choisie reste ;
-   confirmer qu'aucun besoin de comparaison post-validation ne nécessite de les garder.
+2. **Découpage hebdomadaire (E1)** — précisé (fondateur, 2026-07-12), livré dans un lot
+   ultérieur mais le modèle le porte dès maintenant :
+   - un découpage qui implique 2 semaines **crée les 2 plans automatiquement** ; le
+     gestionnaire traite le premier ;
+   - le système voit alors que le fait X a « un planning validé + un planning en cours »
+     et **notifie l'action restante** (radar) ;
+   - **un fait est « ajusté »** quand le/les plans qui couvrent le changement sont tous
+     créés **et pointés** — état **dérivé** sur le fait (aucun flag stocké : on compte
+     les plans du fait dont le pointeur est null).
+3. ~~Vieilles versions supprimées à la validation~~ **Tranché (fondateur, 2026-07-12)** :
+   aucun besoin de comparaison post-validation — la suppression des versions non choisies
+   à la validation est confirmée (la photo de la version choisie suffit).
