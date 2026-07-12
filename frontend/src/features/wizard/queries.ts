@@ -195,6 +195,14 @@ export function useCreatePeriodConstraintOverride(calendarEntryId: string) {
   });
 }
 
+export function useUpdatePeriodConstraintOverride(calendarEntryId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: wizardApi.ConstraintPeriodOverridePayload }) => wizardApi.updateConstraintPeriodOverride(id, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+  });
+}
+
 export function useDeletePeriodConstraintOverride(calendarEntryId: string) {
   const queryClient = useQueryClient();
   return useMutation({

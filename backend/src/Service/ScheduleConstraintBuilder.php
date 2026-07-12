@@ -161,11 +161,15 @@ final class ScheduleConstraintBuilder
      * Build the engine payload for a period OVERLAY (palier B). BYPASSES the
      * schedule-input cache (overlays are rare; the base key stays clean).
      *
-     * - closure (additive): permanent + dated constraints, and each closed venue
-     *   is expanded into per-team FACILITY HARD `forbiddenVenueId` constraints —
-     *   the engine understands `forbiddenVenueId` (→ forbidden_assignments) but
-     *   NOT `config.type=venue_closed`, so the expansion carries the semantics.
-     * - holiday (partial replacement): dated constraints only, full structure.
+     * - closure (fermeture): ALL permanent constraints kept by default (minus those
+     *   explicitly disabled) + dated ; each closed venue is expanded into per-team
+     *   FACILITY HARD `forbiddenVenueId` constraints — the engine understands
+     *   `forbiddenVenueId` (→ forbidden_assignments) but NOT `config.type=venue_closed`.
+     * - holiday (reprise): permanent constraints inherited with a SMART default that
+     *   follows the team selection (inheritedPermanents, reprise predicate) + dated.
+     *
+     * In both, a permanent/dated TEAM-scoped constraint whose team was deactivated for
+     * the period is dropped (its team is absent from the payload — no ghost teamId).
      *
      * slotTemplates are scoped to THIS overlay schedule (its own locks), not the
      * base plan's — the base build (buildForClubSeason) is untouched.
@@ -184,14 +188,36 @@ final class ScheduleConstraintBuilder
         $periodType = $entry->getPeriodType();
 
         $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
+
+        // Period-editable structure: sparse per-team overrides for THIS period. Loaded
+        // BEFORE the constraint match — the reprise default follows the team selection
+        // (a constraint targeting a deactivated team is dropped by default).
+        $teamOverrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $entry->getId()]);
+        $deactivatedTeamIds = [];
+        $this->currentSessionOverrides = [];
+        foreach ($teamOverrides as $teamOverride) {
+            if (!$teamOverride->isActive()) {
+                $deactivatedTeamIds[$teamOverride->getTeamId()] = true;
+            }
+            if (null !== $teamOverride->getSessionsPerWeek()) {
+                $this->currentSessionOverrides[$teamOverride->getTeamId()] = $teamOverride->getSessionsPerWeek();
+            }
+        }
+
         $constraints = match ($periodType) {
-            // Permanent constraints the manager disabled for THIS period are dropped
-            // from the overlay (sparse diff layer — the base plan is never touched).
+            // Fermeture: inherit ALL permanent constraints (kept by default), minus those
+            // the manager explicitly disabled for the window (sparse diff — base untouched).
             CalendarEntryPeriodType::CLOSURE => array_merge(
-                $this->activePermanentForPeriod($clubId, $seasonId, $entry->getId(), $em),
+                $this->inheritedPermanents($clubId, $seasonId, $entry->getId(), static fn (): bool => true, $em),
                 $dated,
             ),
-            CalendarEntryPeriodType::HOLIDAY => $dated,
+            // Reprise: inherit the socle's permanent constraints with a SMART default that
+            // follows the team selection (CLUB/COACH/TEAM kept, FACILITY dropped) — an explicit
+            // override deviates ; the post-filter below drops a paused team's TEAM constraint.
+            CalendarEntryPeriodType::HOLIDAY => array_merge(
+                $this->inheritedPermanents($clubId, $seasonId, $entry->getId(), static fn (Constraint $c): bool => ConstraintScope::FACILITY !== $c->getScope(), $em),
+                $dated,
+            ),
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
         };
 
@@ -211,19 +237,7 @@ final class ScheduleConstraintBuilder
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
 
-        // Period-editable structure: sparse per-team overrides for THIS period —
-        // drop deactivated teams, and override sessions/week where set (else seasonal).
-        $overrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $entry->getId()]);
-        $deactivatedTeamIds = [];
-        $this->currentSessionOverrides = [];
-        foreach ($overrides as $override) {
-            if (!$override->isActive()) {
-                $deactivatedTeamIds[$override->getTeamId()] = true;
-            }
-            if (null !== $override->getSessionsPerWeek()) {
-                $this->currentSessionOverrides[$override->getTeamId()] = $override->getSessionsPerWeek();
-            }
-        }
+        // Deactivated teams (computed above) are dropped from the payload.
         $teams = array_values(array_filter(
             $this->findByClubSeason(Team::class, $clubId, $seasonId, $em),
             static fn (Team $team): bool => !isset($deactivatedTeamIds[$team->getId()]),
@@ -255,6 +269,21 @@ final class ScheduleConstraintBuilder
                 $payload['constraints'],
                 $this->expandClosedVenues($dated, $teams),
             );
+        }
+
+        // Drop any SERIALIZED TEAM row targeting a team deactivated for the period — an
+        // original TEAM constraint, OR a CLUB/tag constraint expanded per-team during
+        // serialization (serializeConstraintRow emits scope=TEAM + scopeTargetId=teamId).
+        // The team is absent from the payload roster, so a ghost teamId here could turn the
+        // solve INFEASIBLE. Filtering the serialized payload (not the entity list) catches
+        // the CLUB+targetTag expansion the entity-level scope check would miss.
+        if ([] !== $deactivatedTeamIds && \is_array($payload['constraints'])) {
+            $payload['constraints'] = array_values(array_filter(
+                $payload['constraints'],
+                static fn (mixed $row): bool => !\is_array($row)
+                    || ConstraintScope::TEAM->value !== ($row['scope'] ?? null)
+                    || !isset($deactivatedTeamIds[(string) ($row['scopeTargetId'] ?? '')]),
+            ));
         }
 
         return $payload;
@@ -370,24 +399,28 @@ final class ScheduleConstraintBuilder
     }
 
     /**
-     * Permanent (seasonal) constraints minus those a ConstraintPeriodOverride disabled
-     * for this period. Absent row = the constraint applies as usual; only isActive=false
-     * drops it. The base plan and the Constraint's own isActive are untouched.
+     * Permanent (seasonal) constraints inherited into a period overlay. A
+     * ConstraintPeriodOverride row is an EXPLICIT deviation (isActive wins); with no row,
+     * $keepByDefault decides. The base plan and the Constraint's own isActive are untouched.
+     *   - fermeture: keep all → $keepByDefault = static fn () => true.
+     *   - reprise:   FACILITY dropped, rest kept → static fn (c) => FACILITY !== c->getScope().
+     * The "a TEAM constraint of a DEACTIVATED team is dropped" rule lives in ONE place — the
+     * unconditional post-filter in buildForOverlay — so neither default handles it here.
+     *
+     * @param callable(Constraint): bool $keepByDefault
      *
      * @return array<Constraint>
      */
-    private function activePermanentForPeriod(string $clubId, string $seasonId, string $entryId, EntityManagerInterface $em): array
+    private function inheritedPermanents(string $clubId, string $seasonId, string $entryId, callable $keepByDefault, EntityManagerInterface $em): array
     {
-        $disabled = [];
+        $overrides = [];
         foreach ($em->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $entryId]) as $override) {
-            if (!$override->isActive()) {
-                $disabled[$override->getConstraintId()] = true;
-            }
+            $overrides[$override->getConstraintId()] = $override->isActive();
         }
 
         return array_values(array_filter(
             $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
-            static fn (Constraint $c): bool => !isset($disabled[$c->getId()]),
+            static fn (Constraint $c): bool => \array_key_exists($c->getId(), $overrides) ? $overrides[$c->getId()] : $keepByDefault($c),
         ));
     }
 

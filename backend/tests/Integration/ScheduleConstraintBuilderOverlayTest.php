@@ -98,11 +98,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
         $payload = $this->builder->buildForOverlay($schedule, $entry);
 
-        // Holiday = dated-only: no permanent constraint, no forbidden expansion.
+        // Reprise inherits the CLUB permanent (smart default = kept), but the closure-only
+        // forbidden-venue expansion never runs for a holiday.
         $names = array_map(static fn (array $c): string => $c['name'] ?? '', $payload['constraints']);
-        self::assertNotContains('Contrainte permanente', $names);
+        self::assertContains('Contrainte permanente', $names, 'a CLUB permanent is inherited in a reprise');
         $forbidden = array_filter($payload['constraints'], static fn (array $c): bool => isset($c['config']['forbiddenVenueId']));
-        self::assertSame([], array_values($forbidden));
+        self::assertSame([], array_values($forbidden), 'no forbidden-venue expansion on a holiday');
     }
 
     public function testOverlayBuildDoesNotWriteBaseCache(): void
@@ -250,6 +251,106 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertContains('Contrainte permanente', $overlayNames, 'only isActive=false drops the constraint');
     }
 
+    public function testRepriseInheritsPermanentsWithSmartDefault(): void
+    {
+        [$club, $season] = $this->seed();
+        $active = $this->team($club, $season, 'SM1'); // reprend (Fanion, actif)
+        $paused = $this->team($club, $season, 'U11'); // en pause pour la période
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null);
+        $this->permanentScoped($club, $season, ConstraintScope::CLUB, null, 'Club perm');
+        $this->permanentScoped($club, $season, ConstraintScope::TEAM, $active->getId(), 'Team active perm');
+        $this->permanentScoped($club, $season, ConstraintScope::TEAM, $paused->getId(), 'Team paused perm');
+        $this->permanentScoped($club, $season, ConstraintScope::FACILITY, 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'Facility perm');
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertContains('Club perm', $names, 'CLUB kept by default in a reprise');
+        self::assertContains('Team active perm', $names, 'a TEAM constraint of a team that reprend is kept');
+        self::assertNotContains('Team paused perm', $names, 'a TEAM constraint of a paused team is dropped by default');
+        self::assertNotContains('Facility perm', $names, 'a FACILITY constraint is dropped by default in a reprise');
+    }
+
+    public function testRepriseOverrideDeviatesFromDefault(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'SM1');
+        $entry = $this->holidayPeriod($club, $season);
+        $clubC = $this->permanentScoped($club, $season, ConstraintScope::CLUB, null, 'Club perm');
+        $facilityC = $this->permanentScoped($club, $season, ConstraintScope::FACILITY, 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'Facility perm');
+        $this->constraintOverride($club, $season, $entry, $clubC, false); // drop a CLUB kept by default
+        $this->constraintOverride($club, $season, $entry, $facilityC, true); // keep a FACILITY dropped by default
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertNotContains('Club perm', $names, 'an explicit isActive=false drops a CLUB kept by default');
+        self::assertContains('Facility perm', $names, 'an explicit isActive=true keeps a FACILITY dropped by default');
+    }
+
+    public function testRepriseDropsTeamConstraintForPausedTeamEvenIfKept(): void
+    {
+        [$club, $season] = $this->seed();
+        $paused = $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null); // en pause
+        $c = $this->permanentScoped($club, $season, ConstraintScope::TEAM, $paused->getId(), 'Paused team perm');
+        $this->constraintOverride($club, $season, $entry, $c, true); // le gestionnaire la GARDE explicitement
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertNotContains('Paused team perm', $names, 'a TEAM constraint targeting a paused team never ships (no ghost teamId), even if explicitly kept');
+    }
+
+    public function testRepriseDropsTagExpandedRowForPausedTeam(): void
+    {
+        [$club, $season] = $this->seed();
+        $active = $this->team($club, $season, 'SM1');
+        $paused = $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null); // en pause
+
+        // A club-wide constraint targeting a tag BOTH teams carry → expands per-team.
+        $tag = (new \App\Entity\TeamTag)->setClubId($club->getId())->setName('loisir')->setIsSystem(false);
+        $this->em->persist($tag);
+        $this->em->flush();
+        foreach ([$active, $paused] as $t) {
+            $this->em->persist((new \App\Entity\TeamTagAssignment)->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
+        }
+        $c = new Constraint;
+        $c->setClubId($club->getId());
+        $c->setSeasonId($season->getId());
+        $c->setName('Tag rule');
+        $c->setScope(ConstraintScope::CLUB);
+        $c->setFamily(ConstraintFamily::TIME);
+        $c->setRuleType(ConstraintRuleType::HARD);
+        $c->setConfig(['targetTag' => 'loisir']);
+        $this->em->persist($c);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $rows = $this->builder->buildForOverlay($schedule, $entry)['constraints'];
+        $targets = array_map(static fn (array $r): string => $r['scopeTargetId'] ?? '', $rows);
+        self::assertContains($active->getId(), $targets, 'the tag rule ships for the active team');
+        self::assertNotContains($paused->getId(), $targets, 'the tag-expanded row for a paused team is dropped (no ghost teamId)');
+    }
+
+    public function testClosureKeepsFacilityPermanentByDefault(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'SM1');
+        $entry = $this->closurePeriod($club, $season);
+        $this->permanentScoped($club, $season, ConstraintScope::FACILITY, 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'Facility perm');
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        // Fermeture unchanged: the smart default is reprise-only; closure keeps all permanents.
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertContains('Facility perm', $names, 'a closure keeps all permanent constraints by default (B3+F2 unchanged)');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -377,6 +478,22 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $o->setConstraintId($constraint->getId());
         $o->setIsActive($isActive);
         $this->em->persist($o);
+    }
+
+    private function permanentScoped(Club $club, Season $season, ConstraintScope $scope, ?string $targetId, string $name): Constraint
+    {
+        $c = new Constraint;
+        $c->setClubId($club->getId());
+        $c->setSeasonId($season->getId());
+        $c->setName($name);
+        $c->setScope($scope);
+        $c->setScopeTargetId($targetId);
+        $c->setFamily(ConstraintScope::FACILITY === $scope ? ConstraintFamily::FACILITY : ConstraintFamily::TIME);
+        $c->setRuleType(ConstraintRuleType::HARD);
+        $c->setConfig([]);
+        $this->em->persist($c);
+
+        return $c;
     }
 
     private function closurePeriod(Club $club, Season $season): CalendarEntry
