@@ -14,6 +14,7 @@ const overridesState: { data: Array<{ id: string; teamId: string; isActive: bool
 const constraintsState: { data: Array<{ id: string; name: string; ruleType: string; scope?: string; scopeTargetId?: string | null }> } = { data: [] };
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
+const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
@@ -25,7 +26,7 @@ vi.mock("../queries", () => ({
     { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
   ] }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
-  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value }),
+  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value }),
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
@@ -54,6 +55,7 @@ afterEach(() => {
   constraintsState.data = [];
   constraintOverridesState.data = [];
   teamOverridesLoadingState.value = false;
+  teamOverridesErrorState.value = false;
   constraintOverridesLoadingState.value = false;
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
@@ -219,6 +221,17 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     expect(checkbox).toBeDisabled();
     await userEvent.click(checkbox);
     expect(createConstraintOverride).not.toHaveBeenCalled();
+  });
+
+  it("locks only TEAM constraints on a team-overrides fetch error (non-TEAM stay usable)", () => {
+    teamOverridesErrorState.value = true; // can't tell which teams are paused
+    constraintsState.data = [
+      { id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" },
+      { id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null },
+    ];
+    render(<PeriodConstraints calendarEntryId="e1" />); // closure
+    expect(screen.getByRole("checkbox", { name: "U13 rule appliquée cette période" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Club rule appliquée cette période" })).not.toBeDisabled();
   });
 
   it("a TEAM constraint of a paused team is non-applicable (disabled, struck, never toggled)", async () => {

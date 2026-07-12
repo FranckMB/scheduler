@@ -340,8 +340,10 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   // Off an overlay period, null disables both queries (no wasted fetch).
   const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
-  // and dropped from the payload server-side — the checklist must mirror that.
-  const { data: teamOverrides = [], isLoading: teamOverridesLoading } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
+  // and dropped from the payload server-side — the checklist must mirror that. On a fetch
+  // error we can't tell which teams are paused, so a TEAM constraint's applicability is
+  // UNKNOWN → its toggle is disabled (non-TEAM scopes are unaffected and stay usable).
+  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
   const update = useUpdatePeriodConstraintOverride(calendarEntryId);
   const del = useDeletePeriodConstraintOverride(calendarEntryId);
@@ -379,11 +381,14 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const mutating = inflight.size > 0;
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
   // drops the row (stays sparse); a deviation upserts (create, or PUT if a row exists).
+  // A TEAM constraint whose applicability can't be determined (team overrides failed to load)
+  // is locked — non-TEAM scopes don't depend on the team selection and stay usable.
+  const teamStateUnknown = (c: Constraint): boolean => teamOverridesError && "TEAM" === c.scope;
   const toggle = (c: Constraint, desired: boolean) => {
     // overridesError: without the override list we can't tell create-vs-update, so a toggle
     // would POST an existing row → 422. Render read-only until it reloads (P4-1 query-error UX).
-    if (mutating || notApplicable(c) || overridesError) {
-      return; // a write is settling, the constraint can't ship, or overrides are unavailable
+    if (mutating || notApplicable(c) || overridesError || teamStateUnknown(c)) {
+      return; // a write is settling, the constraint can't ship / is unknown, or overrides are unavailable
     }
     const settle = () =>
       setInflight((m) => {
@@ -427,7 +432,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} disabled={mutating || naf || overridesError} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={mutating || naf || overridesError || teamStateUnknown(c)} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
                   {naf ? <span className="text-xs text-muted-foreground">(équipe en pause)</span> : null}
                 </label>
