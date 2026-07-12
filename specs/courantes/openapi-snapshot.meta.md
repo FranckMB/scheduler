@@ -2,6 +2,10 @@ Last verified @ feat/rgpd-consent-privacy 2026-07-11
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
 Changements récents :
+- **période : flag d'initialisation (2026-07-12)** : `CalendarEntry` expose
+  `teamSelectionInitialized` (read-only) — vrai dès la 1re surcharge d'équipe
+  (`TeamPeriodOverride`). Le wizard ne pré-remplit « Fanion seul » que si faux →
+  plus de re-seed après un reset « tout actif » ou un reload (survit au F5).
 - **structure de période éditable (2026-07-12)** : `VenueTrainingSlot` gagne
   `calendarEntryId` (créneau scopé période, additif ; listing par défaut = saisonnier
   `IS NULL`, `?calendarEntryId=` liste ceux d'une période). Nouvelle ressource

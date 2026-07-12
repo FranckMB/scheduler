@@ -9,6 +9,7 @@ const createSlot = vi.fn();
 const deleteSlot = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
+const entryState: { data: { teamSelectionInitialized: boolean } | undefined } = { data: { teamSelectionInitialized: false } };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
@@ -26,7 +27,10 @@ vi.mock("../queries", () => ({
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
 }));
-vi.mock("@/features/cockpit/queries", () => ({ useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }) }));
+vi.mock("@/features/cockpit/queries", () => ({
+  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }),
+  useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
+}));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { __resetPeriodSeed, PeriodTeams, PeriodVenues } from "./PeriodStructure";
@@ -35,6 +39,7 @@ afterEach(() => {
   __resetPeriodSeed();
   overridesState.data = [];
   conflictState.venueIds = [];
+  entryState.data = { teamSelectionInitialized: false };
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
@@ -49,6 +54,12 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
     // U13 (tier 2) is deactivated by default; SM1 (Fanion) is not touched.
     expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "fresh-seed", teamId: "t2", isActive: false });
     expect(createOverride).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT seed a period already configured server-side (teamSelectionInitialized)", () => {
+    entryState.data = { teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
+    render(<PeriodTeams calendarEntryId="already-init" />);
+    expect(createOverride).not.toHaveBeenCalled();
   });
 
   it("does NOT re-seed on a re-render (idempotent — guards the removed retry double-write)", () => {

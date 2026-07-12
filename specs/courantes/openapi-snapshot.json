@@ -9813,6 +9813,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -9970,6 +9975,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -10044,6 +10054,11 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "teamSelectionInitialized": {
+                                "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
+                                "default": false,
+                                "type": "boolean"
                             }
                         }
                     }
@@ -16016,6 +16031,13 @@
                     "capacity": {
                         "default": 1,
                         "type": "integer"
+                    },
+                    "calendarEntryId": {
+                        "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -16070,6 +16092,17 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "description": "Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive).",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -16111,6 +16144,13 @@
                     "capacity": {
                         "default": 1,
                         "type": "integer"
+                    },
+                    "calendarEntryId": {
+                        "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -16157,6 +16197,13 @@
                             "capacity": {
                                 "default": 1,
                                 "type": "integer"
+                            },
+                            "calendarEntryId": {
+                                "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         }
                     }

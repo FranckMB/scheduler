@@ -68,6 +68,10 @@ class CalendarEntryResource
     #[Groups(['read'])]
     public ?string $createdBy = null;
 
+    /** Period-editable structure: has this period's team selection been configured once (seed guard)? */
+    #[Groups(['read'])]
+    public bool $teamSelectionInitialized = false;
+
     public static function fromEntity(CalendarEntry $entity): self
     {
         $dto = new self;
@@ -85,6 +89,7 @@ class CalendarEntryResource
         $dto->status = $entity->getStatus()->value;
         $dto->overlayScheduleId = $entity->getOverlayScheduleId();
         $dto->createdBy = $entity->getCreatedBy();
+        $dto->teamSelectionInitialized = $entity->isTeamSelectionInitialized();
 
         return $dto;
     }

@@ -76,6 +76,16 @@ class CalendarEntry implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 80, nullable: true)]
     private ?string $createdBy = null;
 
+    /**
+     * Period-editable structure: has the manager configured this period's team
+     * selection at least once? Distinguishes a FRESH period (seed the Fanion-only
+     * default) from one set back to all-active (0 sparse overrides, NOT to be
+     * re-seeded). Set true on the first TeamPeriodOverride write; survives reload
+     * (unlike a client-side guard).
+     */
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $teamSelectionInitialized = false;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -271,6 +281,18 @@ class CalendarEntry implements TenantOwnedInterface
     public function setCreatedBy(?string $createdBy): self
     {
         $this->createdBy = $createdBy;
+
+        return $this;
+    }
+
+    public function isTeamSelectionInitialized(): bool
+    {
+        return $this->teamSelectionInitialized;
+    }
+
+    public function setTeamSelectionInitialized(bool $teamSelectionInitialized): self
+    {
+        $this->teamSelectionInitialized = $teamSelectionInitialized;
 
         return $this;
     }

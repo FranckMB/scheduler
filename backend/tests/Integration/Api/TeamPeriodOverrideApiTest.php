@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -75,6 +78,22 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         // A second POST for the same (period, team) → clean 422, not a 500 from the DB unique index.
         $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 2]);
         self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testFirstOverrideMarksThePeriodTeamSelectionInitialized(): void
+    {
+        $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Reprise')
+            ->setStartDate(new DateTimeImmutable('2026-01-05'))->setEndDate(new DateTimeImmutable('2026-01-11'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        self::assertFalse($entry->isTeamSelectionInitialized(), 'a fresh period is not yet configured');
+
+        $this->post(['calendarEntryId' => $entry->getId(), 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->client->request('GET', '/api/calendar_entries/' . $entry->getId(), [], [], $this->headers());
+        self::assertTrue(json_decode((string) $this->client->getResponse()->getContent(), true)['teamSelectionInitialized'], 'the first override marks the period configured');
     }
 
     protected function setUp(): void
