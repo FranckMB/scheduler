@@ -1,6 +1,6 @@
 # ADR-0002 — Pattern « Plan » : un plan nommé, des versions, un pointeur
 
-- **Status**: proposed — Date: 2026-07-12
+- **Status**: accepted — Date: 2026-07-12
 - **Décidé avec le fondateur** point par point (session 2026-07-12) ; référence produit :
   [`specs/courantes/types-de-planning.md`](../../specs/courantes/types-de-planning.md).
 
