@@ -338,7 +338,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const isOverlay = isClosure || isReprise;
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
   // Off an overlay period, null disables both queries (no wasted fetch).
-  const { data: overrides = [], isLoading: overridesLoading } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
   // and dropped from the payload server-side — the checklist must mirror that.
   const { data: teamOverrides = [], isLoading: teamOverridesLoading } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
@@ -380,8 +380,10 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
   // drops the row (stays sparse); a deviation upserts (create, or PUT if a row exists).
   const toggle = (c: Constraint, desired: boolean) => {
-    if (mutating || notApplicable(c)) {
-      return; // a write is settling, or the constraint can't ship — ignore the click
+    // overridesError: without the override list we can't tell create-vs-update, so a toggle
+    // would POST an existing row → 422. Render read-only until it reloads (P4-1 query-error UX).
+    if (mutating || notApplicable(c) || overridesError) {
+      return; // a write is settling, the constraint can't ship, or overrides are unavailable
     }
     const settle = () =>
       setInflight((m) => {
@@ -425,7 +427,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} disabled={mutating || naf} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={mutating || naf || overridesError} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
                   {naf ? <span className="text-xs text-muted-foreground">(équipe en pause)</span> : null}
                 </label>
