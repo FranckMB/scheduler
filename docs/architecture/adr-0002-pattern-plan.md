@@ -83,6 +83,21 @@ Schedule (= Version)                    ← existant, recentré
     CLOSURE `Ajustement {gymnase} du {début} au {fin}` · HOLIDAY
     `Planning de vacances de {nom} du {début} au {fin}`.
 
+### Rôle de `CalendarEntry` (conservée, amincie)
+
+`CalendarEntry` = **le calendrier**, pas le planning. Elle porte le **FAIT** ; le Plan porte
+la **RÉPONSE**. Découle de l'invariant fondateur « l'indisponibilité est déclarée d'abord,
+puis le gestionnaire décide » : le fait existe avant tout plan, et parfois sans plan
+(indispo ignorée, semaine blanche, event, cutoff).
+
+- **Garde** : les événements (`kind=event`, marqueurs AG/tournoi) ; la déclaration des
+  périodes (closure/holiday/cutoff/mutualisation) ; l'affichage cockpit + radar ; le lien
+  vacances scolaires (`schoolHolidayId`, zone) et les relances ; les contraintes **datées
+  du fait** (« Barros fermé ») qui alimentent le radar de conflits.
+- **Perd** (part au Plan) : `overlayScheduleId` (pointeur), `teamSelectionInitialized`
+  (seed), la relation 1:1 avec un planning (→ 0..N plans par entry), et l'accroche des
+  réglages de période.
+
 ### Vocabulaire (fait foi — à reporter dans `docs/glossary.md` à l'implémentation)
 
 | Terme | Définition |
