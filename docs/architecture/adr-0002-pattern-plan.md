@@ -120,21 +120,23 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
     CLOSURE/HOLIDAY existent → avertissement proportionné (« supprime N plannings ») puis
     **suppression de ces plans et de leurs versions** (reprend les règles 409+confirm
     reopen/validate actuelles ; « le premier plan secondaire fige le socle » reste vrai).
-15. **Module matchs & radars de conflits** : ils se calculent sur la **version choisie**
-    du plan SEASON ; si le pointeur est null (espace de travail), **repli sur la dernière
-    version terminée** *(défaut proposé — à confirmer au cadrage du lot matchs)*.
-    Consommateurs recensés : `MatchConflictDetector`, `FixtureConflictsController`,
-    `CalendarEntryConflictsController`.
+15. **Module matchs & radars de conflits** : ils **lisent le plan SEASON** (sa version
+    choisie). Le comportement en espace de travail (pointeur null) sera **confirmé au
+    cadrage du module matchs**. Consommateurs recensés : `MatchConflictDetector`,
+    `FixtureConflictsController`, `CalendarEntryConflictsController`.
 16. **Onboarding / mode guidé du wizard** : même règle dérivée que le cockpit (inv. 8) —
     le mode guidé s'arrête quand le plan SEASON a ≥ 1 version terminée (aujourd'hui gaté
     sur la baseline auto, qui disparaît).
 17. **L'auto-★ reste, l'auto-pointeur meurt** : chaque génération COMPLETED du socle
     continue de pointer la ★ (sa photo EST la structure chargée) ; c'est l'ancrage
     automatique du **pointeur de plan** qui disparaît (inv. 2).
-18. **Supprimés avec la reconstruction** : `SetBaselineController` (désigner une baseline
-    sans valider n'a plus de sens — valider = pointer) ; `Season.exportPdfUrl` (orphelin,
-    l'export est par version) ; `PurgeOverlaysCommand` → devient une purge de **plans**
-    échus ; l'erreur 409 `overlays_exist` renvoie des **plans**, plus des schedules.
+18. **Supprimés avec la reconstruction** (« on ne parle plus de baseline ») :
+    `SetBaselineController` (désigner une référence sans valider n'a plus de sens —
+    valider = pointer) ; le champ `Season.exportPdfUrl` (orphelin) — **l'export « du
+    plan » = l'export de sa version choisie** (le fichier porte le **nom du Plan**,
+    inv. 11 ; le lien d'export vit sur la version, comme aujourd'hui) ;
+    `PurgeOverlaysCommand` → devient une purge de **plans** échus ; l'erreur 409
+    `overlays_exist` renvoie des **plans**, plus des schedules.
 19. **RGPD** : la table `plan` entre dans l'export club (`RgpdExportService`) et dans les
     purges (`SeasonDataPurger`, cascades) comme toute donnée club.
 20. **Validation pré-solve** (`ValidateConstraintsController`) : filtre par **plan**
