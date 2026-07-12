@@ -17,6 +17,8 @@ export interface CalendarEntry {
   status: CalendarEntryStatus;
   overlayScheduleId: string | null;
   createdBy: string | null;
+  /** Period-editable structure: has this period's team selection been configured once (seed guard)? */
+  teamSelectionInitialized?: boolean;
 }
 
 export interface SchoolHoliday {

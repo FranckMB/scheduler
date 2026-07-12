@@ -1,7 +1,7 @@
 import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 
-import { useEntryConflicts } from "@/features/cockpit/queries";
+import { useCalendarEntry, useEntryConflicts } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -29,10 +29,10 @@ import { SectionCountTitle } from "./StructureSummary";
 
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
-// Which periods this session has already auto-seeded (Fanion-only). Module-level so
-// it survives a step remount (WizardLayout unmounts inactive steps) — the only signal
-// that distinguishes "fresh period" from "manager cleared all overrides". A period is
-// claimed ONCE and never un-claimed (un-claiming on a partial failure would re-run the
+// In-session guard against re-seeding between firing the Fanion-only seed and the
+// entry query reflecting teamSelectionInitialized (the DURABLE, reload-proof signal).
+// Module-level so it survives a step remount (WizardLayout unmounts inactive steps).
+// Claimed ONCE and never un-claimed (un-claiming on a partial failure would re-run the
 // seed against a still-empty cache and double-write): a failed seed is best-effort, the
 // manager completes it with the "Fanion seul" ramp.
 const seededPeriods = new Set<string>();
@@ -53,6 +53,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
   const { data: overrides = [], isLoading } = useTeamPeriodOverrides(calendarEntryId);
+  const { data: entry, isLoading: entryLoading } = useCalendarEntry(calendarEntryId);
   const create = useCreateTeamPeriodOverride(calendarEntryId);
   const update = useUpdateTeamPeriodOverride(calendarEntryId);
   const del = useDeleteTeamPeriodOverride(calendarEntryId);
@@ -88,8 +89,12 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // partial failure re-runs the effect against a still-empty override cache and
   // double-writes the teams that already succeeded. On a failure the global toast
   // informs; the manager applies "Fanion seul" (ramp) to complete.
+  //
+  // The DURABLE signal is entry.teamSelectionInitialized (server-set on the first
+  // override, survives reload); seededPeriods only guards the in-session window
+  // between firing the seed and the entry query reflecting the flag.
   useEffect(() => {
-    if (isLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || seededPeriods.has(calendarEntryId)) {
+    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || true === entry?.teamSelectionInitialized || seededPeriods.has(calendarEntryId)) {
       return;
     }
     seededPeriods.add(calendarEntryId);
@@ -100,7 +105,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
     setBusy(true);
     void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [isLoading, teams, overrides, topTierId, calendarEntryId, create]);
+  }, [isLoading, entryLoading, entry, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
