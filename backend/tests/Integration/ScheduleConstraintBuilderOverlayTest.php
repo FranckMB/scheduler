@@ -289,6 +289,21 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertContains('Facility perm', $names, 'an explicit isActive=true keeps a FACILITY dropped by default');
     }
 
+    public function testRepriseDropsTeamConstraintForPausedTeamEvenIfKept(): void
+    {
+        [$club, $season] = $this->seed();
+        $paused = $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null); // en pause
+        $c = $this->permanentScoped($club, $season, ConstraintScope::TEAM, $paused->getId(), 'Paused team perm');
+        $this->constraintOverride($club, $season, $entry, $c, true); // le gestionnaire la GARDE explicitement
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertNotContains('Paused team perm', $names, 'a TEAM constraint targeting a paused team never ships (no ghost teamId), even if explicitly kept');
+    }
+
     public function testClosureKeepsFacilityPermanentByDefault(): void
     {
         [$club, $season] = $this->seed();

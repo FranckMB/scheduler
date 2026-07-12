@@ -339,7 +339,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
   // Off an overlay period, null disables both queries (no wasted fetch).
   const { data: overrides = [] } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
-  const { data: teamOverrides = [] } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
+  const { data: teamOverrides = [], isLoading: teamOverridesLoading } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
   const update = useUpdatePeriodConstraintOverride(calendarEntryId);
   const del = useDeletePeriodConstraintOverride(calendarEntryId);
@@ -403,7 +403,9 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
       <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
-      {isLoading ? null : 0 === constraints.length ? (
+      {/* In a reprise the default follows the team selection, so wait for team overrides
+          too — else a paused team's constraint flashes CHECKED and a click persists a wrong row. */}
+      {isLoading || (isReprise && teamOverridesLoading) ? null : 0 === constraints.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">

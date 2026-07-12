@@ -161,11 +161,15 @@ final class ScheduleConstraintBuilder
      * Build the engine payload for a period OVERLAY (palier B). BYPASSES the
      * schedule-input cache (overlays are rare; the base key stays clean).
      *
-     * - closure (additive): permanent + dated constraints, and each closed venue
-     *   is expanded into per-team FACILITY HARD `forbiddenVenueId` constraints —
-     *   the engine understands `forbiddenVenueId` (→ forbidden_assignments) but
-     *   NOT `config.type=venue_closed`, so the expansion carries the semantics.
-     * - holiday (partial replacement): dated constraints only, full structure.
+     * - closure (fermeture): ALL permanent constraints kept by default (minus those
+     *   explicitly disabled) + dated ; each closed venue is expanded into per-team
+     *   FACILITY HARD `forbiddenVenueId` constraints — the engine understands
+     *   `forbiddenVenueId` (→ forbidden_assignments) but NOT `config.type=venue_closed`.
+     * - holiday (reprise): permanent constraints inherited with a SMART default that
+     *   follows the team selection (activePermanentForReprise) + dated.
+     *
+     * In both, a permanent/dated TEAM-scoped constraint whose team was deactivated for
+     * the period is dropped (its team is absent from the payload — no ghost teamId).
      *
      * slotTemplates are scoped to THIS overlay schedule (its own locks), not the
      * base plan's — the base build (buildForClubSeason) is untouched.
@@ -216,6 +220,14 @@ final class ScheduleConstraintBuilder
             ),
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
         };
+
+        // A TEAM-scoped constraint (permanent kept via override, or dated) whose team was
+        // deactivated for the period targets a team absent from the payload — drop it so
+        // no HARD constraint ships a ghost teamId (which could turn the solve INFEASIBLE).
+        $constraints = array_values(array_filter(
+            $constraints,
+            static fn (Constraint $c): bool => ConstraintScope::TEAM !== $c->getScope() || !isset($deactivatedTeamIds[(string) $c->getScopeTargetId()]),
+        ));
 
         // Period-editable structure: the overlay's slots are ADDITIVE — the still-valid
         // SEASONAL slots (calendarEntryId NULL) plus this period's OWN slots (a gym lent
