@@ -151,12 +151,15 @@ export function useCreateTeamPeriodOverride(calendarEntryId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: wizardApi.TeamPeriodOverridePayload) => wizardApi.createTeamPeriodOverride(body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] });
-      // The first override flips CalendarEntry.teamSelectionInitialized server-side —
-      // refresh the entry so the seed guard sees it (survives reload).
-      void queryClient.invalidateQueries({ queryKey: ["calendar-entries", "detail", calendarEntryId] });
-    },
+    // Return the invalidation promise so mutateAsync awaits the refetch — batch
+    // seed/ramp keep `busy` until the overrides list is fresh (no click on stale state).
+    // The first override flips CalendarEntry.teamSelectionInitialized server-side, so
+    // refresh the entry too (the seed guard survives reload off it).
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+        queryClient.invalidateQueries({ queryKey: ["calendar-entries", "detail", calendarEntryId] }),
+      ]),
   });
 }
 

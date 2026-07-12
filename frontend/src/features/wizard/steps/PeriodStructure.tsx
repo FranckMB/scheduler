@@ -94,7 +94,11 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // override, survives reload); seededPeriods only guards the in-session window
   // between firing the seed and the entry query reflecting the flag.
   useEffect(() => {
-    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || true === entry?.teamSelectionInitialized || seededPeriods.has(calendarEntryId)) {
+    // `false !== entry?.teamSelectionInitialized` bails on undefined too: a fetch
+    // error / 404 leaves entry undefined, and we must NOT seed an unknown period
+    // (it could be an already-configured one whose GET blipped) — only seed when the
+    // entry loaded AND is explicitly uninitialised.
+    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== entry?.teamSelectionInitialized || seededPeriods.has(calendarEntryId)) {
       return;
     }
     seededPeriods.add(calendarEntryId);
