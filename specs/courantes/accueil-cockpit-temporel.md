@@ -7,6 +7,8 @@
 > **Rattachement roadmap** : `roadmap.md` §2 (Modèle temporel & périodes d'exception — la
 > plus grosse zone 🔴). **Vision d'origine** : `initiales/ClubScheduler_v3.md` §3.5, §3.6, §8.
 > **Ce doc challenge la vision d'origine** là où elle est trop lourde (voir §3).
+> **Modèle métier des 3 types de planning** (socle / overlay / reprise — déclenchement,
+> manipulation, règle « semaine = unité hors socle ») : [`types-de-planning.md`](types-de-planning.md).
 
 ---
 
