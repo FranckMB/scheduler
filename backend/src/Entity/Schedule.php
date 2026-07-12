@@ -13,8 +13,14 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'schedule')]
 #[ORM\Index(name: 'idx_schedule_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_schedule_status', columns: ['status'])]
-// Partial-unique: at most one overlay schedule per period entry (palier B).
-#[ORM\UniqueConstraint(name: 'uniq_schedule_calendar_entry', columns: ['calendar_entry_id'], options: ['where' => '(calendar_entry_id IS NOT NULL)'])]
+// Non-unique: a period carries SEVERAL overlay versions (V1, V2…) — the old
+// uniq_schedule_calendar_entry was dropped by Version20260711120000
+// (planning-versions). The entity mapping had drifted (still declared UNIQUE),
+// so migration-diff would regenerate the unique index and re-break V2 overlays.
+#[ORM\Index(name: 'idx_schedule_calendar_entry', columns: ['calendar_entry_id'], options: ['where' => '(calendar_entry_id IS NOT NULL)'])]
+// ADR-0002: version numbers are unique within a SchedulePlan (V1, V2…). Partial
+// so the many rows still unlinked during the additive transition don't collide.
+#[ORM\UniqueConstraint(name: 'uniq_schedule_plan_version', columns: ['schedule_plan_id', 'version_number'], options: ['where' => '(schedule_plan_id IS NOT NULL AND version_number IS NOT NULL)'])]
 #[ORM\HasLifecycleCallbacks]
 class Schedule implements TenantOwnedInterface
 {
@@ -45,6 +51,22 @@ class Schedule implements TenantOwnedInterface
      */
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $calendarEntryId = null;
+
+    /**
+     * ADR-0002: the SchedulePlan this schedule is a VERSION of. Nullable during
+     * the additive transition (Lot A) — the backfill + SchedulePlanProvisioner
+     * fill it; made NOT NULL in Lot D once every schedule is linked.
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $schedulePlanId = null;
+
+    /**
+     * ADR-0002: this schedule's position within its SchedulePlan (V1, V2…),
+     * stored (not derived). Nullable during the additive transition; assigned by
+     * the provisioner as MAX(versionNumber of the plan) + 1.
+     */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $versionNumber = null;
 
     #[ORM\Column(type: 'string', length: 180)]
     private string $name;
@@ -185,6 +207,30 @@ class Schedule implements TenantOwnedInterface
     public function setCalendarEntryId(?string $calendarEntryId): self
     {
         $this->calendarEntryId = $calendarEntryId;
+
+        return $this;
+    }
+
+    public function getSchedulePlanId(): ?string
+    {
+        return $this->schedulePlanId;
+    }
+
+    public function setSchedulePlanId(?string $schedulePlanId): self
+    {
+        $this->schedulePlanId = $schedulePlanId;
+
+        return $this;
+    }
+
+    public function getVersionNumber(): ?int
+    {
+        return $this->versionNumber;
+    }
+
+    public function setVersionNumber(?int $versionNumber): self
+    {
+        $this->versionNumber = $versionNumber;
 
         return $this;
     }

@@ -1,0 +1,227 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Entity;
+
+use App\Enum\SchedulePlanType;
+use DateTimeImmutable;
+use Doctrine\ORM\Mapping as ORM;
+
+/**
+ * A SchedulePlan (ADR-0002) — the first-order, named container the manager
+ * thinks in ("le planning"). Its Schedules are its VERSIONS
+ * (Schedule.schedulePlanId + Schedule.versionNumber).
+ *
+ * - SEASON: the base plan of the whole season, exactly one per season
+ *   (calendarEntryId null). Its name is the season plan's public name.
+ * - CLOSURE / HOLIDAY: a bounded secondary plan bound to a CalendarEntry period
+ *   (calendarEntryId set), created lazily at the period's first version.
+ *
+ * chosenScheduleId points at the version the manager validated ("le pointeur");
+ * null = espace de travail (no version chosen yet).
+ *
+ * Named SchedulePlan (not Plan) so the domain concept never collides with the
+ * billing catalogue (App\Entity\SubscriptionPlan).
+ *
+ * Lot A of the reconstruction is ADDITIVE: this entity is stood up and kept in
+ * sync at creation, but the legacy pointers (Season.baselineScheduleId,
+ * CalendarEntry.overlayScheduleId, VALIDATED/ARCHIVED statuses) still make the
+ * decisions until Lot B switches the lifecycle over.
+ */
+#[ORM\Entity]
+#[ORM\Table(name: 'schedule_plan')]
+#[ORM\Index(name: 'idx_schedule_plan_club_season', columns: ['club_id', 'season_id'])]
+// At most one SEASON plan per season (the base plan is unique).
+#[ORM\UniqueConstraint(name: 'uniq_schedule_plan_season_base', columns: ['season_id'], options: ['where' => '(type = \'SEASON\')'])]
+// At most one plan per period entry (a period has one plan, many versions).
+#[ORM\UniqueConstraint(name: 'uniq_schedule_plan_calendar_entry', columns: ['calendar_entry_id'], options: ['where' => '(calendar_entry_id IS NOT NULL)'])]
+#[ORM\HasLifecycleCallbacks]
+class SchedulePlan implements TenantOwnedInterface
+{
+    #[ORM\Id]
+    #[ORM\Column(type: 'guid')]
+    private string $id;
+
+    #[ORM\Version]
+    #[ORM\Column(type: 'integer', options: ['default' => 1])]
+    private int $version = 1;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $createdAt;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $updatedAt;
+
+    #[ORM\Column(type: 'guid')]
+    private string $clubId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $seasonId;
+
+    #[ORM\Column(length: 20, enumType: SchedulePlanType::class)]
+    private SchedulePlanType $type;
+
+    #[ORM\Column(type: 'string', length: 180)]
+    private string $name;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $startDate;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $endDate;
+
+    /** Set on CLOSURE/HOLIDAY plans — the period this plan adjusts. null on SEASON. */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $calendarEntryId = null;
+
+    /** The validated version ("le pointeur"). null = espace de travail. */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $chosenScheduleId = null;
+
+    public function __construct()
+    {
+        $this->id = $this->newUuid();
+        $now = new DateTimeImmutable;
+        $this->createdAt = $now;
+        $this->updatedAt = $now;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
+    }
+
+    public function setId(string $id): self
+    {
+        $this->id = $id;
+
+        return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
+    }
+
+    public function getCreatedAt(): DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getUpdatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    #[ORM\PreUpdate]
+    public function touchUpdatedAt(): void
+    {
+        $this->updatedAt = new DateTimeImmutable;
+    }
+
+    public function getClubId(): ?string
+    {
+        return $this->clubId;
+    }
+
+    public function setClubId(string $clubId): self
+    {
+        $this->clubId = $clubId;
+
+        return $this;
+    }
+
+    public function getSeasonId(): string
+    {
+        return $this->seasonId;
+    }
+
+    public function setSeasonId(string $seasonId): self
+    {
+        $this->seasonId = $seasonId;
+
+        return $this;
+    }
+
+    public function getType(): SchedulePlanType
+    {
+        return $this->type;
+    }
+
+    public function setType(SchedulePlanType $type): self
+    {
+        $this->type = $type;
+
+        return $this;
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    public function setName(string $name): self
+    {
+        $this->name = $name;
+
+        return $this;
+    }
+
+    public function getStartDate(): DateTimeImmutable
+    {
+        return $this->startDate;
+    }
+
+    public function setStartDate(DateTimeImmutable $startDate): self
+    {
+        $this->startDate = $startDate;
+
+        return $this;
+    }
+
+    public function getEndDate(): DateTimeImmutable
+    {
+        return $this->endDate;
+    }
+
+    public function setEndDate(DateTimeImmutable $endDate): self
+    {
+        $this->endDate = $endDate;
+
+        return $this;
+    }
+
+    public function getCalendarEntryId(): ?string
+    {
+        return $this->calendarEntryId;
+    }
+
+    public function setCalendarEntryId(?string $calendarEntryId): self
+    {
+        $this->calendarEntryId = $calendarEntryId;
+
+        return $this;
+    }
+
+    public function getChosenScheduleId(): ?string
+    {
+        return $this->chosenScheduleId;
+    }
+
+    public function setChosenScheduleId(?string $chosenScheduleId): self
+    {
+        $this->chosenScheduleId = $chosenScheduleId;
+
+        return $this;
+    }
+
+    private function newUuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+    }
+}

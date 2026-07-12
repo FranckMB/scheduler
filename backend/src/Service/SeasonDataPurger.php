@@ -41,6 +41,7 @@ final class SeasonDataPurger
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     /**
@@ -86,6 +87,10 @@ final class SeasonDataPurger
             TeamCoach::class,
             CoachPlayerMembership::class,
             CalendarEntry::class,
+            // ADR-0002: the named container of a season/period's versions — a
+            // club_id+season_id table, so it must be purged with the season
+            // (RGPD erasure + retention purge + season reset). No DB FK cascades.
+            \App\Entity\SchedulePlan::class,
             Schedule::class,
             Team::class,
             Coach::class,
@@ -113,6 +118,10 @@ final class SeasonDataPurger
                 $season->setBaselineScheduleId(null);
                 $season->setLiveContextScheduleId(null);
                 $season->setSocleValidatedAt(null);
+                // ADR-0002: the reset wiped the season's SchedulePlan above, but the
+                // season row survives — re-provision its empty SEASON plan so the
+                // invariant "a SEASON plan exists as soon as the season does" holds.
+                $this->schedulePlanProvisioner->ensureSeasonPlan($season);
                 $this->entityManager->flush();
             }
         }

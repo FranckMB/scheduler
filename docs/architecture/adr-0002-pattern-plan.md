@@ -209,3 +209,39 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 3. ~~Vieilles versions supprimées à la validation~~ **Tranché (fondateur, 2026-07-12)** :
    aucun besoin de comparaison post-validation — la suppression des versions non choisies
    à la validation est confirmée (la photo de la version choisie suffit).
+
+## Découpage & avancement de la reconstruction
+
+La reconstruction se livre en **4 lots (A→D)**, dans l'ordre, un PR par lot, chacun avec
+validation du besoin → plan → code → NR phase1 → code-review → go utilisateur.
+
+- **Lot A — Fondations (livré 2026-07-12)** : entité `SchedulePlan` + `Schedule.schedulePlanId`
+  / `Schedule.versionNumber` (nullable pendant la transition), migration RLS `FORCE` + backfill
+  des données existantes, **provisioning automatique** à la création (saison → plan SEASON ;
+  schedule → lien plan + numéro de version) via `SchedulePlanProvisioner`, API **lecture**
+  (`/api/schedule_plans`, `Schedule` expose `schedulePlanId`/`versionNumber`). **Strictement
+  additif** : rien de l'ancien monde n'est retiré — `baselineScheduleId`, `overlayScheduleId`,
+  les statuts `VALIDATED/ARCHIVED` et `planningName` **font toujours foi**. `chosenScheduleId`
+  est backfillé au snapshot mais pas encore vivant. NR : `SchedulePlanProvisionerTest`
+  (+ `RlsIsolationTest` / `TenantOwnedInterfaceCompletenessTest` qui couvrent la nouvelle table).
+- **Lot B** — cycle de vie : valider = pointer + supprimer les autres versions, reopen,
+  espace de travail (pointeur null) ; bascule des décisions du legacy vers le pointeur.
+  **À traiter EN MÊME TEMPS que le passage du pointeur en « vivant » (sinon incohérent) :**
+  - **nettoyer `chosenScheduleId`** quand la version pointée est supprimée / le socle
+    réattribué (en Lot A le pointeur est un snapshot dormant, jamais déréférencé — le
+    trou est inoffensif tant qu'aucun client ne le lit) ;
+  - **numérotation de version strictement monotone** : `versionNumber` est un
+    `MAX+1` en Lot A (aucune suppression) ; dès que Lot B supprime des versions,
+    remplacer par un compteur stocké sur le plan (sinon un « V3 » supprimé puis
+    régénéré réutilise le numéro 3).
+- **Lot C** — réglages de période & génération pilotés par plan.
+- **Lot D** — nettoyage : suppression du legacy (baseline/overlay/liveContext, VALIDATED/
+  ARCHIVED), colonnes `schedule_plan_id`/`version_number` rendues `NOT NULL`.
+
+### Note de nommage (résolution de collision)
+
+Le concept est « le Plan » dans tout ce document, mais l'entité technique s'appelle
+**`SchedulePlan`** (table `schedule_plan`). Le nom `Plan`/`plan` était déjà pris par le
+**catalogue de facturation** (tiers d'abonnement : `maxTeams`, prix, features) ; ce catalogue
+a été renommé **`SubscriptionPlan`** (table `subscription_plan`, route `/api/subscription_plans`)
+dans le même lot, pour qu'aucun des deux sens de « plan » ne soit ambigu dans le code.

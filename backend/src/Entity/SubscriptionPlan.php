@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
-use App\Repository\PlanRepository;
+use App\Repository\SubscriptionPlanRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity(repositoryClass: PlanRepository::class)]
-#[ORM\Table(name: 'plan')]
+#[ORM\Entity(repositoryClass: SubscriptionPlanRepository::class)]
+#[ORM\Table(name: 'subscription_plan')]
 #[ORM\HasLifecycleCallbacks]
-class Plan
+class SubscriptionPlan
 {
     #[ORM\Id]
     #[ORM\Column(type: 'guid')]

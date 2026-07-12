@@ -24,6 +24,7 @@ use App\Service\AuditTrail;
 use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -76,6 +77,7 @@ final class AuthController extends AbstractController
         private readonly FfbbLeagueRepository $ffbbLeagues,
         private readonly FfbbCommitteeRepository $ffbbCommittees,
         private readonly AuditTrail $auditTrail,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -651,6 +653,10 @@ final class AuthController extends AbstractController
         $season->setStatus('active');
         $season->setTransitionData([]);
         $this->entityManager->persist($season);
+
+        // ADR-0002 Lot A: the onboarded club's season starts with its empty
+        // SEASON plan (flushed with the rest of the seed by the caller).
+        $this->schedulePlanProvisioner->ensureSeasonPlan($season);
 
         $sport = $this->sportRepository->findOneBy(['slug' => 'basketball']);
         if (null === $sport) {

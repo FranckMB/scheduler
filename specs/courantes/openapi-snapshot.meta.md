@@ -1,7 +1,14 @@
 Last verified @ feat/period-constraint-toggle 2026-07-12
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **69 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **73 paths.**
 Changements récents :
+- **ADR-0002 pattern « Plan » — Lot A (2026-07-12)** : nouvelle ressource **`SchedulePlan`**
+  (`/api/schedule_plans`, lecture seule) — le conteneur nommé des versions d'une saison/période
+  (`type` SEASON/CLOSURE/HOLIDAY, `name`, `startDate`/`endDate`, `calendarEntryId?`,
+  `chosenScheduleId?`). **`Schedule`** expose `schedulePlanId` + `versionNumber` (lecture).
+  Le catalogue de facturation **`Plan`** est renommé **`SubscriptionPlan`**
+  (`/api/plans` → `/api/subscription_plans`, lecture seule, SEC-14). Additif : aucun champ
+  legacy retiré.
 - **contraintes désactivables par période (2026-07-12)** : nouvelle ressource
   **`ConstraintPeriodOverride`** (`/api/constraint_period_overrides`) — surcharge sparse
   par (période CLOSURE, contrainte) : `isActive` (false = contrainte permanente

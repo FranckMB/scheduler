@@ -17,7 +17,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * SEC-14: the GLOBAL reference tables (PriorityTier, Plan, Sport) have no club_id and
+ * SEC-14: the GLOBAL reference tables (PriorityTier, SubscriptionPlan, Sport) have no club_id and
  * are read by the solver / billing for EVERY tenant — a write through the tenant API
  * would tamper cross-club (solver catalogue) or falsify pricing. Writes must be rejected
  * (the operations are removed → 405). Reads stay open.
@@ -36,7 +36,7 @@ final class GlobalReferenceTablesReadOnlyTest extends WebTestCase
     public static function globalCollections(): iterable
     {
         yield 'priority-tiers' => ['/api/priority_tiers'];
-        yield 'plans' => ['/api/plans'];
+        yield 'subscription-plans' => ['/api/subscription_plans'];
         yield 'sports' => ['/api/sports'];
     }
 

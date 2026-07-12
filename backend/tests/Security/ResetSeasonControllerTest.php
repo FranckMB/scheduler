@@ -121,6 +121,13 @@ final class ResetSeasonControllerTest extends WebTestCase
         self::assertInstanceOf(Season::class, $freshSeason);
         self::assertNull($freshSeason->getBaselineScheduleId(), 'the baseline anchor must be cleared (its schedule is gone)');
         self::assertNull($freshSeason->getSocleValidatedAt(), 'the socle milestone must be cleared — no plan is left behind it');
+        // ADR-0002: the reset wipes the season's SchedulePlan rows but re-provisions
+        // the empty SEASON plan — a surviving season always owns its SEASON plan.
+        self::assertSame(
+            1,
+            (int) $em->getConnection()->fetchOne('SELECT COUNT(*) FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'', ['sid' => $seasonId]),
+            'the SEASON plan must be re-provisioned after a reset',
+        );
     }
 
     public function testResetRequiresAManagementRole(): void

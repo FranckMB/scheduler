@@ -4373,146 +4373,6 @@
                 "summary": "League match-kickoff windows inherited by the club (global reference, read-only)"
             }
         },
-        "/api/plans": {
-            "get": {
-                "operationId": "api_plans_get_collection",
-                "tags": [
-                    "Plan"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Plan collection",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "type": "object",
-                                    "description": "Plan.jsonld collection.",
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
-                                        },
-                                        {
-                                            "type": "object",
-                                            "required": [
-                                                "member"
-                                            ],
-                                            "properties": {
-                                                "member": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "$ref": "#/components/schemas/Plan.jsonld"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/Plan"
-                                    }
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/Plan.html"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "summary": "Retrieves the collection of Plan resources.",
-                "description": "Retrieves the collection of Plan resources.",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "The collection page number",
-                        "required": false,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "integer",
-                            "default": 1
-                        },
-                        "style": "form",
-                        "explode": true
-                    }
-                ]
-            }
-        },
-        "/api/plans/{id}": {
-            "get": {
-                "operationId": "api_plans_id_get",
-                "tags": [
-                    "Plan"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Plan resource",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Plan.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Plan"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Plan.html"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Retrieves a Plan resource.",
-                "description": "Retrieves a Plan resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Plan identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ]
-            }
-        },
         "/api/priority_tiers": {
             "get": {
                 "operationId": "api_priority_tiers_get_collection",
@@ -6069,6 +5929,132 @@
                 ]
             }
         },
+        "/api/schedule_plans": {
+            "get": {
+                "operationId": "api_schedule_plans_get_collection",
+                "tags": [
+                    "SchedulePlan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SchedulePlan collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "SchedulePlan.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/SchedulePlan.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SchedulePlan"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SchedulePlan.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of SchedulePlan resources.",
+                "description": "Retrieves the collection of SchedulePlan resources.",
+                "parameters": []
+            }
+        },
+        "/api/schedule_plans/{id}": {
+            "get": {
+                "operationId": "api_schedule_plans_id_get",
+                "tags": [
+                    "SchedulePlan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SchedulePlan resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a SchedulePlan resource.",
+                "description": "Retrieves a SchedulePlan resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "SchedulePlan identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/schedule_slot_templates": {
             "get": {
                 "operationId": "api_schedule_slot_templates_get_collection",
@@ -7500,6 +7486,146 @@
                         "name": "id",
                         "in": "path",
                         "description": "SportCategory identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/subscription_plans": {
+            "get": {
+                "operationId": "api_subscription_plans_get_collection",
+                "tags": [
+                    "SubscriptionPlan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SubscriptionPlan collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "SubscriptionPlan.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/SubscriptionPlan.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SubscriptionPlan"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SubscriptionPlan.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of SubscriptionPlan resources.",
+                "description": "Retrieves the collection of SubscriptionPlan resources.",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "The collection page number",
+                        "required": false,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        },
+                        "style": "form",
+                        "explode": true
+                    }
+                ]
+            }
+        },
+        "/api/subscription_plans/{id}": {
+            "get": {
+                "operationId": "api_subscription_plans_id_get",
+                "tags": [
+                    "SubscriptionPlan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SubscriptionPlan resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionPlan.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionPlan"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionPlan.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a SubscriptionPlan resource.",
+                "description": "Retrieves a SubscriptionPlan resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "SubscriptionPlan identifier",
                         "required": true,
                         "deprecated": false,
                         "schema": {
@@ -12876,175 +13002,6 @@
                     "@type"
                 ]
             },
-            "Plan": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "version": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "name": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "maxTeams": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "maxVenues": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "maxGenerations": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "monthlyPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "annualPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "features": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        }
-                    }
-                }
-            },
-            "Plan.html": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "version": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "name": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "maxTeams": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "maxVenues": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "maxGenerations": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "monthlyPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "annualPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "features": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        }
-                    }
-                }
-            },
-            "Plan.jsonld": {
-                "allOf": [
-                    {
-                        "$ref": "#/components/schemas/HydraItemBaseSchema"
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "version": {
-                                "default": 0,
-                                "type": "integer"
-                            },
-                            "createdAt": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "updatedAt": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "name": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "maxTeams": {
-                                "default": 0,
-                                "type": "integer"
-                            },
-                            "maxVenues": {
-                                "default": 0,
-                                "type": "integer"
-                            },
-                            "maxGenerations": {
-                                "default": 0,
-                                "type": "integer"
-                            },
-                            "monthlyPrice": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "annualPrice": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "features": {
-                                "type": "object",
-                                "additionalProperties": {
-                                    "type": [
-                                        "string",
-                                        "null"
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                ]
-            },
             "PriorityTier": {
                 "type": "object",
                 "properties": {
@@ -13419,6 +13376,20 @@
                             "null"
                         ]
                     },
+                    "schedulePlanId": {
+                        "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "versionNumber": {
+                        "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "score": {
                         "type": [
                             "integer",
@@ -13604,6 +13575,20 @@
                             "null"
                         ]
                     },
+                    "schedulePlanId": {
+                        "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "versionNumber": {
+                        "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "score": {
                         "type": [
                             "integer",
@@ -13749,6 +13734,20 @@
                                 "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
                                 "type": [
                                     "string",
+                                    "null"
+                                ]
+                            },
+                            "schedulePlanId": {
+                                "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "versionNumber": {
+                                "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                                "type": [
+                                    "integer",
                                     "null"
                                 ]
                             },
@@ -14138,6 +14137,187 @@
                         }
                     }
                 ]
+            },
+            "SchedulePlan": {
+                "type": "object",
+                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "seasonId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "SEASON",
+                            "CLOSURE",
+                            "HOLIDAY"
+                        ]
+                    },
+                    "name": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "chosenScheduleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "SchedulePlan.html": {
+                "type": "object",
+                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "seasonId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "SEASON",
+                            "CLOSURE",
+                            "HOLIDAY"
+                        ]
+                    },
+                    "name": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "chosenScheduleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "SchedulePlan.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "seasonId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "SEASON",
+                                    "CLOSURE",
+                                    "HOLIDAY"
+                                ]
+                            },
+                            "name": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "startDate": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "endDate": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "calendarEntryId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "chosenScheduleId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations."
             },
             "ScheduleSlotTemplate": {
                 "type": "object",
@@ -15075,6 +15255,175 @@
                             "sortOrder": {
                                 "default": 0,
                                 "type": "integer"
+                            }
+                        }
+                    }
+                ]
+            },
+            "SubscriptionPlan": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "name": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "maxTeams": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "maxVenues": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "maxGenerations": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "monthlyPrice": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "annualPrice": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "features": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                }
+            },
+            "SubscriptionPlan.html": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "name": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "maxTeams": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "maxVenues": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "maxGenerations": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "monthlyPrice": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "annualPrice": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "features": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                }
+            },
+            "SubscriptionPlan.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "name": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "maxTeams": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "maxVenues": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "maxGenerations": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "monthlyPrice": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "annualPrice": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "features": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                }
                             }
                         }
                     }
@@ -16804,10 +17153,6 @@
             "description": "Resource 'Fixture' operations."
         },
         {
-            "name": "Plan",
-            "description": "Resource 'Plan' operations."
-        },
-        {
             "name": "PriorityTier",
             "description": "Resource 'PriorityTier' operations."
         },
@@ -16818,6 +17163,10 @@
         {
             "name": "ScheduleDiagnostic",
             "description": "Resource 'ScheduleDiagnostic' operations."
+        },
+        {
+            "name": "SchedulePlan",
+            "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations."
         },
         {
             "name": "Schedule",
@@ -16838,6 +17187,10 @@
         {
             "name": "Sport",
             "description": "Resource 'Sport' operations."
+        },
+        {
+            "name": "SubscriptionPlan",
+            "description": "Resource 'SubscriptionPlan' operations."
         },
         {
             "name": "TeamCoach",

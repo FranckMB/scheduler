@@ -32,6 +32,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -102,26 +103,51 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             $seasonId = $entry->getSeasonId();
         }
 
-        /** @var ScheduleResource $output */
-        $output = parent::processPost($input, $clubId, $seasonId);
-
-        if ($entry instanceof CalendarEntry) {
-            // The new version becomes the ACTIVE overlay only if the period has no
-            // usable one to fall back on — mirror of the season baseline, which
-            // moves only on validation. This keeps a good V1 shown while a
-            // regenerated V2 solves (or fails): validating V2 later flips the
-            // pointer (ValidateScheduleController). Otherwise a failed regenerate
-            // would strand the previously-adapted period on an empty draft.
-            $activeId = $entry->getOverlayScheduleId();
-            $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
-            $activeIsUsable = $active instanceof Schedule && \in_array($active->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true);
-            if (!$activeIsUsable) {
-                $entry->setOverlayScheduleId($output->id);
-            }
-            $this->entityManager->flush();
+        // Stamp tenant/season server-side (parent::processPost's job, inlined so
+        // the persist can join ONE transaction with the plan link below).
+        /** @var Schedule $schedule */
+        $schedule = $this->createEntityFromInput($input);
+        $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
+        // A schedule with no resolvable season is invalid — fail with a controlled
+        // 422 rather than an uninitialized-property TypeError once linkSchedule
+        // (or the flush) dereferences the never-set seasonId.
+        if (null === $resolvedSeasonId) {
+            throw new UnprocessableEntityHttpException('No season could be resolved for this schedule.');
         }
+        if (null !== $clubId) {
+            $schedule->setClubId($clubId);
+        }
+        $schedule->setSeasonId($resolvedSeasonId);
 
-        return $output;
+        // Atomic (like RegenerateController): the row, its plan link and the
+        // overlay pointer commit together. A linkSchedule failure must never
+        // leave a committed-but-unlinked schedule occupying the period slot.
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $entry): void {
+            $this->entityManager->persist($schedule);
+
+            // ADR-0002 Lot A: link the new version to its SchedulePlan (the
+            // CLOSURE/HOLIDAY plan is created lazily on a period's first version).
+            $this->schedulePlanProvisioner->linkSchedule($schedule);
+
+            if ($entry instanceof CalendarEntry) {
+                // The new version becomes the ACTIVE overlay only if the period has
+                // no usable one to fall back on — mirror of the season baseline,
+                // which moves only on validation. This keeps a good V1 shown while
+                // a regenerated V2 solves (or fails): validating V2 later flips the
+                // pointer (ValidateScheduleController). Otherwise a failed
+                // regenerate would strand the period on an empty draft.
+                $activeId = $entry->getOverlayScheduleId();
+                $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
+                $activeIsUsable = $active instanceof Schedule && \in_array($active->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true);
+                if (!$activeIsUsable) {
+                    $entry->setOverlayScheduleId($schedule->getId());
+                }
+            }
+
+            $this->entityManager->flush();
+        });
+
+        return $this->mapEntityToOutput($schedule);
     }
 
     /**

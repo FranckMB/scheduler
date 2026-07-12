@@ -7,19 +7,19 @@ namespace App\ApiResource;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use App\Entity\Plan;
-use App\State\Provider\PlanStateProvider;
+use App\Entity\SubscriptionPlan;
+use App\State\Provider\SubscriptionPlanStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-// SEC-14: read-only over the tenant API. Plan is the GLOBAL billing catalogue (prices,
+// SEC-14: read-only over the tenant API. SubscriptionPlan is the GLOBAL billing catalogue (prices,
 // maxTeams, maxGenerations) — a write here would let any club member falsify pricing/
 // quotas. Managed out-of-band (fixtures / future super-admin surface), never the tenant API.
-#[ApiResource(shortName: 'Plan', operations: [
+#[ApiResource(shortName: 'SubscriptionPlan', operations: [
     new GetCollection,
     new Get,
-], paginationEnabled: true, paginationItemsPerPage: 30, provider: PlanStateProvider::class)]
-class PlanResource
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: SubscriptionPlanStateProvider::class)]
+class SubscriptionPlanResource
 {
     #[Groups(['read'])]
     public string $id = '';
@@ -55,7 +55,7 @@ class PlanResource
     #[Groups(['read'])]
     public array $features = [];
 
-    public static function fromEntity(Plan $entity): self
+    public static function fromEntity(SubscriptionPlan $entity): self
     {
         $dto = new self;
         $dto->id = $entity->getId();

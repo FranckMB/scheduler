@@ -73,6 +73,14 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?string $calendarEntryId = null;
 
+    /** ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill). */
+    #[Groups(['read'])]
+    public ?string $schedulePlanId = null;
+
+    /** ADR-0002: this schedule's version number within its plan (V1, V2…). */
+    #[Groups(['read'])]
+    public ?int $versionNumber = null;
+
     #[Groups(['read'])]
     public ?int $score = null;
 
@@ -152,6 +160,8 @@ class ScheduleResource
         $dto->name = $entity->getName();
         $dto->status = $entity->getStatus();
         $dto->calendarEntryId = $entity->getCalendarEntryId();
+        $dto->schedulePlanId = $entity->getSchedulePlanId();
+        $dto->versionNumber = $entity->getVersionNumber();
         $dto->score = $entity->getScore();
         $dto->solverSeed = $entity->getSolverSeed();
         $dto->snapshotHash = $entity->getSnapshotHash();

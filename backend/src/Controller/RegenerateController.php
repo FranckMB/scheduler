@@ -9,6 +9,7 @@ use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -43,6 +44,7 @@ final class RegenerateController extends AbstractController implements SeasonSco
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly GenerationComplexityGuard $complexityGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedules/{id}/regenerate', name: 'api_schedule_regenerate', methods: ['POST'])]
@@ -106,6 +108,8 @@ final class RegenerateController extends AbstractController implements SeasonSco
             ->setStatus(ScheduleStatus::PENDING);
         $this->entityManager->wrapInTransaction(function () use ($newSchedule): void {
             $this->entityManager->persist($newSchedule);
+            // ADR-0002 Lot A: the new version joins the season's SchedulePlan.
+            $this->schedulePlanProvisioner->linkSchedule($newSchedule);
             $this->entityManager->flush();
         });
 
