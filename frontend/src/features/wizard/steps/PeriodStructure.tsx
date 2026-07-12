@@ -10,18 +10,22 @@ import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { Team, TeamPeriodOverride } from "../api";
+import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride } from "../api";
 import { countSlotsByVenue } from "../lib/summary";
 import {
+  useCreatePeriodConstraintOverride,
   useCreatePeriodSlot,
   useCreateTeamPeriodOverride,
+  useDeletePeriodConstraintOverride,
   useDeletePeriodSlot,
   useDeleteTeamPeriodOverride,
+  usePeriodConstraintOverrides,
   usePeriodSlots,
   usePriorityTiers,
   useTeamPeriodOverrides,
   useUpdateTeamPeriodOverride,
   useVenueSlots,
+  useWizardConstraints,
   useWizardTeams,
   useWizardVenues,
 } from "../queries";
@@ -301,6 +305,74 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
           </Button>
         </form>
       </div>
+    </div>
+  );
+}
+
+/** Libellés gestionnaire (jamais l'enum brut à l'écran). */
+const RULE_LABEL: Record<ConstraintRuleType, string> = {
+  HARD: "Obligatoire",
+  PREFERRED: "Préféré",
+  BONUS: "Bonus",
+  LOCK: "Verrouillé",
+};
+
+/**
+ * Period-editable constraints (F2): the club's PERMANENT constraints are listed
+ * read-only, but each can be DISABLED for this period via a sparse
+ * ConstraintPeriodOverride (isActive=false). No row = the constraint applies as
+ * usual; the base plan and the Constraint's own isActive are never touched.
+ * Rendered ONLY for CLOSURE periods — permanent constraints don't apply to other
+ * overlays (holiday = dated-only). Default: every constraint stays active (no seed).
+ */
+export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
+  const { data: entry } = useCalendarEntry(calendarEntryId);
+  const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
+  const { data: overrides = [] } = usePeriodConstraintOverrides(calendarEntryId);
+  const create = useCreatePeriodConstraintOverride(calendarEntryId);
+  const del = useDeletePeriodConstraintOverride(calendarEntryId);
+
+  // Permanent constraints only feed CLOSURE overlays; nothing to toggle otherwise.
+  if (entry && "closure" !== entry.periodType) {
+    return null;
+  }
+
+  // A constraint is disabled only if an override row turns it off; absent = active.
+  const disabledOf = new Map(overrides.filter((o) => !o.isActive).map((o) => [o.constraintId, o.id]));
+  const toggle = (c: Constraint, active: boolean) => {
+    // Swallow the rejection: the global MutationCache already toasts it.
+    if (active) {
+      const overrideId = disabledOf.get(c.id);
+      if (undefined !== overrideId) {
+        del.mutate(overrideId);
+      }
+      return;
+    }
+    create.mutate({ calendarEntryId, constraintId: c.id, isActive: false });
+  };
+
+  return (
+    <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
+      <p className="text-sm font-medium">Contraintes du planning principal</p>
+      <p className="text-xs text-muted-foreground">Décochez celles qui ne s'appliquent pas pendant cette fermeture — le planning principal n'est pas modifié.</p>
+      {isLoading ? null : 0 === constraints.length ? (
+        <EmptyHint>Aucune contrainte permanente.</EmptyHint>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {constraints.map((c) => {
+            const active = !disabledOf.has(c.id);
+            return (
+              <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={active} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
+                </label>
+                <span className="shrink-0 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

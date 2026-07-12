@@ -1,7 +1,13 @@
-Last verified @ feat/rgpd-consent-privacy 2026-07-11
+Last verified @ feat/period-constraint-toggle 2026-07-12
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **67 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **69 paths.**
 Changements récents :
+- **contraintes désactivables par période (2026-07-12)** : nouvelle ressource
+  **`ConstraintPeriodOverride`** (`/api/constraint_period_overrides`) — surcharge sparse
+  par (période CLOSURE, contrainte) : `isActive` (false = contrainte permanente
+  désactivée pour la période). Le build overlay filtre les permanentes désactivées ;
+  le socle (base plan) et le `isActive` propre de la `Constraint` ne sont jamais touchés.
+  Défaut = toutes actives (aucun seed). Wizard : panneau « Contraintes » de la période.
 - **période : flag d'initialisation (2026-07-12)** : `CalendarEntry` expose
   `teamSelectionInitialized` (read-only) — vrai dès la 1re surcharge d'équipe
   (`TeamPeriodOverride`). Le wizard ne pré-remplit « Fanion seul » que si faux →

@@ -17,6 +17,7 @@ import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleTyp
 import { DAYS, dayLabel } from "../lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
 
 const FAMILIES: { key: ConstraintFamily; label: string }[] = [
@@ -352,6 +353,9 @@ export function ConstraintsStep() {
         <strong> tout le club</strong>, un <strong>groupe</strong> (ex. les jeunes → pas de créneau après 19h50) ou une <strong>équipe</strong> précise. La capacité d'un gymnase se règle
         sur l'écran <strong>Gymnases</strong> (1 ou 2 équipes par créneau).
       </p>
+
+      {/* Period overlay: toggle the club's permanent constraints off for a closure. */}
+      {periodEntryId ? <PeriodConstraints calendarEntryId={periodEntryId} /> : null}
 
       {/* Family + reservation tabs */}
       <div className="mb-3 flex flex-wrap gap-1 border-b border-border">

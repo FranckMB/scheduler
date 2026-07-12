@@ -7,9 +7,13 @@ const updateOverride = vi.fn();
 const deleteOverride = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
+const createConstraintOverride = vi.fn();
+const deleteConstraintOverride = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
+const constraintsState: { data: Array<{ id: string; name: string; ruleType: string }> } = { data: [] };
+const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
-const entryState: { data: { teamSelectionInitialized: boolean } | undefined } = { data: { teamSelectionInitialized: false } };
+const entryState: { data: { teamSelectionInitialized: boolean; periodType: string } | undefined } = { data: { teamSelectionInitialized: false, periodType: "closure" } };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
@@ -26,6 +30,10 @@ vi.mock("../queries", () => ({
   usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
+  useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
+  usePeriodConstraintOverrides: () => ({ data: constraintOverridesState.data }),
+  useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
+  useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
   useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }),
@@ -33,18 +41,22 @@ vi.mock("@/features/cockpit/queries", () => ({
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { __resetPeriodSeed, PeriodTeams, PeriodVenues } from "./PeriodStructure";
+import { __resetPeriodSeed, PeriodConstraints, PeriodTeams, PeriodVenues } from "./PeriodStructure";
 
 afterEach(() => {
   __resetPeriodSeed();
   overridesState.data = [];
+  constraintsState.data = [];
+  constraintOverridesState.data = [];
   conflictState.venueIds = [];
-  entryState.data = { teamSelectionInitialized: false };
+  entryState.data = { teamSelectionInitialized: false, periodType: "closure" };
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
   createSlot.mockClear();
   deleteSlot.mockClear();
+  createConstraintOverride.mockClear();
+  deleteConstraintOverride.mockClear();
 });
 
 describe("PeriodTeams — Fanion-only default + toggles", () => {
@@ -104,5 +116,38 @@ describe("PeriodVenues — borrowed period slots", () => {
     conflictState.venueIds = ["v1"];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByText(/INTERDIT cette période/)).toBeInTheDocument();
+  });
+});
+
+describe("PeriodConstraints — toggle permanent constraints off for a closure", () => {
+  it("lists the club's permanent constraints, all active by default (no seed)", () => {
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
+    expect(checkbox).toBeChecked();
+    expect(createConstraintOverride).not.toHaveBeenCalled();
+  });
+
+  it("toggling a constraint off creates a disabling override", async () => {
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
+    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "k1", isActive: false });
+  });
+
+  it("toggling a disabled constraint back on deletes its override", async () => {
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: false, calendarEntryId: "e1" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    // Rendered unchecked (disabled) → clicking re-activates by removing the row.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
+    expect(deleteConstraintOverride).toHaveBeenCalledWith("ov1");
+  });
+
+  it("does not render outside a closure period (permanent constraints don't apply)", () => {
+    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
   });
 });

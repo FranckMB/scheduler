@@ -377,7 +377,7 @@ différents** :
 | Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables. **Défaut : Fanion seul** (ramp de reprise), ajustable. |
 | Gymnases | Hérités (fermetures marquées **« fermé cette période »**) + **créneaux prêtés** ajoutables pour la fenêtre (additifs, scopés période) |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
-| **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») |
+| **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et, sur une **fermeture**, peut **désactiver** certaines contraintes **permanentes** pour la fenêtre (case à décocher — DIFF `ConstraintPeriodOverride` épars, `isActive=false` ; le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés ; défaut = tout actif, aucun seed) |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |
 | **Génération** | Génère l'**overlay** borné à la fenêtre (le calendrier secondaire) |
 

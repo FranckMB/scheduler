@@ -134,6 +134,24 @@ export const createTeamPeriodOverride = (body: TeamPeriodOverridePayload): Promi
 export const updateTeamPeriodOverride = (id: string, body: TeamPeriodOverridePayload): Promise<TeamPeriodOverride> => api.put(`team_period_overrides/${id}`, { json: body }).json();
 export const deleteTeamPeriodOverride = (id: string): Promise<void> => api.delete(`team_period_overrides/${id}`).then(() => undefined);
 
+/** Period-editable structure: a sparse per-(period, constraint) toggle — isActive=false disables the permanent constraint for the period. No row = applies as usual. */
+export interface ConstraintPeriodOverride {
+  id: string;
+  calendarEntryId: string;
+  constraintId: string;
+  isActive: boolean;
+}
+
+export interface ConstraintPeriodOverridePayload {
+  calendarEntryId: string;
+  constraintId: string;
+  isActive: boolean;
+}
+
+export const listConstraintPeriodOverrides = (calendarEntryId: string): Promise<ConstraintPeriodOverride[]> => collectionAll<ConstraintPeriodOverride>("constraint_period_overrides", { calendarEntryId });
+export const createConstraintPeriodOverride = (body: ConstraintPeriodOverridePayload): Promise<ConstraintPeriodOverride> => api.post("constraint_period_overrides", { json: body }).json();
+export const deleteConstraintPeriodOverride = (id: string): Promise<void> => api.delete(`constraint_period_overrides/${id}`).then(() => undefined);
+
 /** A persistent team→slot HARD pin (base plan or a period overlay). Server-backed. */
 export interface Reservation {
   id: string;

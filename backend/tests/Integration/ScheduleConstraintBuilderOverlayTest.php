@@ -217,6 +217,39 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertSame(2, $serialized['sessionsPerWeek'], 'the base plan keeps the seasonal volume — no override leak');
     }
 
+    public function testOverlayDropsConstraintDisabledForPeriod(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $permanent = $this->permanentConstraint($club, $season);
+        $entry = $this->closurePeriod($club, $season);
+        $this->constraintOverride($club, $season, $entry, $permanent, false); // disabled for this period
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        // Base plan still carries the permanent constraint (sparse diff — base untouched)…
+        $baseNames = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForClubSeason($club->getId(), $season->getId())['constraints']);
+        self::assertContains('Contrainte permanente', $baseNames, 'the base plan keeps the constraint');
+
+        // …but the overlay drops the constraint the manager disabled for the period.
+        $overlayNames = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertNotContains('Contrainte permanente', $overlayNames, 'a constraint disabled for the period is not honored in the overlay');
+    }
+
+    public function testOverlayKeepsConstraintWithActiveOverride(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $permanent = $this->permanentConstraint($club, $season);
+        $entry = $this->closurePeriod($club, $season);
+        $this->constraintOverride($club, $season, $entry, $permanent, true); // explicit active = no-op
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $overlayNames = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
+        self::assertContains('Contrainte permanente', $overlayNames, 'only isActive=false drops the constraint');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -321,7 +354,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         return $team;
     }
 
-    private function permanentConstraint(Club $club, Season $season): void
+    private function permanentConstraint(Club $club, Season $season): Constraint
     {
         $c = new Constraint;
         $c->setClubId($club->getId());
@@ -331,6 +364,19 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $c->setFamily(ConstraintFamily::TIME);
         $c->setRuleType(ConstraintRuleType::HARD);
         $this->em->persist($c);
+
+        return $c;
+    }
+
+    private function constraintOverride(Club $club, Season $season, CalendarEntry $entry, Constraint $constraint, bool $isActive): void
+    {
+        $o = new \App\Entity\ConstraintPeriodOverride;
+        $o->setClubId($club->getId());
+        $o->setSeasonId($season->getId());
+        $o->setCalendarEntryId($entry->getId());
+        $o->setConstraintId($constraint->getId());
+        $o->setIsActive($isActive);
+        $this->em->persist($o);
     }
 
     private function closurePeriod(Club $club, Season $season): CalendarEntry

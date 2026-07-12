@@ -1,0 +1,155 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Entity;
+
+use DateTimeImmutable;
+use Doctrine\ORM\Mapping as ORM;
+
+/**
+ * Period-editable structure: a SPARSE override that DISABLES a permanent constraint
+ * for one CLOSURE period (CalendarEntry). A row exists ONLY when the manager turned a
+ * constraint off for that period — no row means "the permanent constraint applies as
+ * usual". Used by the overlay build to drop deactivated constraints; the base plan
+ * (and the Constraint's own isActive) are never touched.
+ */
+#[ORM\Entity]
+#[ORM\Table(name: 'constraint_period_override')]
+#[ORM\UniqueConstraint(name: 'uniq_constraint_period_override', columns: ['calendar_entry_id', 'constraint_id'])]
+#[ORM\Index(name: 'idx_constraint_period_override_entry', columns: ['calendar_entry_id'])]
+class ConstraintPeriodOverride implements TenantOwnedInterface
+{
+    #[ORM\Id]
+    #[ORM\Column(type: 'guid')]
+    private string $id;
+
+    #[ORM\Column(type: 'integer')]
+    private int $version = 1;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $createdAt;
+
+    #[ORM\Column(type: 'datetimetz_immutable')]
+    private DateTimeImmutable $updatedAt;
+
+    #[ORM\Column(type: 'guid')]
+    private string $clubId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $seasonId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $calendarEntryId;
+
+    #[ORM\Column(type: 'guid')]
+    private string $constraintId;
+
+    /** false = the constraint does NOT apply during this period. */
+    #[ORM\Column(type: 'boolean', options: ['default' => true])]
+    private bool $isActive = true;
+
+    public function __construct()
+    {
+        $this->id = $this->newUuid();
+        $now = new DateTimeImmutable;
+        $this->createdAt = $now;
+        $this->updatedAt = $now;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
+    }
+
+    public function setId(string $id): self
+    {
+        $this->id = $id;
+
+        return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
+    }
+
+    public function getCreatedAt(): DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getUpdatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function getClubId(): ?string
+    {
+        return $this->clubId;
+    }
+
+    public function setClubId(string $clubId): self
+    {
+        $this->clubId = $clubId;
+
+        return $this;
+    }
+
+    public function getSeasonId(): string
+    {
+        return $this->seasonId;
+    }
+
+    public function setSeasonId(string $seasonId): self
+    {
+        $this->seasonId = $seasonId;
+
+        return $this;
+    }
+
+    public function getCalendarEntryId(): string
+    {
+        return $this->calendarEntryId;
+    }
+
+    public function setCalendarEntryId(string $calendarEntryId): self
+    {
+        $this->calendarEntryId = $calendarEntryId;
+
+        return $this;
+    }
+
+    public function getConstraintId(): string
+    {
+        return $this->constraintId;
+    }
+
+    public function setConstraintId(string $constraintId): self
+    {
+        $this->constraintId = $constraintId;
+
+        return $this;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->isActive;
+    }
+
+    public function setIsActive(bool $isActive): self
+    {
+        $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    private function newUuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+    }
+}
