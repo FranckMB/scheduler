@@ -150,6 +150,7 @@ export interface ConstraintPeriodOverridePayload {
 
 export const listConstraintPeriodOverrides = (calendarEntryId: string): Promise<ConstraintPeriodOverride[]> => collectionAll<ConstraintPeriodOverride>("constraint_period_overrides", { calendarEntryId });
 export const createConstraintPeriodOverride = (body: ConstraintPeriodOverridePayload): Promise<ConstraintPeriodOverride> => api.post("constraint_period_overrides", { json: body }).json();
+export const updateConstraintPeriodOverride = (id: string, body: ConstraintPeriodOverridePayload): Promise<ConstraintPeriodOverride> => api.put(`constraint_period_overrides/${id}`, { json: body }).json();
 export const deleteConstraintPeriodOverride = (id: string): Promise<void> => api.delete(`constraint_period_overrides/${id}`).then(() => undefined);
 
 /** A persistent team→slot HARD pin (base plan or a period overlay). Server-backed. */

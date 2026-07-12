@@ -23,6 +23,7 @@ import {
   usePeriodSlots,
   usePriorityTiers,
   useTeamPeriodOverrides,
+  useUpdatePeriodConstraintOverride,
   useUpdateTeamPeriodOverride,
   useVenueSlots,
   useWizardConstraints,
@@ -318,45 +319,62 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
 };
 
 /**
- * Period-editable constraints (F2): the club's PERMANENT constraints are listed
- * read-only, but each can be DISABLED for this period via a sparse
- * ConstraintPeriodOverride (isActive=false). No row = the constraint applies as
- * usual; the base plan and the Constraint's own isActive are never touched.
- * Rendered ONLY for CLOSURE periods — permanent constraints don't apply to other
- * overlays (holiday = dated-only). Default: every constraint stays active (no seed).
+ * Period-editable constraints: the club's PERMANENT constraints are inherited into the
+ * overlay (read-only), each toggle-able for the window via a sparse ConstraintPeriodOverride
+ * that DEVIATES from the smart default. No row = the default applies; the base plan and the
+ * Constraint's own isActive are never touched.
+ *
+ * - Fermeture (closure): default = keep every constraint (B3+F2 — unchanged).
+ * - Reprise (holiday): default FOLLOWS the team selection — CLUB/COACH kept, a TEAM
+ *   constraint kept only if its team reprend (not deactivated), FACILITY dropped.
+ *
+ * Rendered only for overlay-generating periods (closure | holiday), on a CONFIRMED entry
+ * (never during its load window, so the wrong default can't flash).
  */
 export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
-  // Permanent constraints only feed CLOSURE overlays. Gate on a CONFIRMED closure
-  // (entry loaded AND closure) so the checklist never flashes — nor writes a dead
-  // override — for a holiday period during the entry's load window.
   const isClosure = "closure" === entry?.periodType;
+  const isReprise = "holiday" === entry?.periodType;
+  const isOverlay = isClosure || isReprise;
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
-  // Skip the fetch entirely off a closure (null disables the query).
-  const { data: overrides = [] } = usePeriodConstraintOverrides(isClosure ? calendarEntryId : null);
+  // Off an overlay period, null disables both queries (no wasted fetch).
+  const { data: overrides = [] } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: teamOverrides = [] } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
   const create = useCreatePeriodConstraintOverride(calendarEntryId);
+  const update = useUpdatePeriodConstraintOverride(calendarEntryId);
   const del = useDeletePeriodConstraintOverride(calendarEntryId);
-  // Optimistic intended-active state per constraint while its write is in flight:
-  // the sparse row only lands after the refetch, so without this the controlled
-  // checkbox snaps back and a re-click would fire a DUPLICATE create (422). The
-  // in-flight entry also gates re-clicks until the mutation settles.
+  // Optimistic intended-active state per constraint while its write is in flight (the
+  // sparse row only lands after the refetch). Also serializes toggles: the mutation hooks
+  // share ONE observer, so one write at a time keeps every onSettled reliable.
   const [inflight, setInflight] = useState<Map<string, boolean>>(new Map());
 
-  if (!isClosure) {
+  if (!isOverlay) {
     return null;
   }
 
-  // A constraint is disabled only if an override row turns it off; absent = active.
-  const disabledOf = new Map(overrides.filter((o) => !o.isActive).map((o) => [o.constraintId, o.id]));
-  const activeOf = (c: Constraint): boolean => (inflight.has(c.id) ? (inflight.get(c.id) as boolean) : !disabledOf.has(c.id));
-  // Serialize toggles: the create/del mutation hooks share ONE observer, so firing a
-  // second write before the first settles would rebind it and drop the first's
-  // onSettled (its inflight entry would never clear). One write at a time keeps every
-  // onSettled reliable — and still bars the duplicate-POST re-click.
+  const deactivatedTeams = new Set(teamOverrides.filter((o) => !o.isActive).map((o) => o.teamId));
+  // Smart default, mirrored server-side (ScheduleConstraintBuilder::activePermanentForReprise).
+  const defaultKept = (c: Constraint): boolean => {
+    if (isClosure) {
+      return true; // fermeture: everything kept by default (B3+F2 unchanged)
+    }
+    switch (c.scope) {
+      case "FACILITY":
+        return false;
+      case "TEAM":
+        return !deactivatedTeams.has(c.scopeTargetId ?? "");
+      default:
+        return true; // CLUB, COACH
+    }
+  };
+  const overrideOf = new Map(overrides.map((o) => [o.constraintId, o]));
+  const activeOf = (c: Constraint): boolean => (inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
-  const toggle = (c: Constraint, active: boolean) => {
+  // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
+  // drops the row (stays sparse); a deviation upserts (create, or PUT if a row exists).
+  const toggle = (c: Constraint, desired: boolean) => {
     if (mutating) {
-      return; // a write is settling — ignore the click (no duplicate POST, no observer rebind)
+      return; // a write is settling — ignore the click (one observer, no duplicate)
     }
     const settle = () =>
       setInflight((m) => {
@@ -364,23 +382,27 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
         next.delete(c.id);
         return next;
       });
-    setInflight((m) => new Map(m).set(c.id, active));
-    if (active) {
-      const overrideId = disabledOf.get(c.id);
-      if (undefined === overrideId) {
+    setInflight((m) => new Map(m).set(c.id, desired));
+    const existing = overrideOf.get(c.id);
+    if (desired === defaultKept(c)) {
+      if (undefined === existing) {
         settle();
         return;
       }
-      del.mutate(overrideId, { onSettled: settle });
+      del.mutate(existing.id, { onSettled: settle });
       return;
     }
-    create.mutate({ calendarEntryId, constraintId: c.id, isActive: false }, { onSettled: settle });
+    if (undefined !== existing) {
+      update.mutate({ id: existing.id, body: { calendarEntryId, constraintId: c.id, isActive: desired } }, { onSettled: settle });
+      return;
+    }
+    create.mutate({ calendarEntryId, constraintId: c.id, isActive: desired }, { onSettled: settle });
   };
 
   return (
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
-      <p className="text-xs text-muted-foreground">Décochez celles qui ne s'appliquent pas pendant cette fermeture — le planning principal n'est pas modifié.</p>
+      <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
       {isLoading ? null : 0 === constraints.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (

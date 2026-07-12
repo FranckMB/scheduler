@@ -8,9 +8,10 @@ const deleteOverride = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
 const createConstraintOverride = vi.fn();
+const updateConstraintOverride = vi.fn();
 const deleteConstraintOverride = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
-const constraintsState: { data: Array<{ id: string; name: string; ruleType: string }> } = { data: [] };
+const constraintsState: { data: Array<{ id: string; name: string; ruleType: string; scope?: string; scopeTargetId?: string | null }> } = { data: [] };
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
 const entryState: { data: { teamSelectionInitialized: boolean; periodType: string } | undefined } = { data: { teamSelectionInitialized: false, periodType: "closure" } };
@@ -33,6 +34,7 @@ vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
   usePeriodConstraintOverrides: () => ({ data: constraintOverridesState.data }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
+  useUpdatePeriodConstraintOverride: () => ({ mutate: updateConstraintOverride, isPending: false }),
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
@@ -56,6 +58,7 @@ afterEach(() => {
   createSlot.mockClear();
   deleteSlot.mockClear();
   createConstraintOverride.mockClear();
+  updateConstraintOverride.mockClear();
   deleteConstraintOverride.mockClear();
 });
 
@@ -119,8 +122,8 @@ describe("PeriodVenues — borrowed period slots", () => {
   });
 });
 
-describe("PeriodConstraints — toggle permanent constraints off for a closure", () => {
-  it("lists the club's permanent constraints, all active by default (no seed)", () => {
+describe("PeriodConstraints — inherited constraints toggle", () => {
+  it("closure: lists the club's permanent constraints, all kept by default", () => {
     constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
@@ -170,11 +173,39 @@ describe("PeriodConstraints — toggle permanent constraints off for a closure",
     expect(createConstraintOverride).toHaveBeenCalledTimes(1);
   });
 
-  it("does not render outside a closure period (permanent constraints don't apply)", () => {
+  it("reprise (holiday): default follows the team selection", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
+    constraintsState.data = [
+      { id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null },
+      { id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" },
+      { id: "kt1", name: "SM1 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t1" }, // équipe active
+      { id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }, // équipe en pause
+    ];
     render(<PeriodConstraints calendarEntryId="e1" />);
-    expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Club rule appliquée cette période" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Gym rule appliquée cette période" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "SM1 rule appliquée cette période" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "U13 rule appliquée cette période" })).not.toBeChecked();
+  });
+
+  it("reprise: keeping a facility (off by default) creates an isActive=true override", async () => {
+    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    constraintsState.data = [{ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Gym rule appliquée cette période" }));
+    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "kf", isActive: true }, expect.anything());
+  });
+
+  it("re-toggling a redundant isActive=true override updates instead of duplicating (P4-12d, no 422)", async () => {
+    // closure default = kept; a stale isActive=true row → box checked. Unchecking must PUT, not POST.
+    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: true, calendarEntryId: "e1" }];
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).toBeChecked();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
+    expect(updateConstraintOverride).toHaveBeenCalledWith({ id: "ov1", body: { calendarEntryId: "e1", constraintId: "k1", isActive: false } }, expect.anything());
+    expect(createConstraintOverride).not.toHaveBeenCalled();
   });
 
   it("does not render while the calendar entry is still loading (no holiday flash / dead override)", () => {
