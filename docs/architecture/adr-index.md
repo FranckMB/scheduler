@@ -21,6 +21,7 @@ This repo has **no formal ADRs yet**. This index is the entry point; add one num
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-0001](adr-0001-single-pass-solve.md) | Single-pass solve, no silent fallback | accepted |
+| [ADR-0002](adr-0002-pattern-plan.md) | Pattern « Plan » : un plan nommé, des versions, un pointeur | accepted |
 
 ## Candidate decisions to formalize
 These are existing, load-bearing decisions found during onboarding that are currently implicit. Promote to ADRs when touched (do not invent rationale retroactively without confirming intent):

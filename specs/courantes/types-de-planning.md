@@ -5,8 +5,12 @@
 > génération : quel type se déclenche quand, ce qu'on y manipule, quel besoin il comble,
 > et où l'implémentation actuelle diverge de la cible.
 >
-> Mécanique technique : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md)
-> (modèle temporel, CalendarEntry, overlays) · besoin détaillé vacances :
+> **Ce doc = le PRODUIT** (déclenchement, manipulation, besoin). **Le modèle TECHNIQUE**
+> (entité Plan, versions, pointeur, invariants, vocabulaire) vit dans
+> [`ADR-0002 — pattern « Plan »`](../../docs/architecture/adr-0002-pattern-plan.md) — un
+> concept = une maison, pas de duplication.
+> Mécanique temporelle : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md)
+> (CalendarEntry, cockpit) · besoin détaillé vacances :
 > [`../evolution/plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
 
 ## Vue d'ensemble
@@ -40,9 +44,12 @@
   suivante » (transition N→N+1).
 - **Contenu** : toute la structure du club (équipes, gymnases + créneaux, coachs, liens,
   contraintes permanentes) → génération CP-SAT → plan de saison.
-- **Cycle de vie** : versions (D1-D3), VALIDATED = baseline, reopen. Modifier le socle
-  invalide les overlays construits dessus (confirmation proportionnée).
-- **État** : ✅ livré et rodé — c'est le flux de référence.
+- **Cycle de vie (cible ADR-0002)** : des **versions** (V1, V2… nom auto) ; **valider = le
+  plan pointe** sur la version choisie et les autres sont supprimées ; **pointeur null =
+  espace de travail**. Modifier le socle invalide les plans construits dessus
+  (confirmation proportionnée). *(Implémentation actuelle : statuts VALIDATED/ARCHIVED +
+  baseline — à démolir/reconstruire selon l'ADR.)*
+- **État** : ✅ livré et rodé — c'est le flux de référence (refonte du cycle de vie à venir, ADR-0002).
 
 ## 2. Overlay d'ajustement (indisponibilité)
 
@@ -95,7 +102,7 @@
 | E3 | Défaut équipes reprise = **Fanion seul** | 3 | **Fanion + importantes** (rangs S + A) pré-cochées |
 | E4 | **Séances/équipe non ajustables dans l'overlay** côté UI (moteur OK) | 2 | Exposer l'ajustement 3→2 / 0 séances dans le flux overlay |
 | E5 | Modale **« Demandes des coachs »** absente | 3 | Bouton → modale vide d'abord, puis TODO-list par coach commune aux vacances (futur) |
-| E6 | **Noms par défaut non conformes** — aujourd'hui : socle = `Planning {date du jour}` (`GenerateStep.tsx`), overlay/reprise = titre de la CalendarEntry (`Vacances de la Toussaint`, `Gym Barros fermé`) | 1 + 2 + 3 | Socle : `Planning de la saison 20XX-20XX` · indispo : `Ajustement {GYMNASE} du {début} au {fin}` · reprise : `Planning de vacances de {nom} du {début} au {fin}` |
+| E6 | **Nommage des plannings** — souci de conception (le nom n'avait pas de conteneur ; 1re tentative sur `Schedule.name` = échec, PR #214) | 1 + 2 + 3 | **Absorbé par [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md)** : `Plan.name` = le nom public (défauts inv. 12), versions = noms auto « Vn - date » |
 
 > Suivi : ces écarts sont des items de backlog dans
 > [`../evolution/roadmap.md`](../evolution/roadmap.md) — ils se cadrent et se livrent
@@ -103,6 +110,10 @@
 
 ## Historique des décisions
 
+- **2026-07-12** — **pattern « Plan » arbitré point par point (A→H)** → formalisé dans
+  [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md) : entité Plan (type, nom
+  public, période propre, pointeur), Schedule = version, valider = pointer + supprimer
+  les autres, réglages de période sur le Plan, structure partagée + photo.
 - **2026-07-12** — modèle des 3 types validé avec le fondateur (cette page) : semaine =
   unité hors socle ; overlay = décision du gestionnaire après déclaration, structure
   verrouillée sauf séances ; reprise = semaines choisies, défaut Fanion + importantes,
