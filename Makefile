@@ -1,16 +1,29 @@
 .DEFAULT_GOAL := help
 
 DOCKER_COMPOSE := docker compose --env-file .env
-INFRA_SERVICES := postgres redis mailpit mercure
+# php-fpm and engine belong here: `make install` execs into both. nginx must NOT —
+# its healthcheck curls /api/health, which needs vendor/ that install has yet to write.
+INFRA_SERVICES := postgres redis mailpit mercure php-fpm engine
+
+# The PHP containers run as ${USER_ID:-1000}. A shell export beats --env-file, so this
+# covers .env files created before the rule below started writing the ids.
+export USER_ID := $(shell id -u)
+export GROUP_ID := $(shell id -g)
 
 .env:
 	cp .env.dist .env
+	printf 'USER_ID=%s\nGROUP_ID=%s\n' "$$(id -u)" "$$(id -g)" >> .env
 
 .installed: .env
 	$(DOCKER_COMPOSE) build
-	$(DOCKER_COMPOSE) up -d $(INFRA_SERVICES)
+	$(DOCKER_COMPOSE) up -d --wait $(INFRA_SERVICES)
 	$(MAKE) install
+	$(MAKE) bootstrap
 	touch .installed
+
+bootstrap: .env ## Generate JWT keys + create/migrate the dev DB (idempotent; repairs a stale DB)
+	$(MAKE) -C backend jwt-keys
+	$(MAKE) -C backend db-init
 
 start: .env .installed ## Start all Docker services, install dependencies on first run
 	$(DOCKER_COMPOSE) up -d --wait
@@ -20,10 +33,9 @@ stop: ## Stop all Docker services
 
 restart: stop start ## Restart all services
 
-install: .env ## Install all dependencies
+install: .env ## Install backend and engine development dependencies
 	$(MAKE) -C backend install
 	$(MAKE) -C engine install
-	$(MAKE) -C frontend install
 
 reinstall: .env ## Force reinstall dependencies
 	rm -f .installed

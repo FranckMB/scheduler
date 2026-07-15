@@ -25,14 +25,16 @@ A constraint solver (OR-Tools CP-SAT) places teams into venue time-slots under h
 
 ## 3. Key commands
 
-Backend & engine commands run **inside Docker** (their Makefiles wrap `docker compose exec`). Frontend dev runs **on the host**.
+Backend, engine and frontend tooling run **inside Docker** (their Makefiles wrap Docker Compose).
 
 ```bash
 make start | stop | install | test | lint        # root orchestration (docker compose, reads .env)
+make bootstrap             # JWT keypair + create/migrate the dev DB — idempotent; `.installed` runs it
+                           # on first install, so re-run it by hand after a pull adds migrations
 cd backend && make test    # CS-Fixer + PHPStan(lvl8) + PHPUnit (--group phase1)
-cd backend && make phpstan | cs-fix | rector | migration-diff | migration-migrate
+cd backend && make phpstan | cs-fix | rector | migration-diff | migration-migrate | jwt-keys | db-init
 cd engine  && make test    # pytest + ruff + mypy   |  make format
-cd frontend && npm run dev  # host, Vite :5173 (proxies /api + /.well-known/mercure — never /engine)
+make -C frontend dev        # Dockerized Vite :5173 (proxies /api + /.well-known/mercure — never /engine)
 ```
 
 ## 4. CI order (`.github/workflows/ci.yml`)
@@ -99,7 +101,7 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 
 ## 10. Gotchas (top)
 
-1. Backend & engine commands fail on the host — they must run inside the containers. Frontend dev is host-only.
+1. Backend, engine and frontend tooling run in Docker; the host only needs Docker, Docker Compose and Make.
 2. PHPUnit = `vendor/bin/phpunit` (PHPUnit 11) everywhere (CI, `Makefile`, `composer test`). `make phpunit` adds `--group phase1`. The suite needs the test DB — run `make db-init-test` first (CI brings it up via `docker compose up -d --wait`).
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
 4. Frontend is rebuilt + **active** — indexed by the graph (only its build artifacts `dist`/`node_modules`/`storybook-static` are ignored). Tenant is resolved server-side from the JWT: the frontend sends **no** `X-Club-Id` header.

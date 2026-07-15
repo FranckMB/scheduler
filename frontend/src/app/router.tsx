@@ -16,7 +16,7 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { ProfilePage } from "@/features/profile/ProfilePage";
 import { WizardPage } from "@/features/wizard/WizardLayout";
 
-export const router = createBrowserRouter([
+const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },

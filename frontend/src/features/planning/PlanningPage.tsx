@@ -25,36 +25,12 @@ import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
+import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { visibleSeasonPlans } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
 const IN_FLIGHT = ["PENDING", "GENERATING"];
-
-/** Latest finished SEASON schedule (VALIDATED or COMPLETED), else the most recent one, else null.
- *  Period overlays (calendarEntryId set) are never auto-selected — they are reached explicitly
- *  from the cockpit "Voir le plan". */
-type LandingSchedule = { id: string; status: string; createdAt: string; calendarEntryId: string | null };
-
-export function pickDefaultSchedule(schedules: LandingSchedule[]): string | null {
-  // planning-versions: ARCHIVED siblings are invisible — never auto-selected.
-  const seasonPlans = visibleSeasonPlans(schedules);
-  if (0 === seasonPlans.length) {
-    return null;
-  }
-  const byRecent = [...seasonPlans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return (byRecent.find((s) => "VALIDATED" === s.status || "COMPLETED" === s.status) ?? byRecent[0]).id;
-}
-
-/** UX-02: which schedule the planning page opens on. Prefer the season baseline —
- *  but ONLY if it is a finished SEASON plan (never a period overlay, never mid-flight),
- *  else fall back to the latest finished season plan. A stale/overlay baseline must
- *  never land the user on an empty "★ · période". */
-export function pickLandingScheduleId(schedules: LandingSchedule[], baselineScheduleId: string | null): string | null {
-  const base = schedules.find((s) => s.id === baselineScheduleId && null === s.calendarEntryId);
-
-  return base && !IN_FLIGHT.includes(base.status) ? base.id : pickDefaultSchedule(schedules);
-}
 
 function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: { hasAlerts: boolean; siblingCount: number; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (

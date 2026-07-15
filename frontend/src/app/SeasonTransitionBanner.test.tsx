@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MeResponse, MeSeason } from "@/features/auth/api";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 
-import { SeasonTransitionBanner, seasonYearOf } from "./SeasonTransitionBanner";
+import { SeasonTransitionBanner } from "./SeasonTransitionBanner";
+import { seasonYearOf } from "./seasonTransition";
 
 let meData: Partial<MeResponse> | undefined;
 

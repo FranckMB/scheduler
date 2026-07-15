@@ -1,0 +1,8 @@
+.git
+.ai
+.claude
+frontend/node_modules
+frontend/dist
+frontend/storybook-static
+engine/.venv
+**/__pycache__

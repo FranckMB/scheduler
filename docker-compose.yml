@@ -13,14 +13,54 @@ services:
         condition: service_healthy
       engine:
         condition: service_healthy
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null"]
       interval: 20s
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - clubscheduler_network
+
+  # Node/npm tooling stays inside Docker. This service is run on demand by the
+  # frontend Makefile and never starts as part of the application stack.
+  frontend-tooling:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      target: tooling
+    working_dir: /app/frontend
+    environment:
+      HUSKY: "0"
+    networks:
+      - clubscheduler_network
+
+  # Vite development server. Source code is bind-mounted for hot reload, while
+  # dependencies remain in a Docker-managed volume rather than on the host.
+  frontend-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      target: tooling
+    working_dir: /app/frontend
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./frontend:/app/frontend:cached
+      - frontend_node_modules:/app/frontend/node_modules
+    environment:
+      HUSKY: "0"
+      API_PROXY_TARGET: http://nginx
+      MERCURE_PROXY_TARGET: http://mercure
+    command: >-
+      sh -lc 'npm ci --legacy-peer-deps && exec npm run dev -- --host 0.0.0.0'
+    depends_on:
+      nginx:
+        condition: service_healthy
+      mercure:
+        condition: service_healthy
     networks:
       - clubscheduler_network
 
@@ -237,13 +277,20 @@ services:
       dockerfile: docker/pdf-worker/Dockerfile
     container_name: clubscheduler-pdf-worker
     working_dir: /app/frontend
+    # Host uid, like the PHP containers: the worker creates backend/public/exports
+    # on the bind mount itself (PdfGenerator.php does NOT pre-create it), which the
+    # image's pptruser (10042) may not do inside a host-owned directory.
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     volumes:
       - ./:/app:cached
       - pdf_worker_node_modules:/app/frontend/node_modules
     environment:
       NODE_ENV: development
-      PUPPETEER_SKIP_DOWNLOAD: "true"
-      NODE_PATH: /app/frontend/node_modules
+      # Chrome (crashpad, profile) needs a writable $HOME, which the host uid does
+      # not have in /home/pptruser — while the browser binary stays in the image's
+      # cache, which puppeteer resolves through PUPPETEER_CACHE_DIR before $HOME.
+      HOME: /tmp
+      PUPPETEER_CACHE_DIR: /home/pptruser/.cache/puppeteer
     command: [ "node", "worker.js" ]
     healthcheck:
       test: [ "CMD-SHELL", "pgrep -fa 'node worker.js' >/dev/null" ]
@@ -299,3 +346,4 @@ networks:
 volumes:
   postgres_data:
   pdf_worker_node_modules:
+  frontend_node_modules:

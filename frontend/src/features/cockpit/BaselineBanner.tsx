@@ -5,7 +5,8 @@ import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
-import { SeasonSchedulesModal, seasonPlanCounts } from "./SeasonSchedulesModal";
+import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
+import { seasonPlanCounts } from "./seasonPlannings";
 
 interface BaselineBannerProps {
   schedules: Schedule[];

@@ -1,49 +1,44 @@
 .DEFAULT_GOAL := help
 
 FIG := docker compose -f ../docker-compose.yml
-APP_ENV ?= $(shell awk -F= '$$1=="APP_ENV" {print $$2}' .env 2>/dev/null | tail -n 1)
-APP_ENV ?= dev
-USERID := $(shell id -u)
-GROUPID := $(shell id -g)
+ROOT_ENV := ../.env
 
-# Note: frontend service exists in docker-compose; exec still runs a one-off node container for ad hoc work
-exec: ## Enter a Node.js container for frontend work (one-off)
-	@echo "Starting one-off node container for frontend dev..."
-	docker run --rm -e APP_ENV=$(APP_ENV) -u $(USERID):$(GROUPID) -v /home/franck/Projets/scheduler:/app:cached -w /app/frontend node:20-alpine sh -c "
-		if ! command -v npm >/dev/null 2>&1; then apk add --no-cache npm; fi;
-		sh
-	"
+$(ROOT_ENV):
+	$(MAKE) -C .. .env
+
+exec: $(ROOT_ENV) ## Enter the Dockerized Node.js tooling environment
+	$(FIG) --profile tools run --rm --build --no-deps frontend-tooling sh
 
 start: ## Start the full Docker stack
 	$(FIG) up -d
 
 logs: ## Follow frontend service logs
-	$(FIG) logs -f frontend
+	$(FIG) --profile dev logs -f frontend frontend-dev
 
 stop: ## Stop the frontend service
-	$(FIG) stop frontend
+	$(FIG) --profile dev stop frontend frontend-dev
 
 shell: ## Open a shell in the frontend service container
 	$(FIG) exec frontend sh
 
 status: ## Show frontend service status
-	$(FIG) ps frontend
+	$(FIG) --profile dev ps frontend frontend-dev
 
-install: ## Install Node dependencies
-	npm install
+install: $(ROOT_ENV) ## Build the Dockerized Node.js tooling environment
+	$(FIG) --profile tools build frontend-tooling
 
-build: ## Build frontend
-	npm run build
+build: $(ROOT_ENV) ## Build the production frontend image
+	$(FIG) build frontend
 
-dev: ## Start dev server
-	npm run dev
+dev: $(ROOT_ENV) ## Start Dockerized Vite with hot reload
+	$(FIG) --profile dev up --build frontend-dev
 
-lint: ## Run ESLint + TypeScript checks
-	npm run lint && npx tsc --noEmit
+lint: install ## Run ESLint + TypeScript checks in Docker
+	$(FIG) --profile tools run --rm --no-deps frontend-tooling sh -lc 'npm run lint && npx tsc --noEmit'
 
-test: ## Run frontend tests
+test: ## Run frontend checks and tests in Docker
 	$(MAKE) lint
-	npm run test || true
+	$(FIG) --profile tools run --rm --no-deps frontend-tooling npm run test -- --maxWorkers=2
 
 help: ## Display this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)

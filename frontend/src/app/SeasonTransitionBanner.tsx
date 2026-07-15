@@ -2,17 +2,7 @@ import { CalendarPlus } from "lucide-react";
 
 import { useMe } from "@/features/auth/queries";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
-
-/**
- * Season year of an ISO date, July-15 pivot — mirrors the backend
- * SeasonResolver::seasonYear (lexicographic month-day comparison is safe on
- * zero-padded ISO strings).
- */
-export function seasonYearOf(iso: string): number {
-  const year = Number(iso.slice(0, 4));
-
-  return iso.slice(5, 10) >= "07-15" ? year : year - 1;
-}
+import { seasonYearOf } from "./seasonTransition";
 
 /** Local Y-m-d (never toISOString — the UTC shift can flip the day). */
 function localIso(date: Date): string {

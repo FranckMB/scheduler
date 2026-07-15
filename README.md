@@ -64,7 +64,7 @@ The manager stays in control; the solver does the combinatorial heavy lifting.
 
 ## Getting started
 
-Backend and engine run **inside Docker**; the frontend dev server runs **on the host**.
+Backend, engine and frontend tooling all run **inside Docker**.
 
 ```bash
 make start      # bring up the stack (docker compose, reads .env)
@@ -72,8 +72,22 @@ make test       # run backend + engine test suites
 make lint       # code-quality checks
 make stop       # stop the stack
 
-cd frontend && npm install && npm run dev   # UI on http://localhost:5173 (proxies /api)
+make -C frontend dev   # Dockerized Vite on http://localhost:5173 (proxies /api)
 ```
+
+On a fresh clone `make start` is the only command needed: it builds the images and their
+dependencies (including the frontend bundle served by its container on port 8081), installs
+the backend and engine development dependencies, then runs `make bootstrap` — which generates
+the JWT keypair and creates+migrates the dev database. No host Node.js installation is used by
+this bootstrap. Subsequent `make start` calls only start the Docker services. The installation
+and bootstrap steps are idempotent.
+
+`make bootstrap` is also the repair command: `make start` never touches the database on its own,
+so **re-run it after a `git pull` that brings new migrations**, otherwise the app hits
+`permission denied for table app_user` (the RLS grants ride along with the migrations).
+
+The database comes up empty. Demo data is opt-in: `make -C backend fixtures` seeds a club, its
+teams and the holiday reference data — it purges the existing rows first.
 
 Per-zone commands live in `backend/Makefile` and `engine/Makefile` (e.g.
 `cd backend && make test`, `cd engine && make test`). A solver smoke test drives a full
