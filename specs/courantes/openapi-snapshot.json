@@ -12,6 +12,188 @@
         }
     ],
     "paths": {
+        "/api/admin/auth/logout": {
+            "post": {
+                "operationId": "postAdminAuthLogout",
+                "tags": [
+                    "AdminAuth"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Super-admin session invalidated"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Missing or invalid X-CSRF-Token header"
+                    }
+                },
+                "summary": "Invalidate the super-admin session (CSRF-protected)",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/auth/me": {
+            "get": {
+                "operationId": "getAdminAuthMe",
+                "tags": [
+                    "AdminAuth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Authenticated super-admin identity",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "email": {
+                                            "type": "string",
+                                            "format": "email"
+                                        },
+                                        "csrfToken": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Hydrate the separate super-admin session"
+            }
+        },
+        "/api/admin/auth/password": {
+            "post": {
+                "operationId": "postAdminAuthPassword",
+                "tags": [
+                    "AdminAuth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Password accepted; TOTP challenge required within five minutes",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "mfaRequired": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                true
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid credentials"
+                    },
+                    "429": {
+                        "description": "Too many attempts (per-IP rate limit)"
+                    }
+                },
+                "summary": "Start the separate super-admin authentication flow",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/admin/auth/totp": {
+            "post": {
+                "operationId": "postAdminAuthTotp",
+                "tags": [
+                    "AdminAuth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "MFA accepted; stateful admin session created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "authenticated": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                true
+                                            ]
+                                        },
+                                        "csrfToken": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired authentication challenge"
+                    },
+                    "429": {
+                        "description": "Too many attempts (per-IP rate limit)"
+                    }
+                },
+                "summary": "Complete super-admin authentication with the mandatory TOTP code",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "code"
+                                ],
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "pattern": "^\\d{6}$"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
         "/api/me": {
             "get": {
                 "operationId": "getApiMe",

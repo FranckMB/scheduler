@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **besoin spécifié, décisions socle posées** (2026-07-10). Discovery terminée sur l'axe sécurité/auth ; **phasé SA0 → SA5**. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
+> **Statut** : **SA0 backend livré** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent le frontend React SA0 puis SA1 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` (**pas encore persistées**) · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -21,14 +21,14 @@ Trois usages :
 | # | Décision |
 |---|---|
 | 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
-| 2 | **On commence par SA0 + SA1** (socle sécurité/auth + capture des métriques). Sans le socle, tout le reste est soit vide (pas d'historique) soit dangereux. Peu visible mais indispensable. |
+| 2 | **SA0 backend est livré ; la suite commence par le frontend React SA0 puis SA1** (capture des métriques). Sans SA1, la console de monitoring serait vide d'historique. |
 | 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
 | 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
 ## 3. Découpage en lots (ordre imposé : SA0 → SA5)
 
-### SA0 — Socle sécurité & auth superadmin *(prérequis, 🔴 fondation)*
-Rôle applicatif superadmin distinct (hors `ClubUser`/tenant) · **auth séparée + MFA** · firewall/pare-feu dédié sur les routes `/admin/**` · **audit de tout accès et action** (qui, quand, quoi) · surface minimale, pas d'exposition publique sans garde. **NR sécurité obligatoire** (un `ClubUser` ne franchit jamais `/admin` ; un superadmin n'a pas de tenant).
+### SA0 — Socle sécurité & auth superadmin *(backend ✅ · frontend ⬜)*
+Backend livré : identité distincte hors tenant, session séparée mot de passe + TOTP, firewall `/api/admin/**`, rate limit, CSRF des mutations, audit fail-closed et NR `phase1`. Voir [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Reste : feature React lazy sous `/admin` (login mot de passe + TOTP, session, logout et layout dédié), sans réutiliser le JWT/store club.
 
 ### SA1 — Capture des métriques *(plomberie, avant l'UI, 🟡)*
 Persister **`solver_metrics`** à chaque génération (durée p50/p95, statut, INFEASIBLE, taille problème) — aujourd'hui calculées par `SolverMetricsMapper` puis **jetées** · **`Club.lastActivityAt`** (connexion / génération) · brancher l'**audit trail**. Sans SA1, la console n'a aucune donnée historique.
@@ -67,12 +67,11 @@ Se mettre à la place d'un club — **lecture d'abord**, bornée dans le temps, 
 
 ## 6. Questions ouvertes (à trancher au `/plan` de chaque lot)
 
-1. **Où vit la console ?** Route `/admin` protégée dans l'app (réutilise l'infra Symfony/React) vs sous-domaine séparé vs outil interne distinct. Défaut pressenti : **route `/admin` sous firewall dédié** (moins d'infra, sécurité par le pare-feu + MFA).
-2. **MFA** : TOTP (app d'authentification) vs email OTP vs WebAuthn. Défaut pressenti : **TOTP**.
-3. **Frontend** : réutiliser le front React (feature `admin/`) vs pages serveur Twig minimalistes (moins de surface JS, plus sobre pour de l'ops). À trancher.
-4. **Granularité de l'audit** : quoi tracer, rétention, format (table `admin_audit` dédiée).
-5. **`lastActivityAt`** : quels événements le mettent à jour (login, génération, écriture cockpit) ?
+1. **Granularité/rétention de l'audit viewer SA2** : SA0 capture déjà acteur, route, méthode, statut et date dans `admin_audit_log`; durée de conservation et filtres UI restent à décider.
+2. **`lastActivityAt`** : quels événements le mettent à jour (login, génération, écriture cockpit) ?
+
+Décisions désormais prises : console React intégrée sous `/admin` ; API sous `/api/admin` ; MFA TOTP ; authentification admin par session séparée du JWT club.
 
 ## 7. Ce que ce fichier engage / n'engage pas
 
-**Engage** : le périmètre (santé / usage / support / data ops), les 4 décisions socle (§2), l'ordre des lots (§3). **N'engage pas** : l'archi d'implémentation de chaque lot (route vs sous-domaine, TOTP vs WebAuthn, React vs Twig) — tranchées au `/plan` du lot concerné, en commençant par **SA0 + SA1**.
+**Engage** : le périmètre (santé / usage / support / data ops), les 4 décisions socle (§2), l'ordre des lots (§3), React intégré et TOTP. **N'engage pas** : l'architecture détaillée de SA1 à SA5, tranchée au `/plan` de chaque lot.

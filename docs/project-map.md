@@ -41,7 +41,7 @@ All services share the Docker network `clubscheduler_network`.
 
 ### 2.2 Domain entities (core)
 - **Club** — root tenant: `slug` (unique), `ffbbClubCode`, `planId`, `billingCycle`, `timezone`, `locale`, `onboardingCompleted`.
-- **User** (global) + **ClubUser** (membership junction: `clubId`, `userId`, `role`, `isActive`; unique `(clubId,userId)`) — access control pivot.
+- **User** (global) + **ClubUser** (membership junction: `clubId`, `userId`, `role`, `isActive`; unique `(clubId,userId)`) — access control pivot. **SuperAdmin** est une identité d'exploitation séparée, hors tenant, chargée uniquement par le firewall stateful `/api/admin/**` après mot de passe + TOTP.
 - **Season** — per-club: dates, `status`, `transitionData`.
 - **Team** — per-club-season: `sportCategoryId`, `priorityTierId`, `level`, `gender`, `size`, `sessionsPerWeek`, `allowMultipleSessionsPerDay`, `forcedVenueId`, `parentTeamId`.
 - **Schedule** — per-club-season run: `status` (`DRAFT|PENDING|GENERATING|COMPLETED|FAILED|VALIDATED`), `score`, snapshot data/hash, solver metrics, `calendarEntryId` (non-null ⇒ this schedule is a **period overlay**, not a season plan). `VALIDATED` lifecycle is a structuring axis (§7.1).

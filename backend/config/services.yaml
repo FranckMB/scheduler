@@ -26,6 +26,7 @@ services:
             $frontendBaseUrl: '%env(FRONTEND_BASE_URL)%'
             # Optional FFBB Meilisearch token override (lot C); empty → fetched at runtime.
             $ffbbMeilisearchToken: '%env(FFBB_MEILISEARCH_TOKEN)%'
+            $appSecret: '%env(APP_SECRET)%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name

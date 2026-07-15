@@ -36,7 +36,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         [$club, $seasons] = $this->createClubWithSeasons();
         [$old] = $seasons;
 
-        $tester = $this->runPurge(['--dry-run' => true, '--club' => $club->getId()]);
+        $tester = $this->runPurge(['--dry-run' => true, '--club' => $club->getId(), '--date' => $this->purgeDate()]);
         $tester->assertCommandIsSuccessful();
 
         // The command cleared the GUC in its finally block — re-scope so the
@@ -46,7 +46,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         // The N-2 season and its team are still there.
         self::assertNotNull($this->em->getRepository(Season::class)->find($old->getId()));
         self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['seasonId' => $old->getId()]));
-        self::assertStringContainsString('would purge', $tester->getDisplay());
+        self::assertStringContainsString('would be purged', $tester->getDisplay());
     }
 
     public function testPurgesOnlySeasonsOlderThanPredecessor(): void
@@ -54,7 +54,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         [$club, $seasons] = $this->createClubWithSeasons();
         [$old, $past, $current, $draft] = $seasons;
 
-        $tester = $this->runPurge(['--club' => $club->getId()]);
+        $tester = $this->runPurge(['--club' => $club->getId(), '--date' => $this->purgeDate()]);
         $tester->assertCommandIsSuccessful();
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
@@ -159,5 +159,14 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->persist($season);
 
         return $season;
+    }
+
+    private function purgeDate(): string
+    {
+        $seasonYear = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+
+        // The command deliberately grants 30 days after the season starts.
+        // Pin the test after that grace window so it tests retention, not grace.
+        return $seasonYear . '-09-01';
     }
 }
