@@ -4,7 +4,7 @@
 
 ## Rôle & périmètre
 
-Le frontend est l'UI de la plateforme. Un gestionnaire de club y **saisit ses données** (équipes, gymnases, coachs, contraintes), **génère** un planning, puis l'**ajuste et régénère**. Servi en statique par Nginx en prod ; en dev, le serveur Vite tourne **sur l'hôte** (pas dans Docker).
+Le frontend est l'UI de la plateforme. Un gestionnaire de club y **saisit ses données** (équipes, gymnases, coachs, contraintes), **génère** un planning, puis l'**ajuste et régénère**. Servi en statique par Nginx en prod ; en dev, le serveur Vite tourne dans Docker.
 
 **Frontières (à ne jamais franchir) :**
 - Parle **uniquement** au backend via `/api/*`. **Ne contacte jamais l'engine directement** (la génération passe par `POST /api/schedules/{id}/generate`, le backend appelle l'engine).
@@ -14,15 +14,14 @@ Le frontend est l'UI de la plateforme. Un gestionnaire de club y **saisit ses do
 ## Commandes principales
 
 ```bash
-# Dev frontend = sur l'HÔTE (pas dans Docker), Vite proxifie vers le backend
-npm install
-npm run dev            # Vite, http://localhost:5173 (proxy /api → :8080, /.well-known/mercure → :3000)
-npm run build          # tsc + vite build (prod → dist/)
-npm run lint           # ESLint
-npm run test           # Vitest (unit + intégration RTL avec vi.mock)
+# Aucun Node/npm requis sur l'hôte
+make dev               # Vite Docker, http://localhost:5173
+make build             # image frontend de production (tsc + Vite + Nginx)
+make lint              # ESLint + TypeScript dans Docker
+make test              # Vitest dans Docker (inclut lint + typecheck)
+make exec              # shell dans l'image de tooling Node
 
-# e2e (Playwright)
-npx playwright test    # parcours bout-en-bout (frontend/tests/e2e, config playwright.config.ts)
+# Les e2e Playwright restent pilotés par la CI.
 ```
 
 ## Recap projet

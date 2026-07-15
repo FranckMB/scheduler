@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/utils";
 
 import { listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
 
@@ -17,9 +18,14 @@ vi.mock("./api", () => {
   // A real error class so PlanningPage's `error instanceof OverlaysExistError`
   // escalation branch fires from the mocked reopen/validate rejections.
   class OverlaysExistError extends Error {
-    constructor(public count: number, public overlays: unknown[]) {
+    public count: number;
+    public overlays: unknown[];
+
+    constructor(count: number, overlays: unknown[]) {
       super("overlays");
       this.name = "OverlaysExistError";
+      this.count = count;
+      this.overlays = overlays;
     }
   }
   return {
@@ -142,7 +148,7 @@ describe("PlanningPage (integration)", () => {
   // planning lifecycle (§7.1): reopening a VALIDATED plan that has period overlays
   // 409s; the UI escalates to a proportional confirm, then re-sends with the flag.
   describe("reopen escalation (validated plan with overlays)", () => {
-    const validated = [{ id: SID, name: "Planning A", status: "VALIDATED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
+    const validated: Schedule[] = [{ id: SID, name: "Planning A", status: "VALIDATED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
 
     beforeEach(() => {
       vi.mocked(reopenSchedule).mockReset(); // per-test call count + queued once-values

@@ -29,6 +29,7 @@ Thumbs.db
 
 # --- Python ---
 __pycache__/
+*.egg-info/
 *.py[cod]
 *.pyo
 *.pyd

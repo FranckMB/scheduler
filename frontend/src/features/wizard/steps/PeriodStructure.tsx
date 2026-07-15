@@ -31,6 +31,7 @@ import {
   useWizardVenues,
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
+import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
@@ -40,13 +41,6 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 // Claimed ONCE and never un-claimed (un-claiming on a partial failure would re-run the
 // seed against a still-empty cache and double-write): a failed seed is best-effort, the
 // manager completes it with the "Fanion seul" ramp.
-const seededPeriods = new Set<string>();
-
-/** Test-only: reset the session seed memory so each test starts fresh. */
-export function __resetPeriodSeed(): void {
-  seededPeriods.clear();
-}
-
 /**
  * Period-editable teams (F1): the club roster is READ-ONLY (grouped by rank), but
  * each team can be toggled off for the period and given a period-specific number
@@ -103,10 +97,10 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // error / 404 leaves entry undefined, and we must NOT seed an unknown period
     // (it could be an already-configured one whose GET blipped) — only seed when the
     // entry loaded AND is explicitly uninitialised.
-    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== entry?.teamSelectionInitialized || seededPeriods.has(calendarEntryId)) {
+    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== entry?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
       return;
     }
-    seededPeriods.add(calendarEntryId);
+    claimPeriodSeed(calendarEntryId);
     const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
     if (0 === belowTop.length) {
       return;

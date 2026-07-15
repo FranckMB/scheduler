@@ -13,8 +13,8 @@ vi.mock("./SeasonSchedulesModal", () => ({
       <button onClick={onClose}>Fermer</button>
     </div>
   ),
-  seasonPlanCounts: () => ({ total: 2, overlays: 1 }),
 }));
+vi.mock("./seasonPlannings", () => ({ seasonPlanCounts: () => ({ total: 2, overlays: 1 }) }));
 
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));

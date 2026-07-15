@@ -3,8 +3,10 @@
 ## Quick Start
 
 ```bash
-# 1. Start all services — on a fresh clone this also installs the dependencies,
-#    generates the JWT keypair and creates+migrates the dev database.
+# 1. Start all services — on a fresh clone this builds every Docker image (including
+#    the frontend bundle), installs backend/engine dependencies, generates the JWT
+#    keypair and creates+migrates the dev database. It does not use host Node.js.
+#    Subsequent calls only start the Docker services.
 make start
 
 # 2. Check health
@@ -13,6 +15,9 @@ curl http://localhost:8080/api/health
 # 3. Run tests
 make test
 ```
+
+Node.js and npm are never required on the host. Frontend development, build,
+lint and tests run through Docker with `make -C frontend dev|build|lint|test`.
 
 The database starts empty; demo data is opt-in (`make -C backend fixtures`). After a `git pull`
 that brings new migrations, run `make bootstrap` — `make start` never migrates on its own.

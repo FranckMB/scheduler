@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickDefaultSchedule, pickLandingScheduleId } from "./PlanningPage";
+import { pickDefaultSchedule, pickLandingScheduleId } from "./lib/pickLandingSchedule";
 
 type S = { id: string; status: string; createdAt: string; calendarEntryId: string | null };
 

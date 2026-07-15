@@ -47,10 +47,11 @@ vi.mock("@/features/cockpit/queries", () => ({
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { __resetPeriodSeed, PeriodConstraints, PeriodTeams, PeriodVenues } from "./PeriodStructure";
+import { PeriodConstraints, PeriodTeams, PeriodVenues } from "./PeriodStructure";
+import { resetPeriodSeed } from "./periodSeed";
 
 afterEach(() => {
-  __resetPeriodSeed();
+  resetPeriodSeed();
   overridesState.data = [];
   constraintsState.data = [];
   constraintOverridesState.data = [];
@@ -80,7 +81,7 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
   });
 
   it("does NOT seed a period already configured server-side (teamSelectionInitialized)", () => {
-    entryState.data = { teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
+    entryState.data = { teamSelectionInitialized: true, periodType: "closure" }; // e.g. manager reset it to all-active, then reloaded
     render(<PeriodTeams calendarEntryId="already-init" />);
     expect(createOverride).not.toHaveBeenCalled();
   });

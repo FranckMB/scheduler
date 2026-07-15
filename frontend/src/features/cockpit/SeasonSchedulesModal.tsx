@@ -3,63 +3,17 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
-import { representativeVersion, visibleOverlayVersions, visibleSeasonPlans } from "@/features/planning/lib/versions";
 import { type ExportFormat, useScheduleExport } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
+import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
   schedules: Schedule[];
   baselineScheduleId: string | null;
   onClose: () => void;
-}
-
-/** A distinct PLANNING (not a version): the season main plan, or a period overlay. */
-interface PlanningRow {
-  id: string;
-  label: string;
-  status: Schedule["status"];
-  isBaseline: boolean;
-  isOverlay: boolean;
-}
-
-/**
- * The season's distinct PLANNINGS — the main season plan (1) plus one per period
- * overlay — NOT their internal versions (V1/V2… are navigated inside the
- * planning). Each is represented by its latest FINISHED version, so its
- * Eye/Export never target a failed or in-flight one.
- */
-function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | null): PlanningRow[] {
-  const rows: PlanningRow[] = [];
-  const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
-  if (null !== seasonMain) {
-    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId, isOverlay: false });
-  }
-  // One row per period overlay (its latest finished version), sorted by period name.
-  const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
-  const periods: PlanningRow[] = [];
-  for (const entryId of periodIds) {
-    const version = representativeVersion(visibleOverlayVersions(schedules, entryId));
-    if (null !== version) {
-      periods.push({ id: version.id, label: version.name, status: version.status, isBaseline: false, isOverlay: true });
-    }
-  }
-  periods.sort((a, b) => a.label.localeCompare(b.label));
-
-  return [...rows, ...periods];
-}
-
-/**
- * Banner counts — derived from the SAME row list the modal shows (distinct
- * plannings, not versions), in ONE pass: `total` drives "Tous les plannings (N)",
- * `overlays` drives "N planning secondaire" (finished periods only, so it never
- * advertises a period the modal omits — e.g. one still mid-first-generation).
- */
-export function seasonPlanCounts(schedules: Schedule[]): { total: number; overlays: number } {
-  const rows = seasonPlannings(schedules, null);
-  return { total: rows.length, overlays: rows.filter((row) => row.isOverlay).length };
 }
 
 const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [

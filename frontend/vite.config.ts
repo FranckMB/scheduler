@@ -15,16 +15,16 @@ const config = defineConfig({
     // Dev-only proxies — production uses Nginx
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
       // Exported PDF/PNG files live under the backend's public/exports.
       '/exports': {
-        target: 'http://127.0.0.1:8080',
+        target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
       '/.well-known/mercure': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.MERCURE_PROXY_TARGET ?? 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
       // FRT-17: no `/engine` proxy — the frontend NEVER calls the engine directly

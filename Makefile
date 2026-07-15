@@ -33,10 +33,9 @@ stop: ## Stop all Docker services
 
 restart: stop start ## Restart all services
 
-install: .env ## Install all dependencies
+install: .env ## Install backend and engine development dependencies
 	$(MAKE) -C backend install
 	$(MAKE) -C engine install
-	$(MAKE) -C frontend install
 
 reinstall: .env ## Force reinstall dependencies
 	rm -f .installed

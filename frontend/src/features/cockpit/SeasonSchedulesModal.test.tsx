@@ -15,7 +15,8 @@ vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }) }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
-import { SeasonSchedulesModal, seasonPlanCounts } from "./SeasonSchedulesModal";
+import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
+import { seasonPlanCounts } from "./seasonPlannings";
 
 beforeEach(() => {
   setSelectedScheduleId.mockClear();
