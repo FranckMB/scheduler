@@ -8,6 +8,12 @@ Changements récents :
 - **Supervision superadmin SA2 API (2026-07-16)** : `GET /api/admin/overview`
   expose les agrégats parc/solveur et `GET /api/admin/clubs` la liste transverse
   paginée/recherchable avec saison, volumétrie et métriques sur 30 jours.
+- **ADR-0002 pattern « Plan » — Lot B1 (2026-07-16, ADDITIF)** : aucun path ni schéma
+  généré ne bouge, et **aucun comportement ne change**. Seule évolution de contrat :
+  `GET /api/me` gagne **`seasonPlanHasFinishedVersion`** (bool — le plan SEASON a ≥1
+  version terminée COMPLETED/FAILED/VALIDATED). Champ **préparatoire non consommé** : il
+  servira au lot de bascule pour le déblocage cockpit (inv. 8/16).
+  `baselineScheduleId`/`socleValidatedAt` restent la vérité jusqu'à ce lot-là.
 - **SA1 métriques (2026-07-16)** : les métriques de génération sont persistées côté
   backend et `Club.lastActivityAt` est un champ de lecture pour les futurs agrégats.
 - **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous

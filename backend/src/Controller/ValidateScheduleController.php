@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
+use App\Service\SchedulePlanProvisioner;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -38,6 +39,7 @@ final class ValidateScheduleController extends AbstractController implements Sea
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedules/{id}/validate', name: 'api_schedule_validate', methods: ['POST'])]
@@ -126,6 +128,13 @@ final class ValidateScheduleController extends AbstractController implements Sea
             }
 
             $schedule->setStatus(ScheduleStatus::VALIDATED);
+
+            // ADR-0002 lot B1 (ADDITIF) : le plan pointe la version validée. Le
+            // pointeur est MAINTENU ici mais rien ne le lit encore pour décider —
+            // c'est le lot de bascule qui déplacera les consommateurs dessus, en
+            // même temps que la suppression du legacy. Objectif : quand la bascule
+            // arrivera, le pointeur sera déjà juste et peuplé.
+            $this->schedulePlanProvisioner->choose($schedule);
 
             // The sibling versions are set aside — ARCHIVED, hidden from the
             // selector, kept as a safety net until the purge. A previously

@@ -224,16 +224,51 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   les statuts `VALIDATED/ARCHIVED` et `planningName` **font toujours foi**. `chosenScheduleId`
   est backfillé au snapshot mais pas encore vivant. NR : `SchedulePlanProvisionerTest`
   (+ `RlsIsolationTest` / `TenantOwnedInterfaceCompletenessTest` qui couvrent la nouvelle table).
-- **Lot B** — cycle de vie : valider = pointer + supprimer les autres versions, reopen,
-  espace de travail (pointeur null) ; bascule des décisions du legacy vers le pointeur.
-  **À traiter EN MÊME TEMPS que le passage du pointeur en « vivant » (sinon incohérent) :**
-  - **nettoyer `chosenScheduleId`** quand la version pointée est supprimée / le socle
-    réattribué (en Lot A le pointeur est un snapshot dormant, jamais déréférencé — le
-    trou est inoffensif tant qu'aucun client ne le lit) ;
-  - **numérotation de version strictement monotone** : `versionNumber` est un
-    `MAX+1` en Lot A (aucune suppression) ; dès que Lot B supprime des versions,
-    remplacer par un compteur stocké sur le plan (sinon un « V3 » supprimé puis
-    régénéré réutilise le numéro 3).
+- **Lot B1 — fondations du pointeur (ADDITIF, livré 2026-07-16)** : le pointeur est
+  **maintenu** (valider le pose, rouvrir le relâche, supprimer une version le libère) et
+  la **numérotation devient monotone** (`SchedulePlan.lastVersionNumber` — une version
+  supprimée ne rend jamais son numéro : déféré du lot A). **Rien ne lit encore le
+  pointeur pour décider** : aucun comportement ne change (aucun test existant n'a bougé).
+  `/api/me` expose `seasonPlanHasFinishedVersion` (préparé pour la bascule, non consommé).
+  **Correction d'un vrai bug du lot A (déjà sur main)** : le backfill avait seedé
+  `chosenScheduleId` depuis `baselineScheduleId`, or cette baseline est posée
+  **automatiquement** à la 1re génération COMPLETED — ce n'est pas une validation. La
+  migration **répare** le pointeur (`chosen` := la version `VALIDATED`, sinon `null`) et
+  ne supprime **rien**.
+
+- **Limites assumées du lot B1** (revues, tracées, à reprendre au lot de bascule) :
+  - `SetBaselineController` déplace encore la baseline **sans toucher au pointeur** →
+    les deux peuvent diverger. Sans effet aujourd'hui (**zéro appelant** : ni le
+    frontend ni aucun service ne l'appelle) ; la bascule le supprime (inv. 18).
+  - Si le plan disparaît en cours de requête (reset de saison concurrent), la version
+    est laissée **non liée** (`schedulePlanId` null) plutôt que de lever : lever
+    fermerait l'EntityManager et transformerait une création qui marchait en 500. Le
+    lien est nullable pendant toute la transition ; le lot D le rendra NOT NULL et
+    devra backfiller ces rares orphelins.
+  - Le seed du compteur part du MAX des versions **survivantes** : les numéros des
+    versions supprimées AVANT la migration sont irrécupérables (une réutilisation
+    résiduelle possible, une seule fois, puis plus jamais).
+  - `app:purge-overlays` attrape-et-continue : une transaction en échec ferme
+    l'EntityManager et fait échouer le reste du passage. Pré-existant (le flush était
+    déjà dans la boucle) ; à traiter avec la commande, hors scope B1.
+
+- **Lot B-bascule — LA LEÇON (à faire en UN SEUL lot, back + front + drop du legacy)** :
+  une **demi-migration est structurellement impossible**. Le legacy n'est PAS un miroir
+  passif : `baselineScheduleId`/`socleValidatedAt` sont **lus pour décider** par ~16
+  fichiers — radar de conflits matchs (`FixtureConflictsController`,
+  `CalendarEntryConflictsController`, `MatchConflictDetector`), routing et mode guidé
+  (`AuthGuard`, `CockpitPage`, `WizardLayout`), bannière et atterrissage
+  (`BaselineBanner`, `PlanningPage`, `PlanningToolbar`, `seasonPlannings`),
+  `GenerateScheduleHandler` (auto-baseline). Une tentative de basculer les seules gardes
+  backend en gardant le legacy vivant a produit **deux vérités divergentes** et ~15
+  défauts confirmés en 4 rounds de revue (gardes destructives désarmées, baseline
+  pendante ⇒ zéro conflit match détecté, V1 indélébile…). La bascule doit donc déplacer
+  **tous** les consommateurs et **supprimer** le legacy dans le même commit — une seule
+  vérité, par construction. Elle emporte alors : valider = pointer **+ supprimer les
+  autres versions** (inv. 1), gate des plans secondaires sur le pointeur (inv. 13),
+  destruction confirmée (inv. 14), déblocage cockpit (inv. 8/16), suppression de
+  `SetBaselineController` (inv. 18) et le `plans[]` du 409.
+
 - **Lot C** — réglages de période & génération pilotés par plan.
 - **Lot D** — nettoyage : suppression du legacy (baseline/overlay/liveContext, VALIDATED/
   ARCHIVED), colonnes `schedule_plan_id`/`version_number` rendues `NOT NULL`.

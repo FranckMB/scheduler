@@ -42,6 +42,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -135,6 +136,26 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
      */
     protected function processDelete(array $uriVariables, ?string $clubId): void
     {
+        // Atomique : la suppression du plan de période est un DELETE brut qui
+        // s'auto-commit ; sans transaction, un échec plus bas (cascade, audit)
+        // laisserait le plan détruit alors que la période survit — et une
+        // ré-adaptation repartirait à V1 (le compteur monotone serait perdu).
+        $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId): void {
+            $this->deleteEntryAndCascade($uriVariables, $clubId);
+        });
+    }
+
+    /**
+     * @param CalendarEntry $entity
+     */
+    protected function mapEntityToOutput(object $entity): CalendarEntryResource
+    {
+        return CalendarEntryResource::fromEntity($entity);
+    }
+
+    /** @param array<string, mixed> $uriVariables */
+    private function deleteEntryAndCascade(array $uriVariables, ?string $clubId): void
+    {
         // Delete the overlay BEFORE the parent removes the entry (we need the
         // entry to read overlayScheduleId). Guard club ownership inline so a
         // cross-club delete deletes nothing before the parent throws 403.
@@ -142,7 +163,18 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         if (\is_string($id) && '' !== $id) {
             $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($id);
             if ($entry instanceof CalendarEntry && (null === $clubId || $entry->getClubId() === $clubId)) {
+                // Verrou EN TÊTE : deleteOverlayForEntry balaie les versions juste
+                // en dessous. Le prendre après (dans deletePeriodPlan) ne sérialise
+                // rien — une création d'overlay concurrente s'intercale, et sa
+                // version se retrouve liée à un plan qu'on vient de supprimer.
+                $this->schedulePlanProvisioner->lockPlanScope($entry->getId());
                 $this->overlayManager->deleteOverlayForEntry($entry);
+                // ADR-0002 inv. 10 : supprimer une indisponibilité supprime SES plans.
+                // Ici (et pas dans deleteOverlayForEntry, que la purge des périodes
+                // échues appelle sur des entries qui, elles, SURVIVENT) : sinon
+                // /api/schedule_plans garderait un plan fantôme nommant une période
+                // supprimée, et une re-adaptation repartirait à V1.
+                $this->schedulePlanProvisioner->deletePeriodPlan($entry->getId());
             }
         }
 
@@ -180,14 +212,6 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             }
             $this->entityManager->flush();
         }
-    }
-
-    /**
-     * @param CalendarEntry $entity
-     */
-    protected function mapEntityToOutput(object $entity): CalendarEntryResource
-    {
-        return CalendarEntryResource::fromEntity($entity);
     }
 
     private function parseKind(?string $value): CalendarEntryKind
