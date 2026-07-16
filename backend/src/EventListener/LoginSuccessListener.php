@@ -53,6 +53,10 @@ final class LoginSuccessListener
                 'UPDATE app_user SET last_login_at = :now, inactivity_warned_at = NULL WHERE id = :id',
                 ['now' => $now->format('Y-m-d H:i:s'), 'id' => $user->getId()],
             );
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE club SET last_activity_at = :now WHERE id IN (SELECT club_id FROM club_user WHERE user_id = :user_id AND is_active = TRUE)',
+                ['now' => $now->format('Y-m-d H:i:s'), 'user_id' => $user->getId()],
+            );
             // Aligne l'entité managée (déjà hydratée par le provider) pour que
             // la suite de la requête voie la même vérité que la DB.
             $user->setLastLoginAt($now);

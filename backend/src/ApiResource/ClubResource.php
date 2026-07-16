@@ -66,6 +66,9 @@ class ClubResource
     public int $generationCountSeason = 0;
 
     #[Groups(['read'])]
+    public ?DateTimeImmutable $lastActivityAt = null;
+
+    #[Groups(['read'])]
     public ?string $schoolZone = null;
 
     #[Groups(['read'])]
@@ -103,6 +106,7 @@ class ClubResource
         $dto->billingCycle = $entity->getBillingCycle();
         $dto->planExpiresAt = $entity->getPlanExpiresAt();
         $dto->generationCountSeason = $entity->getGenerationCountSeason();
+        $dto->lastActivityAt = $entity->getLastActivityAt();
         $dto->schoolZone = $entity->getSchoolZone();
         $dto->timezone = $entity->getTimezone();
         $dto->locale = $entity->getLocale();

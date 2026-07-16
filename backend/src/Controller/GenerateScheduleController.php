@@ -8,8 +8,10 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,6 +29,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Service\SocleGuard $socleGuard,
         private readonly \App\Service\GenerationComplexityGuard $complexityGuard,
+        private readonly ClockInterface $clock,
     ) {}
 
     public function __invoke(string $id): JsonResponse
@@ -91,8 +94,11 @@ final class GenerateScheduleController extends AbstractController implements Sea
         // done at queue time so the UI can leave /wizard for the work loop right away,
         // regardless of whether the solve ends up feasible.
         $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
-        if ($club instanceof Club && !$club->getOnboardingCompleted()) {
-            $club->setOnboardingCompleted(true);
+        if ($club instanceof Club) {
+            $club->setLastActivityAt(DateTimeImmutable::createFromInterface($this->clock->now()));
+            if (!$club->getOnboardingCompleted()) {
+                $club->setOnboardingCompleted(true);
+            }
         }
 
         $this->entityManager->flush();

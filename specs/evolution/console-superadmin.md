@@ -1,9 +1,9 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0 backend + frontend livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent SA1 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
+> **Statut** : **SA0 backend + frontend et SA1 plomberie livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent SA2 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
-> **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` (**pas encore persistées**) · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
+> **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` puis persistées par SA1 dans `solver_metrics` · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
 
 ---
 
@@ -21,7 +21,7 @@ Trois usages :
 | # | Décision |
 |---|---|
 | 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
-| 2 | **SA0 backend est livré ; la suite commence par le frontend React SA0 puis SA1** (capture des métriques). Sans SA1, la console de monitoring serait vide d'historique. |
+| 2 | **SA0 backend/frontend et SA1 plomberie sont livrés ; la suite est SA2** (console read-only). |
 | 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
 | 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
@@ -30,8 +30,8 @@ Trois usages :
 ### SA0 — Socle sécurité & auth superadmin *(backend ✅ · frontend ✅)*
 Livré : identité distincte hors tenant, session séparée mot de passe + TOTP, firewall `/api/admin/**`, rate limit, CSRF, audit fail-closed et NR `phase1`, plus feature React lazy sous `/admin` (login, TOTP, hydratation de session, logout et layout dédié). Le frontend n'utilise pas le JWT/store club. Voir [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md).
 
-### SA1 — Capture des métriques *(plomberie, avant l'UI, 🟡)*
-Persister **`solver_metrics`** à chaque génération (durée p50/p95, statut, INFEASIBLE, taille problème) — aujourd'hui calculées par `SolverMetricsMapper` puis **jetées** · **`Club.lastActivityAt`** (connexion / génération) · brancher l'**audit trail**. Sans SA1, la console n'a aucune donnée historique.
+### SA1 — Capture des métriques *(plomberie ✅)*
+Livré : persistance `solver_metrics` à chaque tentative de génération (statut, durée, taille, conflits, score, version), RLS tenant-scoped, et `Club.lastActivityAt` alimenté par activité authentifiée + génération mise en file. Le partitionnement mensuel et la purge six mois restent à rattacher aux jobs d'exploitation ; l'audit des accès admin est déjà livré en SA0.
 
 ### SA2 — Console read-only (monitoring) *(🟢 lecture seule)*
 - **Santé technique** : engine up, worker up, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries) ; erreurs (Sentry si branché).
@@ -68,10 +68,9 @@ Se mettre à la place d'un club — **lecture d'abord**, bornée dans le temps, 
 ## 6. Questions ouvertes (à trancher au `/plan` de chaque lot)
 
 1. **Granularité/rétention de l'audit viewer SA2** : SA0 capture déjà acteur, route, méthode, statut et date dans `admin_audit_log`; durée de conservation et filtres UI restent à décider.
-2. **`lastActivityAt`** : quels événements le mettent à jour (login, génération, écriture cockpit) ?
 
 Décisions désormais prises : console React intégrée sous `/admin` ; API sous `/api/admin` ; MFA TOTP ; authentification admin par session séparée du JWT club.
 
 ## 7. Ce que ce fichier engage / n'engage pas
 
-**Engage** : le périmètre (santé / usage / support / data ops), les 4 décisions socle (§2), l'ordre des lots (§3), React intégré et TOTP. **N'engage pas** : l'architecture détaillée de SA1 à SA5, tranchée au `/plan` de chaque lot.
+**Engage** : le périmètre (santé / usage / support / data ops), les 4 décisions socle (§2), l'ordre des lots (§3), React intégré, TOTP et la plomberie métriques SA1. **N'engage pas** : l'architecture détaillée de SA2 à SA5, tranchée au `/plan` de chaque lot.

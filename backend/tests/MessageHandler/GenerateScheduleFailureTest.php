@@ -19,6 +19,7 @@ use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
+use App\Service\SolverMetricsRecorder;
 use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
@@ -76,6 +77,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $reloaded->getStatus(),
             'a persisted COMPLETED solve must survive a best-effort Mercure publish failure',
         );
+        self::assertSame(1, $em->getRepository(\App\Entity\SolverMetric::class)->count(['scheduleId' => $scheduleId]));
     }
 
     /**
@@ -127,6 +129,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $em->getRepository(ScheduleDiagnostic::class)->findBy(['scheduleId' => $scheduleId]),
         );
         self::assertContains('internal_error', $types, 'a failure diagnostic must be recorded');
+        self::assertSame(1, $em->getRepository(\App\Entity\SolverMetric::class)->count(['scheduleId' => $scheduleId]));
     }
 
     /**
@@ -191,6 +194,9 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $container->get(ClubGenerationLock::class),
             $container->get(TenantConnectionContext::class),
             $container->get(StructureSnapshotter::class),
+            null,
+            null,
+            $container->get(SolverMetricsRecorder::class),
         );
 
         $handler(new GenerateScheduleMessage(scheduleId: $scheduleId, clubId: $clubId));
