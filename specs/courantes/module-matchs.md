@@ -173,8 +173,10 @@ alors vrai par l'API et faux ici — donc faux, et contournable en un clic.
 
 `StructureRestorer::assertRestoreKeepsEngagedTeams` refuse le chargement (**409**) quand la photo ne contient
 pas une équipe engagée. On refuse plutôt que d'épargner l'équipe : la garder hors de la photo rendrait la
-structure incohérente avec la version qu'on prétend recharger. Une équipe engagée **présente** dans la photo
-ne bloque rien.
+structure incohérente avec la version qu'on prétend recharger. Il refuse **aussi** quand la photo porte un
+**autre niveau** pour une équipe engagée : `level` est un champ mappé, donc la photo le réinsère tel quel, et le
+gel du niveau (voir plus haut) serait contourné par le restore — le club se retrouverait inscrit sous un niveau
+que l'API refuse ensuite de corriger. Une équipe engagée présente dans la photo **avec son niveau** ne bloque rien.
 
 ## Reste palier A (à venir)
 

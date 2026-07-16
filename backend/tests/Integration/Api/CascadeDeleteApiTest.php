@@ -11,7 +11,6 @@ use App\Entity\CoachPlayerMembership;
 use App\Entity\Competition;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
-use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;

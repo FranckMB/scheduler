@@ -206,7 +206,6 @@ final class StructureRestorer
         }
     }
 
-    /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
     /**
      * REFUS avant destruction : une équipe ENGAGÉE ne peut pas disparaître d'un restore : ses matchs sont déposés
      * à la fédération, et `Fixture` n'est ni dans le wipe ni dans la photo — elle
@@ -278,6 +277,7 @@ final class StructureRestorer
         }
     }
 
+    /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
     private function wipeStructure(string $clubId, string $seasonId): void
     {
         // TeamTagAssignment has a season_id but NO club_id (scoped by season).
