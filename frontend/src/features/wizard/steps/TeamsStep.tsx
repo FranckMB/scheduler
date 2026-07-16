@@ -149,11 +149,11 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         </Button>
       </div>
       {engaged && (
-        // Un `title` de survol ne suffisait pas : un contrôle `disabled` sort de l'ordre
-        // de tabulation ET ne reçoit aucun événement souris — au clavier comme au lecteur
-        // d'écran, deux contrôles grisés sans la moindre raison. La raison devient donc
-        // du TEXTE, lu par tout le monde, sur le patron de l'alerte « Bonus » ci-dessous.
-        <p className="ml-8 mt-1 text-xs text-muted-foreground">{ENGAGED_REASON} Son niveau et sa suppression sont verrouillés ; le reste se modifie.</p>
+        // Marqueur COURT, mais du TEXTE : un `title` de survol ne suffisait pas — un
+        // contrôle `disabled` sort de l'ordre de tabulation ET ne reçoit aucun événement
+        // souris, donc au clavier comme au lecteur d'écran deux contrôles disparaissaient
+        // sans la moindre raison. Le POURQUOI est dit une fois au-dessus de la liste.
+        <p className="ml-8 mt-1 text-xs text-muted-foreground">Engagée en compétition — niveau et suppression verrouillés.</p>
       )}
       {bonusCompetitionWarning && (
         <p role="alert" className="ml-8 mt-1 text-xs text-warning">
@@ -543,6 +543,14 @@ function TeamsEditor() {
             <EmptyHint>Aucune équipe pour le moment.</EmptyHint>
           ) : (
             <div className="flex flex-col gap-4">
+              {teams.some((t) => true === t.isEngaged) && (
+                // UNE fois pour la liste : après un import FBI, presque toutes les lignes
+                // sont engagées — répéter les deux phrases sous chacune en ferait du bruit
+                // qu'on ne lit plus. Chaque ligne porte son propre marqueur court.
+                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  {ENGAGED_REASON} Leur niveau de jeu et leur suppression sont verrouillés ; le reste (nom, rang, créneaux, gymnase) se modifie librement.
+                </p>
+              )}
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
                 <span className="w-6 text-center">#</span>
                 <span className="flex-1">Nom de l'équipe</span>

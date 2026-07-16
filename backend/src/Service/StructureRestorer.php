@@ -159,11 +159,32 @@ final class StructureRestorer
         // s'affiche avec un gymnase blanc ET reste HORS de la liste des matchs à placer,
         // dont la règle est `venueId === null` — donc le gestionnaire n'apprend jamais
         // que son match a perdu sa salle.
+        //
+        // Pourquoi NULL ici alors qu'une équipe engagée vaut un 409 : les deux pertes ne
+        // se rattrapent pas pareil. Une équipe balayée laisse des matchs INVISIBLES et
+        // irrécupérables (plus aucun geste ne les atteint — celui qui les aurait purgés
+        // était la suppression de l'équipe, qui n'existe plus). Un gymnase balayé rend le
+        // match VISIBLE dans « à placer » : le gestionnaire le repose, et le restore
+        // l'avait prévenu que sa structure serait écrasée. Refuser vaut pour l'irréparable,
+        // pas pour le réparable. ⚠️ Résidu assumé : un match déjà SUBMITTED/VALIDATED à la
+        // fédération perd sa salle sans avertissement propre — voir roadmap DOC-2.
         $this->entityManager->createQuery(
             'UPDATE App\Entity\Fixture f SET f.venueId = NULL '
             . 'WHERE f.clubId = :c AND f.seasonId = :s AND f.venueId IS NOT NULL '
             . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = f.venueId)',
         )->setParameters($tenant)->execute();
+
+        // L'inscription en compétition d'une équipe que le restore a balayée. Une équipe
+        // balayée n'a AUCUN match (sinon elle serait engagée, et `assertRestoreKeepsEngagedTeams`
+        // aurait refusé) — il n'y a donc pas de match orphelin à craindre ici, mais son
+        // inscription, elle, survivrait en nommant un team_id mort et s'afficherait dans
+        // le module matchs pour une équipe fantôme.
+        $this->deleteDangling(
+            'SELECT co.id FROM App\Entity\Competition co WHERE co.clubId = :c AND co.seasonId = :s '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = co.teamId)',
+            $tenant,
+            'DELETE App\Entity\Competition co WHERE co.id IN (:ids)',
+        );
     }
 
     /**
@@ -187,7 +208,7 @@ final class StructureRestorer
 
     /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
     /**
-     * Une équipe ENGAGÉE ne peut pas disparaître d'un restore : ses matchs sont déposés
+     * REFUS avant destruction : une équipe ENGAGÉE ne peut pas disparaître d'un restore : ses matchs sont déposés
      * à la fédération, et `Fixture` n'est ni dans le wipe ni dans la photo — elle
      * survivrait en nommant un `team_id` mort (aucune FK ne l'en empêche).
      *
