@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\AdminJob\AdminJobMonitoringService;
 use App\Service\AdminHealthService;
 use App\Service\AdminMonitoringService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -16,6 +17,7 @@ final readonly class AdminMonitoringController
     public function __construct(
         private AdminMonitoringService $monitoring,
         private AdminHealthService $health,
+        private AdminJobMonitoringService $jobs,
     ) {}
 
     #[Route('/health', methods: ['GET'])]
@@ -28,6 +30,12 @@ final readonly class AdminMonitoringController
     public function overview(): JsonResponse
     {
         return new JsonResponse($this->monitoring->overview());
+    }
+
+    #[Route('/jobs', methods: ['GET'])]
+    public function jobs(): JsonResponse
+    {
+        return new JsonResponse($this->jobs->jobs());
     }
 
     #[Route('/clubs', methods: ['GET'])]
