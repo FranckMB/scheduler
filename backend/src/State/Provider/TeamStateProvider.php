@@ -4,15 +4,60 @@ declare(strict_types=1);
 
 namespace App\State\Provider;
 
+use ApiPlatform\Metadata\Operation;
+use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\TeamResource;
 use App\Entity\Team;
+use App\Service\TeamEngagementGuard;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProvider<Team, TeamResource>
  */
 class TeamStateProvider extends AbstractStateProvider
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        Pagination $pagination,
+        private readonly TeamEngagementGuard $teamEngagementGuard,
+    ) {
+        parent::__construct($entityManager, $requestStack, $pagination);
+    }
+
+    /**
+     * Enrichit le(s) DTO avec `isEngaged` en UNE requête groupée — un EXISTS par DTO
+     * N+1-erait la collection des équipes (patron de ScheduleStateProvider). La règle
+     * elle-même vit dans TeamEngagementGuard, celui qui refuse les écritures : le
+     * contrat de lecture ne la redéfinit pas, il la consulte.
+     */
+    public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
+    {
+        $result = parent::provide($operation, $uriVariables, $context);
+        if (null === $result) {
+            return null;
+        }
+
+        /** @var iterable<TeamResource> $dtos */
+        $dtos = $result instanceof TeamResource ? [$result] : $result;
+        $ids = [];
+        foreach ($dtos as $dto) {
+            $ids[] = $dto->id;
+        }
+        if ([] === $ids) {
+            return $result;
+        }
+
+        $engaged = $this->teamEngagementGuard->engagedTeamIds($ids);
+        foreach ($dtos as $dto) {
+            $dto->isEngaged = isset($engaged[$dto->id]);
+        }
+
+        return $result;
+    }
+
     protected function getEntityClass(): string
     {
         return Team::class;

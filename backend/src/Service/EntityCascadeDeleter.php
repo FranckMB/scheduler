@@ -60,6 +60,11 @@ final class EntityCascadeDeleter
             $this->deleteByField(ScheduleSlotTemplate::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(ScheduleDiagnostic::class, 'teamId', $teamId, $clubId, $seasonId);
             // Match module: a team's fixtures + competition enrolments key on teamId.
+            // NOTE: depuis la garde du périmètre engagé, cette ligne ne supprime plus
+            // rien par l'API — un seul match, même UNPLACED, rend l'équipe indélébile
+            // (TeamStateProcessor::cascadeBeforeDelete refuse AVANT d'arriver ici). On
+            // la garde comme filet : si la règle d'engagement se relâche un jour, les
+            // matchs partiront avec l'équipe au lieu de pendre sur un team_id mort.
             $this->deleteByField(Fixture::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(Competition::class, 'teamId', $teamId, $clubId, $seasonId);
             // TeamTagAssignment has a season_id but NO club_id (scoped by season).

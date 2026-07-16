@@ -56,6 +56,7 @@ final class StructureRestorer
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly TeamEngagementGuard $teamEngagementGuard,
     ) {}
 
     /**
@@ -87,6 +88,7 @@ final class StructureRestorer
     public function apply(string $clubId, string $seasonId, array $data): void
     {
         $this->disableTenantFilters($this->entityManager);
+        $this->assertRestoreKeepsEngagedTeams($clubId, $seasonId, $data);
         $this->wipeStructure($clubId, $seasonId);
         // Bulk DQL DELETE removes the rows but leaves the (now-stale) objects in
         // the identity map — re-inserting the SAME ids would raise an identity
@@ -148,6 +150,41 @@ final class StructureRestorer
             $tenant,
             'DELETE App\Entity\VenueTrainingSlot vts WHERE vts.id IN (:ids)',
         );
+
+        // Un match dont le gymnase a disparu du restore. `Fixture` n'est ni dans le wipe
+        // ni dans la photo : il SURVIT, en nommant un venue_id mort (aucune FK ne
+        // l'arrête). On le DÉPOINTE au lieu de le supprimer — exactement ce que fait la
+        // suppression d'un gymnase par l'API (`purgeChildrenOfVenue` : « le match survit,
+        // il perd juste son gymnase »). Le laisser pendre est pire que le vider : il
+        // s'affiche avec un gymnase blanc ET reste HORS de la liste des matchs à placer,
+        // dont la règle est `venueId === null` — donc le gestionnaire n'apprend jamais
+        // que son match a perdu sa salle.
+        //
+        // Pourquoi NULL ici alors qu'une équipe engagée vaut un 409 : les deux pertes ne
+        // se rattrapent pas pareil. Une équipe balayée laisse des matchs INVISIBLES et
+        // irrécupérables (plus aucun geste ne les atteint — celui qui les aurait purgés
+        // était la suppression de l'équipe, qui n'existe plus). Un gymnase balayé rend le
+        // match VISIBLE dans « à placer » : le gestionnaire le repose, et le restore
+        // l'avait prévenu que sa structure serait écrasée. Refuser vaut pour l'irréparable,
+        // pas pour le réparable. ⚠️ Résidu assumé : un match déjà SUBMITTED/VALIDATED à la
+        // fédération perd sa salle sans avertissement propre — voir roadmap DOC-2.
+        $this->entityManager->createQuery(
+            'UPDATE App\Entity\Fixture f SET f.venueId = NULL '
+            . 'WHERE f.clubId = :c AND f.seasonId = :s AND f.venueId IS NOT NULL '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = f.venueId)',
+        )->setParameters($tenant)->execute();
+
+        // L'inscription en compétition d'une équipe que le restore a balayée. Une équipe
+        // balayée n'a AUCUN match (sinon elle serait engagée, et `assertRestoreKeepsEngagedTeams`
+        // aurait refusé) — il n'y a donc pas de match orphelin à craindre ici, mais son
+        // inscription, elle, survivrait en nommant un team_id mort et s'afficherait dans
+        // le module matchs pour une équipe fantôme.
+        $this->deleteDangling(
+            'SELECT co.id FROM App\Entity\Competition co WHERE co.clubId = :c AND co.seasonId = :s '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = co.teamId)',
+            $tenant,
+            'DELETE App\Entity\Competition co WHERE co.id IN (:ids)',
+        );
     }
 
     /**
@@ -166,6 +203,77 @@ final class StructureRestorer
         $ids = $query->getSingleColumnResult();
         if ([] !== $ids) {
             $this->entityManager->createQuery($deleteDql)->setParameter('ids', $ids)->execute();
+        }
+    }
+
+    /**
+     * REFUS avant destruction : une équipe ENGAGÉE ne peut pas disparaître d'un restore : ses matchs sont déposés
+     * à la fédération, et `Fixture` n'est ni dans le wipe ni dans la photo — elle
+     * survivrait en nommant un `team_id` mort (aucune FK ne l'en empêche).
+     *
+     * `wipeStructure` supprime les Team en DQL de MASSE : il ne passe donc pas par
+     * TeamStateProcessor, où vit la garde de suppression. Sans ce contrôle, l'invariant
+     * « une équipe qui joue est intouchable » serait vrai par l'API et faux ici — donc
+     * faux tout court, et contournable en un clic sur « Charger cette version ».
+     *
+     * On refuse plutôt que d'épargner l'équipe : la garder hors de la photo rendrait la
+     * structure restaurée incohérente avec la version qu'on prétend recharger.
+     *
+     * @param array<string, list<array<string, mixed>>> $data
+     */
+    private function assertRestoreKeepsEngagedTeams(string $clubId, string $seasonId, array $data): void
+    {
+        /** @var list<Team> $teams */
+        $teams = $this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ([] === $teams) {
+            return;
+        }
+
+        $engaged = $this->teamEngagementGuard->engagedTeamIds(array_map(static fn (Team $t): string => $t->getId(), $teams));
+        if ([] === $engaged) {
+            return;
+        }
+
+        // La clé de famille est le nom COURT de la classe ('Team'), pas un pluriel :
+        // la lire en dur ferait taire la garde sur un tableau vide. array_search sur la
+        // table de correspondance qui sert déjà à l'hydratation — une seule source.
+        $teamFamily = array_search(Team::class, self::FAMILY_CLASS, true);
+        $inPhoto = [];
+        foreach ($data[$teamFamily] ?? [] as $row) {
+            if (isset($row['id']) && \is_string($row['id'])) {
+                $inPhoto[$row['id']] = $row;
+            }
+        }
+
+        $lost = [];
+        $releveled = [];
+        foreach ($teams as $team) {
+            if (!isset($engaged[$team->getId()])) {
+                continue;
+            }
+            $row = $inPhoto[$team->getId()] ?? null;
+            if (null === $row) {
+                $lost[] = $team->getName();
+                continue;
+            }
+            // Présente ne suffit pas : `level` est un champ mappé, donc la photo le
+            // porte et `hydrate()` le réinsère tel quel. Une photo antérieure à la
+            // correction du niveau le RÉÉCRIRAIT en silence — la divergence même que
+            // le gel total du niveau existe pour rendre impossible, atteinte par
+            // l'autre bout. Et le processor refuse ensuite (409) toute correction :
+            // le club resterait avec un niveau faux, sans issue par l'UI.
+            $photoLevel = $row['level'] ?? null;
+            if ($team->getLevel()?->value !== (\is_string($photoLevel) ? $photoLevel : null)) {
+                $releveled[] = $team->getName();
+            }
+        }
+
+        if ([] !== $lost) {
+            throw new ConflictHttpException(\sprintf('Cette version est antérieure à %s, qui joue%s déjà en compétition : la charger %s supprimerait et laisserait %s matchs sans équipe.', implode(', ', $lost), 1 === \count($lost) ? '' : 'nt', 1 === \count($lost) ? 'la' : 'les', 1 === \count($lost) ? 'ses' : 'leurs'));
+        }
+
+        if ([] !== $releveled) {
+            throw new ConflictHttpException(\sprintf('Cette version a été générée quand %s %s un autre niveau de jeu. %s joue%s déjà en compétition : la charger rétablirait un niveau qui ne correspond plus à %s engagement.', implode(', ', $releveled), 1 === \count($releveled) ? 'avait' : 'avaient', 1 === \count($releveled) ? 'Elle' : 'Elles', 1 === \count($releveled) ? '' : 'nt', 1 === \count($releveled) ? 'son' : 'leur'));
         }
     }
 

@@ -6,10 +6,12 @@ import { renderWithProviders } from "@/test/utils";
 
 import type { Team } from "../api";
 
-const team: Team = {
+const baseTeam: Team = {
   id: "t1", name: "SM3", sportCategoryId: "cat1", priorityTierId: 5, tierOrder: 0,
   gender: "M", level: "DEPARTEMENTAL", sessionsPerWeek: 1, isActive: true,
 };
+// Mutable : « engagée » vient du serveur, donc les tests le font varier comme lui.
+let team: Team = baseTeam;
 
 const createMut = vi.fn();
 const updateMut = vi.fn();
@@ -38,6 +40,7 @@ import { TeamsStep } from "./TeamsStep";
 
 describe("TeamsStep", () => {
   beforeEach(() => {
+    team = baseTeam;
     createMut.mockClear();
     updateMut.mockClear();
     deleteMut.mockClear();
@@ -56,6 +59,40 @@ describe("TeamsStep", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Supprimer" }));
     expect(deleteMut).toHaveBeenCalledWith("t1");
+  });
+
+  /** La ligne de l'équipe — le formulaire d'ajout porte les mêmes libellés. */
+  const teamRow = (): HTMLElement => screen.getByRole("button", { name: "Supprimer" }).closest("div") as HTMLElement;
+
+  it("locks Supprimer and the play level on a team already engaged in competition", () => {
+    // Le serveur refuse les deux (ses matchs sont connus de la fédé) : l'écran ne
+    // doit pas les proposer, sinon il promet un geste qui finit en 409.
+    team = { ...baseTeam, isEngaged: true };
+    renderWithProviders(<TeamsStep />);
+    const row = teamRow();
+
+    expect(within(row).getByRole("button", { name: "Supprimer" })).toBeDisabled();
+    expect(within(row).getByRole("combobox", { name: "Niveau de jeu" })).toBeDisabled();
+    // Ce qui reste libre le reste : le nom et les créneaux ne dépendent pas de la fédé.
+    expect(within(row).getByRole("textbox", { name: "Nom" })).toBeEnabled();
+    expect(within(row).getByRole("spinbutton", { name: "Séances/sem" })).toBeEnabled();
+    // La raison est du TEXTE, pas un survol : un contrôle `disabled` sort de l'ordre de
+    // tabulation et ne reçoit aucun événement souris — au clavier comme au lecteur
+    // d'écran, un `title` laisserait deux contrôles grisés sans explication.
+    // Deux niveaux, et il faut les DEUX : le pourquoi une fois pour la liste…
+    expect(screen.getByText(/joue en compétition/)).toBeInTheDocument();
+    // …et le marqueur sur LA ligne concernée, sinon on ne sait pas laquelle est verrouillée.
+    expect(within(row.parentElement as HTMLElement).getByText(/Engagée en compétition/)).toBeInTheDocument();
+  });
+
+  it("leaves both open on a team that does not play yet", () => {
+    renderWithProviders(<TeamsStep />);
+    const row = teamRow();
+
+    expect(within(row).getByRole("button", { name: "Supprimer" })).toBeEnabled();
+    expect(within(row).getByRole("combobox", { name: "Niveau de jeu" })).toBeEnabled();
+    expect(screen.queryByText(/joue en compétition/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Engagée en compétition/)).not.toBeInTheDocument();
   });
 
   it("shows a play-level select and no redundant inner heading", () => {

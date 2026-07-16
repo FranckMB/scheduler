@@ -90,6 +90,21 @@ class TeamResource
     #[Groups(['read'])]
     public ?TeamLevel $level = null;
 
+    /**
+     * Cette équipe joue-t-elle déjà en compétition ? Vrai dès qu'elle porte AU MOINS UN
+     * match, quel qu'en soit le statut : la correspondance faite par l'import FBI entre
+     * une rencontre et cette équipe suffit — la fédération la connaît. Elle ne peut alors
+     * plus être supprimée ni changer de `level`. Son nom, son tier, son `isActive` et ses
+     * créneaux restent libres.
+     *
+     * Exposé pour que l'UI grise ces deux gestes sans re-dériver la règle de son côté :
+     * un second endroit qui répond « engagée ? » finirait par répondre autre chose que
+     * le serveur, et l'écran offrirait un geste toujours refusé. Rempli en lot par
+     * TeamStateProvider ; false sur le chemin nu de fromEntity.
+     */
+    #[Groups(['read'])]
+    public bool $isEngaged = false;
+
     #[Groups(['read'])]
     public int $sessionsPerWeek = 0;
 

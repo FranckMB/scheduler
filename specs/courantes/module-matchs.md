@@ -129,6 +129,55 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   `FixtureApiTest`.
 - Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).
 
+## Le périmètre engagé — `TeamEngagementGuard` (2026-07-16)
+
+**Réalité du terrain** : valider le planning de la saison valide aussi un **périmètre**, les équipes qui
+font de la compétition. Une fois les matchs envoyés à la fédération, on n'y revient plus — « une équipe qui
+joue ne peut pas être supprimée, ni avoir son niveau modifié ; elle peut être déplacée ou changer de
+créneau ». Le planning de saison, lui, ne change **quasiment jamais** ; il s'ajuste dans de rares cas.
+
+**Engagée** = elle porte **au moins un `Fixture`**, quel qu'en soit le statut. Décision fondateur : « si
+import FBI pour les matchs, l'équipe est engagée d'office. Une correspondance pour les matchs implique que
+l'équipe est engagée pour la fédération. Même si le statut est `UNPLACED`, même si le match n'est pas placé. »
+
+⚠️ **Ne PAS filtrer sur le statut.** `FbiFixtureImporter` crée TOUT en `UNPLACED` — domicile **et** extérieur
+(« Status is always UNPLACED : placing requires a CLUB venue + an explicit manager action »). Seul un geste
+du gestionnaire (`FixtureStateProcessor`) pose un autre statut. Une garde exigeant `PLACED` serait donc
+**inerte au moment précis où elle doit mordre** : juste après l'import, quand la fédération connaît déjà les
+rencontres. *(Le docblock de `FixtureStatus` a longtemps prétendu qu'un match extérieur naissait `PLACED` —
+c'était faux, et ça a coûté une règle bâtie sur du vide.)*
+
+Conséquence assumée : **dès l'import FBI**, toutes les équipes de la compétition sont figées.
+
+| Sur une équipe engagée | |
+|---|---|
+| Suppression (`DELETE /api/teams/{id}`) | **409** — sans ça, `EntityCascadeDeleter::purgeChildrenOfTeam` emporterait ses `Fixture`, y compris ceux déjà connus de la fédé |
+| Changement de `Team.level` | **409**, sans exception — c'est sous ce niveau qu'elle est inscrite, et il se saisit AVANT de générer (il alimente le tag NIVEAU, donc les contraintes, donc la photo de structure de la version). Le laisser bouger après ferait diverger la photo — qui l'a figé — et la base, puis « Charger cette version » ramènerait l'ancienne valeur en silence. Vaut aussi pour un niveau jamais renseigné (`null` → REGIONAL refusé) et pour un effacement. Seule tolérance, qui n'est pas une exception : un PUT qui ré-écho le MÊME niveau passe — le front renvoie le payload complet, refuser l'écho casserait un renommage sans rien protéger. Le jour où l'import FFBB devra changer un niveau, ce cas sera traité **avec** la photo |
+| `priorityTierId` / `tierOrder` | **libres** — perception interne du club |
+| `isActive` | **libre** — sert aux plannings de période, pas au périmètre de la saison |
+| Nom, créneaux, gymnase | **libres** |
+
+La règle vit à **un seul endroit** (`TeamEngagementGuard`) : la garde d'écriture et le contrat de lecture
+(`TeamResource.isEngaged`, rempli en lot par `TeamStateProvider`) la consultent. Le front grise « Supprimer »
+et le sélecteur de niveau à partir de ce champ — il ne re-dérive rien, sinon un second endroit répondrait
+« engagée ? » et finirait par contredire le serveur.
+
+Les purges de masse (`SeasonDataPurger`, `ErasedClubPurger`) ne passent pas par la garde : la saison entière
+part, matchs compris.
+
+**Le restore aussi** : `StructureRestorer::wipeStructure` (« Charger cette version ») supprime les `Team` de
+la saison en DQL de **masse**, donc sans passer par le processor où vit la garde. `Fixture` n'est ni dans ce
+wipe ni dans la photo (`StructureSnapshotter::FAMILIES`) : une équipe engagée que la photo ignore serait
+supprimée et ses matchs survivraient en nommant un `team_id` mort (aucune FK ne l'arrête). L'invariant serait
+alors vrai par l'API et faux ici — donc faux, et contournable en un clic.
+
+`StructureRestorer::assertRestoreKeepsEngagedTeams` refuse le chargement (**409**) quand la photo ne contient
+pas une équipe engagée. On refuse plutôt que d'épargner l'équipe : la garder hors de la photo rendrait la
+structure incohérente avec la version qu'on prétend recharger. Il refuse **aussi** quand la photo porte un
+**autre niveau** pour une équipe engagée : `level` est un champ mappé, donc la photo le réinsère tel quel, et le
+gel du niveau (voir plus haut) serait contourné par le restore — le club se retrouverait inscrit sous un niveau
+que l'API refuse ensuite de corriger. Une équipe engagée présente dans la photo **avec son niveau** ne bloque rien.
+
 ## Reste palier A (à venir)
 
 `Team.preferredMatchWindow` (backend). **Joueurs** dans le moteur de conflits (nécessite un modèle de

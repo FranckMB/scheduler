@@ -12,6 +12,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\TeamLevel;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -263,7 +264,7 @@ final class TeamApiTest extends WebTestCase
     {
         $client = $this->client;
         $team = $this->createTeam('Leveled');
-        $team->setLevel(\App\Enum\TeamLevel::REGIONAL);
+        $team->setLevel(TeamLevel::REGIONAL);
         $this->em->flush();
         $client->loginUser($this->user);
 

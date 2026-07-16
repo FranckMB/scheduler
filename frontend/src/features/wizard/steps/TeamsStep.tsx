@@ -40,6 +40,14 @@ const LEVELS: { value: TeamLevel | ""; label: string }[] = [
   { value: "LOISIR_JEUNE", label: "Loisir jeune" },
 ];
 
+/**
+ * Une équipe qui JOUE déjà est inscrite sous son niveau auprès de la fédération : on
+ * ne la supprime plus (ses matchs partiraient avec elle) et son niveau ne bouge plus.
+ * Le serveur refuse les deux ; l'écran ne les propose donc pas, plutôt que d'offrir un
+ * geste qui finira en 409.
+ */
+const ENGAGED_REASON = "Cette équipe joue en compétition : ses matchs sont engagés auprès de la fédération.";
+
 /** A team is "competitive" unless it plays at a loisir level (or has none set). */
 const isCompetitive = (level: TeamLevel | null): boolean =>
   null !== level && "LOISIR_ADULTE" !== level && "LOISIR_JEUNE" !== level;
@@ -84,6 +92,8 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
   // Competitive team ranked "Bonus" (D) is likely a mistake — it will be
   // scheduled last. Non-blocking warning (the solver stays the authority).
   const bonusCompetitionWarning = isCompetitive(team.level) && isBonusTier(tiers, team.priorityTierId);
+  // Le serveur le dit (TeamResource.isEngaged) — on ne le recalcule pas ici.
+  const engaged = true === team.isEngaged;
 
   return (
     <div className="border-t border-border py-1.5">
@@ -110,13 +120,19 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
             </option>
           ))}
         </Select>
-        <Select aria-label="Niveau de jeu" className="h-8 w-32" value={team.level ?? ""} onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}>
-          {LEVELS.map((l) => (
-            <option key={l.value} value={l.value}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
+        <Select
+            aria-label="Niveau de jeu"
+            className="h-8 w-32"
+            value={team.level ?? ""}
+            disabled={engaged}
+            onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}
+          >
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
         <Input
           aria-label="Séances/sem"
           type="number"
@@ -128,10 +144,17 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         />
         {/* Rang is not edited inline: changing a team's tier is done via the
             "Trier" mode (drag & drop between S/A/B/C/D zones). */}
-        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
+        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" disabled={engaged} onClick={() => onDelete(team)}>
           <Trash2 className="size-4" />
         </Button>
       </div>
+      {engaged && (
+        // Marqueur COURT, mais du TEXTE : un `title` de survol ne suffisait pas — un
+        // contrôle `disabled` sort de l'ordre de tabulation ET ne reçoit aucun événement
+        // souris, donc au clavier comme au lecteur d'écran deux contrôles disparaissaient
+        // sans la moindre raison. Le POURQUOI est dit une fois au-dessus de la liste.
+        <p className="ml-8 mt-1 text-xs text-muted-foreground">Engagée en compétition — niveau et suppression verrouillés.</p>
+      )}
       {bonusCompetitionWarning && (
         <p role="alert" className="ml-8 mt-1 text-xs text-warning">
           Équipe en compétition classée Bonus (D) — elle passera en dernier ; vérifiez le rang.
@@ -520,6 +543,14 @@ function TeamsEditor() {
             <EmptyHint>Aucune équipe pour le moment.</EmptyHint>
           ) : (
             <div className="flex flex-col gap-4">
+              {teams.some((t) => true === t.isEngaged) && (
+                // UNE fois pour la liste : après un import FBI, presque toutes les lignes
+                // sont engagées — répéter les deux phrases sous chacune en ferait du bruit
+                // qu'on ne lit plus. Chaque ligne porte son propre marqueur court.
+                <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  {ENGAGED_REASON} Leur niveau de jeu et leur suppression sont verrouillés ; le reste (nom, rang, créneaux, gymnase) se modifie librement.
+                </p>
+              )}
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
                 <span className="w-6 text-center">#</span>
                 <span className="flex-1">Nom de l'équipe</span>

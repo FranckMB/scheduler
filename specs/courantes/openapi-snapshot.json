@@ -16457,6 +16457,11 @@
                             null
                         ]
                     },
+                    "isEngaged": {
+                        "description": "Cette \u00e9quipe joue-t-elle d\u00e9j\u00e0 en comp\u00e9tition ? Vrai d\u00e8s qu'elle porte AU MOINS UN\nmatch, quel qu'en soit le statut : la correspondance faite par l'import FBI entre\nune rencontre et cette \u00e9quipe suffit \u2014 la f\u00e9d\u00e9ration la conna\u00eet. Elle ne peut alors\nplus \u00eatre supprim\u00e9e ni changer de `level`. Son nom, son tier, son `isActive` et ses\ncr\u00e9neaux restent libres.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "sessionsPerWeek": {
                         "default": 0,
                         "type": "integer"
@@ -16671,6 +16676,11 @@
                             null
                         ]
                     },
+                    "isEngaged": {
+                        "description": "Cette \u00e9quipe joue-t-elle d\u00e9j\u00e0 en comp\u00e9tition ? Vrai d\u00e8s qu'elle porte AU MOINS UN\nmatch, quel qu'en soit le statut : la correspondance faite par l'import FBI entre\nune rencontre et cette \u00e9quipe suffit \u2014 la f\u00e9d\u00e9ration la conna\u00eet. Elle ne peut alors\nplus \u00eatre supprim\u00e9e ni changer de `level`. Son nom, son tier, son `isActive` et ses\ncr\u00e9neaux restent libres.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "sessionsPerWeek": {
                         "default": 0,
                         "type": "integer"
@@ -16778,6 +16788,11 @@
                                     "PRE_REGION",
                                     null
                                 ]
+                            },
+                            "isEngaged": {
+                                "description": "Cette \u00e9quipe joue-t-elle d\u00e9j\u00e0 en comp\u00e9tition ? Vrai d\u00e8s qu'elle porte AU MOINS UN\nmatch, quel qu'en soit le statut : la correspondance faite par l'import FBI entre\nune rencontre et cette \u00e9quipe suffit \u2014 la f\u00e9d\u00e9ration la conna\u00eet. Elle ne peut alors\nplus \u00eatre supprim\u00e9e ni changer de `level`. Son nom, son tier, son `isActive` et ses\ncr\u00e9neaux restent libres.",
+                                "default": false,
+                                "type": "boolean"
                             },
                             "sessionsPerWeek": {
                                 "default": 0,
