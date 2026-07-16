@@ -37,6 +37,9 @@ final class SuperAdminAccessTest extends WebTestCase
     /** @var list<string> */
     private array $monitoringClubIds = [];
 
+    /** @var list<string> */
+    private array $jobRunIds = [];
+
     public function testClubJwtCanNeverCrossTheAdminFirewall(): void
     {
         $token = $this->registerVerified('SAA1');
@@ -47,6 +50,9 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertResponseStatusCodeSame(401);
 
         $this->client->request('GET', '/api/admin/health', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('GET', '/api/admin/jobs', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
     }
 
@@ -118,6 +124,43 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertArrayHasKey('backlog', $health['messenger']);
         self::assertArrayHasKey('failed', $health['messenger']);
         self::assertArrayHasKey('retriesToday', $health['messenger']);
+    }
+
+    public function testAuthenticatedAdminCanReadTheAllowlistedJobsAndTheirLatestRun(): void
+    {
+        $olderId = Uuid::v4()->toRfc4122();
+        $latestId = Uuid::v4()->toRfc4122();
+        $this->jobRunIds = [$olderId, $latestId];
+        foreach ([
+            ['id' => $olderId, 'status' => 'failed', 'started' => '2026-07-16 08:00:00+00', 'finished' => '2026-07-16 08:00:02+00', 'duration' => 2000, 'exit' => 1],
+            ['id' => $latestId, 'status' => 'succeeded', 'started' => '2026-07-16 09:00:00+00', 'finished' => '2026-07-16 09:00:01+00', 'duration' => 1000, 'exit' => 0],
+        ] as $run) {
+            $this->admin()->insert('admin_job_run', [
+                'id' => $run['id'],
+                'job_key' => 'period-reminders',
+                'command_name' => 'app:periods:remind',
+                'source' => 'scheduled',
+                'status' => $run['status'],
+                'started_at' => $run['started'],
+                'finished_at' => $run['finished'],
+                'duration_ms' => $run['duration'],
+                'exit_code' => $run['exit'],
+            ]);
+        }
+
+        [$secret] = $this->createSuperAdmin('jobs@example.test', 'VeryStrongPassword!');
+        $this->authenticate('jobs@example.test', 'VeryStrongPassword!', $secret);
+
+        $this->client->request('GET', '/api/admin/jobs');
+        self::assertResponseIsSuccessful();
+        $jobs = $this->responseBody()['items'];
+        self::assertCount(8, $jobs);
+        self::assertSame('period-reminders', $jobs[0]['key']);
+        self::assertSame('hourly', $jobs[0]['cadence']);
+        self::assertSame($latestId, $jobs[0]['latestRun']['id']);
+        self::assertSame('succeeded', $jobs[0]['latestRun']['status']);
+        self::assertSame(1000, $jobs[0]['latestRun']['durationMs']);
+        self::assertNull($jobs[1]['latestRun']);
     }
 
     public function testPasswordAloneDoesNotAuthenticateAndTotpIsMandatory(): void
@@ -250,6 +293,9 @@ final class SuperAdminAccessTest extends WebTestCase
 
     protected function tearDown(): void
     {
+        if ([] !== $this->jobRunIds) {
+            $this->admin()->executeStatement('DELETE FROM admin_job_run WHERE id IN (:ids)', ['ids' => $this->jobRunIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+        }
         if ([] !== $this->metricIds) {
             $this->admin()->executeStatement('DELETE FROM solver_metrics WHERE id IN (:ids)', ['ids' => $this->metricIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
         }

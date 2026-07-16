@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Cpu,
   Database,
+  History,
   MapPin,
   Radio,
   RefreshCw,
@@ -22,8 +23,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
 
-import type { AdminClub, AdminHealthResponse, AdminOverviewResponse } from "./api";
-import { useAdminClubs, useAdminHealth, useAdminOverview } from "./queries";
+import type { AdminClub, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview } from "./queries";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -37,8 +38,9 @@ export function AdminDashboardPage() {
   const [queryDraft, setQueryDraft] = useState("");
   const overview = useAdminOverview();
   const health = useAdminHealth();
+  const jobs = useAdminJobs();
   const clubs = useAdminClubs(page, CLUBS_PER_PAGE, query);
-  const refreshing = overview.isFetching || health.isFetching || clubs.isFetching;
+  const refreshing = overview.isFetching || health.isFetching || jobs.isFetching || clubs.isFetching;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +49,7 @@ export function AdminDashboardPage() {
   }
 
   function refreshAll() {
-    void Promise.all([overview.refetch(), health.refetch(), clubs.refetch()]);
+    void Promise.all([overview.refetch(), health.refetch(), jobs.refetch(), clubs.refetch()]);
   }
 
   return (
@@ -76,6 +78,7 @@ export function AdminDashboardPage() {
 
       <OverviewSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
       <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
+      <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
 
       <section aria-labelledby="clubs-heading" className="space-y-4">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -251,6 +254,62 @@ function HealthSection({ data, loading, error, retry }: DataSectionProps<AdminHe
   );
 }
 
+function JobsSection({ data, loading, error, retry }: DataSectionProps<AdminJobsResponse>) {
+  if (loading) return <PanelLoading label="Chargement des jobs opérationnels" />;
+  if (error || !data) return <PanelError label="Les jobs opérationnels sont indisponibles." retry={retry} />;
+
+  return (
+    <section aria-labelledby="jobs-heading" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Exploitation</p>
+          <h2 id="jobs-heading" className="mt-2 text-xl font-semibold text-white">Jobs opérationnels</h2>
+        </div>
+        <p className="text-xs text-slate-500">Cadence déclarée et dernière exécution connue</p>
+      </div>
+      {data.items.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/15 px-6 py-12 text-center text-sm text-slate-500">Aucun job opérationnel configuré.</div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-left text-sm">
+              <caption className="sr-only">État des jobs opérationnels allowlistés</caption>
+              <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wider text-slate-500">
+                <tr><th className="px-5 py-4 font-medium">Job</th><th className="px-4 py-4 font-medium">Cadence</th><th className="px-4 py-4 font-medium">Dernière exécution</th><th className="px-4 py-4 font-medium">Durée</th><th className="px-4 py-4 font-medium">Résultat</th></tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {data.items.map((job) => <JobRow key={job.key} job={job} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function JobRow({ job }: { job: AdminJob }) {
+  return (
+    <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
+      <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><History className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{job.label}</p><p className="mt-1 font-mono text-[11px] text-slate-600">{job.command}</p></div></div></td>
+      <td className="px-4 py-5">{formatCadence(job.cadence)}</td>
+      <td className="px-4 py-5">{job.latestRun ? <><p>{formatDateTime(job.latestRun.startedAt)}</p><p className="mt-1 text-xs text-slate-600">{formatJobSource(job.latestRun.source)}</p></> : <span className="text-slate-500">Jamais exécuté</span>}</td>
+      <td className="px-4 py-5 tabular-nums">{job.latestRun ? formatDuration(job.latestRun.durationMs) : "—"}</td>
+      <td className="px-4 py-5"><JobStatus status={job.latestRun?.status ?? null} />{job.latestRun?.exitCode !== null && job.latestRun?.exitCode !== undefined ? <p className="mt-1 text-[11px] text-slate-600">Code {job.latestRun.exitCode}</p> : null}</td>
+    </tr>
+  );
+}
+
+function JobStatus({ status }: { status: AdminJobStatus | null }) {
+  const labels: Record<AdminJobStatus, string> = { running: "En cours", succeeded: "Réussi", failed: "Échec", interrupted: "Interrompu" };
+  if (status === null) return <span className="text-xs font-medium text-slate-500">Sans historique</span>;
+
+  const successful = status === "succeeded";
+  const running = status === "running";
+  const Icon = successful ? CheckCircle2 : status === "failed" ? AlertTriangle : History;
+  return <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", successful ? "text-emerald-300" : running ? "text-cyan-300" : status === "failed" ? "text-amber-300" : "text-slate-400")}><Icon className="size-3.5" aria-hidden="true" />{labels[status]}</span>;
+}
+
 function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }: {
   clubs: AdminClub[];
   page: number;
@@ -360,4 +419,12 @@ function formatHeartbeat(worker: AdminHealthResponse["services"]["worker"]): Rea
   if (worker.ageSeconds !== null) return `Heartbeat il y a ${worker.ageSeconds} s`;
   if (worker.lastHeartbeatAt) return `Heartbeat ${formatDateTime(worker.lastHeartbeatAt)}`;
   return "Aucun heartbeat reçu";
+}
+
+function formatCadence(cadence: AdminJob["cadence"]): string {
+  return cadence === "hourly" ? "Toutes les heures" : cadence;
+}
+
+function formatJobSource(source: NonNullable<AdminJob["latestRun"]>["source"]): string {
+  return { scheduled: "Planifié", cli: "CLI", superadmin: "Superadmin" }[source];
 }

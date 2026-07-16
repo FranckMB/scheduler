@@ -100,6 +100,28 @@ export interface AdminClubsResponse {
   metricsWindowDays: number;
 }
 
+export type AdminJobStatus = "running" | "succeeded" | "failed" | "interrupted";
+
+export interface AdminJob {
+  key: string;
+  label: string;
+  command: string;
+  cadence: "hourly";
+  latestRun: {
+    id: string;
+    status: AdminJobStatus;
+    source: "scheduled" | "cli" | "superadmin";
+    startedAt: string;
+    finishedAt: string | null;
+    durationMs: number | null;
+    exitCode: number | null;
+  } | null;
+}
+
+export interface AdminJobsResponse {
+  items: AdminJob[];
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -128,6 +150,10 @@ export function getAdminHealth(): Promise<AdminHealthResponse> {
 
 export function getAdminClubs(page: number, limit: number, query: string): Promise<AdminClubsResponse> {
   return adminApi.get("clubs", { searchParams: { page, limit, query } }).json();
+}
+
+export function getAdminJobs(): Promise<AdminJobsResponse> {
+  return adminApi.get("jobs").json();
 }
 
 export function logoutAdmin(csrfToken: string): Promise<void> {

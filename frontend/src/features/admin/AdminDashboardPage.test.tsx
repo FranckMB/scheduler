@@ -5,8 +5,8 @@ import { axe } from "vitest-axe";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { AdminClubsResponse, AdminHealthResponse, AdminOverviewResponse } from "./api";
-import { getAdminClubs, getAdminHealth, getAdminOverview } from "./api";
+import type { AdminClubsResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview } from "./api";
 import { AdminDashboardPage } from "./AdminDashboardPage";
 
 vi.mock("./api", async (importOriginal) => {
@@ -15,6 +15,7 @@ vi.mock("./api", async (importOriginal) => {
     ...original,
     getAdminOverview: vi.fn(),
     getAdminHealth: vi.fn(),
+    getAdminJobs: vi.fn(),
     getAdminClubs: vi.fn(),
   };
 });
@@ -80,14 +81,43 @@ const clubs: AdminClubsResponse = {
   metricsWindowDays: 30,
 };
 
+const jobs: AdminJobsResponse = {
+  items: [
+    {
+      key: "period-reminders",
+      label: "Rappels de périodes",
+      command: "app:periods:remind",
+      cadence: "hourly",
+      latestRun: {
+        id: "run-1",
+        status: "succeeded",
+        source: "scheduled",
+        startedAt: "2026-07-16T10:00:00+00:00",
+        finishedAt: "2026-07-16T10:00:01+00:00",
+        durationMs: 950,
+        exitCode: 0,
+      },
+    },
+    {
+      key: "purge-seasons",
+      label: "Purge des anciennes saisons",
+      command: "app:seasons:purge",
+      cadence: "hourly",
+      latestRun: null,
+    },
+  ],
+};
+
 const mockOverview = vi.mocked(getAdminOverview);
 const mockHealth = vi.mocked(getAdminHealth);
+const mockJobs = vi.mocked(getAdminJobs);
 const mockClubs = vi.mocked(getAdminClubs);
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
     mockOverview.mockReset().mockResolvedValue(overview);
     mockHealth.mockReset().mockResolvedValue(health);
+    mockJobs.mockReset().mockResolvedValue(jobs);
     mockClubs.mockReset().mockResolvedValue(clubs);
   });
 
@@ -98,8 +128,12 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("Base de données")).toBeInTheDocument();
     expect(screen.getByText("Découverte")).toBeInTheDocument();
+    expect(screen.getByText("Rappels de périodes")).toBeInTheDocument();
+    expect(screen.getByText("Réussi")).toBeInTheDocument();
+    expect(screen.getByText("Jamais exécuté")).toBeInTheDocument();
     expect(mockOverview).toHaveBeenCalledOnce();
     expect(mockHealth).toHaveBeenCalledOnce();
+    expect(mockJobs).toHaveBeenCalledOnce();
     expect(mockClubs).toHaveBeenCalledWith(1, 25, "");
   });
 
@@ -114,9 +148,9 @@ describe("AdminDashboardPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Page suivante" }));
     await waitFor(() => expect(mockClubs).toHaveBeenCalledWith(2, 25, "Lacs"));
-  });
+  }, 10_000);
 
-  it("refreshes all three monitoring feeds on demand", async () => {
+  it("refreshes all four monitoring feeds on demand", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
     await screen.findByText("Basket Club des Lacs");
@@ -126,6 +160,7 @@ describe("AdminDashboardPage", () => {
     await waitFor(() => {
       expect(mockOverview).toHaveBeenCalledTimes(2);
       expect(mockHealth).toHaveBeenCalledTimes(2);
+      expect(mockJobs).toHaveBeenCalledTimes(2);
       expect(mockClubs).toHaveBeenCalledTimes(2);
     });
   });
@@ -137,6 +172,15 @@ describe("AdminDashboardPage", () => {
     expect(await screen.findByText("La santé technique est indisponible.")).toBeInTheDocument();
     expect(screen.getByText("Basket Club des Lacs")).toBeInTheDocument();
     expect(screen.getByText("Activité globale")).toBeInTheDocument();
+  });
+
+  it("keeps the other monitoring panels visible when jobs fail", async () => {
+    mockJobs.mockRejectedValue(new Error("jobs unavailable"));
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("Les jobs opérationnels sont indisponibles.")).toBeInTheDocument();
+    expect(screen.getByText("Basket Club des Lacs")).toBeInTheDocument();
+    expect(screen.getByText("Santé technique")).toBeInTheDocument();
   });
 
   it("shows an explicit empty search result", async () => {
@@ -155,5 +199,5 @@ describe("AdminDashboardPage", () => {
     await screen.findByText("Basket Club des Lacs");
 
     expect(await axe(container)).toHaveNoViolations();
-  });
+  }, 10_000);
 });

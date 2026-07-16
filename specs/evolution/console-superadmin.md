@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0, SA1, console read-only SA2 et socle jobs SA3-A livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Suite : solde SA3 → SA5.
+> **Statut** : **SA0, SA1, console read-only SA2, socle jobs SA3-A et supervision jobs SA3-B livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Suite : solde SA3 → SA5.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` puis persistées par SA1 dans `solver_metrics` · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -21,7 +21,7 @@ Trois usages :
 | # | Décision |
 |---|---|
 | 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
-| 2 | **SA0, SA1, SA2 et le socle SA3-A sont livrés ; la suite solde SA3** (planification, API/UI et relances). |
+| 2 | **SA0, SA1, SA2, SA3-A et la supervision read-only SA3-B sont livrés ; la suite solde SA3** (planification et relances). |
 | 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
 | 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
@@ -45,6 +45,9 @@ Livré : persistance `solver_metrics` à chaque tentative de génération (statu
 - **Livré SA3-A** : historique global restreint `admin_job_run`, catalogue fermé,
   wrapper `app:jobs:run`, verrou anti-chevauchement et instrumentation des huit jobs
   horaires existants. Aucun output ou message d'erreur métier n'est persisté.
+- **Livré SA3-B** : `GET /api/admin/jobs` et panneau React read-only des huit jobs avec
+  cadence déclarée, dernier run, statut, origine, durée et code de sortie. Le prochain run
+  reste différé tant que la boucle `sleep 3600` ne fournit pas une échéance fiable.
 - **Planifier** les commandes existantes sur `cron-runner` : **vacances scolaires/publiques** (annuel), **purges** (saisons N-2, users non vérifiés, orphelins), **rappels** (périodes, transition), **reconcile** stuck schedules.
 - **Vue superadmin des jobs** : dernier run, statut (OK/échec), **prochain run**, **re-trigger manuel** (non destructif).
 - **Refresh FFBB club** (route lot C déjà prête) : à la demande sur un club, ou **batch** (rafraîchir les ligues/comités périmés).

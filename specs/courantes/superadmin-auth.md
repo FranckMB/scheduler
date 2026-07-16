@@ -1,8 +1,8 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2 et le socle
-> d'historisation des jobs SA3-A sont livrés. La planification étendue, l'API/UI des
-> jobs et les actions cross-tenant restent dans
+> **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2, le socle
+> d'historisation SA3-A et la supervision read-only des jobs SA3-B sont livrés. La
+> planification étendue, les relances et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -126,6 +126,22 @@ clubs effacés, comptes inactifs, anciennes saisons et audit. Un verrou advisory
 PostgreSQL empêche le chevauchement d'un même job ; une tentative `running` abandonnée
 est marquée `interrupted` au prochain démarrage acquis.
 
-SA3-A ne change pas la cadence existante et n'expose encore ni API ni bouton React. Les
-imports annuels, les autres purges, le prochain run et la relance superadmin appartiennent
-aux PR suivantes de SA3.
+SA3-A ne change pas la cadence existante. Les imports annuels, les autres purges, le
+prochain run et la relance superadmin appartiennent aux PR suivantes de SA3.
+
+## Supervision read-only des jobs SA3-B
+
+`GET /api/admin/jobs`, protégé par le firewall et la session superadmin séparée, rapproche
+le catalogue fermé de la dernière ligne `admin_job_run` de chaque job. La réponse expose
+la clé, le libellé, la commande, la cadence déclarée et, lorsqu'elle existe, la dernière
+exécution avec son statut, son origine, ses dates, sa durée et son code de sortie. Un JWT
+club ne peut pas accéder à cette route.
+
+Le dashboard React `/admin` affiche ces huit jobs dans un panneau indépendant. Un job sans
+historique est explicitement marqué « Jamais exécuté » ; une indisponibilité de ce flux ne
+masque ni la santé technique, ni les indicateurs, ni les comptes clubs. Le flux est
+rafraîchi toutes les 60 secondes et par le bouton d'actualisation global.
+
+La cadence `hourly` est descriptive : la boucle actuelle repose encore sur `sleep 3600`,
+donc SA3-B n'affiche pas de prochain run calculé qui serait trompeur après un redémarrage.
+Cette PR reste entièrement en lecture seule et n'ajoute aucun bouton de relance.

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { getAdminClubs, getAdminHealth, getAdminOverview, getAdminSession } from "./api";
+import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -37,5 +37,13 @@ export function useAdminClubs(page: number, limit: number, query: string) {
     queryKey: ["admin-clubs", { page, limit, query }],
     queryFn: () => getAdminClubs(page, limit, query),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useAdminJobs() {
+  return useQuery({
+    queryKey: ["admin-jobs"],
+    queryFn: getAdminJobs,
+    refetchInterval: 60_000,
   });
 }
