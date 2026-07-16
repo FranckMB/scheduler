@@ -73,15 +73,23 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     if (null !== entry.overlayScheduleId) {
       return true; // un planning secondaire existe : cette semaine EST différente
     }
-    const impact = closureImpacts[i]?.data;
-    if (undefined === impact) {
-      return false; // pas encore su : ne pas faire clignoter une carte qui va disparaître
+    const impact = closureImpacts[i];
+    if (impact?.isPending) {
+      return false; // on ne sait pas ENCORE : ne pas faire clignoter une carte qui va disparaître
     }
-    if (false === impact.seasonPlanChosen) {
-      return true; // plan incomplet : impact non évalué, ça se traite
+    if (undefined === impact?.data) {
+      return true; // la requête a échoué : on ne sait pas, et ne pas savoir se traite
     }
-    return impact.conflicts.some((c) => c.dates.length > 0);
+    if (false === impact.data.seasonPlanChosen) {
+      return true; // plan incomplet : impact non évalué
+    }
+    return impact.data.conflicts.some((c) => c.dates.length > 0);
   });
+  // Masquer une fermeture parce qu'on ne SAIT PAS encore, tout en annonçant « Tout
+  // roule », c'est le silence qui ment que `seasonPlanChosen` sert à tuer — déplacé
+  // du libellé vers le filtre de visibilité, où le drapeau n'est même plus lu. Tant
+  // qu'un impact est en vol, le panneau n'est pas « vide », il est incomplet.
+  const closureImpactsPending = closureImpacts.some((q) => q.isPending);
   // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
   const cutoffs = upcomingPeriods("cutoff");
 
@@ -93,6 +101,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     upcomingHolidays.length === 0 &&
     disruptiveEvents.length === 0 &&
     visibleClosures.length === 0 &&
+    !closureImpactsPending &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
@@ -177,7 +186,9 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   // un mensonge rassurant — le gestionnaire n'adapterait pas une fermeture qui, en
   // vrai, touchera ses séances. Un plan qui pointe et ne heurte rien, lui, n'a
   // vraiment rien à signaler : les deux états ne doivent pas se dire pareil.
-  const planIncomplete = false === data?.seasonPlanChosen;
+  // Plan sans version pointée, OU impact illisible (requête en échec) : dans les deux
+  // cas on n'a rien pu évaluer. Le dire, plutôt que d'afficher un « 0 séance ».
+  const planIncomplete = undefined === data || false === data.seasonPlanChosen;
 
   // Le parent ne monte cette carte que s'il y a quelque chose à traiter (voir
   // visibleClosures) : pas de branche « rien à signaler » ici, elle ne serait

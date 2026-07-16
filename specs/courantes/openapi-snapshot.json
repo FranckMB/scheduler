@@ -14474,6 +14474,11 @@
                         "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "isChosen": {
+                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -14670,6 +14675,11 @@
                         "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "isChosen": {
+                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -14828,6 +14838,11 @@
                             },
                             "isLiveContext": {
                                 "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
+                                "default": false,
+                                "type": "boolean"
+                            },
+                            "isChosen": {
+                                "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                                 "default": false,
                                 "type": "boolean"
                             }
@@ -15721,19 +15736,6 @@
                             "null"
                         ]
                     },
-                    "baselineScheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
                     "transitionData": {
                         "type": "object",
                         "additionalProperties": {
@@ -15784,13 +15786,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "planningName": {
-                        "description": "Name of THE season plan (planning-versions) \u2014 null keeps the current value.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
                     }
                 }
             },
@@ -15830,19 +15825,6 @@
                         "type": "string"
                     },
                     "exportPdfUrl": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "baselineScheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                         "type": [
                             "string",
                             "null"
@@ -15900,19 +15882,6 @@
                                 "type": "string"
                             },
                             "exportPdfUrl": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "baselineScheduleId": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "planningName": {
-                                "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                                 "type": [
                                     "string",
                                     "null"

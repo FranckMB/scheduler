@@ -64,6 +64,10 @@ final class SeasonDataPurger
         // entries. They must go before their parents' bulk DELETE or they
         // orphan silently.
         $deleted += $this->deleteBySubQuery(ConstraintConflict::class, 'scheduleId', Schedule::class, $clubId, $seasonId);
+        // SolverMetric porte un clubId mais PAS de seasonId : il se résout par son
+        // planning, comme les conflits. Oublié, il survivait au reset ET à l'effacement
+        // RGPD en nommant des plannings supprimés — aucune FK ne pend à `schedule`.
+        $deleted += $this->deleteBySubQuery(\App\Entity\SolverMetric::class, 'scheduleId', Schedule::class, $clubId, $seasonId);
         $deleted += $this->deleteBySubQuery(PeriodReminderLog::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
 
         // TeamTagAssignment has a season_id but NO club_id → deleted by season.

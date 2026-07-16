@@ -60,7 +60,7 @@ final class OverlayManager
      * Delete the overlay schedule of a period entry (if any) and clear the link.
      * Refuses (409) while the overlay is mid-generation — deleting it out from
      * under the worker would orphan the slots it is about to import — and, unless
-     * $force, while it is VALIDATED (read-only means read-only; the entry-delete
+     * $force, while its plan POINTS at it (en vigueur = read-only ; the entry-delete
      * path must not bypass the guard DELETE /api/schedules enforces). The
      * destructive reopen passes $force: the user explicitly confirmed destruction.
      */
@@ -127,9 +127,9 @@ final class OverlayManager
         }
     }
 
-    /** Most recent USABLE (COMPLETED/VALIDATED) overlay version of the entry other
-     *  than $excludeId, or null — never promotes a FAILED/DRAFT/PENDING version as
-     *  the active plan (that would show an empty overlay in the cockpit). */
+    /** Most recent USABLE (COMPLETED) overlay version of the entry other than
+     *  $excludeId, or null — never promotes a FAILED/DRAFT/PENDING version as the
+     *  active plan (that would show an empty overlay in the cockpit). */
     private function newestOtherOverlayId(string $entryId, string $excludeId): ?string
     {
         $candidates = $this->entityManager->getRepository(Schedule::class)->findBy(

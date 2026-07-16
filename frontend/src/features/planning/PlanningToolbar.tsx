@@ -28,7 +28,6 @@ interface PlanningToolbarProps {
   onRegenerateFrom: () => void;
   isGenerating: boolean;
   actionBusy: boolean;
-  chosenScheduleId: string | null;
   /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
   rightSlot?: ReactNode;
   /** Wizard-embedded (generation step) vs standalone /planning consultation. The
@@ -60,15 +59,14 @@ export function PlanningToolbar({
   onRegenerateFrom,
   isGenerating,
   actionBusy,
-  chosenScheduleId,
   rightSlot,
   embedded = false,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
-  // ADR-0002: "in force" is the plan's pointer and nothing else. isSeasonChosen
-  // asks it of the SEASON plan; isChosen asks it of this version's own plan (which
-  // for an overlay is its period's) — the two differ, so keep them apart.
-  const isSeasonChosen = null !== selected && selected.id === chosenScheduleId;
+  // ADR-0002 : « en vigueur » = le plan de CETTE version la pointe — vrai pour le
+  // calendrier de la saison comme pour l'overlay d'une période, dont le pointeur vit
+  // sur le plan de sa période. Une seule question, une seule réponse : rejouer la
+  // comparaison contre le pointeur de /api/me remettrait deux vérités en présence.
   const isChosen = true === selected?.isChosen;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && null !== selected.calendarEntryId;
@@ -88,9 +86,22 @@ export function PlanningToolbar({
   // When an overlay is selected, its period's versions get their own V{n} labels.
   const overlayLabels = isOverlay && null !== selected?.calendarEntryId ? overlayVersionLabels(schedules, selected.calendarEntryId) : null;
   const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
-  // Deletable = a plain work version: never the baseline (anchors the season),
-  // never the version in force (read-only), never mid-solve, never an overlay.
-  const canDelete = null !== selected && !isSeasonChosen && !isChosen && !isInFlight && !isOverlay;
+  // Deletable = a plain work version: never the one in force (read-only), never
+  // mid-solve, never an overlay — et jamais la DERNIÈRE version terminée de la
+  // saison, qui l'ancre (le serveur la refuse : ne pas offrir un geste toujours
+  // rejeté). Miroir de ScheduleStateProcessor::isLastFinishedSeasonVersion.
+  const isLastFinishedSeasonVersion =
+    null !== selected
+    && null === selected.calendarEntryId
+    && "COMPLETED" === selected.status
+    && visibleSeasonPlans(schedules).filter((s) => "COMPLETED" === s.status).length <= 1;
+  const canDelete = null !== selected && !isChosen && !isInFlight && !isOverlay && !isLastFinishedSeasonVersion;
+  // Le serveur refuse la validation ENTIÈRE tant qu'une sœur solve (il ne supprime
+  // pas un planning sous les pieds du worker). Offrir « Valider » puis annoncer un
+  // décompte de suppression que la requête ne fera jamais, c'est promettre à vide.
+  const hasInFlightSibling =
+    null !== selected
+    && schedules.some((s) => s.id !== selected.id && s.calendarEntryId === selected.calendarEntryId && ("PENDING" === s.status || "GENERATING" === s.status));
   // "Load this version" (restore its structure + regenerate) is offered only on a
   // finished COMPLETED version that is NOT in force — the chosen one is read-only
   // and the backend refuses the restore (reopen first). The status used to carry
@@ -149,7 +160,7 @@ export function PlanningToolbar({
             ) : null}
           </span>
         ) : null}
-        {isCompleted && !isChosen ? (
+        {isCompleted && !isChosen && !hasInFlightSibling ? (
           // Choosing a version the plan ALREADY points at is a no-op: the status
           // used to hide this (VALIDATED was not COMPLETED); now only the pointer
           // says "in force", so ask it directly.

@@ -13,7 +13,9 @@ import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
 import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
 import { addDays, monthWindow, todayISO } from "./lib/date";
 
-/** Home cockpit — unlocked once the season's baseline plan has been validated (sticky). Before that, the work-loop is home. */
+/** Home cockpit — unlocked once the season's plan carries a first COMPLETED version
+ *  (inv. 8/16 : avoir généré une fois suffit, donc rouvrir ne re-verrouille pas).
+ *  Before that, the work-loop is home. */
 export function CockpitPage() {
   const { data: me, isLoading } = useMe();
   const now = new Date();

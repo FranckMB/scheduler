@@ -104,7 +104,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
-      setSelectedScheduleId(pickLandingScheduleId(schedules, chosenScheduleId));
+      setSelectedScheduleId(pickLandingScheduleId(schedules));
     }
   }, [validScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
 
@@ -373,7 +373,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onReopen={() => reopen()}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
-              chosenScheduleId={chosenScheduleId}
               embedded={embedded}
               rightSlot={
                 <>

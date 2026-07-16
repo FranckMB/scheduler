@@ -141,6 +141,14 @@ export function MatchesPage() {
             />
           ) : null}
 
+          {false === conflicts.data?.seasonPlanChosen ? (
+            // Le planning a été rouvert (ici, ou dans un autre onglet — /api/me peut
+            // avoir jusqu'à 60 s de retard). Le radar ne peut alors rien détecter :
+            // le dire, sinon « aucun conflit » ferait poser un match sur un entraînement.
+            <p className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+              Le planning de la saison n'est plus validé — les conflits avec les entraînements ne sont pas évalués.
+            </p>
+          ) : null}
           <ConflictRadar conflicts={conflicts.data?.conflicts ?? []} teams={teamsMap} coaches={coachesMap} />
         </div>
 

@@ -12,6 +12,7 @@ use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\EntityNotFoundException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -63,6 +64,8 @@ final class ValidateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
+        // Note : le statut est RE-VÉRIFIÉ sous le verrou (voir plus bas). Ce pré-contrôle
+        // n'existe que pour rendre un 409 franc sans ouvrir de transaction.
         if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
             return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
         }
@@ -83,6 +86,24 @@ final class ValidateScheduleController extends AbstractController implements Sea
 
         return $this->entityManager->wrapInTransaction(function () use ($schedule, $entryId): JsonResponse {
             $this->schedulePlanProvisioner->lockPlanScope($entryId ?? ('season:' . $schedule->getSeasonId()));
+
+            // RELIRE la version elle-même sous le verrou. Sérialiser le scan des sœurs
+            // ne suffit pas : l'entité en mémoire a été chargée AVANT le verrou, et la
+            // requête qui vient de commiter a pu la supprimer (c'était une de SES sœurs)
+            // ou la faire repartir en solve. Sans cette relecture, la seconde validation
+            // pointerait le plan sur une ligne MORTE — `chosen_schedule_id` est une
+            // colonne guid nue, aucune FK ne l'arrête — puis supprimerait la survivante :
+            // zéro version, pointeur fantôme, club renvoyé au wizard avec ses matchs.
+            try {
+                $this->entityManager->refresh($schedule);
+            } catch (EntityNotFoundException) {
+                // La version a été supprimée pendant qu'on attendait le verrou —
+                // typiquement par une validation concurrente dont elle était la sœur.
+                return $this->json(['error' => 'Cette version n\'existe plus — rechargez le planning.'], Response::HTTP_CONFLICT);
+            }
+            if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
+                return $this->json(['error' => 'Cette version a changé entre-temps — rechargez le planning.'], Response::HTTP_CONFLICT);
+            }
 
             // Les versions sœurs de MÊME portée. Une sœur en cours de solve bloque :
             // on ne supprime pas un planning sous les pieds du worker qui l'écrit.

@@ -8,7 +8,7 @@ const noop = () => {};
 
 const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
 
-function renderToolbar(schedules: Schedule | Schedule[], { chosenScheduleId = null, embedded = true, selectedScheduleId = "s1" }: { chosenScheduleId?: string | null; embedded?: boolean; selectedScheduleId?: string } = {}) {
+function renderToolbar(schedules: Schedule | Schedule[], { embedded = true, selectedScheduleId = "s1" }: { embedded?: boolean; selectedScheduleId?: string } = {}) {
   return render(
     <PlanningToolbar
       schedules={Array.isArray(schedules) ? schedules : [schedules]}
@@ -23,7 +23,6 @@ function renderToolbar(schedules: Schedule | Schedule[], { chosenScheduleId = nu
       onRegenerateFrom={noop}
       isGenerating={false}
       actionBusy={false}
-      chosenScheduleId={chosenScheduleId}
       embedded={embedded}
     />,
   );
@@ -39,7 +38,7 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
 
   it("offers Rouvrir and hides Régénérer on the version in force (read-only)", () => {
     // « En vigueur » is the plan's pointer (isChosen), not a status.
-    renderToolbar(schedule("COMPLETED", { isChosen: true }), { chosenScheduleId: "s1" });
+    renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
     // The plain "Régénérer" (current structure) is hidden on a read-only version;
     // "Charger cette version" (restore this version's structure) may still show.
@@ -47,7 +46,7 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   });
 
   it("never offers a « Définir principal » action (the plan's pointer is moved by validating, not by a toggle)", () => {
-    renderToolbar(schedule("COMPLETED"), { chosenScheduleId: "other" });
+    renderToolbar(schedule("COMPLETED"));
     expect(screen.queryByRole("button", { name: /principal/i })).not.toBeInTheDocument();
   });
 
@@ -69,8 +68,20 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   });
 
   it("offers Supprimer on a plain work version, but not on the one in force", () => {
-    renderToolbar(schedule("COMPLETED"), { chosenScheduleId: "other" });
+    // Deux versions : celle qu'on regarde n'est pas la dernière, donc la saison reste
+    // ancrée — c'est bien « une version de travail ordinaire » qu'on teste.
+    renderToolbar([schedule("COMPLETED", { id: "s1" }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01" })]);
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
+  });
+
+  it("hides Supprimer on the season's LAST finished version — it anchors the season (server refuses it)", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
+  });
+
+  it("hides Valider while a sibling is still solving — the server refuses the whole validation", () => {
+    renderToolbar([schedule("COMPLETED", { id: "s1" }), schedule("GENERATING", { id: "s2", createdAt: "2026-02-01" })]);
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
   });
 
   it("greys « Charger cette version » on the live-context (★) version — reloading it is a no-op", () => {
@@ -100,7 +111,6 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
         onRegenerateFrom={noop}
         isGenerating={false}
         actionBusy
-        chosenScheduleId={null}
         embedded
       />,
     );
@@ -117,11 +127,11 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
 
   it("hides Supprimer on the version in force — whether the SEASON plan points at it or its own plan does", () => {
     // The season's calendar: /api/me carries that pointer.
-    renderToolbar(schedule("COMPLETED"), { chosenScheduleId: "s1" });
+    renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
     // A version its OWN plan points at (e.g. a period's overlay in force): the
     // season pointer is elsewhere, so only the per-version isChosen catches it.
-    renderToolbar(schedule("COMPLETED", { isChosen: true }), { chosenScheduleId: "other" });
+    renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
   });
 

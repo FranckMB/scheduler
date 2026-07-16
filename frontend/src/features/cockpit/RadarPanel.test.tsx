@@ -10,13 +10,14 @@ import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
 let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
+let conflictsPending = false;
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
-  useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData })),
+  useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
 }));
 
 const FUTURE = "2999-01-05";
@@ -54,6 +55,7 @@ describe("RadarPanel", () => {
   beforeEach(() => {
     createHolidayMutate.mockReset();
     conflictsData = undefined;
+    conflictsPending = false;
   });
 
   it("asks for the school zone when unknown", () => {
@@ -97,6 +99,28 @@ describe("RadarPanel", () => {
 
     expect(screen.getByText(/Planning de la saison incomplet · impact non évalué/)).toBeInTheDocument();
     expect(screen.queryByText("Rien à signaler")).not.toBeInTheDocument();
+  });
+
+  it("never announces « tout roule » while a closure's impact is still loading", () => {
+    // Masquer une carte parce qu'on ne sait pas ENCORE, tout en annonçant que tout va
+    // bien, c'est le silence qui ment — juste déplacé du libellé vers le filtre.
+    conflictsPending = true;
+    conflictsData = undefined;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.queryByText("Gymnase fermé")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a closure whose impact could NOT be read (failed request) instead of silently dropping it", () => {
+    // Requête en échec : `data` reste undefined pour toujours. La masquer cacherait
+    // définitivement une fermeture qui, en vrai, tombe sur 6 séances.
+    conflictsPending = false;
+    conflictsData = undefined;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.getByText("Gymnase fermé")).toBeInTheDocument();
+    expect(screen.getByText(/impact non évalué/)).toBeInTheDocument();
   });
 
   it("hides a closure that hits nothing on a validated plan — the radar is a to-do list, not an inventory", () => {

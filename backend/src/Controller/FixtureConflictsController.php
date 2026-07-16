@@ -97,6 +97,12 @@ final class FixtureConflictsController extends AbstractController
             'clubId' => $clubId,
             'seasonId' => $season?->getId(),
             'conflicts' => $conflicts,
+            // Même raison que le radar des périodes : sans version pointée, la saison
+            // n'a pas de calendrier, `MATCH_TRAINING` ne peut rien détecter hors période,
+            // et `conflicts: []` devient indiscernable d'une saison réellement saine. Le
+            // gestionnaire poserait un match sur un entraînement vivant. Un silence qui
+            // ment est pire qu'un blanc.
+            'seasonPlanChosen' => null !== $seasonScheduleId,
         ]);
     }
 }
