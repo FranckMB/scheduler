@@ -38,7 +38,7 @@ Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `Coc
 - Le gestionnaire consulte **tous** les plannings de l'année ; il édite ceux que leur plan ne pointe pas.
 
 ### Hors scope (reporté, raison technique)
-- **Cascade « éditer le baseline ⇒ répercuter sur les plannings secondaires »** : suppose que les secondaires dérivent du baseline (modèle **templates → occurrences**, roadmap §2, **absent**). Impossible proprement aujourd'hui → différé, documenté.
+- **Cascade « éditer le calendrier de la saison ⇒ répercuter sur les plannings secondaires »** : suppose que les secondaires dérivent du calendrier de base (modèle **templates → occurrences**, roadmap §2, **absent**). Impossible proprement aujourd'hui → différé, documenté. En attendant, déplacer ou retirer le pointeur du plan SEASON **détruit** les plans secondaires, sur confirmation explicite (inv. 14, §6).
 
 ## 2. État du code au moment de la rédaction (ancrages)
 
@@ -126,15 +126,17 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
 - **Reopen destructeur du calendrier de saison** (cockpit palier B) : rouvrir la **version choisie du plan SEASON** alors que des calendriers secondaires (overlays de période) existent les **supprime** (spec §2bis, inv. 14). `POST /api/schedules/{id}/reopen` renvoie **409 `{code:"overlays_exist", count, overlays:[{entryId,title,overlayScheduleId}]}`** ; le client confirme avec le body `{"confirmDeleteOverlays": true}` → les overlays sont supprimés (schedules + slots + diagnostics ; **les entrées de période et leurs contraintes datées sont conservées** — la période redevient « signalée, non adaptée ») puis le reopen procède. Même garde, même code, sur `/validate` quand choisir une **autre** version déplacerait le calendrier de la saison. Zéro overlay, ou reopen d'un overlay de période : comportement inchangé.
 
 **Frontend** :
-- Toolbar : bouton Valider (COMPLETED) / Rouvrir (VALIDATED), read-only gating, libellés statut, badge « Planning de la saison ».
+- Toolbar : bouton Valider (`COMPLETED` non choisie) / Rouvrir (version choisie), read-only gating, libellés statut, badge « Planning de la saison ». Bandeau cockpit : `SeasonPlanBanner`.
 
 ## 7. Vérification (backend touché ⇒ obligatoire)
 - `cd backend && make test` (CS-Fixer + PHPStan lvl8 + PHPUnit)
 - **`backend/scripts/smoke-solver.sh` → planning `COMPLETED`**
 - `frontend` : `npm run test` + `npm run build`
-- Contrat engine inchangé (VALIDATED backend-only) — aucun bump `CONTRACT_VERSION`.
+- Contrat engine inchangé (le pointeur est backend-only, l'engine ne le voit pas) — aucun bump `CONTRACT_VERSION`.
 
 ## 8. Checklist de scope (§9 CLAUDE.md)
+
+> *Checklist datée de la PR-3, conservée pour la traçabilité — **périmée par la bascule ADR-0002 (2026-07-16)** : `SetBaselineController` n'existe plus et le cycle de vie repose sur le pointeur du plan.*
 - **Zone** : `backend/src` (Enum, Entity, Controller, State, Dto) + `backend/tests` + `frontend/src/features/planning` (+ union `wizard/api.ts`).
 - **Interdit** : `engine/**` (aucun changement) · `specs/initiales/**` · la **cascade** baseline→secondaires · le modèle occurrences.
 - **Fichiers probables** : `Enum/ScheduleStatus.php`, `Controller/{ValidateSchedule,Reopen,SetBaseline}Controller.php`, `Controller/GenerateScheduleController.php`, `Controller/ManualEditController.php`, `State/Processor/{Schedule,ScheduleSlotTemplate}StateProcessor.php`, `Dto/ScheduleInput.php` ; front `planning/{api,queries,PlanningToolbar,PlanningPage,SlotDetail,WeekGrid}.tsx`, `wizard/api.ts`. **Tests** : `ValidateScheduleTest`, `ReopenScheduleTest`, `SetBaselineTest`, gardes, tenant.

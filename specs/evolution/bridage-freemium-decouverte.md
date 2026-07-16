@@ -3,7 +3,7 @@
 > **Statut** : **besoin spécifié** (discovery close, décisions tranchées §5) — **pas un plan**.
 > **Nature** : fixe le modèle de bridage du plan gratuit (Découverte / freemium), business-critique — pas de SaaS sans verrou de conversion.
 > **Rattachement roadmap** : `roadmap.md` §6 (pricing & bridage). Concrétise le bridage Découverte + l'enforcement `generation_count`.
-> **Réutilise l'existant** : `Club.planId` · `billing_cycle`/`plan_expires_at` · `generation_count_season` · le **verrou read-only serveur** (patron VALIDATED). **Zéro changement engine.**
+> **Réutilise l'existant** : `Club.planId` · `billing_cycle`/`plan_expires_at` · `generation_count_season` · le **verrou read-only serveur** des 4 chemins d'édition (patron de la version choisie, ADR-0002). **Zéro changement engine.**
 
 ---
 
@@ -36,7 +36,7 @@ Laisser un gestionnaire **tester l'app avec ses vraies données** — assez pour
 Le modèle génération **dissout** le 🔴 « enforcement transversal sur chaque feature » : **3 gardes seulement**.
 1. **Compteur générations** : garde dans `GenerateScheduleController` — refus si freemium ET quota atteint (le champ `generation_count_season` existe ; freemium a besoin d'un compteur **total non rechargeable** → nouveau champ ou variante qui ne se remet jamais à zéro).
 2. **Export off** : garde sur l'export PDF si `plan = Découverte`.
-3. **Read-only à l'épuisement** : réutilise le **verrou serveur VALIDATED** (déjà en place sur les 4 chemins d'édition) → étendu au cas « freemium épuisé ».
+3. **Read-only à l'épuisement** : réutilise le **verrou serveur** déjà en place sur les 4 chemins d'édition (celui qui protège la version choisie d'un plan, ADR-0002) → étendu au cas « freemium épuisé ».
 
 Pas de garde par-entité, pas d'état « déjà au-dessus de la limite », pas de souci d'import/copie-de-transition. **Bien plus simple que le bridage entités de la roadmap d'origine.**
 
@@ -66,5 +66,5 @@ Pas de garde par-entité, pas d'état « déjà au-dessus de la limite », pas d
 ## 8. Axes structurants (§7.1) & vérification
 
 - **generation pipeline** : le compteur gate `POST /generate` → NR (freemium épuisé → 402/403 refusé ; ajustement manuel non décompté ; superadmin reset ré-ouvre).
-- **planning lifecycle** : read-only à l'épuisement réutilise le verrou VALIDATED → NR (les 4 chemins d'édition refusés en freemium épuisé).
+- **planning lifecycle** : read-only à l'épuisement réutilise le verrou des 4 chemins d'édition → NR (les 4 chemins refusés en freemium épuisé).
 - **Vérification** : smoke-solveur inchangé (le freemium génère un vrai plan tant qu'il a du quota).

@@ -147,14 +147,16 @@ final class ManagementRoleTest extends WebTestCase
 
     public function testScheduleCannotBeCreatedWithNonDraftStatus(): void
     {
-        // Review finding: POST accepted any status — fabricating a VALIDATED
-        // plan without generation. Even a manager gets 409 for non-DRAFT.
+        // Review finding: POST accepted any status — fabricating a finished plan
+        // without ever generating. Even a manager gets 409 for non-DRAFT.
+        // COMPLETED is the forge that matters now: it is what the solver's own
+        // answer looks like, and choosing a version only ever picks a COMPLETED one.
         [$adminToken] = $this->register('MGD');
 
         $this->client->request('POST', '/api/schedules', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
             'CONTENT_TYPE' => 'application/ld+json',
-        ], '{"name":"forged","status":"VALIDATED"}');
+        ], '{"name":"forged","status":"COMPLETED"}');
 
         self::assertResponseStatusCodeSame(409, 'a schedule must be created as DRAFT only');
     }

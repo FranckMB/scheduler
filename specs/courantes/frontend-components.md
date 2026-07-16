@@ -32,7 +32,7 @@ Référence : `specs/courantes/openapi-snapshot.json` — paths des ressources A
 Platform + opérations custom déclarées sur les ressources (`/api/schedules/{id}/generate`,
 `/api/schedules/{id}/export-pdf`, `/api/clubs/{id}/import-teams`). Les routes
 Symfony custom (`/api/me`, `/api/register`, `/api/password/*`, `/api/memberships/*`,
-`/api/schedules/{id}/validate|reopen|set-baseline`, `/api/teams/reorder`,
+`/api/schedules/{id}/validate|reopen`, `/api/teams/reorder`,
 `/api/club/appearance`, `/api/club/logo`, …) n'y figurent **pas** — inventaire
 complet dans `backend-inventory.md` §3.
 
@@ -230,7 +230,8 @@ ScheduleSlotTemplate:
   pendingConstraintSuggestion
 
 Schedule:
-  id, name, status (enum: DRAFT | PENDING | GENERATING | COMPLETED | FAILED | VALIDATED),
+  id, name, status (enum: DRAFT | PENDING | GENERATING | COMPLETED | FAILED),
+  isChosen (bool — le plan de cette version la pointe = « validée », ADR-0002),
   score, solverSeed, pdfExportStatus, pdfExportUrl, pngExportUrl,
   solverWallTimeMs, solverNbVariables, solverNbConstraints
 ```

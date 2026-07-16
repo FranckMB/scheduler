@@ -356,12 +356,12 @@ Voici un tableau récapitulatif de tous les cas d'erreur possibles, avec leur ca
 
 ## 8. Cycle de vie du statut d'un planning
 
-Le champ `Schedule.status` suit un cycle de vie strict à **sept** états.
+Le champ `Schedule.status` suit un cycle de vie strict à **cinq** états.
 
 ```
-DRAFT ──► PENDING ──► GENERATING ──► COMPLETED ──► VALIDATED
-                          │                │
-                          └──► FAILED      └──► ARCHIVED
+DRAFT ──► PENDING ──► GENERATING ──► COMPLETED
+                          │
+                          └──► FAILED
 ```
 
 | Statut | Signification | Qui le définit |
@@ -371,10 +371,10 @@ DRAFT ──► PENDING ──► GENERATING ──► COMPLETED ──► VALID
 | `GENERATING` | Le worker `GenerateScheduleHandler` est en cours d'exécution | `GenerateScheduleHandler` (début du traitement) |
 | `COMPLETED` | Le moteur a retourné un planning valide, les créneaux sont importés | `ScheduleResultImporter` (cas succès) |
 | `FAILED` | Erreur à n'importe quelle étape (timeout, infaisabilité, engine down, etc.) | `GenerateScheduleHandler` ou `ScheduleResultImporter` (cas échec) |
-| `VALIDATED` | Planning validé par l'administrateur : lecture seule | Côté API (validation explicite), jamais par le worker |
-| `ARCHIVED` | Ancienne version de planning, conservée pour historique | Côté API (gestion des versions), jamais par le worker |
 
-Les états `VALIDATED` et `ARCHIVED` **bloquent tous deux `POST /generate`** : la requête est refusée en `409 Conflict` (il faut rouvrir le planning validé, ou générer une nouvelle version au lieu de toucher une archive).
+**« Validé » n'est pas un statut** (ADR-0002 inv. 1) : c'est le **plan** (`schedule_plan`) qui **pointe** la version faisant foi (`chosen_schedule_id`), et une version pointée reste `COMPLETED`. Il n'y a pas non plus d'archive : valider **supprime** les versions sœurs.
+
+La version que son plan pointe **bloque `POST /generate`** : la requête est refusée en `409 Conflict` — il faut d'abord la **rouvrir** (dépointer, `POST /api/schedules/{id}/reopen`).
 
 ### 8.1 Transitions possibles
 

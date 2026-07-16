@@ -47,7 +47,7 @@
 ### 1.7 Réinitialiser le club (QW-4 + correction audit)
 À faire **en dernier** de cette section si tu veux garder tes données, ou sur un club jetable :
 - ☐ /club → « Réinitialiser » : modale de confirmation « Tout supprimer ».
-- ☐ Après reset : équipes, gymnases, **créneaux d'entraînement**, coachs, plannings, **entrées du calendrier cockpit** tous vides ; l'accueil redevient le work-loop (le jalon socle est remis à zéro). *(Correction audit : avant, les créneaux et le calendrier survivaient au reset.)*
+- ☐ Après reset : équipes, gymnases, **créneaux d'entraînement**, coachs, plannings, **entrées du calendrier cockpit** tous vides ; l'accueil redevient le work-loop (le plan n'a plus de version terminée → le cockpit se reverrouille). *(Correction audit : avant, les créneaux et le calendrier survivaient au reset.)*
 - ☐ Avec un compte membre non-admin : le bouton n'est pas proposé / l'appel est refusé (403).
 
 ---
@@ -57,11 +57,12 @@
 Saisir un petit club (2 gymnases, ~6 équipes, 2 coachs) puis :
 
 1. ☐ **Générer** : étape Génération → planning `COMPLETED` avec score.
-2. ☐ **Valider** : bouton Valider → modale de responsabilité → statut **Validé**, édition verrouillée (drag&drop, édition manuelle et régénération refusés).
-3. ☐ **Accueil = cockpit** : retourner à l'accueil (`/`) → l'écran **cockpit 3 zones** s'affiche (bandeau socle · calendrier · radar). C'est le jalon sticky : il ne se reverrouille jamais (sauf reset club).
-4. ☐ **Renommer un planning validé** : impossible (verrou total) ; rouvrir d'abord.
-5. ☐ **Supprimer le planning principal** : refusé avec message (« désigner un autre principal d'abord ») — *garde ajoutée par l'audit.*
-6. ☐ **Supprimer un planning validé non-principal** : refusé tant qu'il n'est pas rouvert — *garde ajoutée par l'audit.*
+2. ☐ **Accueil = cockpit dès la 1ʳᵉ génération** : retourner à l'accueil (`/`) → l'écran **cockpit 3 zones** s'affiche (bandeau socle · calendrier · radar), **sans avoir validé**. Le déblocage est **dérivé** (le plan porte une version terminée) : il ne se reverrouille jamais, pas même après un « Rouvrir » (sauf reset club).
+3. ☐ **Valider** : bouton Valider → modale de responsabilité → badge **Validé** (le plan **pointe** cette version ; le statut reste `COMPLETED`), édition verrouillée (drag&drop, édition manuelle et régénération refusés). **Les versions sœurs disparaissent** de la liste — elles sont supprimées, pas archivées.
+4. ☐ **Matchs / plans secondaires avant validation** : tant qu'aucune version n'est choisie, les deux sont bloqués (front désactivé, API **409**). Après validation → débloqués.
+5. ☐ **Renommer la version choisie** : impossible (verrou total) ; rouvrir d'abord. Le **nom du planning** (porté par le plan) reste renommable indépendamment.
+6. ☐ **Supprimer la version choisie** : refusé avec message (« La version choisie ne peut pas être supprimée. Rouvrez le planning d'abord. »).
+7. ☐ **Rouvrir** : la version **survit** et redevient éditable ; le plan n'en pointe plus aucune ; le cockpit **reste** débloqué.
 
 ---
 
@@ -86,7 +87,7 @@ Saisir un petit club (2 gymnases, ~6 équipes, 2 coachs) puis :
 7. ☐ **Ajuster** à nouveau (période avec plan) : la génération **régénère** l'overlay existant (pas de doublon, pas de 422).
 8. ☐ **Modifier une période qui a un plan** (si tu passes par l'API/PUT) : type/dates/kind **refusés en 422** avec message « supprime le plan d'abord » ; le titre reste modifiable — *garde ajoutée par l'audit.*
 9. ☐ **Supprimer une période avec plan généré** (clic jour → poubelle) : confirmation **destructive** mentionnant la suppression du plan ; après confirmation, l'overlay disparaît **aussi du bandeau et de « Tous les plannings »** sans recharger — *correction audit.*
-10. ☐ **Période dont le plan est validé** : la suppression de la période est **refusée** (409 — rouvrir le plan de période d'abord). Le reopen destructeur du socle, lui, supprime bien tout (chemin autorisé, confirmé) — *correction revue.*
+10. ☐ **Période dont le plan pointe une version** (= « validée ») : la suppression de la période est **refusée** (409 — rouvrir le plan de période d'abord). Le reopen destructeur du socle, lui, supprime bien tout (chemin autorisé, confirmé) — *correction revue.*
 11. ☐ **Radar et entrées ignorées** : marquer une période `ignored` (API) → elle **disparaît du radar** (le calendrier la montre encore) — *correction revue.*
 
 ### 4bis. Reopen proportionné (le garde-fou du socle)
@@ -158,7 +159,7 @@ Nav → **« Matchs »** (`/matchs`).
 ## 11. Perf, robustesse & UX (PRs #96, #100)
 
 1. ☐ **Génération rapide même sur gros club** : générer un club **dense** (beaucoup d'équipes/contraintes de préférence gymnase) → le planning `COMPLETED` en **quelques secondes** (avant : jusqu'à ~10 min). *(Fix workers adaptatifs.)*
-2. ☐ **UX-02 — accueil sur le bon planning** : après login, l'app ouvre sur le **planning principal plein** (ou le dernier plan de saison fini) — **jamais** sur un « ★ · période » **vide**. Le bouton « Définir principal » **n'apparaît pas** quand un overlay de période est sélectionné.
+2. ☐ **UX-02 — accueil sur le bon planning** : après login, l'app ouvre sur la **version choisie du plan de saison** (ou le dernier plan de saison fini) — **jamais** sur un « ★ · période » **vide**. Il n'existe **aucun** bouton « Définir principal » : le pointeur du plan se déplace en **validant**, pas par un bascule séparé.
 3. ☐ **Garde-fou génération bloquée** (outillage) : si le worker est mort, le smoke `smoke-solver.sh` échoue **à ~90s avec un diagnostic** (worker/NOGROUP) au lieu de pendre 10 min. *(Vérif dev, pas gestionnaire.)*
 
 ## 12. Sécurité (audit 2026-07-06 — surtout automatisé)
@@ -176,8 +177,8 @@ Nav → **« Matchs »** (`/matchs`).
 | # | Correction | Où le voir |
 |---|-----------|------------|
 | 1 | Période sous plan : type/dates/kind verrouillés (422) | §4.8 |
-| 2 | Reset club purge créneaux + calendrier + jalon socle | §1.6 |
-| 3 | Planning principal / validé non supprimable (409) | §2.5–2.6 |
+| 2 | Reset club purge créneaux + calendrier + déblocage cockpit | §1.6 |
+| 3 | Version choisie non supprimable (409) | §2.6 |
 | 4 | Statut non falsifiable via PUT (409) | (API only) |
 | 5 | Rappels limités aux périodes qui peuvent avoir un plan | §5.4 |
 | 6 | « Aujourd'hui » du cron = fuseau du club | (implicite §5) |
@@ -202,7 +203,7 @@ Nav → **« Matchs »** (`/matchs`).
 | Axe | Correction | Où le voir |
 |-----|-----------|------------|
 | PERF | Solveur gros club 612 s → ~2 s (workers adaptatifs) | §11.1 |
-| UX-02 | Un overlay n'est jamais baseline ; accueil sur le vrai plan | §11.2 |
+| UX-02 | Un overlay n'est jamais la version choisie du plan de saison ; accueil sur le vrai plan | §11.2 |
 | ENG-10..13 | Matrice contrainte UI↔engine (préférences honorées, BONUS retiré, union coach) | §10 |
 | SEC-08 | Plus de `getMessage()` brut au client (manual-edit) | §12.1 |
 | SEC-07 | Garde de rôle management sur les écritures cockpit | automatisé (ManagementRoleTest) |

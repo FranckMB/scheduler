@@ -41,8 +41,8 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
 - **Affichage** : dès qu'un schedule est `COMPLETED`, `GenerateStep` bascule sur
   `<PlanningPage embedded />`. La page choisit le plan à ouvrir via
   `pickLandingScheduleId` (`features/planning/PlanningPage.tsx`) : **jamais un overlay
-  de période**, toujours le plan de saison de référence (baseline sinon le dernier
-  plan de saison terminé).
+  de période**, toujours une version de saison — celle que le plan SEASON **pointe**
+  (`seasonPlan.chosenScheduleId`, ADR-0002), sinon la dernière version de saison terminée.
 
 ## 3. Backend — ce qu'il fait
 
@@ -79,7 +79,7 @@ le planning s'ouvre sur rien après une génération réussie.
   (`features/planning/api.ts`) mappe les champs nullable (`calendarEntryId`, `score`)
   en `?? null` → le type redevient honnête, **tous** les consommateurs voient un vrai
   `null`. Même piège pour `score` : un plan sans score (DRAFT/en vol) affichait sinon
-  le littéral « score undefined » (`PlanningToolbar`, `BaselineBanner`, `SeasonSchedulesModal`).
+  le littéral « score undefined » (`PlanningToolbar`, `SeasonPlanBanner`, `SeasonSchedulesModal`).
 - **Règle générale** : tout champ nullable consommé côté frontend via une comparaison
   `=== null` doit être normalisé à la frontière de son endpoint, ou testé avec un
   check *nullish* (`!x` / `== null`), jamais `=== null` seul.

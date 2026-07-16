@@ -46,8 +46,8 @@ Croise l'empreinte-temps `MatchFootprint` d'un `Fixture` avec les autres occupat
 - **`MATCH_TRAINING`** : un `Fixture` chevauchant un entraînement d'une équipe du coach, lu dans le **planning
   effectif à la date du match**. Une période ACTIVE **capture** les dates qu'elle couvre : à l'intérieur le
   planning de base ne s'applique pas — son **overlay** (`CalendarEntry.overlayScheduleId`) s'il existe, **sinon
-  aucun entraînement** (une coupure = « pas d'entraînement », donc aucun conflit fantôme). Hors période =
-  `Season.baselineScheduleId`. Le créneau hebdo (`ScheduleSlotTemplate`, `dayOfWeek`+`startTime`+`durationMinutes`)
+  aucun entraînement** (une coupure = « pas d'entraînement », donc aucun conflit fantôme). Hors période = la
+  **version choisie du plan SEASON** (`SchedulePlanProvisioner::chosenOfSeasonPlan`, ADR-0002). Le créneau hebdo (`ScheduleSlotTemplate`, `dayOfWeek`+`startTime`+`durationMinutes`)
   est **projeté sur la date**, puis chevauché. Le coach en conflit = le `coachId` **assigné au créneau** s'il
   existe, sinon les coachs de l'équipe du créneau (pas de faux positif sur un co-coach qui ne tient pas la séance).
 
