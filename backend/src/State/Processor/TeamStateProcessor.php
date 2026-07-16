@@ -38,36 +38,27 @@ class TeamStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * Une équipe ENGAGÉE (elle joue déjà) n'est pas supprimable : ses matchs sont
-     * connus de la fédération, et `purgeChildrenOfTeam` les emporterait avec elle.
+     * Une équipe ENGAGÉE (elle joue déjà) n'est pas supprimable : ses matchs sont connus
+     * de la fédération, et `purgeChildrenOfTeam` les emporterait avec elle.
      *
-     * Le refus vit ICI, avant `parent::processDelete` — donc avant la cascade, qui
-     * supprime les Fixture. Le placer plus bas ne refuserait rien : les matchs
-     * seraient déjà détruits.
-     *
-     * @param array<string, mixed> $uriVariables
+     * Le refus vit dans ce hook parce qu'il est le dernier point AVANT la cascade et le
+     * `remove()` — le placer après ne refuserait rien, les matchs seraient déjà détruits.
+     * Et le parent a déjà chargé l'entité ET vérifié le tenant : surcharger
+     * `processDelete` pour re-chercher l'équipe y ajouterait une troisième variante
+     * maison du même contrôle d'appartenance.
      */
-    protected function processDelete(array $uriVariables, ?string $clubId): void
-    {
-        $id = $uriVariables['id'] ?? null;
-        if (\is_string($id) && '' !== $id) {
-            $team = $this->entityManager->getRepository(Team::class)->find($id);
-            if ($team instanceof Team && (null === $clubId || $team->getClubId() === $clubId)) {
-                $this->teamEngagementGuard->assertNotEngaged(
-                    $team->getId(),
-                    'Cette équipe joue en compétition : ses matchs sont engagés auprès de la fédération. Elle ne peut plus être supprimée.',
-                );
-            }
-        }
-
-        parent::processDelete($uriVariables, $clubId);
-    }
-
     protected function cascadeBeforeDelete(object $entity): void
     {
-        if ($entity instanceof Team) {
-            $this->cascadeDeleter?->purgeChildrenOfTeam($entity);
+        if (!$entity instanceof Team) {
+            return;
         }
+
+        $this->teamEngagementGuard->assertNotEngaged(
+            $entity->getId(),
+            'Cette équipe joue en compétition : ses matchs sont engagés auprès de la fédération. Elle ne peut plus être supprimée.',
+        );
+
+        $this->cascadeDeleter?->purgeChildrenOfTeam($entity);
     }
 
     /**

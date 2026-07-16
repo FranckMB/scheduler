@@ -120,11 +120,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
             </option>
           ))}
         </Select>
-        {/* Le title vit sur le WRAPPER, pas sur le contrôle : un élément de formulaire
-            `disabled` ne reçoit aucun événement souris, donc son propre title ne
-            s'affiche jamais — le grisage resterait muet. */}
-        <span title={engaged ? ENGAGED_REASON : undefined}>
-          <Select
+        <Select
             aria-label="Niveau de jeu"
             className="h-8 w-32"
             value={team.level ?? ""}
@@ -137,7 +133,6 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
               </option>
             ))}
           </Select>
-        </span>
         <Input
           aria-label="Séances/sem"
           type="number"
@@ -149,12 +144,17 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         />
         {/* Rang is not edited inline: changing a team's tier is done via the
             "Trier" mode (drag & drop between S/A/B/C/D zones). */}
-        <span title={engaged ? ENGAGED_REASON : undefined}>
-          <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" disabled={engaged} onClick={() => onDelete(team)}>
-            <Trash2 className="size-4" />
-          </Button>
-        </span>
+        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" disabled={engaged} onClick={() => onDelete(team)}>
+          <Trash2 className="size-4" />
+        </Button>
       </div>
+      {engaged && (
+        // Un `title` de survol ne suffisait pas : un contrôle `disabled` sort de l'ordre
+        // de tabulation ET ne reçoit aucun événement souris — au clavier comme au lecteur
+        // d'écran, deux contrôles grisés sans la moindre raison. La raison devient donc
+        // du TEXTE, lu par tout le monde, sur le patron de l'alerte « Bonus » ci-dessous.
+        <p className="ml-8 mt-1 text-xs text-muted-foreground">{ENGAGED_REASON} Son niveau et sa suppression sont verrouillés ; le reste se modifie.</p>
+      )}
       {bonusCompetitionWarning && (
         <p role="alert" className="ml-8 mt-1 text-xs text-warning">
           Équipe en compétition classée Bonus (D) — elle passera en dernier ; vérifiez le rang.
@@ -588,6 +588,11 @@ function TeamsEditor() {
           { count: reservations.filter((r) => r.teamId === toDelete?.id).length, one: "créneau réservé", many: "créneaux réservés" },
           { count: teamCoaches.filter((l) => l.teamId === toDelete?.id).length, one: "coach lié", many: "coachs liés" },
           { count: coachPlayers.filter((l) => l.teamId === toDelete?.id).length, one: "coach-joueur lié", many: "coach-joueurs liés" },
+          // La cascade emporte les matchs de l'équipe. Une équipe supprimable n'a par
+          // définition aucun match placé (sinon elle serait engagée, donc protégée) :
+          // c'est donc typiquement un import FBI entier qui part, à ré-importer. Le
+          // compte vient du serveur — celui qui les supprime.
+          { count: toDelete?.fixtureCount ?? 0, one: "match importé", many: "matchs importés" },
         ]}
         onConfirm={() => {
           if (toDelete) {

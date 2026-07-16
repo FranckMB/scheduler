@@ -37,6 +37,12 @@ export interface Team {
    * autre chose que le serveur : l'écran offrirait un geste toujours refusé.
    */
   isEngaged?: boolean;
+  /**
+   * Combien de matchs pendent à cette équipe. La supprimer les emporte — et une équipe
+   * supprimable est justement une équipe dont aucun match n'est encore placé, donc
+   * typiquement un import FBI entier. La confirmation DOIT l'annoncer.
+   */
+  fixtureCount?: number;
 }
 
 export interface SportCategory {

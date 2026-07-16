@@ -55,6 +55,41 @@ final class TeamEngagementGuard
     }
 
     /**
+     * Le nombre de matchs de chaque équipe, engagés ou non — en UNE requête.
+     *
+     * Sert la confirmation de suppression : `purgeChildrenOfTeam` emporte les `Fixture`
+     * de l'équipe, et une équipe supprimable est justement une équipe dont AUCUN match
+     * n'est encore placé — donc typiquement un import FBI entier (14 matchs) qui
+     * disparaîtrait sans un mot. Le compte vient du serveur, celui qui les supprime :
+     * le recalculer côté front demanderait de charger tous les matchs sur l'écran des
+     * équipes, et divergerait un jour de ce que la cascade fait vraiment.
+     *
+     * @param list<string> $teamIds
+     *
+     * @return array<string, int>
+     */
+    public function fixtureCountByTeam(array $teamIds): array
+    {
+        if ([] === $teamIds) {
+            return [];
+        }
+
+        /** @var list<array{team_id: string, n: int}> $rows */
+        $rows = $this->entityManager->getConnection()->fetchAllAssociative(
+            'SELECT team_id, COUNT(*) AS n FROM fixture WHERE team_id IN (:tids) GROUP BY team_id',
+            ['tids' => $teamIds],
+            ['tids' => \Doctrine\DBAL\ArrayParameterType::STRING],
+        );
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(string) $row['team_id']] = (int) $row['n'];
+        }
+
+        return $counts;
+    }
+
+    /**
      * Les équipes engagées parmi `$teamIds`, en UNE requête — un EXISTS par ligne
      * N+1-erait la collection des équipes.
      *

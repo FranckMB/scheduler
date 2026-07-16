@@ -150,6 +150,20 @@ final class StructureRestorer
             $tenant,
             'DELETE App\Entity\VenueTrainingSlot vts WHERE vts.id IN (:ids)',
         );
+
+        // Un match dont le gymnase a disparu du restore. `Fixture` n'est ni dans le wipe
+        // ni dans la photo : il SURVIT, en nommant un venue_id mort (aucune FK ne
+        // l'arrête). On le DÉPOINTE au lieu de le supprimer — exactement ce que fait la
+        // suppression d'un gymnase par l'API (`purgeChildrenOfVenue` : « le match survit,
+        // il perd juste son gymnase »). Le laisser pendre est pire que le vider : il
+        // s'affiche avec un gymnase blanc ET reste HORS de la liste des matchs à placer,
+        // dont la règle est `venueId === null` — donc le gestionnaire n'apprend jamais
+        // que son match a perdu sa salle.
+        $this->entityManager->createQuery(
+            'UPDATE App\Entity\Fixture f SET f.venueId = NULL '
+            . 'WHERE f.clubId = :c AND f.seasonId = :s AND f.venueId IS NOT NULL '
+            . 'AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = f.venueId)',
+        )->setParameters($tenant)->execute();
     }
 
     /**
@@ -207,19 +221,39 @@ final class StructureRestorer
         $inPhoto = [];
         foreach ($data[$teamFamily] ?? [] as $row) {
             if (isset($row['id']) && \is_string($row['id'])) {
-                $inPhoto[$row['id']] = true;
+                $inPhoto[$row['id']] = $row;
             }
         }
 
         $lost = [];
+        $releveled = [];
         foreach ($teams as $team) {
-            if (isset($engaged[$team->getId()]) && !isset($inPhoto[$team->getId()])) {
+            if (!isset($engaged[$team->getId()])) {
+                continue;
+            }
+            $row = $inPhoto[$team->getId()] ?? null;
+            if (null === $row) {
                 $lost[] = $team->getName();
+                continue;
+            }
+            // Présente ne suffit pas : `level` est un champ mappé, donc la photo le
+            // porte et `hydrate()` le réinsère tel quel. Une photo antérieure à la
+            // correction du niveau le RÉÉCRIRAIT en silence — la divergence même que
+            // le gel total du niveau existe pour rendre impossible, atteinte par
+            // l'autre bout. Et le processor refuse ensuite (409) toute correction :
+            // le club resterait avec un niveau faux, sans issue par l'UI.
+            $photoLevel = $row['level'] ?? null;
+            if ($team->getLevel()?->value !== (\is_string($photoLevel) ? $photoLevel : null)) {
+                $releveled[] = $team->getName();
             }
         }
 
         if ([] !== $lost) {
             throw new ConflictHttpException(\sprintf('Cette version est antérieure à %s, qui joue%s déjà en compétition : la charger %s supprimerait et laisserait %s matchs sans équipe.', implode(', ', $lost), 1 === \count($lost) ? '' : 'nt', 1 === \count($lost) ? 'la' : 'les', 1 === \count($lost) ? 'ses' : 'leurs'));
+        }
+
+        if ([] !== $releveled) {
+            throw new ConflictHttpException(\sprintf('Cette version a été générée quand %s %s un autre niveau de jeu. %s joue%s déjà en compétition : la charger rétablirait un niveau qui ne correspond plus à %s engagement.', implode(', ', $releveled), 1 === \count($releveled) ? 'avait' : 'avaient', 1 === \count($releveled) ? 'Elle' : 'Elles', 1 === \count($releveled) ? '' : 'nt', 1 === \count($releveled) ? 'son' : 'leur'));
         }
     }
 

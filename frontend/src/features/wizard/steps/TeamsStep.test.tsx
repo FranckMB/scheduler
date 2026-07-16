@@ -76,6 +76,10 @@ describe("TeamsStep", () => {
     // Ce qui reste libre le reste : le nom et les créneaux ne dépendent pas de la fédé.
     expect(within(row).getByRole("textbox", { name: "Nom" })).toBeEnabled();
     expect(within(row).getByRole("spinbutton", { name: "Séances/sem" })).toBeEnabled();
+    // La raison est du TEXTE, pas un survol : un contrôle `disabled` sort de l'ordre de
+    // tabulation et ne reçoit aucun événement souris — au clavier comme au lecteur
+    // d'écran, un `title` laisserait deux contrôles grisés sans explication.
+    expect(screen.getByText(/joue en compétition/)).toBeInTheDocument();
   });
 
   it("leaves both open on a team that does not play yet", () => {
@@ -84,6 +88,7 @@ describe("TeamsStep", () => {
 
     expect(within(row).getByRole("button", { name: "Supprimer" })).toBeEnabled();
     expect(within(row).getByRole("combobox", { name: "Niveau de jeu" })).toBeEnabled();
+    expect(screen.queryByText(/joue en compétition/)).not.toBeInTheDocument();
   });
 
   it("shows a play-level select and no redundant inner heading", () => {

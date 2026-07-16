@@ -51,8 +51,10 @@ class TeamStateProvider extends AbstractStateProvider
         }
 
         $engaged = $this->teamEngagementGuard->engagedTeamIds($ids);
+        $counts = $this->teamEngagementGuard->fixtureCountByTeam($ids);
         foreach ($dtos as $dto) {
             $dto->isEngaged = isset($engaged[$dto->id]);
+            $dto->fixtureCount = $counts[$dto->id] ?? 0;
         }
 
         return $result;

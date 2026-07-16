@@ -6,15 +6,12 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
-use App\Entity\Fixture;
 use App\Entity\PriorityTier;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
-use App\Enum\FixtureHomeAway;
-use App\Enum\FixtureStatus;
 use App\Enum\TeamLevel;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -485,44 +482,6 @@ final class TeamApiTest extends WebTestCase
         $tier->setOrToolsWeight(100);
         $tier->setDefaultMinSessions(2);
 
-        $this->em->persist($tier);
-        $this->em->flush();
-
-        return $tier;
-    }
-
-    private function fixture(Team $team, FixtureStatus $status, FixtureHomeAway $homeAway = FixtureHomeAway::HOME): Fixture
-    {
-        $this->scopeGucToClub($this->club->getId());
-        $fixture = new Fixture;
-        $fixture->setClubId($this->club->getId());
-        $fixture->setSeasonId($this->season->getId());
-        $fixture->setTeamId($team->getId());
-        $fixture->setMatchDate(new DateTimeImmutable('2026-10-04'));
-        $fixture->setHomeAway($homeAway);
-        $fixture->setOpponentLabel('AS Voisins');
-        $fixture->setStatus($status);
-        $this->em->persist($fixture);
-        $this->em->flush();
-
-        return $fixture;
-    }
-
-    /** Un SECOND rang, pour prouver qu'une équipe engagée peut encore en changer. */
-    private function otherTier(): PriorityTier
-    {
-        $existing = $this->em->getRepository(PriorityTier::class)->find(2);
-        if ($existing instanceof PriorityTier) {
-            return $existing;
-        }
-
-        $tier = new PriorityTier;
-        $tier->setId(2);
-        $tier->setLabel('A');
-        $tier->setName('Compétition');
-        $tier->setColor('#00FF00');
-        $tier->setOrToolsWeight(50);
-        $tier->setDefaultMinSessions(2);
         $this->em->persist($tier);
         $this->em->flush();
 

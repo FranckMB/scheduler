@@ -181,6 +181,85 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Team::class)->find($sm1->getId()));
     }
 
+    public function testLoadVersionIsRefusedWhenThePhotoWouldRewriteAnEngagedTeamLevel(): void
+    {
+        // Le gel du niveau existe pour rendre IMPOSSIBLE la divergence photo↔base. Le
+        // restore l'atteint par l'autre bout : `level` est un champ mappé, donc la photo
+        // le porte et `hydrate()` le réinsère tel quel. Une photo antérieure à la
+        // correction du niveau le rétablirait — et le processor refuserait ensuite (409)
+        // toute correction : le club resterait avec un niveau faux, sans issue.
+        $sm1 = $this->persistTeam('SM1');
+        $sm1->setLevel(\App\Enum\TeamLevel::DEPARTEMENTAL);
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        $snapshotter = self::getContainer()->get(StructureSnapshotter::class);
+        $snapshotter->store($v1, $snapshotter->serialize($this->club->getId(), $this->season->getId()));
+
+        // Le niveau est corrigé APRÈS la photo (encore permis : pas de match), puis
+        // l'équipe est engagée — elle est désormais inscrite REGIONAL à la fédération.
+        $sm1->setLevel(\App\Enum\TeamLevel::REGIONAL);
+        $fixture = (new \App\Entity\Fixture)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setTeamId($sm1->getId())
+            ->setMatchDate(new DateTimeImmutable('2026-10-04'))
+            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setOpponentLabel('AS Voisins')
+            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+        $this->em->persist($fixture);
+        $this->em->flush();
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+
+        self::assertResponseStatusCodeSame(409, 'une photo qui rétablirait un autre niveau sur une équipe engagée doit être refusée');
+        $this->em->clear();
+        self::assertSame(
+            \App\Enum\TeamLevel::REGIONAL,
+            $this->em->getRepository(Team::class)->find($sm1->getId())?->getLevel(),
+            'le niveau sous lequel elle est inscrite ne bouge pas',
+        );
+    }
+
+    public function testLoadVersionUnpointsAMatchWhoseVenueDisappeared(): void
+    {
+        // `Fixture` n'est ni dans le wipe ni dans la photo : le match survit au restore.
+        // Si son gymnase, lui, n'est pas dans la photo, il est supprimé — et le match
+        // nomme un venue_id mort. Le laisser pendre est PIRE que le vider : il s'affiche
+        // avec un gymnase blanc ET reste hors de la liste des matchs à placer (dont la
+        // règle est `venueId === null`). Le gestionnaire n'apprendrait jamais la perte.
+        $sm1 = $this->persistTeam('SM1');
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        $snapshotter = self::getContainer()->get(StructureSnapshotter::class);
+        $snapshotter->store($v1, $snapshotter->serialize($this->club->getId(), $this->season->getId()));
+
+        // Un gymnase né APRÈS la photo, et un match posé dedans.
+        $venue = (new \App\Entity\Venue)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName('Halle B')->setCanSplit(false)->setSource('manual');
+        $this->em->persist($venue);
+        $this->em->flush();
+        $fixture = (new \App\Entity\Fixture)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setTeamId($sm1->getId())
+            ->setMatchDate(new DateTimeImmutable('2026-10-04'))
+            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setOpponentLabel('AS Voisins')
+            ->setStatus(\App\Enum\FixtureStatus::PLACED)
+            ->setVenueId($venue->getId());
+        $this->em->persist($fixture);
+        $this->em->flush();
+
+        // SM1 est dans la photo (elle n'est pas engagée ici : le match la rendrait
+        // engagée, mais elle EST dans la photo — la garde laisse donc passer).
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+        self::assertResponseStatusCodeSame(200);
+
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(\App\Entity\Fixture::class)->find($fixture->getId());
+        self::assertNotNull($reloaded, 'le match survit — il perd juste son gymnase');
+        self::assertNull($reloaded->getVenueId(), 'et il redevient « à placer » au lieu de nommer un gymnase mort');
+    }
+
     public function testRegenerateFromTheChosenVersionIsRefused(): void
     {
         // The version the plan points at is read-only: replaying its conditions
