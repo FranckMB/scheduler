@@ -55,7 +55,15 @@ final class ErasedClubPurger
         // 2. Club-scoped sans saison. SeasonDataPurger::purge fait un clear()
         //    final → les filtres Doctrine doivent être re-désactivés.
         $this->disableTenantFilters($this->entityManager);
-        foreach ([TeamTag::class, SportCategory::class, ClubUser::class] as $entityClass) {
+        foreach ([
+            // SolverMetric porte un clubId mais PAS de seasonId : la purge de saison ne
+            // l'atteint que via son planning. Un orphelin (métrique dont le planning a
+            // déjà été supprimé) y échapperait et survivrait à l'effacement du club —
+            // or « seule l'identité FFBB survit » doit être vrai à la lettre. Ici, la
+            // suppression par clubId les emporte tous, rattachés ou non.
+            \App\Entity\SolverMetric::class,
+            TeamTag::class, SportCategory::class, ClubUser::class,
+        ] as $entityClass) {
             $deleted += (int) $this->entityManager->createQueryBuilder()
                 ->delete($entityClass, 'e')
                 ->where('e.clubId = :clubId')
