@@ -1,4 +1,4 @@
-import { Activity, LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 
@@ -57,29 +57,4 @@ export function AdminShell() {
       <main className="mx-auto max-w-7xl px-6 py-10"><Outlet /></main>
     </div>
   );
-}
-
-export function AdminHomePage() {
-  return (
-    <div className="space-y-10">
-      <section className="max-w-2xl">
-        <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-cyan-300"><Activity className="size-4" aria-hidden="true" /> SA0 opérationnel</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Vue d’ensemble de la plateforme</h1>
-        <p className="mt-4 text-base leading-7 text-slate-400">Le socle d’accès est prêt. Les métriques, la supervision des jobs et les opérations globales seront ajoutées dans les prochains lots.</p>
-      </section>
-      <section className="grid gap-4 md:grid-cols-3" aria-label="État de la console">
-        <StatusCard label="Authentification" value="Protégée" detail="Mot de passe + TOTP" />
-        <StatusCard label="Session" value="Isolée" detail="Cookie admin, sans JWT club" />
-        <StatusCard label="Audit" value="Actif" detail="Écriture fail-closed" />
-      </section>
-      <section className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-8">
-        <p className="text-sm font-medium text-slate-200">Prochain jalon : métriques SA1</p>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Cette zone accueillera les indicateurs santé, usage et génération lorsque la persistance des métriques sera livrée.</p>
-      </section>
-    </div>
-  );
-}
-
-function StatusCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <article className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-3 text-2xl font-semibold text-white">{value}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></article>;
 }

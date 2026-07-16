@@ -3,7 +3,8 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
 import { AdminGuard } from "@/features/admin/AdminGuard";
-import { AdminHomePage, AdminShell } from "@/features/admin/AdminShell";
+import { AdminDashboardPage } from "@/features/admin/AdminDashboardPage";
+import { AdminShell } from "@/features/admin/AdminShell";
 import { AdminLoginPage } from "@/features/admin/AdminLoginPage";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 import { LoginPage } from "@/features/auth/LoginPage";
@@ -29,7 +30,7 @@ const router = createBrowserRouter([
       {
         element: <AdminShell />,
         children: [
-          { index: true, element: <AdminHomePage /> },
+          { index: true, element: <AdminDashboardPage /> },
           { path: "*", element: <Navigate to="/admin" replace /> },
         ],
       },

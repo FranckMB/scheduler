@@ -18,6 +18,88 @@ export interface AdminSessionResponse extends AdminIdentity {
   csrfToken: string;
 }
 
+export interface AdminOverviewResponse {
+  clubs: {
+    total: number;
+    active7d: number;
+    active30d: number;
+    new7d: number;
+    unsubscribed: number;
+  };
+  solver: {
+    windowDays: number;
+    generations: number;
+    completed: number;
+    failed: number;
+    infeasible: number;
+    infeasibleRate: number;
+    p50WallTimeMs: number | null;
+    p95WallTimeMs: number | null;
+    daily: Array<{
+      date: string;
+      generations: number;
+      infeasible: number;
+      p50WallTimeMs: number | null;
+      p95WallTimeMs: number | null;
+    }>;
+  };
+}
+
+type HealthStatus = "up" | "down" | "unknown";
+
+export interface AdminHealthResponse {
+  status: "healthy" | "degraded";
+  checkedAt: string;
+  services: {
+    database: { status: HealthStatus; latencyMs: number | null };
+    redis: { status: HealthStatus; latencyMs: number | null };
+    engine: { status: HealthStatus; latencyMs: number | null };
+    mercure: { status: HealthStatus; latencyMs: number | null };
+    worker: {
+      status: HealthStatus;
+      lastHeartbeatAt: string | null;
+      ageSeconds: number | null;
+    };
+  };
+  messenger: {
+    status: "up" | "degraded" | "unknown";
+    backlog: number | null;
+    failed: number | null;
+    retriesToday: number | null;
+    backlogWarningThreshold: number;
+  };
+}
+
+export interface AdminClub {
+  id: string;
+  name: string;
+  slug: string;
+  ffbbClubCode: string | null;
+  planId: number | null;
+  billingCycle: string | null;
+  generationCountSeason: number;
+  createdAt: string;
+  lastActivityAt: string | null;
+  unsubscribed: boolean;
+  currentSeason: { id: string; name: string; status: string } | null;
+  volumes: { teams: number; venues: number; coaches: number; constraints: number };
+  solver: {
+    generations: number;
+    infeasible: number;
+    infeasibleRate: number;
+    p50WallTimeMs: number | null;
+    p95WallTimeMs: number | null;
+    latestStatus: string | null;
+    latestAt: string | null;
+  };
+}
+
+export interface AdminClubsResponse {
+  items: AdminClub[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+  metricsWindowDays: number;
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -34,6 +116,18 @@ export function completeAdminTotp(code: string): Promise<TotpResponse> {
 
 export function getAdminSession(): Promise<AdminSessionResponse> {
   return adminApi.get("auth/me").json();
+}
+
+export function getAdminOverview(): Promise<AdminOverviewResponse> {
+  return adminApi.get("overview").json();
+}
+
+export function getAdminHealth(): Promise<AdminHealthResponse> {
+  return adminApi.get("health").json();
+}
+
+export function getAdminClubs(page: number, limit: number, query: string): Promise<AdminClubsResponse> {
+  return adminApi.get("clubs", { searchParams: { page, limit, query } }).json();
 }
 
 export function logoutAdmin(csrfToken: string): Promise<void> {
