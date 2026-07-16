@@ -55,51 +55,58 @@ final class ReopenScheduleController extends AbstractController implements Seaso
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        // ADR-0002 inv. 1/2 : « validé » = le plan pointe cette version. Rouvrir =
-        // dépointer. Une version que le plan ne pointe pas n'a rien à rouvrir.
-        if (!$this->schedulePlanProvisioner->isChosen($schedule->getId())) {
-            return $this->json(['error' => 'Seule la version choisie d\'un planning peut être rouverte.'], Response::HTTP_CONFLICT);
-        }
+        // Tout ce qui décide, puis le dépointage, sous le verrou de portée du plan et
+        // DANS la transaction — même raison qu'à la validation, qui sérialise sur ce
+        // verrou ET supprime des versions dessous. Sans lui, un reopen lisait « je suis
+        // la version choisie » sur une photo qu'une validation concurrente invalidait
+        // aussitôt, puis annonçait 200 alors que son UPDATE ne touchait plus rien : le
+        // gestionnaire croyait son planning rouvert et se faisait refuser chaque édition.
+        return $this->entityManager->wrapInTransaction(function () use ($schedule): JsonResponse {
+            $this->schedulePlanProvisioner->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
-        // Garde destructive : dépointer le calendrier de base invalide les plans
-        // secondaires bâtis dessus (inv. 14). Clé sur le pointeur, comme le release
-        // qu'elle protège — les clé sur deux vérités différentes laissait un reopen
-        // orphaniser des plans secondaires vivants sans jamais demander confirmation.
-        if ($schedule->getId() === $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId())) {
-            $overlays = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
-            if ([] !== $overlays) {
-                if (!$this->confirmedDeleteOverlays()) {
-                    return $this->json([
-                        'code' => 'overlays_exist',
-                        'error' => 'Rouvrir le planning de la saison supprime ses plannings secondaires.',
-                        'count' => \count($overlays),
-                        'overlays' => array_map(static fn (CalendarEntry $e): array => [
-                            'entryId' => $e->getId(),
-                            'title' => $e->getTitle(),
-                            'overlayScheduleId' => $e->getOverlayScheduleId(),
-                        ], $overlays),
-                    ], Response::HTTP_CONFLICT);
-                }
-                // Atomic: all overlay deletions + the reopen commit together (a
-                // mid-loop failure must not leave a half-deleted, still-locked state).
-                $this->entityManager->wrapInTransaction(function () use ($overlays, $schedule): void {
+            // ADR-0002 inv. 1/2 : « validé » = le plan pointe cette version. Rouvrir =
+            // dépointer. Une version que le plan ne pointe pas n'a rien à rouvrir.
+            if (!$this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+                return $this->json(['error' => 'Seule la version choisie d\'un planning peut être rouverte.'], Response::HTTP_CONFLICT);
+            }
+
+            // Garde destructive : dépointer le calendrier de base invalide les plans
+            // secondaires bâtis dessus (inv. 14). Clé sur le pointeur, comme le release
+            // qu'elle protège — les clé sur deux vérités différentes laissait un reopen
+            // orphaniser des plans secondaires vivants sans jamais demander confirmation.
+            if ($schedule->getId() === $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId())) {
+                $overlays = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
+                if ([] !== $overlays) {
+                    if (!$this->confirmedDeleteOverlays()) {
+                        return $this->json([
+                            'code' => 'overlays_exist',
+                            'error' => 'Rouvrir le planning de la saison supprime ses plannings secondaires.',
+                            'count' => \count($overlays),
+                            'overlays' => array_map(static fn (CalendarEntry $e): array => [
+                                'entryId' => $e->getId(),
+                                'title' => $e->getTitle(),
+                                'overlayScheduleId' => $e->getOverlayScheduleId(),
+                            ], $overlays),
+                        ], Response::HTTP_CONFLICT);
+                    }
                     foreach ($overlays as $entry) {
                         // force: the user explicitly confirmed destroying the overlays,
-                        // VALIDATED ones included (this IS the authorized destructive path).
+                        // the one in force included (this IS the authorized destructive path).
                         $this->overlayManager->deleteOverlayForEntry($entry, force: true);
                     }
-                    // inv. 2 : rouvrir dépointe — le plan redevient un espace de travail.
-                    $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
-                });
-
-                return $this->json(['id' => $schedule->getId(), 'chosen' => false], Response::HTTP_OK);
+                }
             }
-        }
 
-        // inv. 2 : rouvrir dépointe — le plan redevient un espace de travail.
-        $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
+            // inv. 2 : rouvrir dépointe — le plan redevient un espace de travail.
+            if (!$this->schedulePlanProvisioner->releaseSchedule($schedule->getId())) {
+                // Aucun plan ne la pointait plus : ne pas annoncer une réouverture qui
+                // n'a pas eu lieu (le 200 mensonger laissait le gestionnaire éditer un
+                // planning que le serveur refusait à chaque geste).
+                return $this->json(['error' => 'Ce planning n\'est plus la version en vigueur — rechargez la page.'], Response::HTTP_CONFLICT);
+            }
 
-        return $this->json(['id' => $schedule->getId(), 'chosen' => false], Response::HTTP_OK);
+            return $this->json(['id' => $schedule->getId(), 'chosen' => false], Response::HTTP_OK);
+        });
     }
 
     private function confirmedDeleteOverlays(): bool

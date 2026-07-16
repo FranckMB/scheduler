@@ -249,13 +249,20 @@ final class SchedulePlanProvisioner
      * pointer must never name a deleted version. Raw SQL: filter-free, and the
      * plan is usually not in the UnitOfWork on these paths.
      */
-    public function releaseSchedule(string $scheduleId): void
+    /**
+     * Dépointe la version : le plan qui la nommait redevient un espace de travail.
+     *
+     * @return bool false si AUCUN plan ne la pointait — l'appelant ne doit alors pas
+     *              annoncer une réouverture qui n'a pas eu lieu (une validation
+     *              concurrente a pu déplacer le pointeur entre-temps)
+     */
+    public function releaseSchedule(string $scheduleId): bool
     {
-        $this->entityManager->getConnection()->executeStatement(
+        return $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = NULL, updated_at = now(), version = version + 1 '
             . 'WHERE chosen_schedule_id = :sid',
             ['sid' => $scheduleId],
-        );
+        ) > 0;
     }
 
     private function ensureSeasonPlanId(string $seasonId): ?string

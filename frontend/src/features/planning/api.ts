@@ -51,7 +51,6 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   GENERATING: "Génération…",
   COMPLETED: "Terminé",
   FAILED: "Échec",
-  // planning-versions: sibling version set aside at validation — hidden from the selector.
 };
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
 export type LockLevel = "NONE" | "HARD";
@@ -189,10 +188,10 @@ export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
 /** Queue a (re)generation of the schedule (202). Locked slots survive; the rest reshuffles. */
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
-/** Choose a COMPLETED version: its plan points at it (read-only, in force). */
 /**
- * Validate a COMPLETED version → it becomes THE plan (baseline). Validating a
- * different version while period overlays exist → 409 overlays_exist unless
+ * Choose a COMPLETED version: its plan POINTS at it — it becomes the calendar in
+ * force (read-only), and its sibling versions are SUPPRIMÉES. Choosing a different
+ * version while period overlays exist → 409 overlays_exist unless
  * confirmDeleteOverlays is passed (same destructive idiom as reopen).
  */
 export async function validateSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {

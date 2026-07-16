@@ -142,6 +142,25 @@ final class ReopenScheduleTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($sibling->getId()), 'an unchosen sibling is untouched by a reopen');
     }
 
+    public function testReopeningAVersionThePlanStoppedPointingAtDoesNotClaimSuccess(): void
+    {
+        // Course : un autre onglet valide une AUTRE version pendant qu'on rouvre. Le
+        // dépointage ne touche alors plus rien. Répondre 200 « rouvert » ferait croire
+        // au gestionnaire qu'il peut éditer, et chaque geste serait refusé en 409.
+        [$user, , $season] = $this->seed('REO9');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($v1);
+        // L'issue de la course : le plan pointe désormais ailleurs.
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($v2);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/reopen");
+
+        self::assertResponseStatusCodeSame(409, 'on n\'annonce pas une réouverture qui n\'a pas eu lieu');
+        self::assertSame($v2->getId(), $this->chosenPlanVersion($season), 'et le pointeur d\'autrui n\'est pas touché');
+    }
+
     public function testAVersionThePlanDoesNotPointAtCannotBeReopened(): void
     {
         // "Validated" is the pointer and nothing else — a COMPLETED version the

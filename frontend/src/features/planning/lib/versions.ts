@@ -80,7 +80,7 @@ export function liveContextScheduleId<T extends VersionLike & { id: string }>(sc
 
 /**
  * The version a PLANNING row should represent (cockpit "Tous les plannings"):
- * the latest FINISHED one (VALIDATED or COMPLETED), so its Eye / Export never
+ * the latest FINISHED one (COMPLETED), so its Eye / Export never
  * target a FAILED or in-flight (PENDING/GENERATING) version — which would open
  * an empty planning or export an empty file. Returns null when nothing has
  * finished yet (a brand-new planning still solving): there is no plan to consult

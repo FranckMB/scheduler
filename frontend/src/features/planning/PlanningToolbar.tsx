@@ -42,9 +42,10 @@ interface PlanningToolbarProps {
  * NAME lives in the page header (on the plan itself). Versions are not
  * renamable; a version can be deleted (workspace) behind a DeleteConfirm.
  *
- * The season's MAIN plan (baseline) is never chosen here: the first validated
- * plan is the baseline, as a fact — there is no "set as main" action. Two rows:
- * (1) version + state + view mode, (2) generation actions + export/filter.
+ * « En vigueur » ne se décide pas ici : c'est le plan qui POINTE une version, et
+ * seul « Valider » déplace ce pointeur — il n'y a pas d'action « définir principal »
+ * (rien ne se pointe automatiquement non plus). Deux lignes : (1) version + état +
+ * mode d'affichage, (2) actions de génération + export/filtre.
  */
 export function PlanningToolbar({
   schedules,
@@ -105,7 +106,7 @@ export function PlanningToolbar({
   // "Load this version" (restore its structure + regenerate) is offered only on a
   // finished COMPLETED version that is NOT in force — the chosen one is read-only
   // and the backend refuses the restore (reopen first). The status used to carry
-  // that exclusion (VALIDATED was not COMPLETED); only the pointer does now.
+  // that exclusion (le statut « validé » n'était pas COMPLETED) ; seul le pointeur le fait.
   // It must also carry a structure photo: a pre-D2 plan has a solver payload but no
   // photo, so the restore would 409 — don't offer an action that cannot succeed.
   const canRegenerateFrom = null !== selected && isCompleted && !isChosen && !isOverlay && true === selected.hasStructurePhoto;
@@ -162,8 +163,8 @@ export function PlanningToolbar({
         ) : null}
         {isCompleted && !isChosen && !hasInFlightSibling ? (
           // Choosing a version the plan ALREADY points at is a no-op: the status
-          // used to hide this (VALIDATED was not COMPLETED); now only the pointer
-          // says "in force", so ask it directly.
+          // used to hide this (le statut « validé » n'était pas COMPLETED) ; seul le
+          // pointeur dit « en vigueur » désormais, donc on le lui demande directement.
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
             <CheckCircle2 className="size-4" />
             Valider

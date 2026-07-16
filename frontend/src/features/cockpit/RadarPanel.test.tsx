@@ -120,7 +120,10 @@ describe("RadarPanel", () => {
     renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
 
     expect(screen.getByText("Gymnase fermé")).toBeInTheDocument();
-    expect(screen.getByText(/impact non évalué/)).toBeInTheDocument();
+    // …et sans PRÉTENDRE savoir pourquoi : « planning incomplet » serait affirmer un
+    // fait sur le plan qu'on n'a justement pas pu vérifier.
+    expect(screen.getByText("Impact non évalué · réessayez")).toBeInTheDocument();
+    expect(screen.queryByText(/Planning de la saison incomplet/)).not.toBeInTheDocument();
   });
 
   it("hides a closure that hits nothing on a validated plan — the radar is a to-do list, not an inventory", () => {

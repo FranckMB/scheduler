@@ -186,18 +186,22 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   // un mensonge rassurant — le gestionnaire n'adapterait pas une fermeture qui, en
   // vrai, touchera ses séances. Un plan qui pointe et ne heurte rien, lui, n'a
   // vraiment rien à signaler : les deux états ne doivent pas se dire pareil.
-  // Plan sans version pointée, OU impact illisible (requête en échec) : dans les deux
-  // cas on n'a rien pu évaluer. Le dire, plutôt que d'afficher un « 0 séance ».
-  const planIncomplete = undefined === data || false === data.seasonPlanChosen;
+  // Trois causes distinctes de « pas de chiffre », à ne pas confondre : le plan de la
+  // saison ne pointe rien (fait VÉRIFIÉ), ou la lecture a échoué (on ne sait pas, et
+  // affirmer « plan incomplet » serait énoncer un fait jamais contrôlé).
+  const planIncomplete = false === data?.seasonPlanChosen;
+  const impactUnknown = undefined === data;
 
   // Le parent ne monte cette carte que s'il y a quelque chose à traiter (voir
   // visibleClosures) : pas de branche « rien à signaler » ici, elle ne serait
   // jamais rendue — et l'écrire laisserait croire que le radar inventorie.
   const detail = hasOverlay
     ? "Planning secondaire généré"
-    : planIncomplete
-      ? "Planning de la saison incomplet · impact non évalué"
-      : `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`;
+    : impactUnknown
+      ? "Impact non évalué · réessayez"
+      : planIncomplete
+        ? "Planning de la saison incomplet · impact non évalué"
+        : `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`;
 
   return (
     <RadarCard

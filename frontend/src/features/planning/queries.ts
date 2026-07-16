@@ -166,6 +166,11 @@ export function useValidateSchedule() {
       // destruction serveur que rouvrir, qui l'invalide déjà. Sans ça le cockpit
       // continue d'afficher des périodes dont l'overlay n'existe plus.
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+      // Le radar dérive désormais du POINTEUR, que ce geste déplace : ses conflits ET
+      // son `seasonPlanChosen` changent. L'ancienne baseline était auto-posée et
+      // collante, donc valider/rouvrir ne changeaient jamais cette réponse — d'où
+      // l'oubli. Sans ça le cockpit garde jusqu'à 30 s un radar d'avant le geste.
+      void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
       // Validating moves the plan's pointer (surfaced on /me.seasonPlan), which
       // unlocks matches + secondary plans — refresh it so the home screen follows.
       void queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -195,6 +200,9 @@ export function useReopenSchedule() {
       // Sans ça, useMe (staleTime 60 s) laisse l'onglet Matchs ouvert pendant une
       // minute alors que le serveur refuse déjà les écritures (SocleGuard, 409).
       void queryClient.invalidateQueries({ queryKey: ["me"] });
+      // Même raison que pour la validation : le radar dérive du pointeur, qui vient
+      // de tomber — ses conflits deviennent « impact non évalué ».
+      void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
     },
   });
 }

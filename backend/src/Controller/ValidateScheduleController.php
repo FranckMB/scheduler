@@ -12,7 +12,6 @@ use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityNotFoundException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -90,18 +89,24 @@ final class ValidateScheduleController extends AbstractController implements Sea
             // RELIRE la version elle-même sous le verrou. Sérialiser le scan des sœurs
             // ne suffit pas : l'entité en mémoire a été chargée AVANT le verrou, et la
             // requête qui vient de commiter a pu la supprimer (c'était une de SES sœurs)
-            // ou la faire repartir en solve. Sans cette relecture, la seconde validation
-            // pointerait le plan sur une ligne MORTE — `chosen_schedule_id` est une
-            // colonne guid nue, aucune FK ne l'arrête — puis supprimerait la survivante :
-            // zéro version, pointeur fantôme, club renvoyé au wizard avec ses matchs.
-            try {
-                $this->entityManager->refresh($schedule);
-            } catch (EntityNotFoundException) {
-                // La version a été supprimée pendant qu'on attendait le verrou —
-                // typiquement par une validation concurrente dont elle était la sœur.
+            // ou la faire repartir en solve. Sans ça, la seconde validation pointerait le
+            // plan sur une ligne MORTE — `chosen_schedule_id` est une colonne guid nue,
+            // aucune FK ne l'arrête — puis supprimerait la survivante : zéro version,
+            // pointeur fantôme, club renvoyé au wizard avec ses matchs.
+            //
+            // La relecture se fait en SQL, pas via refresh()/find() : `refresh()` sur une
+            // ligne disparue ne lève RIEN (il SELECTe puis hydrate zéro ligne — voir
+            // BasicEntityPersister::refresh) et laisse l'entité MANAGED avec son état
+            // d'avant le verrou ; `find()` la rendrait depuis l'identity map sans toucher
+            // la base. Les deux répondraient « COMPLETED » sur une version morte.
+            $fresh = $this->entityManager->getConnection()->fetchOne(
+                'SELECT status FROM schedule WHERE id = :id',
+                ['id' => $schedule->getId()],
+            );
+            if (false === $fresh) {
                 return $this->json(['error' => 'Cette version n\'existe plus — rechargez le planning.'], Response::HTTP_CONFLICT);
             }
-            if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
+            if (ScheduleStatus::COMPLETED->value !== $fresh) {
                 return $this->json(['error' => 'Cette version a changé entre-temps — rechargez le planning.'], Response::HTTP_CONFLICT);
             }
 

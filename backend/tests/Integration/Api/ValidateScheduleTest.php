@@ -204,6 +204,33 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertSame($v1->getId(), $this->chosenPlanVersion($season));
     }
 
+    public function testValidatingAVersionThatVanishedMeanwhileIsRefused(): void
+    {
+        // LA course qui m'a échappé deux fois. Deux onglets valident V1 et V2 : la
+        // première supprime V2 (sa sœur), la seconde arrive avec une entité V2 chargée
+        // AVANT le verrou. Si elle ne relit pas la BASE, elle croit V2 COMPLETED,
+        // pointe le plan sur une ligne morte (colonne guid nue, aucune FK) et supprime
+        // V1 : zéro version, pointeur fantôme, club renvoyé au wizard.
+        //
+        // On simule l'issue de la course : la version disparaît de la base pendant que
+        // la requête la tient encore en mémoire.
+        [$user, , $season] = $this->seed('VAL12');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $v2Id = $v2->getId();
+
+        // Suppression HORS ORM : l'identity map garde V2, comme la requête concurrente.
+        $this->em->getConnection()->executeStatement('DELETE FROM schedule WHERE id = :id', ['id' => $v2Id]);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v2Id}/validate");
+
+        self::assertResponseStatusCodeSame(409, 'une version disparue ne peut pas être choisie');
+        $this->em->clear();
+        self::assertNull($this->chosenPlanVersion($season), 'le plan ne pointe pas une ligne morte');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'et la survivante n\'est pas emportée');
+    }
+
     public function testNonCompletedScheduleCannotBeValidated(): void
     {
         [$user, , $season] = $this->seed('VAL2');
