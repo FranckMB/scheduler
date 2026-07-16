@@ -195,11 +195,9 @@ services:
     networks:
       - clubscheduler_network
 
-  # Hourly maintenance loop. All three commands are idempotent so hourly is
-  # safe: periods:remind dedupes per (entry, threshold) via period_reminder_log,
-  # seasons:remind-transition dedupes per (season, threshold) via
-  # transition_reminder_log, and reconcile-stuck only touches GENERATING
-  # schedules older than --older-than.
+  # Hourly maintenance loop. The allowlisted app:jobs:run wrapper prevents
+  # overlap and persists every outcome in admin_job_run. The underlying jobs
+  # remain idempotent; a failure is recorded but never stops the next job.
   cron-runner:
     build:
       context: .
@@ -217,14 +215,14 @@ services:
     command: >-
       sh -lc 'while true; do
         if [ -f bin/console ]; then
-          php bin/console app:periods:remind --no-interaction || true;
-          php bin/console app:seasons:remind-transition --no-interaction || true;
-          php bin/console app:schedules:reconcile-stuck --older-than=60 --no-interaction || true;
-          php bin/console app:users:purge-unverified --no-interaction || true;
-          php bin/console app:clubs:purge-erased --no-interaction || true;
-          php bin/console app:users:purge-inactive --no-interaction || true;
-          php bin/console app:seasons:purge --no-interaction || true;
-          php bin/console app:audit:purge --no-interaction || true;
+          php bin/console app:jobs:run period-reminders --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run transition-reminders --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run reconcile-stuck-schedules --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run purge-unverified-users --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run purge-erased-clubs --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run purge-inactive-users --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run purge-seasons --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run purge-audit-log --source=scheduled --no-interaction || true;
         fi;
         sleep 3600;
       done'

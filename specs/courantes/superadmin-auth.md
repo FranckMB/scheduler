@@ -1,7 +1,8 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : SA0, SA1 et la console read-only SA2 sont livrés.
-> Les jobs d'exploitation et actions cross-tenant restent dans
+> **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2 et le socle
+> d'historisation des jobs SA3-A sont livrés. La planification étendue, l'API/UI des
+> jobs et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -16,7 +17,7 @@ de console et logout CSRF. Il ne lit ni ne persiste le JWT club.
   `SuperAdminProvider`. Un JWT club présenté à cette surface reste anonyme et reçoit 401.
 - Les identités et l'audit sont lus/écrits par la connexion Doctrine `admin`, seule porte
   autorisée à franchir RLS. Le rôle runtime `app_user` n'a aucun privilège sur
-  `super_admin` ou `admin_audit_log`.
+  `super_admin`, `admin_audit_log` ou `admin_job_run`.
 
 ## Parcours d'authentification
 
@@ -109,3 +110,22 @@ La santé est rafraîchie toutes les 30 secondes, l'overview toutes les 60 secon
 bouton permet de rafraîchir les trois panneaux. Chaque flux conserve ses propres états
 chargement, erreur et vide afin qu'une sonde indisponible ne masque pas les autres
 informations. SA2 ne déclenche aucune mutation ou action de support.
+
+## Socle d'exécution des jobs SA3-A
+
+La table globale `admin_job_run`, accessible uniquement par la connexion Doctrine
+`admin`, conserve pour chaque exécution la clé du job, la commande allowlistée, l'origine,
+le statut, les horodatages, la durée et le code de sortie. Elle ne stocke ni sortie
+console ni texte d'exception afin de ne pas transformer la télémétrie en journal de
+données métier.
+
+`app:jobs:run <clé>` est l'unique wrapper opérationnel. Son catalogue fermé contient les
+huit tâches déjà exécutées chaque heure par `cron-runner` : rappels de périodes et de
+transition, réconciliation des générations bloquées, purges des comptes non vérifiés,
+clubs effacés, comptes inactifs, anciennes saisons et audit. Un verrou advisory
+PostgreSQL empêche le chevauchement d'un même job ; une tentative `running` abandonnée
+est marquée `interrupted` au prochain démarrage acquis.
+
+SA3-A ne change pas la cadence existante et n'expose encore ni API ni bouton React. Les
+imports annuels, les autres purges, le prochain run et la relance superadmin appartiennent
+aux PR suivantes de SA3.

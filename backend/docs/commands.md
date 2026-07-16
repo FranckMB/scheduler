@@ -28,6 +28,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | Commande | Effet |
 |----------|-------|
 | `app:superadmin:create <email>` | Crée une identité superadmin séparée ; demande le mot de passe interactivement et affiche une seule fois la clé/URI TOTP |
+| `app:jobs:run <clé> [--source=cli\|scheduled]` | Exécute exclusivement un job du catalogue opérationnel fermé, empêche le chevauchement et persiste statut/durée/code de sortie dans `admin_job_run` ; le `cron-runner` l'utilise pour ses huit tâches horaires |
 | `app:schedules:reconcile-stuck` | Passe en FAILED les plannings bloqués PENDING/GENERATING (crash worker / message perdu) |
 | `app:constraint:export-implicit` | Exporte la config des contraintes implicites en JSON (versionnée avec le contrat) |
 | `app:overlays:purge` | Supprime les versions overlay des périodes échues — manuel, jamais auto |
