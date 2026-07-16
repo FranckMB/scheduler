@@ -193,6 +193,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
+  const regenerateDisabled =
+    null !== selectedSchedule
+    && null === selectedSchedule.calendarEntryId
+    && selectedSchedule.snapshotHash === me?.seasonPlan?.currentStructureHash;
   // regenerateFromMutation.isPending: "Charger cette version" no longer creates a
   // PENDING schedule (nothing sets isGenerating), so its own restore must disable
   // the action here — else a second click double-runs the destructive restore.
@@ -355,6 +359,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onViewMode={setViewMode}
               isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
+              disableRegenerate={regenerateDisabled}
               onRegenerate={() => {
                 if (null === validScheduleId) {
                   return;

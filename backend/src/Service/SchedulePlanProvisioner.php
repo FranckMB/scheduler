@@ -35,7 +35,10 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class SchedulePlanProvisioner
 {
-    public function __construct(private readonly EntityManagerInterface $entityManager) {}
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly ScheduleConstraintBuilder $constraintBuilder,
+    ) {}
 
     /**
      * The season's SEASON plan, created if absent. NOTE: an already-existing plan
@@ -147,17 +150,19 @@ final class SchedulePlanProvisioner
      * ADR-0002 : le plan SEASON d'une saison — LE calendrier de base. Exposé par
      * /api/me. `chosenScheduleId` = la version choisie (« validée ») ;
      * `hasFinishedVersion` = le plan porte au moins une version terminée
-     * (déblocage cockpit + mode guidé, inv. 8/16).
+     * (déblocage cockpit + mode guidé, inv. 8/16) ;
+     * `currentStructureHash` = le payload solver de la structure actuelle, pour
+     * griser « Régénérer » quand la version sélectionnée est déjà à l'identique.
      *
      * SQL brut, comme le reste des lectures de plan ici : filter-free (la saison
      * demandée n'est pas forcément l'active) et une seule requête. RLS scope par club.
      *
-     * @return array{id: string, name: string, chosenScheduleId: string|null, hasFinishedVersion: bool}|null
+     * @return array{id: string, name: string, chosenScheduleId: string|null, hasFinishedVersion: bool, currentStructureHash: string|null}|null
      */
     public function seasonPlanPayload(string $seasonId): ?array
     {
         $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT p.id, p.name, p.chosen_schedule_id, EXISTS ( '
+            'SELECT p.id, p.club_id, p.name, p.chosen_schedule_id, EXISTS ( '
             . 'SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id '
             // Déverrouille le cockpit (inv. 8/16) : il faut une PREMIÈRE version
             // COMPLETED — décision fondateur. Un solve en échec ne donne aucun planning ;
@@ -179,6 +184,7 @@ final class SchedulePlanProvisioner
             'name' => (string) $row['name'],
             'chosenScheduleId' => null === $row['chosen_schedule_id'] ? null : (string) $row['chosen_schedule_id'],
             'hasFinishedVersion' => (bool) $row['has_finished'],
+            'currentStructureHash' => $this->currentStructureHash((string) $row['club_id'], $seasonId),
         ];
     }
 
@@ -225,6 +231,17 @@ final class SchedulePlanProvisioner
                 ['eid' => $calendarEntryId],
             );
         });
+    }
+
+    private function currentStructureHash(string $clubId, string $seasonId): ?string
+    {
+        try {
+            $payload = $this->constraintBuilder->buildForClubSeason($clubId, $seasonId);
+
+            return hash('sha256', json_encode($payload, \JSON_THROW_ON_ERROR));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

@@ -16,6 +16,7 @@ export interface MeSeasonPlan {
   name: string;
   chosenScheduleId: string | null;
   hasFinishedVersion: boolean;
+  currentStructureHash: string | null;
 }
 
 /** FFBB institutional contact block (lot C) — league or committee. */

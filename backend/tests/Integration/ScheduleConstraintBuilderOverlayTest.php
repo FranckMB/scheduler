@@ -79,31 +79,37 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertContains('Contrainte permanente', $names);
     }
 
-    public function testHolidayOverlayHasNoForbiddenExpansion(): void
+    public function testHolidayOverlayExpandsForbiddenVenuePerTeam(): void
     {
         [$club, $season] = $this->seed();
-        $this->team($club, $season, 'U11');
+        $teamA = $this->team($club, $season, 'U11');
+        $teamB = $this->team($club, $season, 'U13');
         $this->permanentConstraint($club, $season);
-        $entry = new CalendarEntry;
-        $entry->setClubId($club->getId());
-        $entry->setSeasonId($season->getId());
-        $entry->setKind(CalendarEntryKind::PERIOD);
-        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
-        $entry->setTitle('Vacances');
-        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
-        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
-        $this->em->persist($entry);
+        $entry = $this->holidayPeriod($club, $season);
         $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->datedClosedVenueConstraint($club, $season, $entry);
         $this->em->flush();
 
         $payload = $this->builder->buildForOverlay($schedule, $entry);
 
-        // Reprise inherits the CLUB permanent (smart default = kept), but the closure-only
-        // forbidden-venue expansion never runs for a holiday.
+        // Reprise inherits the CLUB permanent (smart default = kept) and expands the
+        // dated closed venue the same way as a closure so the engine receives forbiddenVenueId.
         $names = array_map(static fn (array $c): string => $c['name'] ?? '', $payload['constraints']);
         self::assertContains('Contrainte permanente', $names, 'a CLUB permanent is inherited in a reprise');
-        $forbidden = array_filter($payload['constraints'], static fn (array $c): bool => isset($c['config']['forbiddenVenueId']));
-        self::assertSame([], array_values($forbidden), 'no forbidden-venue expansion on a holiday');
+        $forbidden = array_values(array_filter(
+            $payload['constraints'],
+            static fn (array $c): bool => ($c['config']['forbiddenVenueId'] ?? null) === self::VENUE_CLOSED,
+        ));
+        $forbiddenTeams = array_map(static fn (array $c): string => $c['scopeTargetId'], $forbidden);
+
+        self::assertContains($teamA->getId(), $forbiddenTeams);
+        self::assertContains($teamB->getId(), $forbiddenTeams);
+        self::assertCount(2, $forbidden);
+        foreach ($forbidden as $c) {
+            self::assertSame('FACILITY', $c['family']);
+            self::assertSame('HARD', $c['ruleType']);
+            self::assertSame('TEAM', $c['scope']);
+        }
     }
 
     public function testOverlayBuildDoesNotWriteBaseCache(): void
@@ -426,6 +432,23 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $slot->setCapacity(1);
         $slot->setCalendarEntryId($calendarEntryId);
         $this->em->persist($slot);
+    }
+
+    private function datedClosedVenueConstraint(Club $club, Season $season, CalendarEntry $entry): Constraint
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($club->getId());
+        $constraint->setSeasonId($season->getId());
+        $constraint->setCalendarEntryId($entry->getId());
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId(self::VENUE_CLOSED);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setName('Salle fermée');
+        $constraint->setConfig(['type' => 'venue_closed']);
+        $this->em->persist($constraint);
+
+        return $constraint;
     }
 
     private function slot(Schedule $schedule, string $venueId): void
