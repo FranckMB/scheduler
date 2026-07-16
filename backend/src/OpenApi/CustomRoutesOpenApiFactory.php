@@ -121,7 +121,9 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         // ADR-0002 : le plan de saison — le calendrier de base. null si
                         // la saison n'en a pas encore. `chosenScheduleId` = la version
                         // choisie (« validée ») ; `hasFinishedVersion` = le plan porte au
-                        // moins une version terminée.
+                        // moins une version terminée ; `currentStructureHash` = le hash
+                        // du payload solver courant, pour griser « Régénérer » quand
+                        // la structure sélectionnée est déjà à l'identique.
                         // Le document est en OpenAPI 3.1 : `nullable` y a disparu, un
                         // consommateur l'ignore. Il faut l'union JSON-Schema, sinon le
                         // contrat promet du non-null là où null est l'état NORMAL
@@ -132,6 +134,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'name' => ['type' => 'string'],
                             'chosenScheduleId' => ['type' => ['string', 'null']],
                             'hasFinishedVersion' => ['type' => 'boolean'],
+                            'currentStructureHash' => ['type' => ['string', 'null']],
                         ]],
                         'hasGenerated' => ['type' => 'boolean'],
                     ]]],

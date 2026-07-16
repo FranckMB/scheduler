@@ -26,6 +26,7 @@ interface PlanningToolbarProps {
   onReopen: () => void;
   onDelete: () => void;
   onRegenerateFrom: () => void;
+  disableRegenerate?: boolean;
   isGenerating: boolean;
   actionBusy: boolean;
   /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
@@ -58,6 +59,7 @@ export function PlanningToolbar({
   onReopen,
   onDelete,
   onRegenerateFrom,
+  disableRegenerate = false,
   isGenerating,
   actionBusy,
   rightSlot,
@@ -110,10 +112,10 @@ export function PlanningToolbar({
   // It must also carry a structure photo: a pre-D2 plan has a solver payload but no
   // photo, so the restore would 409 — don't offer an action that cannot succeed.
   const canRegenerateFrom = null !== selected && isCompleted && !isChosen && !isOverlay && true === selected.hasStructurePhoto;
-  // Reloading the version that IS the live context (★) is a no-op — its structure
-  // is already the current one (that would just be "Régénérer"). Keep the button
-  // visible but greyed with a reason, so the state reads as deliberate. Uses the
-  // fallback id so a NULL/stale pointer still disables it on the current version.
+  // Reloading the version that IS the live context (★) is a no-op when its
+  // snapshot already matches the current club structure — keep the button
+  // visible but greyed with a reason, so the state reads as deliberate. The
+  // page computes the actual comparison (snapshot hash vs current structure hash).
   const isLiveContext = null !== selected && null === selected.calendarEntryId && selected.id === seasonLiveId;
 
   return (
@@ -197,7 +199,7 @@ export function PlanningToolbar({
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
           // not show a misleading "Génération…".
-          <Button size="sm" variant="default" className="h-8" disabled={isGenerating || actionBusy || null === selectedScheduleId} onClick={onRegenerate}>
+          <Button size="sm" variant="default" className="h-8" disabled={isGenerating || actionBusy || disableRegenerate || null === selectedScheduleId} onClick={onRegenerate}>
             <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
             {isGenerating ? "Génération…" : "Régénérer"}
           </Button>

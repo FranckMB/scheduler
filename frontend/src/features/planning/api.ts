@@ -71,6 +71,8 @@ export interface Schedule {
   pngExportUrl?: string | null;
   /** Teams in the frozen solve input — divergence banner ("générée avec N équipes"). */
   generatedTeamCount?: number | null;
+  /** Hash of the frozen solve input for this version. */
+  snapshotHash?: string | null;
   /** D3: carries a restorable structure photo → "Charger cette version" can succeed (pre-D2 plans have none). */
   hasStructurePhoto?: boolean;
   /** ★ : this version's structure is the season's currently loaded context (set server-side). */

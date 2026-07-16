@@ -8,7 +8,10 @@ const noop = () => {};
 
 const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
 
-function renderToolbar(schedules: Schedule | Schedule[], { embedded = true, selectedScheduleId = "s1" }: { embedded?: boolean; selectedScheduleId?: string } = {}) {
+function renderToolbar(
+  schedules: Schedule | Schedule[],
+  { embedded = true, selectedScheduleId = "s1", disableRegenerate = false }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean } = {},
+) {
   return render(
     <PlanningToolbar
       schedules={Array.isArray(schedules) ? schedules : [schedules]}
@@ -21,6 +24,7 @@ function renderToolbar(schedules: Schedule | Schedule[], { embedded = true, sele
       onReopen={noop}
       onDelete={noop}
       onRegenerateFrom={noop}
+      disableRegenerate={disableRegenerate}
       isGenerating={false}
       actionBusy={false}
       embedded={embedded}
@@ -118,6 +122,11 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(regen).toBeDisabled();
     // The busy label keys on isGenerating (false here), not actionBusy → no false spinner text.
     expect(screen.queryByRole("button", { name: /génération…/i })).not.toBeInTheDocument();
+  });
+
+  it("greys « Régénérer » when the selected season version already matches the current structure", () => {
+    renderToolbar(schedule("COMPLETED"), { disableRegenerate: true });
+    expect(screen.getByRole("button", { name: "Régénérer" })).toBeDisabled();
   });
 
   it("hides « Charger cette version » on a pre-D2 version with no structure photo (would 409)", () => {
