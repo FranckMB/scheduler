@@ -70,12 +70,16 @@ final class RegenerateController extends AbstractController implements SeasonSco
         if (null !== $source->getCalendarEntryId()) {
             return $this->json(['error' => 'Un overlay de période se régénère depuis le cockpit.'], Response::HTTP_CONFLICT);
         }
-        // Only an already-generated version yields a new version: a VALIDATED plan
-        // is read-only (reopen first), ARCHIVED is never resurrected, and a
-        // DRAFT/in-flight has no version to branch from (the first generation is
-        // the wizard's in-place path).
+        // Only an already-generated version yields a new version: a DRAFT/in-flight
+        // has none to branch from (the first generation is the wizard's in-place path).
         if (!\in_array($source->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::FAILED], true)) {
-            return $this->json(['error' => 'Seule une version terminée peut être régénérée (rouvrez un planning validé d\'abord).'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Seule une version terminée peut être régénérée.'], Response::HTTP_CONFLICT);
+        }
+        // ADR-0002 inv. 1 — la version CHOISIE est le planning en vigueur : on n'y
+        // travaille pas, on le rouvre d'abord. Le statut VALIDATED portait cette
+        // garde ; il n'existe plus, seul le pointeur dit « en vigueur ».
+        if ($this->schedulePlanProvisioner->isChosen($source->getId())) {
+            return $this->json(['error' => 'La version choisie est le planning en vigueur. Rouvrez-le avant de régénérer.'], Response::HTTP_CONFLICT);
         }
         // Never branch while any version of the season is still solving.
         $inFlight = $this->entityManager->getRepository(Schedule::class)->count([

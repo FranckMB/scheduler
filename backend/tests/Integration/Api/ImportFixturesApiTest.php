@@ -6,9 +6,9 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -24,6 +24,7 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 #[Group('integration')]
 final class ImportFixturesApiTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
     use VerifiesRegistration;
 
@@ -147,10 +148,10 @@ final class ImportFixturesApiTest extends WebTestCase
         $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $clubId]);
         self::assertNotNull($season);
         // SocleGuard: fixture import is a match-module write, refused (409) until
-        // the season's main plan is validated — stamp it like the real flow would
-        // (opt-out for the test covering the 409 branch itself).
+        // the season's plan points at a version — settle it like the real flow
+        // would (opt-out for the test covering the 409 branch itself).
         if ($validateSocle) {
-            $season->setSocleValidatedAt(new DateTimeImmutable);
+            $this->settleSeasonPlan($season);
         }
 
         $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);

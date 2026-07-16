@@ -18,6 +18,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -27,13 +28,15 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * Reopening a VALIDATED schedule returns it to COMPLETED (editable); only within
- * the caller's own club, and only when validated.
+ * ADR-0002 inv. 2 — reopening the version a plan POINTS at un-points it: the plan
+ * becomes an "espace de travail" again and the version is editable. Only the chosen
+ * version can be reopened, and only within the caller's own club.
  */
 #[Group('phase1')]
 #[Group('integration')]
 final class ReopenScheduleTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -42,42 +45,46 @@ final class ReopenScheduleTest extends WebTestCase
 
     private UserPasswordHasherInterface $hasher;
 
-    public function testReopenValidatedSchedule(): void
+    public function testReopenUnpointsTheChosenVersion(): void
     {
         [$user, , $season] = $this->seed('REO1');
-        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($schedule);
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/reopen");
 
         self::assertResponseIsSuccessful();
         $this->em->clear();
-        $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
-        self::assertSame(ScheduleStatus::COMPLETED, $reloaded?->getStatus());
+        self::assertNull($this->chosenPlanVersion($season), 'the plan is an espace de travail again');
+        // The version survives, untouched: reopening drops the pointer, not the work.
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($schedule->getId())?->getStatus());
     }
 
-    public function testReopenKeepsStickyCockpitUnlock(): void
+    public function testReopenKeepsTheCockpitUnlocked(): void
     {
+        // inv. 8/16: the cockpit unlocks on "≥1 finished version", NOT on the
+        // pointer — reopening drops the pointer but the version remains, so the
+        // manager must not be thrown back into the guided mode.
         [$user, , $season] = $this->seed('REO5');
-        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $season->setBaselineScheduleId($schedule->getId());
-        $season->setSocleValidatedAt(new DateTimeImmutable('2026-01-15 10:00:00'));
-        $this->em->flush();
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($schedule);
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/reopen");
         self::assertResponseIsSuccessful();
 
         $this->em->clear();
-        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertNotNull($reloaded?->getSocleValidatedAt(), 'reopen must NOT clear the sticky cockpit unlock');
+        $plan = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->seasonPlanPayload($season->getId());
+        self::assertTrue($plan['hasFinishedVersion'], 'reopen must NOT re-lock the cockpit');
+        self::assertNull($plan['chosenScheduleId']);
     }
 
     public function testReopenBaselineWithOverlaysRequiresConfirm(): void
     {
         [$user, , $season] = $this->seed('REO6');
-        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $season->setBaselineScheduleId($baseline->getId());
+        $baseline = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($baseline);
         $this->overlayEntry($season, 'Vacances Toussaint');
         $this->em->flush();
 
@@ -94,8 +101,8 @@ final class ReopenScheduleTest extends WebTestCase
     public function testReopenBaselineWithConfirmDeletesOverlays(): void
     {
         [$user, $club, $season] = $this->seed('REO7');
-        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $season->setBaselineScheduleId($baseline->getId());
+        $baseline = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($baseline);
         [$entry, $overlayId, $slotId, $datedId] = $this->overlayEntry($season, 'Toussaint');
         $this->em->flush();
 
@@ -116,23 +123,29 @@ final class ReopenScheduleTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Constraint::class)->find($datedId), 'dated constraint is kept (period stays signalée)');
     }
 
-    public function testReopenNonBaselineWithOverlaysUnaffected(): void
+    public function testReopenLeavesASiblingVersionAndItsOverlaysAlone(): void
     {
+        // A plan points at ONE version; a sibling is just an unchosen version.
+        // Reopening the chosen one must not disturb the sibling — only the
+        // overlays, which hang off the base plan being un-pointed.
         [$user, , $season] = $this->seed('REO8');
-        $baseline = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $season->setBaselineScheduleId($baseline->getId());
-        $other = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $this->overlayEntry($season, 'Toussaint');
+        $baseline = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($baseline);
+        $sibling = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         $this->em->flush();
 
-        // Reopening a non-baseline validated schedule ignores overlays.
         $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$other->getId()}/reopen");
+        $this->client->request('POST', "/api/schedules/{$baseline->getId()}/reopen");
         self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($sibling->getId()), 'an unchosen sibling is untouched by a reopen');
     }
 
-    public function testNonValidatedScheduleCannotBeReopened(): void
+    public function testAVersionThePlanDoesNotPointAtCannotBeReopened(): void
     {
+        // "Validated" is the pointer and nothing else — a COMPLETED version the
+        // plan does not point at has nothing to reopen.
         [$user, , $season] = $this->seed('REO2');
         $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
 
@@ -146,7 +159,8 @@ final class ReopenScheduleTest extends WebTestCase
     {
         [$user] = $this->seed('REO3');
         [, , $otherSeason] = $this->seed('REO4');
-        $foreign = $this->createSchedule($otherSeason, ScheduleStatus::VALIDATED);
+        $foreign = $this->createSchedule($otherSeason, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($foreign);
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$foreign->getId()}/reopen");

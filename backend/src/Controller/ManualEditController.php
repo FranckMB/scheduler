@@ -7,7 +7,6 @@ namespace App\Controller;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
-use App\Enum\ScheduleStatus;
 use App\Service\ManualEditService;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +25,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         private ManualEditService $manualEditService,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly \Psr\Log\LoggerInterface $logger,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
@@ -185,6 +185,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
     {
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($slot->getScheduleId());
 
-        return $schedule instanceof Schedule && ScheduleStatus::VALIDATED === $schedule->getStatus();
+        // ADR-0002 inv. 1 : « verrouillé » = c'est la version choisie du plan.
+        return $schedule instanceof Schedule && $this->schedulePlanProvisioner->isChosen($schedule->getId());
     }
 }

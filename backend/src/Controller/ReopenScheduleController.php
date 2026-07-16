@@ -7,7 +7,6 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
-use App\Enum\ScheduleStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -19,9 +18,10 @@ use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
 /**
- * Reopen a VALIDATED schedule → back to COMPLETED (editable again). The inverse
- * of ValidateScheduleController. Reopening the season BASELINE while period
- * overlays exist destroys them (spec §2bis) — guarded by a 409 that the client
+ * Reopen the version a plan points at → the plan un-points it and becomes an
+ * "espace de travail" again, editable (ADR-0002 inv. 2). The inverse of
+ * ValidateScheduleController. Reopening the season plan's chosen version while
+ * period overlays exist destroys them (inv. 14) — guarded by a 409 the client
  * confirms with {"confirmDeleteOverlays": true}. See planning-lifecycle-validated.md.
  */
 final class ReopenScheduleController extends AbstractController implements SeasonScopedWriteInterface
@@ -55,19 +55,23 @@ final class ReopenScheduleController extends AbstractController implements Seaso
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        if (ScheduleStatus::VALIDATED !== $schedule->getStatus()) {
-            return $this->json(['error' => 'Only a validated schedule can be reopened.'], Response::HTTP_CONFLICT);
+        // ADR-0002 inv. 1/2 : « validé » = le plan pointe cette version. Rouvrir =
+        // dépointer. Une version que le plan ne pointe pas n'a rien à rouvrir.
+        if (!$this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+            return $this->json(['error' => 'Seule la version choisie d\'un planning peut être rouverte.'], Response::HTTP_CONFLICT);
         }
 
-        // Destructive-edit guard: reopening the baseline invalidates its overlays.
-        $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
-        if ($season instanceof Season && $schedule->getId() === $season->getBaselineScheduleId()) {
+        // Garde destructive : dépointer le calendrier de base invalide les plans
+        // secondaires bâtis dessus (inv. 14). Clé sur le pointeur, comme le release
+        // qu'elle protège — les clé sur deux vérités différentes laissait un reopen
+        // orphaniser des plans secondaires vivants sans jamais demander confirmation.
+        if ($schedule->getId() === $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId())) {
             $overlays = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
             if ([] !== $overlays) {
                 if (!$this->confirmedDeleteOverlays()) {
                     return $this->json([
                         'code' => 'overlays_exist',
-                        'error' => 'Reopening the baseline deletes its overlay schedules.',
+                        'error' => 'Rouvrir le planning de la saison supprime ses plannings secondaires.',
                         'count' => \count($overlays),
                         'overlays' => array_map(static fn (CalendarEntry $e): array => [
                             'entryId' => $e->getId(),
@@ -84,23 +88,18 @@ final class ReopenScheduleController extends AbstractController implements Seaso
                         // VALIDATED ones included (this IS the authorized destructive path).
                         $this->overlayManager->deleteOverlayForEntry($entry, force: true);
                     }
-                    // ADR-0002 lot B1 (ADDITIF) : rouvrir dépointe le plan.
+                    // inv. 2 : rouvrir dépointe — le plan redevient un espace de travail.
                     $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
-                    $schedule->setStatus(ScheduleStatus::COMPLETED);
                 });
 
-                return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::COMPLETED->value], Response::HTTP_OK);
+                return $this->json(['id' => $schedule->getId(), 'chosen' => false], Response::HTTP_OK);
             }
         }
 
-        // ADR-0002 lot B1 (ADDITIF) : rouvrir dépointe le plan.
-        $this->entityManager->wrapInTransaction(function () use ($schedule): void {
-            $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
-            $schedule->setStatus(ScheduleStatus::COMPLETED);
-            $this->entityManager->flush();
-        });
+        // inv. 2 : rouvrir dépointe — le plan redevient un espace de travail.
+        $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
 
-        return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::COMPLETED->value], Response::HTTP_OK);
+        return $this->json(['id' => $schedule->getId(), 'chosen' => false], Response::HTTP_OK);
     }
 
     private function confirmedDeleteOverlays(): bool

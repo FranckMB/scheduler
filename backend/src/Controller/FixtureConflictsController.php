@@ -38,6 +38,7 @@ final class FixtureConflictsController extends AbstractController
         private readonly RequestStack $requestStack,
         private readonly SeasonResolver $seasonResolver,
         private readonly MatchConflictDetector $detector,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     // priority > 0: this static path must win over API Platform's /api/fixtures/{id}
@@ -56,14 +57,17 @@ final class FixtureConflictsController extends AbstractController
         $teamCoachRows = $this->entityManager->getRepository(TeamCoach::class)->findBy([]);
 
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
-        $baselineScheduleId = $season?->getBaselineScheduleId();
+        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON.
+        // null = espace de travail : rien n'est arrêté, donc rien contre quoi
+        // détecter un conflit.
+        $seasonScheduleId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($season?->getId());
 
         // Active period entries capture the dates they cover: inside them the base
         // plan does not apply (user rule "soit un overlay généré, soit le planning
         // de base" — and a closure with no overlay means "no training"). Ordered
         // so overlapping periods resolve deterministically.
         $activePeriods = [];
-        $scheduleIds = null !== $baselineScheduleId ? [$baselineScheduleId] : [];
+        $scheduleIds = null !== $seasonScheduleId ? [$seasonScheduleId] : [];
         foreach ($this->calendarEntryRepository->findActivePeriodsOrdered() as $period) {
             $overlayId = $period->getOverlayScheduleId();
             $activePeriods[] = [
@@ -87,7 +91,7 @@ final class FixtureConflictsController extends AbstractController
             }
         }
 
-        $conflicts = $this->detector->detect($fixtures, $teamCoachRows, $baselineScheduleId, $activePeriods, $slotsBySchedule);
+        $conflicts = $this->detector->detect($fixtures, $teamCoachRows, $seasonScheduleId, $activePeriods, $slotsBySchedule);
 
         return $this->json([
             'clubId' => $clubId,

@@ -31,6 +31,32 @@ final class OverlayManager
     ) {}
 
     /**
+     * Purge les artefacts d'une version et la supprime, SANS la promotion de
+     * pointeur de purgeScheduleArtifacts(). Utilisé par la validation (ADR-0002
+     * inv. 1 : choisir une version supprime ses sœurs), qui a déjà repointé tout le
+     * monde sur la gagnante — y promouvoir « la version suivante » serait faux.
+     *
+     * L'entry qui pointerait encore la version détruite est tout de même nettoyée :
+     * un overlay legacy (sans marqueur avant) peut être collecté comme sœur d'un
+     * plan de saison, et le supprimer laisserait la période sur une ligne disparue.
+     */
+    public function deleteVersion(Schedule $schedule): void
+    {
+        $this->assertNotGenerating($schedule);
+        $this->purgeArtifacts($schedule->getId());
+
+        // Le lookup lit la DB, périmée vs UnitOfWork : l'appelant vient peut-être de
+        // repointer cette entry sur la gagnante (en mémoire). L'instance managée
+        // porte cette valeur en attente — re-vérifier avant d'effacer.
+        $orphaned = $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
+        if ($orphaned instanceof CalendarEntry && $orphaned->getOverlayScheduleId() === $schedule->getId()) {
+            $orphaned->setOverlayScheduleId(null);
+        }
+
+        $this->entityManager->remove($schedule);
+    }
+
+    /**
      * Delete the overlay schedule of a period entry (if any) and clear the link.
      * Refuses (409) while the overlay is mid-generation — deleting it out from
      * under the worker would orphan the slots it is about to import — and, unless
@@ -59,8 +85,8 @@ final class OverlayManager
         }
         foreach ($overlays as $schedule) {
             $this->assertNotGenerating($schedule);
-            if (!$force && ScheduleStatus::VALIDATED === $schedule->getStatus()) {
-                throw new ConflictHttpException('The period plan is validated (read-only). Reopen it before deleting the period.');
+            if (!$force && $this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+                throw new ConflictHttpException('Le planning de cette période est en vigueur (lecture seule). Rouvrez-le avant de supprimer la période.');
             }
         }
         // Atomique : le release du pointeur est un UPDATE brut qui s'auto-commit hors
@@ -114,7 +140,7 @@ final class OverlayManager
             if ($candidate->getId() === $excludeId) {
                 continue;
             }
-            if (\in_array($candidate->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true)) {
+            if (ScheduleStatus::COMPLETED === $candidate->getStatus()) {
                 return $candidate->getId();
             }
         }

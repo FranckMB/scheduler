@@ -109,12 +109,15 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         $upcomingEntry = $this->period($club, $season, 'Upcoming', '2026-09-01', '2026-09-10');
         $this->em->flush();
 
-        $endedV1 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::ARCHIVED);
-        $endedV2 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::VALIDATED);
+        // Une période échue peut porter plusieurs versions : la purge les emporte
+        // TOUTES, y compris celle que le plan de la période pointe (la période est
+        // passée — inv. 10 : le plan meurt avec son entrée).
+        $endedV1 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::COMPLETED);
+        $endedV2 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::COMPLETED);
         $endedEntry->setOverlayScheduleId($endedV2->getId());
         $upcomingOverlay = $this->overlay($club, $season, $upcomingEntry, ScheduleStatus::COMPLETED);
         $upcomingEntry->setOverlayScheduleId($upcomingOverlay->getId());
-        $seasonPlan = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Plan')->setStatus(ScheduleStatus::VALIDATED);
+        $seasonPlan = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Plan')->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($seasonPlan);
         $this->em->flush();
 

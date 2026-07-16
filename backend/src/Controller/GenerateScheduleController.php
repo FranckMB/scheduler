@@ -28,6 +28,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private RequestStack $requestStack,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Service\SocleGuard $socleGuard,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly \App\Service\GenerationComplexityGuard $complexityGuard,
         private readonly ClockInterface $clock,
     ) {}
@@ -51,22 +52,17 @@ final class GenerateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
-        if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before regenerating.'], Response::HTTP_CONFLICT);
-        }
-
-        // planning-versions: an ARCHIVED sibling is a hidden safety net — it is
-        // never resurrected (a regenerate would bring back a zombie version
-        // competing with the validated plan).
-        if (ScheduleStatus::ARCHIVED === $schedule->getStatus()) {
-            return $this->json(['error' => 'This version is archived. Generate a new version instead.'], Response::HTTP_CONFLICT);
+        // ADR-0002 inv. 1 : la version CHOISIE est le planning en vigueur — la
+        // régénérer l'écraserait. Rouvrir (dépointer) d'abord.
+        if ($this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+            return $this->json(['error' => 'La version choisie est le planning en vigueur. Rouvrez-le avant de régénérer.'], Response::HTTP_CONFLICT);
         }
 
         // A secondary plan (period overlay) can only be generated once the season's
         // main plan is validated. Generating the main plan itself (no overlay) is
         // always allowed — that is how the socle gets created in the first place.
         if (null !== $schedule->getCalendarEntryId()) {
-            $this->socleGuard->assertValidated($schedule->getSeasonId());
+            $this->socleGuard->assertSeasonPlanChosen($schedule->getSeasonId());
         }
 
         // A10: reject an over-complex problem BEFORE queuing it, so a "generation bomb"

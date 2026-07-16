@@ -24,10 +24,11 @@ use Doctrine\ORM\Mapping as ORM;
  * Named SchedulePlan (not Plan) so the domain concept never collides with the
  * billing catalogue (App\Entity\SubscriptionPlan).
  *
- * Lot A of the reconstruction is ADDITIVE: this entity is stood up and kept in
- * sync at creation, but the legacy pointers (Season.baselineScheduleId,
- * CalendarEntry.overlayScheduleId, VALIDATED/ARCHIVED statuses) still make the
- * decisions until Lot B switches the lifecycle over.
+ * The SEASON plan and the version it points at ARE the season's calendar: every
+ * reader (conflict radar, routing, guided mode, match module) derives "settled"
+ * from this pointer and from nothing else. The mirrors that used to answer the
+ * same question (Season.baselineScheduleId, VALIDATED/ARCHIVED statuses) are
+ * gone — two truths is what made them diverge.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'schedule_plan')]

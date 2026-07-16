@@ -89,9 +89,12 @@ final class OverlayGenerationTest extends KernelTestCase
             self::assertContains($teamId, $forbiddenTeams, 'every team must be forbidden from the closed venue');
         }
 
-        // An overlay must never become the season baseline.
-        $reloadedSeason = $em->getRepository(Season::class)->find($season->getId());
-        self::assertNull($reloadedSeason?->getBaselineScheduleId(), 'an overlay must not become the baseline');
+        // An overlay lives in the PERIOD's plan — it must never end up pointed at
+        // by the SEASON plan (inv. 2: nothing points automatically anyway).
+        self::assertNull(
+            $em->getConnection()->fetchOne('SELECT chosen_schedule_id FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'', ['sid' => $season->getId()]) ?: null,
+            'an overlay must not become the season plan\'s chosen version',
+        );
     }
 
     public function testOverlayWithMissingPeriodFailsCleanly(): void

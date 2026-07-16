@@ -28,6 +28,7 @@ use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonAlreadyTransitionedException;
 use App\Service\SeasonResolver;
 use App\Service\SeasonTransitionService;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -44,6 +45,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 #[Group('integration')]
 final class SeasonTransitionServiceTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -60,8 +62,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertSame($club->getId(), $target->getClubId());
         self::assertSame($season->getStartDate()->modify('+1 year')->format('Y-m-d'), $target->getStartDate()->format('Y-m-d'));
         self::assertSame('draft', $target->getStatus());
-        self::assertNull($target->getBaselineScheduleId());
-        self::assertNull($target->getSocleValidatedAt());
+        self::assertNull($this->chosenPlanVersion($target), 'N+1 starts as an empty espace de travail');
         self::assertSame($season->getId(), $target->getTransitionData()['sourceSeasonId']);
         self::assertSame($target->getId(), $season->getTransitionData()['transitionedTo']);
 
@@ -171,25 +172,22 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertCount(0, $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $target->getId()]));
     }
 
-    public function testCanPrepareNextSeasonInJuneFromAValidatedCurrentSeason(): void
+    public function testCanPrepareNextSeasonInJuneFromASettledCurrentSeason(): void
     {
-        // Real anticipation flow (spec §1): mid-June, the current season has a
-        // VALIDATED main plan; the manager prepares next season ahead of the
-        // rush. The transition works and N+1 starts with a null socle so the
-        // cockpit gate forces its own baseline.
+        // Real anticipation flow (spec §1): mid-June, the current season's plan
+        // points at a version; the manager prepares next season ahead of the rush.
+        // The transition works and N+1 starts as an empty espace de travail, so
+        // the cockpit gate makes it build its own plan.
         $club = $this->minimalClub();
-        // Season 2025-26 (started Aug 2025) — current on 2026-06-01, and validated.
+        // Season 2025-26 (started Aug 2025) — current on 2026-06-01, and settled.
         $current = $this->createSeason($club, 2025);
-        $current->setBaselineScheduleId('11111111-1111-4111-8111-111111111111');
-        $current->setSocleValidatedAt(new DateTimeImmutable('2025-10-01T10:00:00+00:00'));
-        $this->em->flush();
+        $this->settleSeasonPlan($current);
 
         $june1 = new DateTimeImmutable('2026-06-01');
         $target = $this->service->transition($current, $june1);
 
         self::assertSame('draft', $target->getStatus());
-        self::assertNull($target->getBaselineScheduleId());
-        self::assertNull($target->getSocleValidatedAt());
+        self::assertNull($this->chosenPlanVersion($target), 'N+1 must not inherit the pointer');
         // N+1 = the 2026-27 season-year.
         self::assertSame('2026-08-01', $target->getStartDate()->format('Y-m-d'));
         self::assertSame($current->getId(), $target->getTransitionData()['sourceSeasonId']);

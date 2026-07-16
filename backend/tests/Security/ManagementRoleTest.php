@@ -16,7 +16,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * SEC-07 non-regression: the cockpit write endpoints
- * (validate/reopen/set-baseline/generate/reorder/appearance/manual-edit) require
+ * (validate/reopen/generate/reorder/appearance/manual-edit) require
  * a management membership (owner/admin), not merely an authenticated active
  * member. Benign today (every member is admin) but the boundary that keeps the
  * cockpit closed to the forthcoming non-management `coach` role.
@@ -43,7 +43,6 @@ final class ManagementRoleTest extends WebTestCase
         return [
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/validate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/reopen'],
-            ['POST', '/api/schedules/' . self::DUMMY_ID . '/set-baseline'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/regenerate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/generate'],
             ['POST', '/api/teams/reorder'],

@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -33,6 +34,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class OverlayVersionsTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -41,7 +43,7 @@ final class OverlayVersionsTest extends WebTestCase
 
     private JWTTokenManagerInterface $jwt;
 
-    public function testValidatingOverlayVersionArchivesSiblingsAndSetsActive(): void
+    public function testValidatingOverlayVersionDeletesSiblingsAndSetsActive(): void
     {
         [$user, $club, $season, $baseline] = $this->seed('OVV1');
         $entry = $this->period($club, $season, 'P1');
@@ -52,7 +54,7 @@ final class OverlayVersionsTest extends WebTestCase
         $entry->setOverlayScheduleId($v1->getId()); // V1 active initially
         $otherOverlay = $this->overlay($club, $season, $otherEntry, ScheduleStatus::COMPLETED);
         $otherEntry->setOverlayScheduleId($otherOverlay->getId());
-        // A non-baseline SEASON plan version must not be touched by an overlay validation.
+        // A SEASON plan version must not be touched by an overlay validation.
         $seasonPlan = $this->seasonPlan($club, $season, ScheduleStatus::COMPLETED);
         $this->em->flush();
 
@@ -60,17 +62,16 @@ final class OverlayVersionsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        // V2 validated + active overlay; V1 archived.
-        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
-        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus());
+        // The period's plan points at V2, which becomes the active overlay; V1 —
+        // the version it no longer points at — is deleted (inv. 1).
+        self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'the unchosen sibling version is deleted');
         self::assertSame($v2->getId(), $this->em->getRepository(CalendarEntry::class)->find($entry->getId())?->getOverlayScheduleId());
-        // The OTHER period's overlay is untouched.
-        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($otherOverlay->getId())?->getStatus());
+        // The OTHER period's overlay is untouched — each period owns its own plan.
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($otherOverlay->getId()));
         self::assertSame($otherOverlay->getId(), $this->em->getRepository(CalendarEntry::class)->find($otherEntry->getId())?->getOverlayScheduleId());
-        // The season plan is untouched, and the season baseline/socle did NOT move.
-        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($seasonPlan->getId())?->getStatus());
-        $reloadedSeason = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertSame($baseline->getId(), $reloadedSeason?->getBaselineScheduleId(), 'validating an overlay must not move the season baseline');
+        // The season plan is untouched, and its pointer did NOT move.
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($seasonPlan->getId()));
+        self::assertSame($baseline->getId(), $this->chosenPlanVersion($season), 'validating an overlay must not move the season plan pointer');
     }
 
     public function testCreatingAVersionKeepsAUsableActiveOverlay(): void
@@ -108,22 +109,25 @@ final class OverlayVersionsTest extends WebTestCase
         self::assertResponseStatusCodeSame(409, 'a sibling overlay still generating blocks validation');
     }
 
-    public function testReopenOverlayDoesNotResurrectArchivedSiblings(): void
+    public function testReopeningAnOverlayReleasesItsPeriodPlan(): void
     {
-        [$user, $club, $season] = $this->seed('OVV3');
+        // Il n'y a plus de sœur « archivée » à ressusciter : valider les supprime.
+        // Ce qui reste à garantir, c'est que rouvrir dépointe le plan de la période
+        // SANS toucher au plan de la saison (deux plans, deux pointeurs).
+        [$user, $club, $season, $baseline] = $this->seed('OVV3');
         $entry = $this->period($club, $season, 'P');
-        $archived = $this->overlay($club, $season, $entry, ScheduleStatus::ARCHIVED);
-        $validated = $this->overlay($club, $season, $entry, ScheduleStatus::VALIDATED);
-        $entry->setOverlayScheduleId($validated->getId());
+        $chosen = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
+        $this->em->flush();
+        $this->choosePlanVersion($chosen);
+        $entry->setOverlayScheduleId($chosen->getId());
         $this->em->flush();
 
-        $this->post($user, $club, "/api/schedules/{$validated->getId()}/reopen");
+        $this->post($user, $club, "/api/schedules/{$chosen->getId()}/reopen");
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($validated->getId())?->getStatus());
-        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($archived->getId())?->getStatus(), 'reopen must not resurrect an archived sibling');
-        self::assertSame($validated->getId(), $this->em->getRepository(CalendarEntry::class)->find($entry->getId())?->getOverlayScheduleId());
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($chosen->getId())?->getStatus(), 'la version survit : rouvrir lâche le pointeur, pas le travail');
+        self::assertSame($baseline->getId(), $this->chosenPlanVersion($season), 'rouvrir un plan secondaire ne touche pas au plan de la saison');
     }
 
     protected function setUp(): void
@@ -209,12 +213,12 @@ final class OverlayVersionsTest extends WebTestCase
         $this->em->persist($season);
         $this->em->flush();
 
-        $baseline = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Baseline')->setStatus(ScheduleStatus::VALIDATED);
+        // Le socle : la version que le plan SEASON pointe. Les plans secondaires
+        // (overlays de période) ne sont autorisés qu'au-dessus d'un socle pointé (inv. 13).
+        $baseline = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Baseline')->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($baseline);
         $this->em->flush();
-        $season->setBaselineScheduleId($baseline->getId());
-        $season->setSocleValidatedAt(new DateTimeImmutable);
-        $this->em->flush();
+        $this->choosePlanVersion($baseline);
 
         return [$user, $club, $season, $baseline];
     }

@@ -38,6 +38,7 @@ final class CalendarEntryConflictsController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/calendar-entries/{id}/conflicts', name: 'api_calendar_entry_conflicts', methods: ['GET'])]
@@ -81,8 +82,8 @@ final class CalendarEntryConflictsController extends AbstractController
         // The entry's OWN season baseline (not the active season) — an entry may
         // belong to a past/other season; scoring it against a different season's
         // plan would be wrong.
-        $season = $this->entityManager->find(Season::class, $entry->getSeasonId());
-        $baselineId = $season?->getBaselineScheduleId();
+        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON.
+        $baselineId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($entry->getSeasonId());
         if (null === $baselineId) {
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => []]);
         }

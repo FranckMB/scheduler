@@ -12,6 +12,7 @@ use App\Entity\Team;
 use App\Entity\User;
 use App\Enum\ScheduleStatus;
 use App\Service\StructureSnapshotter;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +30,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('phase1')]
 final class RegenerateFromVersionTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -119,12 +121,13 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertCount(0, $this->em->getRepository(\App\Entity\TeamPeriodOverride::class)->findBy(['teamId' => $sm2->getId()]), 'a dangling period override is purged on restore');
     }
 
-    public function testRegenerateFromANonCompletedSourceIsRefused(): void
+    public function testRegenerateFromTheChosenVersionIsRefused(): void
     {
-        // A VALIDATED (read-only) version's conditions cannot be replayed —
-        // reopen it first (D1 model archives siblings on validate).
-        $v1 = $this->makeSchedule(ScheduleStatus::VALIDATED, null);
+        // The version the plan points at is read-only: replaying its conditions
+        // would rebuild the season's calendar in place. Reopen it first.
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
         $this->em->flush();
+        $this->choosePlanVersion($v1);
 
         $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
         self::assertResponseStatusCodeSame(409);

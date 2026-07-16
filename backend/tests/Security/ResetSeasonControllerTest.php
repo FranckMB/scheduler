@@ -15,6 +15,7 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
@@ -34,6 +35,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ResetSeasonControllerTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
     use VerifiesRegistration;
 
@@ -82,16 +84,16 @@ final class ResetSeasonControllerTest extends WebTestCase
         $slot->setDurationMinutes(90);
         $em->persist($slot);
 
-        // Baseline schedule + validated socle + a period entry with a reminder log.
+        // Le socle en vigueur (version pointée par le plan SEASON) + une période
+        // avec son log de rappel.
         $schedule = new Schedule;
         $schedule->setClubId($clubId);
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Socle');
-        $schedule->setStatus(ScheduleStatus::VALIDATED);
+        $schedule->setStatus(ScheduleStatus::COMPLETED);
         $em->persist($schedule);
         $em->flush();
-        $season->setBaselineScheduleId($schedule->getId());
-        $season->setSocleValidatedAt(new DateTimeImmutable);
+        $this->choosePlanVersion($schedule);
 
         $entry = new CalendarEntry;
         $entry->setClubId($clubId);
@@ -119,8 +121,10 @@ final class ResetSeasonControllerTest extends WebTestCase
         self::assertSame([], $em->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $entryId]), 'reminder logs must be wiped');
         $freshSeason = $em->getRepository(Season::class)->find($seasonId);
         self::assertInstanceOf(Season::class, $freshSeason);
-        self::assertNull($freshSeason->getBaselineScheduleId(), 'the baseline anchor must be cleared (its schedule is gone)');
-        self::assertNull($freshSeason->getSocleValidatedAt(), 'the socle milestone must be cleared — no plan is left behind it');
+        // Le pointeur ne survit pas au reset : sa version est supprimée, et un plan
+        // qui nommerait un planning disparu laisserait le cockpit « déverrouillé »
+        // sans rien derrière.
+        self::assertNull($this->chosenPlanVersion($freshSeason), 'the plan must point at nothing — its version is gone');
         // ADR-0002: the reset wipes the season's SchedulePlan rows but re-provisions
         // the empty SEASON plan — a surviving season always owns its SEASON plan.
         self::assertSame(

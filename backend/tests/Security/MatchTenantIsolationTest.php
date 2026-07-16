@@ -14,6 +14,7 @@ use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
 use App\Service\SeasonResolver;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -32,6 +33,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class MatchTenantIsolationTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -173,10 +175,11 @@ final class MatchTenantIsolationTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
-        // Matches require a validated socle (cockpit state 3) — stamp it so these
-        // isolation tests exercise the tenant boundary, not the socle guard.
-        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
+        $this->em->flush();
+        // Matches require a settled season plan (cockpit state 3) — point the plan
+        // at a version so these tests exercise the tenant boundary, not the guard.
+        $this->settleSeasonPlan($season);
 
         return $season;
     }

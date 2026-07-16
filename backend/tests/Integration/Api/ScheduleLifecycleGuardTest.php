@@ -10,6 +10,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -20,14 +21,16 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * NR — planning lifecycle guards (§7.1): the baseline is never deletable, a
- * VALIDATED schedule is read-only (no delete, no free-form PUT), and status
- * never changes through PUT (transitions belong to generate/validate/reopen).
+ * NR — planning lifecycle guards (§7.1): the version a plan POINTS at is read-only
+ * (no delete, no free-form PUT), and status never changes through PUT (transitions
+ * belong to generate/validate/reopen). ADR-0002: "baseline" and "validated" used to
+ * be two guards over two mirrors — they are now one, keyed on the pointer alone.
  */
 #[Group('phase1')]
 #[Group('integration')]
 final class ScheduleLifecycleGuardTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -38,32 +41,23 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
 
     private JWTTokenManagerInterface $jwt;
 
-    public function testBaselineScheduleCannotBeDeleted(): void
+    public function testTheChosenVersionCannotBeDeleted(): void
     {
+        // The season's calendar cannot be deleted out from under the club: it is
+        // the version the plan points at. Reopen first, then delete.
         [$user, $club, $season] = $this->seed('SLG1');
         $schedule = $this->makeSchedule($club, $season, ScheduleStatus::COMPLETED);
-        $season->setBaselineScheduleId($schedule->getId());
-        $this->em->flush();
+        $this->choosePlanVersion($schedule);
 
         $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
 
-        self::assertResponseStatusCodeSame(409, 'the baseline schedule must never be deletable');
+        self::assertResponseStatusCodeSame(409, 'the version the plan points at must never be deletable');
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($schedule->getId()));
     }
 
-    public function testValidatedScheduleCannotBeDeleted(): void
-    {
-        [$user, $club, $season] = $this->seed('SLG2');
-        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::VALIDATED);
-
-        $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
-
-        self::assertResponseStatusCodeSame(409, 'a validated schedule is read-only — reopen before delete');
-    }
-
-    public function testNonBaselineCompletedScheduleIsDeletable(): void
+    public function testAnUnchosenCompletedVersionIsDeletable(): void
     {
         [$user, $club, $season] = $this->seed('SLG3');
         $schedule = $this->makeSchedule($club, $season, ScheduleStatus::COMPLETED);
@@ -82,18 +76,6 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
         $schedule = $this->makeSchedule($club, $season, ScheduleStatus::GENERATING);
 
         $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
-
-        self::assertResponseStatusCodeSame(409);
-    }
-
-    public function testArchivedScheduleCannotBeRegenerated(): void
-    {
-        // planning-versions: an ARCHIVED sibling is never resurrected — a
-        // regenerate would bring back a zombie version next to the validated plan.
-        [$user, $club, $season] = $this->seed('SLG7');
-        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::ARCHIVED);
-
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/generate", [], [], $this->authHeaders($user, $club));
 
         self::assertResponseStatusCodeSame(409);
     }

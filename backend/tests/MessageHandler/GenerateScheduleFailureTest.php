@@ -122,7 +122,10 @@ final class GenerateScheduleFailureTest extends KernelTestCase
 
         $reloadedSeason = $em->getRepository(Season::class)->find($seasonId);
         self::assertInstanceOf(Season::class, $reloadedSeason);
-        self::assertNull($reloadedSeason->getBaselineScheduleId(), 'a failed run must NOT become the season baseline');
+        self::assertNull(
+            $em->getConnection()->fetchOne('SELECT chosen_schedule_id FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'', ['sid' => $seasonId]) ?: null,
+            'a failed run must NOT be pointed at by the season plan',
+        );
 
         $types = array_map(
             static fn (ScheduleDiagnostic $diagnostic): string => $diagnostic->getType(),

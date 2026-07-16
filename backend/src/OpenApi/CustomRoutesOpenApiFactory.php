@@ -118,7 +118,6 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'accentColorDark' => ['type' => 'string', 'nullable' => true],
                             'accentPalette' => ['type' => 'array', 'nullable' => true, 'items' => ['type' => 'string']],
                         ]],
-                        'baselineScheduleId' => ['type' => 'string', 'nullable' => true],
                         // ADR-0002 : le plan de saison — le calendrier de base. null si
                         // la saison n'en a pas encore. `chosenScheduleId` = la version
                         // choisie (« validée ») ; `hasFinishedVersion` = le plan porte au

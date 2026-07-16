@@ -49,22 +49,16 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * Keep the SEASON plan's derived fields (name, period) in sync when the
-     * season is edited — during the additive phase the plan mirrors the season
-     * (planningName + dates), so the now-exposed /api/schedule_plans must not go
-     * stale. Raw SQL: filter-free (the edited season may not be the active one)
-     * and it never touches a version-locked ORM-managed plan mid-request.
+     * ADR-0002 : la PÉRIODE du plan SEASON suit celle de la saison. Le NOM, lui,
+     * appartient au plan (inv. 12) et n'est écrit que par son renommage — un
+     * second écrivain le rendrait non durable.
      */
     public function syncSeasonPlan(Season $season): void
     {
         $this->entityManager->getConnection()->executeStatement(
-            // version = version + 1: this raw UPDATE mutates the row out of band,
-            // so it must bump the optimistic-lock column like an ORM update would
-            // — otherwise a stale ORM copy could later flush a lost update.
-            'UPDATE schedule_plan SET name = :name, start_date = :start, end_date = :end, updated_at = now(), version = version + 1 '
+            'UPDATE schedule_plan SET start_date = :start, end_date = :end, updated_at = now(), version = version + 1 '
             . 'WHERE season_id = :sid AND type = \'SEASON\'',
             [
-                'name' => $this->seasonPlanName($season),
                 'start' => $season->getStartDate(),
                 'end' => $season->getEndDate(),
                 'sid' => $season->getId(),
@@ -122,7 +116,7 @@ final class SchedulePlanProvisioner
      * Raw SQL: filter-free (the plan's season may not be the active one) and the
      * plan is not loaded in the UnitOfWork on the validation path. RLS scopes club.
      */
-    public function choose(Schedule $schedule): void
+    public function choose(Schedule $schedule): bool
     {
         $planId = $schedule->getSchedulePlanId();
         if (null === $planId) {
@@ -134,13 +128,18 @@ final class SchedulePlanProvisioner
             $planId = $schedule->getSchedulePlanId();
         }
         if (null === $planId) {
-            return; // aucun ancrage résoluble — transition-safe (rien ne lit le pointeur)
+            // Aucun ancrage résoluble. Le rapporter plutôt que faire semblant :
+            // l'appelant supprime les versions sœurs juste après, un no-op silencieux
+            // les détruirait pour rien ET laisserait le plan non pointé en répondant 200.
+            return false;
         }
 
         $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
             ['sid' => $schedule->getId(), 'pid' => $planId],
         );
+
+        return true;
     }
 
     /**
@@ -159,11 +158,10 @@ final class SchedulePlanProvisioner
         $row = $this->entityManager->getConnection()->fetchAssociative(
             'SELECT p.id, p.name, p.chosen_schedule_id, EXISTS ( '
             . 'SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id '
-            // Une version « terminée » = le solveur a rendu sa réponse. Les statuts
-            // legacy VALIDATED/ARCHIVED en font partie tant que la bascule n'a pas eu
-            // lieu : les omettre ferait repasser le flag à false pile à la validation
-            // (la version choisie porte le miroir VALIDATED).
-            . 'AND s.status IN (\'COMPLETED\', \'FAILED\', \'VALIDATED\', \'ARCHIVED\')) AS has_finished '
+            // Une version « terminée » = le solveur a rendu sa réponse, quelle qu'elle
+            // soit. C'est ce qui déverrouille le cockpit (inv. 8/16) — indépendant du
+            // pointeur : avoir généré une fois suffit, choisir est un autre geste.
+            . 'AND s.status IN (\'COMPLETED\', \'FAILED\')) AS has_finished '
             . 'FROM schedule_plan p WHERE p.season_id = :sid AND p.type = \'SEASON\'',
             ['sid' => $seasonId],
         );
@@ -178,6 +176,34 @@ final class SchedulePlanProvisioner
             'chosenScheduleId' => null === $row['chosen_schedule_id'] ? null : (string) $row['chosen_schedule_id'],
             'hasFinishedVersion' => (bool) $row['has_finished'],
         ];
+    }
+
+    /**
+     * La version CHOISIE du plan SEASON d'une saison — LE calendrier de base
+     * (ADR-0002). null = espace de travail : le gestionnaire n'a rien choisi.
+     * C'est la seule vérité : « validé » se dérive de ce pointeur.
+     */
+    public function chosenOfSeasonPlan(?string $seasonId): ?string
+    {
+        if (null === $seasonId) {
+            return null;
+        }
+
+        $chosen = $this->entityManager->getConnection()->fetchOne(
+            'SELECT chosen_schedule_id FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $seasonId],
+        );
+
+        return \is_string($chosen) ? $chosen : null;
+    }
+
+    /** Cette version est-elle celle que pointe son plan ? (= « validée ») */
+    public function isChosen(string $scheduleId): bool
+    {
+        return (bool) $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM schedule_plan WHERE chosen_schedule_id = :sid',
+            ['sid' => $scheduleId],
+        );
     }
 
     /**
@@ -381,11 +407,6 @@ final class SchedulePlanProvisioner
 
     private function seasonPlanName(Season $season): string
     {
-        $custom = $season->getPlanningName();
-        if (null !== $custom && '' !== trim($custom)) {
-            return $custom;
-        }
-
         return 'Planning de la saison ' . $season->getName();
     }
 }

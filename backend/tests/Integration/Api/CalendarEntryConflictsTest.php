@@ -18,6 +18,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class CalendarEntryConflictsTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private const VENUE_X = '11111111-1111-4111-8111-111111111111';
@@ -161,8 +163,9 @@ final class CalendarEntryConflictsTest extends WebTestCase
         $this->em->persist($schedule);
         $this->em->flush();
 
-        $season->setBaselineScheduleId($schedule->getId());
-        $this->em->flush();
+        // The conflict radar reads the season's calendar = the version the plan
+        // points at. Without the pointer it has nothing to compare periods against.
+        $this->choosePlanVersion($schedule);
 
         return $schedule;
     }

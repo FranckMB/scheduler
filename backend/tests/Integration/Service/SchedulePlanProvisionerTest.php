@@ -82,7 +82,9 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $plan = $this->provisioner->ensureSeasonPlan($season);
         $this->em->flush();
 
-        $season->setPlanningName('Saison définitive');
+        $named = $fresh = $this->em->getRepository(SchedulePlan::class)->find($plan->getId());
+        self::assertInstanceOf(SchedulePlan::class, $named);
+        $named->setName('Saison définitive');
         $season->setStartDate(new DateTimeImmutable('2025-08-15'));
         $season->setEndDate(new DateTimeImmutable('2026-07-10'));
         $this->em->flush();
@@ -92,19 +94,11 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $this->em->clear();
         $fresh = $this->em->getRepository(SchedulePlan::class)->find($plan->getId());
         self::assertInstanceOf(SchedulePlan::class, $fresh);
-        self::assertSame('Saison définitive', $fresh->getName());
         self::assertSame('2025-08-15', $fresh->getStartDate()->format('Y-m-d'));
         self::assertSame('2026-07-10', $fresh->getEndDate()->format('Y-m-d'));
-    }
-
-    public function testSeasonPlanHonoursTheCustomPlanningName(): void
-    {
-        $clubId = $this->seedClub();
-        $season = $this->makeSeason($clubId, 'Mon planning à moi');
-
-        $plan = $this->provisioner->ensureSeasonPlan($season);
-
-        self::assertSame('Mon planning à moi', $plan->getName());
+        // Le nom vit sur le plan (inv. 12) : une édition de la saison recale les
+        // DATES et ne doit jamais réécrire le nom que le gestionnaire a choisi.
+        self::assertSame('Saison définitive', $fresh->getName(), 'un resync de saison n\'écrase pas le nom du plan');
     }
 
     public function testSeasonSchedulesLinkAsIncrementingVersions(): void
@@ -193,7 +187,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     {
         $clubId = $this->seedClub();
         $seasonA = $this->makeSeason($clubId);
-        $seasonB = $this->makeSeason($clubId, null, '2026-2027', '2026-09-01', '2027-06-30');
+        $seasonB = $this->makeSeason($clubId, '2026-2027', '2026-09-01', '2027-06-30');
 
         $planA = $this->provisioner->ensureSeasonPlan($seasonA);
         $planB = $this->provisioner->ensureSeasonPlan($seasonB);
@@ -235,7 +229,6 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
 
     private function makeSeason(
         string $clubId,
-        ?string $planningName = null,
         string $name = '2025-2026',
         string $start = '2025-09-01',
         string $end = '2026-06-30',
@@ -247,9 +240,6 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $season->setEndDate(new DateTimeImmutable($end));
         $season->setStatus('active');
         $season->setTransitionData([]);
-        if (null !== $planningName) {
-            $season->setPlanningName($planningName);
-        }
         $this->em->persist($season);
         $this->em->flush();
 
