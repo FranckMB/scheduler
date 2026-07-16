@@ -101,30 +101,29 @@ une période passée. Comportement hérité, jamais conforme à la règle.
 - **Import FFBB qui change un niveau** : « si je veux changer le niveau par import FFBB
   pour les matchs, je gérerai ce cas à ce moment-là ». Non traité, volontairement.
 
-## Autres dettes tracées (indépendantes de ce lot)
+## Les autres lots ? Dans la roadmap, pas ici
 
-- **Tunnel Cloudflare pour les démos** — PR de documentation à faire.
-  `docker compose up -d` puis `cloudflared tunnel --url http://localhost:8080` ; CTRL+C
-  coupe. Proposition : `docs/ops/demo-tunnel.md` + pointeur depuis `project-map.md`. ⚠️ à
-  écrire dedans : le tunnel expose l'app **publiquement** le temps de la démo (mot de passe
-  de démo, pas de données réelles, vérifier que le CTRL+C a bien coupé).
-- **Numérotation des versions** : valider supprime les sœurs, donc la version choisie se
-  retrouve libellée « V1 ». Le serveur a un `Schedule.versionNumber` **stable** que le
-  front n'utilise pas (il dérive les libellés de l'ordre de création).
-- **Le front re-dérive 3 règles de refus serveur** (`isLastFinishedSeasonVersion`,
-  `hasInFlightSibling`, le décompte des sœurs supprimées à la validation). Chaque miroir est
-  un risque de dérive — c'est ce motif qui a produit 40 défauts sur la bascule. Les
-  supprimer suppose que le serveur expose ce qui est **permis** : chantier de conception.
-- **Radar** : aucun indicateur de chargement pendant que les impacts arrivent (cadre
-  « À traiter » nu quelques centaines de ms).
-- **Divergence doc/code antérieure** : `gestion-matchs-ffbb.md` et `module-matchs.md`
-  affirment que le module matchs est « **découplé** de la validation du socle », alors que
-  `SocleGuard::assertSeasonPlanChosen` gate bien `FixtureStateProcessor` et
-  `ImportFixturesController`. Intention produit ≠ code livré. **À trancher** : c'est la doc
-  qui a tort, ou le code ?
-- **Lot C (ADR-0002)** : réglages de période & génération pilotés par plan
-  (`calendarEntryId` → `planId`, inv. 5). Voir
-  [`adr-0002-pattern-plan.md`](../../docs/architecture/adr-0002-pattern-plan.md).
+Ce document ne porte QUE le cadrage de P2-7 — ce que la roadmap ne peut pas tenir : le
+verbatim du fondateur, le pourquoi métier, les décisions déjà prises.
+
+**Tout le reste vit dans [`roadmap.md`](roadmap.md)**, le suivi unique (CLAUDE.md §8). Le
+recopier ici en ferait un second endroit qui dit la même chose — précisément le motif qui a
+coûté 40 défauts sur la bascule.
+
+Les dettes croisées pendant cette session y sont des lignes à part entière :
+
+| | |
+|---|---|
+| **P2-8** | Le front re-dérive 3 règles de refus du serveur (chaque miroir dérive) |
+| **P3-10** | Libellés de versions : le front ignore `Schedule.versionNumber`, stable côté serveur |
+| **P3-11** | Radar : aucun état de chargement |
+| **P3-12** | Doc ops : tunnel Cloudflare pour les démos |
+| **DOC-1** | Divergence doc↔code : le module matchs est-il découplé du socle ? **À trancher** |
+
+Et les lots structurants : **P2-6** (pattern « Plan », dont le **lot C** — réglages de
+période & génération pilotés par plan, inv. 5, cf.
+[`adr-0002-pattern-plan.md`](../../docs/architecture/adr-0002-pattern-plan.md)), **P2-7a**
+(le périmètre engagé, livré).
 
 ## Méthode — ce que cette session a coûté
 
