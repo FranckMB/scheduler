@@ -92,11 +92,12 @@ export function PlanningToolbar({
   // never the version in force (read-only), never mid-solve, never an overlay.
   const canDelete = null !== selected && !isSeasonChosen && !isChosen && !isInFlight && !isOverlay;
   // "Load this version" (restore its structure + regenerate) is offered only on a
-  // finished, non-locked COMPLETED version (the one in force is read-only — reopen
-  // first; the backend refuses it anyway) that actually carries a structure photo:
-  // a pre-D2 plan has a solver payload but no photo, so the restore would 409 —
-  // don't offer an action that cannot succeed.
-  const canRegenerateFrom = null !== selected && isCompleted && !isOverlay && true === selected.hasStructurePhoto;
+  // finished COMPLETED version that is NOT in force — the chosen one is read-only
+  // and the backend refuses the restore (reopen first). The status used to carry
+  // that exclusion (VALIDATED was not COMPLETED); only the pointer does now.
+  // It must also carry a structure photo: a pre-D2 plan has a solver payload but no
+  // photo, so the restore would 409 — don't offer an action that cannot succeed.
+  const canRegenerateFrom = null !== selected && isCompleted && !isChosen && !isOverlay && true === selected.hasStructurePhoto;
   // Reloading the version that IS the live context (★) is a no-op — its structure
   // is already the current one (that would just be "Régénérer"). Keep the button
   // visible but greyed with a reason, so the state reads as deliberate. Uses the

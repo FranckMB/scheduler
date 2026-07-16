@@ -44,10 +44,34 @@ final class Version20260716180000 extends AbstractMigration
             . 'AND s.planning_name IS NOT NULL AND trim(s.planning_name) <> \'\'',
         );
 
-        // 2. Les statuts legacy disparaissent. VALIDATED/ARCHIVED disaient « choisi »
-        //    ou « écarté » — deux choses que le pointeur dit seul désormais. Une
-        //    version reste une résolution du solveur : elle est COMPLETED.
-        $this->addSql('UPDATE schedule SET status = \'COMPLETED\' WHERE status IN (\'VALIDATED\', \'ARCHIVED\')');
+        // 2. Les versions ARCHIVED n'ont pas d'équivalent dans le nouveau modèle : elles
+        //    étaient les sœurs ÉCARTÉES à la validation, et valider les SUPPRIME
+        //    désormais (inv. 1 — plus de filet). Les passer en COMPLETED les
+        //    ressusciterait en versions normales, visibles et sélectionnables à côté de
+        //    la version choisie : le sélecteur ne filtre plus ARCHIVED, puisque le statut
+        //    n'existe plus. On les supprime, comme la validation l'aurait fait.
+        //
+        //    Aucune FK ne pend à `schedule` (que des colonnes UUID nues) : les enfants et
+        //    les pointeurs se purgent à la main, enfants d'abord, sinon ils survivent
+        //    orphelins en nommant une version morte.
+        foreach (['constraint_conflict', 'schedule_diagnostic', 'schedule_slot_template', 'schedule_structure_snapshot', 'solver_metrics'] as $child) {
+            $this->addSql(\sprintf(
+                'DELETE FROM %s WHERE schedule_id IN (SELECT id FROM schedule WHERE status = \'ARCHIVED\')',
+                $child,
+            ));
+        }
+        // Les pointeurs qui nommeraient une version supprimée : la ★ (photo chargée) et
+        // l'overlay actif d'une période. `chosen_schedule_id` ne peut pas viser une
+        // ARCHIVED (Version20260716130000 le dérive de VALIDATED seul), mais le dépointer
+        // ici coûte zéro et ferme la question.
+        $this->addSql('UPDATE season SET live_context_schedule_id = NULL WHERE live_context_schedule_id IN (SELECT id FROM schedule WHERE status = \'ARCHIVED\')');
+        $this->addSql('UPDATE calendar_entry SET overlay_schedule_id = NULL WHERE overlay_schedule_id IN (SELECT id FROM schedule WHERE status = \'ARCHIVED\')');
+        $this->addSql('UPDATE schedule_plan SET chosen_schedule_id = NULL WHERE chosen_schedule_id IN (SELECT id FROM schedule WHERE status = \'ARCHIVED\')');
+        $this->addSql('DELETE FROM schedule WHERE status = \'ARCHIVED\'');
+
+        // VALIDATED disait « choisie » — le pointeur le dit seul désormais. La version
+        // reste une résolution du solveur : elle est COMPLETED.
+        $this->addSql('UPDATE schedule SET status = \'COMPLETED\' WHERE status = \'VALIDATED\'');
 
         // 3. Le legacy meurt.
         $this->addSql('ALTER TABLE season DROP baseline_schedule_id, DROP socle_validated_at, DROP planning_name');

@@ -98,10 +98,16 @@ final class ValidateScheduleController extends AbstractController implements Sea
         // secondaires bâtis sur l'ancien socle. Clé sur le POINTEUR — la seule
         // vérité (inv. 1/14) — et jamais composer silencieusement un ajustement
         // par-dessus un autre plan de base.
+        // Un pointeur NULL n'exempte pas : le plan est alors un espace de travail, mais
+        // des plans secondaires peuvent survivre (socle rouvert, donnée migrée). Choisir
+        // cette version leur donnerait un autre socle que celui sur lequel ils ont été
+        // bâtis — silencieusement. La seule question est « le plan pointe-t-il DÉJÀ cette
+        // version ? » ; sinon le calendrier bouge, et il faut le confirmer.
+        // (Cas normal : à la 1re validation aucun plan secondaire n'existe — inv. 13 les
+        // interdit sans socle pointé — donc la garde ne coûte rien.)
         $currentlyChosen = $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId());
         $overlaysToDelete = [];
         if (null === $schedule->getCalendarEntryId()
-            && null !== $currentlyChosen
             && $schedule->getId() !== $currentlyChosen
         ) {
             $overlaysToDelete = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());

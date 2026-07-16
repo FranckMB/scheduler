@@ -186,6 +186,11 @@ export function useReopenSchedule() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+      // Rouvrir DÉPOINTE le plan (inv. 2), donc /me.seasonPlan.chosenScheduleId
+      // passe à null — et c'est lui qui verrouille le module matchs côté client.
+      // Sans ça, useMe (staleTime 60 s) laisse l'onglet Matchs ouvert pendant une
+      // minute alors que le serveur refuse déjà les écritures (SocleGuard, 409).
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }

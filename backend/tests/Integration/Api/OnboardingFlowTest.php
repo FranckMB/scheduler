@@ -49,7 +49,13 @@ final class OnboardingFlowTest extends WebTestCase
         self::assertSame($me['seasons'][0]['id'], $me['currentSeasonId']);
         self::assertTrue($me['seasons'][0]['isCurrent']);
         self::assertFalse($me['seasons'][0]['isReadonly']);
-        self::assertNull($me['socleValidatedAt']);
+        // Un club neuf : le plan de la saison existe dès sa naissance, vide — aucune
+        // version, donc rien de pointé et rien de terminé (le cockpit reste verrouillé,
+        // le wizard est la maison). Assertion sur `seasonPlan` : `socleValidatedAt`
+        // n'existe plus, et l'assertion qui le lisait passait sur une clé absente.
+        self::assertNotNull($me['seasonPlan'], 'une saison possède son plan SEASON dès sa création');
+        self::assertNull($me['seasonPlan']['chosenScheduleId']);
+        self::assertFalse($me['seasonPlan']['hasFinishedVersion']);
         self::assertGreaterThan($me['seasons'][0]['startDate'], $me['seasons'][0]['endDate']);
 
         // 3. Minimal data: one team, one gym with a slot, one coach.

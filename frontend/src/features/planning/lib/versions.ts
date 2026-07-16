@@ -2,11 +2,48 @@ import type { Schedule } from "../api";
 
 /** Structural subset shared with PlanningPage's LandingSchedule (single predicate owner). */
 interface VersionLike {
+  id: string;
   status: string;
   createdAt: string;
   calendarEntryId: string | null;
   /** Server pointer (season plans only) — the loaded-context version (★). */
   isLiveContext?: boolean;
+}
+
+/** Une version en cours de solve bloque la validation (409) au lieu d'être supprimée. */
+const IN_FLIGHT_STATUS = ["PENDING", "GENERATING"];
+
+/**
+ * Les versions que valider `selected` va SUPPRIMER — miroir exact de la règle du
+ * serveur (`ValidateScheduleController`) : même portée que la version choisie (les
+ * versions de saison partagent `calendarEntryId = null`, celles d'une période
+ * partagent l'id de cette période), soi-même exclu, et une version en vol bloque
+ * la validation plutôt que d'être emportée.
+ *
+ * À garder aligné sur le serveur : c'est ce compte qu'on montre AVANT une
+ * destruction irréversible. Le compter dans une autre portée, ou en écarter la
+ * version en vigueur (elle est supprimée comme les autres), fait consentir le
+ * gestionnaire à moins que ce qu'il perd.
+ */
+/**
+ * La version qui REPRÉSENTE un plan : celle qu'il pointe si le gestionnaire en a
+ * choisi une (c'est le planning en vigueur, la seule qui compte), sinon la dernière
+ * terminée — le plan est alors un espace de travail et « le planning », c'est l'état
+ * le plus abouti. Prendre la plus récente sans regarder le pointeur ferait désigner
+ * une version que le plan ne pointe pas, puis lire `isChosen: false` dessus.
+ *
+ * Entrée : un ensemble visible* (trié createdAt asc) d'UN seul plan.
+ */
+export function planRepresentative<T extends VersionLike & { isChosen?: boolean }>(versions: T[]): T | null {
+  return versions.find((v) => true === v.isChosen) ?? representativeVersion(versions);
+}
+
+export function versionsDeletedByValidating<T extends VersionLike>(schedules: T[], selected: T): T[] {
+  return schedules.filter(
+    (s) => s.id !== selected.id
+      && s.calendarEntryId === selected.calendarEntryId
+      && !IN_FLIGHT_STATUS.includes(s.status),
+  );
 }
 
 /**

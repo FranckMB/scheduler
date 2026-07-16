@@ -223,9 +223,6 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // the frontend rename echoes a possibly-stale cached status, so rejecting a
         // mismatch would 409 legitimate renames — while silently ignoring still makes
         // fabricating a COMPLETED plan without generation impossible.
-        if ('VALIDATED' === $input->status) {
-            throw new ConflictHttpException('Use POST /schedules/{id}/validate to validate a schedule.');
-        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }

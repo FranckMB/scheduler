@@ -155,6 +155,55 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'the version it no longer points at is deleted');
     }
 
+    public function testValidatingWithLiveOverlaysAsksEvenWhenThePlanPointsAtNothing(): void
+    {
+        // Le plan est un espace de travail (pointeur null) MAIS des plans secondaires
+        // survivent — cas réel : le socle a été rouvert, ou la donnée vient d'avant la
+        // bascule. Choisir une version donne alors aux overlays un autre socle que celui
+        // sur lequel ils ont été bâtis. La garde doit s'armer sur « le plan ne pointe pas
+        // DÉJÀ cette version », pas sur « le plan pointe quelque chose » — sinon elle
+        // saute exactement là où elle est nécessaire, et sans rien dire.
+        [$user, , $season] = $this->seed('VAL10');
+        $entry = (new CalendarEntry)
+            ->setClubId($season->getClubId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->flush();
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        self::assertNull($this->chosenPlanVersion($season), 'le plan ne pointe rien : c\'est le cas qui désarmait la garde');
+
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
+        $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json'];
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate", [], [], $auth);
+
+        self::assertResponseStatusCodeSame(409);
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('overlays_exist', $body['code'] ?? null);
+        $this->em->clear();
+        self::assertNull($this->chosenPlanVersion($season), 'rien n\'est commité sur le 409');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'le plan secondaire survit tant que rien n\'est confirmé');
+    }
+
+    public function testFirstValidationWithoutOverlaysNeedsNoConfirmation(): void
+    {
+        // Le pendant du test ci-dessus : sans plan secondaire, la garde ne coûte rien.
+        // Sinon on aurait remplacé un trou par une demande de confirmation absurde à
+        // la toute première validation d'un club.
+        [$user, , $season] = $this->seed('VAL11');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate");
+
+        self::assertResponseIsSuccessful();
+        self::assertSame($v1->getId(), $this->chosenPlanVersion($season));
+    }
+
     public function testNonCompletedScheduleCannotBeValidated(): void
     {
         [$user, , $season] = $this->seed('VAL2');

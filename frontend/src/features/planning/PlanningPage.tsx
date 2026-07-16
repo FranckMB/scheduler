@@ -26,7 +26,7 @@ import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
-import { visibleSeasonPlans } from "./lib/versions";
+import { versionsDeletedByValidating } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -58,7 +58,7 @@ function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: 
       </p>
       {siblingCount > 0 ? (
         <p className="mt-3 text-sm font-medium text-foreground">
-          Seule cette version sera conservée — {siblingCount > 1 ? `les ${siblingCount} autres versions seront retirées` : "l'autre version sera retirée"} de la liste.
+          Seule cette version sera conservée — {siblingCount > 1 ? `les ${siblingCount} autres versions seront définitivement supprimées` : "l'autre version sera définitivement supprimée"}.
         </p>
       ) : null}
       <div className="mt-6 flex justify-end gap-2">
@@ -461,7 +461,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {validateOpen ? (
         <ValidateDialog
           hasAlerts={diagnostics.length > 0}
-          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId && true !== sc.isChosen && !["PENDING", "GENERATING"].includes(sc.status)).length}
+          siblingCount={null === selectedSchedule ? 0 : versionsDeletedByValidating(schedules, selectedSchedule).length}
           busy={validateMutation.isPending}
           onCancel={() => setValidateOpen(false)}
           onConfirm={() => validate()}
