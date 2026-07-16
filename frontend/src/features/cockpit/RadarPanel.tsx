@@ -152,17 +152,20 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
   const hasOverlay = null !== entry.overlayScheduleId;
-  // Sans calendrier de saison (plan non validé), le serveur n'a rien pu comparer :
-  // dire « aucun impact » serait un mensonge rassurant. On dit qu'on ne sait pas.
-  const cannotScore = false === data?.seasonPlanChosen;
+  // Le plan de la saison existe mais ne pointe aucune version : il est INCOMPLET,
+  // et le serveur n'a donc aucun calendrier à comparer. Dire « aucun impact » serait
+  // un mensonge rassurant — le gestionnaire n'adapterait pas une fermeture qui, en
+  // vrai, touchera ses séances. Un plan qui pointe et ne heurte rien, lui, n'a
+  // vraiment rien à signaler : les deux états ne doivent pas se dire pareil.
+  const planIncomplete = false === data?.seasonPlanChosen;
 
   const detail = hasOverlay
     ? "Planning secondaire généré"
-    : cannotScore
-      ? "Impact inconnu · validez le planning de la saison"
+    : planIncomplete
+      ? "Planning de la saison incomplet · impact non évalué"
       : count > 0
         ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`
-        : "Indisponibilité signalée";
+        : "Rien à signaler";
 
   return (
     <RadarCard

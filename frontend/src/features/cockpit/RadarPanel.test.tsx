@@ -85,15 +85,22 @@ describe("RadarPanel", () => {
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
   });
 
-  it("says the impact is unknown when the season plan points at nothing", () => {
+  it("shows the season plan as incomplete when it points at nothing", () => {
     // Le serveur ne rend AUCUN conflit faute de calendrier à comparer. Sans
     // distinguer ce cas de « zéro conflit », le gestionnaire déclare une fermeture
     // de gymnase, lit que tout va bien, et n'adapte rien.
     conflictsData = { conflicts: [], seasonPlanChosen: false };
     renderRadar({ entries: [closure({})] });
 
-    expect(screen.getByText(/Impact inconnu · validez le planning de la saison/)).toBeInTheDocument();
-    expect(screen.queryByText("Indisponibilité signalée")).not.toBeInTheDocument();
+    expect(screen.getByText(/Planning de la saison incomplet · impact non évalué/)).toBeInTheDocument();
+    expect(screen.queryByText("Rien à signaler")).not.toBeInTheDocument();
+  });
+
+  it("says there is nothing to report when the plan points at a version and nothing collides", () => {
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+
+    expect(screen.getByText("Rien à signaler")).toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {
