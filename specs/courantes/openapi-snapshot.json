@@ -16462,11 +16462,6 @@
                         "default": false,
                         "type": "boolean"
                     },
-                    "fixtureCount": {
-                        "description": "Combien de matchs pendent \u00e0 cette \u00e9quipe \u2014 engag\u00e9s ou non. Supprimer l'\u00e9quipe les\nemporte (`EntityCascadeDeleter::purgeChildrenOfTeam`), donc la confirmation doit\nles annoncer : une \u00e9quipe supprimable est une \u00e9quipe dont aucun match n'est encore\nplac\u00e9, c'est-\u00e0-dire typiquement un import FBI entier. Rempli en lot par\nTeamStateProvider ; 0 sur le chemin nu de fromEntity.",
-                        "default": 0,
-                        "type": "integer"
-                    },
                     "sessionsPerWeek": {
                         "default": 0,
                         "type": "integer"
@@ -16686,11 +16681,6 @@
                         "default": false,
                         "type": "boolean"
                     },
-                    "fixtureCount": {
-                        "description": "Combien de matchs pendent \u00e0 cette \u00e9quipe \u2014 engag\u00e9s ou non. Supprimer l'\u00e9quipe les\nemporte (`EntityCascadeDeleter::purgeChildrenOfTeam`), donc la confirmation doit\nles annoncer : une \u00e9quipe supprimable est une \u00e9quipe dont aucun match n'est encore\nplac\u00e9, c'est-\u00e0-dire typiquement un import FBI entier. Rempli en lot par\nTeamStateProvider ; 0 sur le chemin nu de fromEntity.",
-                        "default": 0,
-                        "type": "integer"
-                    },
                     "sessionsPerWeek": {
                         "default": 0,
                         "type": "integer"
@@ -16803,11 +16793,6 @@
                                 "description": "Cette \u00e9quipe joue-t-elle d\u00e9j\u00e0 en comp\u00e9tition (\u22651 match non-UNPLACED, ext\u00e9rieur\ncompris) ? Alors elle ne peut plus \u00eatre supprim\u00e9e ni changer de `level` \u2014 elle\nest inscrite ainsi aupr\u00e8s de la f\u00e9d\u00e9ration. Son tier, ses cr\u00e9neaux et son nom\nrestent libres.",
                                 "default": false,
                                 "type": "boolean"
-                            },
-                            "fixtureCount": {
-                                "description": "Combien de matchs pendent \u00e0 cette \u00e9quipe \u2014 engag\u00e9s ou non. Supprimer l'\u00e9quipe les\nemporte (`EntityCascadeDeleter::purgeChildrenOfTeam`), donc la confirmation doit\nles annoncer : une \u00e9quipe supprimable est une \u00e9quipe dont aucun match n'est encore\nplac\u00e9, c'est-\u00e0-dire typiquement un import FBI entier. Rempli en lot par\nTeamStateProvider ; 0 sur le chemin nu de fromEntity.",
-                                "default": 0,
-                                "type": "integer"
                             },
                             "sessionsPerWeek": {
                                 "default": 0,

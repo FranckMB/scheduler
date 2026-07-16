@@ -104,16 +104,6 @@ class TeamResource
     #[Groups(['read'])]
     public bool $isEngaged = false;
 
-    /**
-     * Combien de matchs pendent à cette équipe — engagés ou non. Supprimer l'équipe les
-     * emporte (`EntityCascadeDeleter::purgeChildrenOfTeam`), donc la confirmation doit
-     * les annoncer : une équipe supprimable est une équipe dont aucun match n'est encore
-     * placé, c'est-à-dire typiquement un import FBI entier. Rempli en lot par
-     * TeamStateProvider ; 0 sur le chemin nu de fromEntity.
-     */
-    #[Groups(['read'])]
-    public int $fixtureCount = 0;
-
     #[Groups(['read'])]
     public int $sessionsPerWeek = 0;
 

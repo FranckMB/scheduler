@@ -24,8 +24,6 @@ use App\Enum\CompetitionType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
-use App\Enum\FixtureHomeAway;
-use App\Enum\FixtureStatus;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\TeamCoachRole;
@@ -82,10 +80,10 @@ final class CascadeDeleteApiTest extends WebTestCase
         $overrideId = $this->persist((new ConstraintPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setCalendarEntryId('33333333-3333-4333-8333-333333333333')->setConstraintId($constraintId)->setIsActive(false));
-        $fixtureId = $this->persist((new Fixture)
-            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setTeamId($team->getId())
-            ->setMatchDate(new DateTimeImmutable('2026-01-10'))->setHomeAway(FixtureHomeAway::HOME)
-            ->setOpponentLabel('AS Voisins')->setStatus(FixtureStatus::UNPLACED));
+        // PAS de Fixture ici : depuis la garde du périmètre engagé, un SEUL match — même
+        // UNPLACED — rend l'équipe indélébile (409). Ce test porte sur la cascade d'une
+        // équipe ordinaire ; le cas « elle joue » est couvert par EngagedTeamGuardTest.
+        // La Competition, elle, n'engage pas : c'est une inscription, pas une rencontre.
         $competitionId = $this->persist((new Competition)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setTeamId($team->getId())
             ->setName('D2 Poule A')->setCompetitionType(CompetitionType::CHAMPIONSHIP));
@@ -104,7 +102,6 @@ final class CascadeDeleteApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(CoachPlayerMembership::class)->find($coachPlayerId));
         self::assertNull($this->em->getRepository(Constraint::class)->find($constraintId));
         self::assertNull($this->em->getRepository(ConstraintPeriodOverride::class)->find($overrideId), 'period override of the deleted scoped constraint orphaned');
-        self::assertNull($this->em->getRepository(Fixture::class)->find($fixtureId), 'fixture orphaned');
         self::assertNull($this->em->getRepository(Competition::class)->find($competitionId), 'competition orphaned');
         self::assertNull($this->em->getRepository(ScheduleDiagnostic::class)->find($diagnosticId), 'diagnostic dangling');
         // The coach itself is a peer, not a child — it survives the team delete.

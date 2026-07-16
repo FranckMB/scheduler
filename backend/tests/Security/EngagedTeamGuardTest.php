@@ -84,13 +84,34 @@ final class EngagedTeamGuardTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(Fixture::class)->find($fixture->getId()), 'ses matchs engagés survivent');
     }
 
-    public function testATeamWhoseFixturesAreAllUnplacedIsStillDeletable(): void
+    public function testAnUnplacedFixtureEngagesTheTeamToo(): void
     {
-        // UNPLACED = match encore en traitement : il n'engage rien, et la garde ne
-        // doit pas bloquer le cas normal (un club qui range ses équipes avant de jouer).
+        // LE test qui compte. L'import FBI crée TOUT en UNPLACED (`FbiFixtureImporter` :
+        // « Status is always UNPLACED ») : une garde qui exigerait PLACED serait donc
+        // inerte au moment précis où elle doit mordre — juste après l'import, quand la
+        // fédération connaît déjà les rencontres. Décision fondateur : la correspondance
+        // import↔équipe EST l'engagement, le statut ne dit rien de lui.
         $client = $this->client;
-        $team = $this->createTeam('U13 sans engagement');
-        $this->fixture($team, FixtureStatus::UNPLACED);
+        $team = $this->createTeam('U13 fraîchement importée');
+        $fixture = $this->fixture($team, FixtureStatus::UNPLACED);
+        $client->loginUser($this->user);
+
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ]);
+
+        self::assertResponseStatusCodeSame(409, 'un match importé, même non placé, engage l\'équipe');
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertNotNull($this->em->getRepository(Fixture::class)->find($fixture->getId()), 'et l\'import FBI ne part pas avec elle');
+    }
+
+    public function testATeamWithoutAnyFixtureIsDeletable(): void
+    {
+        // La garde ne bloque QUE ce qui joue : une équipe sans aucune rencontre reste
+        // une ligne de travail ordinaire (un club qui range ses équipes avant la saison).
+        $client = $this->client;
+        $team = $this->createTeam('U13 sans match');
         $client->loginUser($this->user);
 
         $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
@@ -102,11 +123,13 @@ final class EngagedTeamGuardTest extends WebTestCase
 
     public function testAnAwayFixtureEngagesTheTeamToo(): void
     {
-        // Un match à l'extérieur naît PLACED à l'import FBI (horaire imposé par
-        // l'adversaire) : l'équipe joue, donc elle est engagée.
+        // Un match à l'extérieur engage aussi : l'équipe joue, la fédération le sait.
+        // Il naît UNPLACED comme les autres — le croire PLACED (ce que prétendait le
+        // docblock de FixtureStatus) faisait passer ce test sur un état que l'import ne
+        // produit JAMAIS, donc sur rien.
         $client = $this->client;
         $team = $this->createTeam('U18 qui joue dehors');
-        $this->fixture($team, FixtureStatus::PLACED, FixtureHomeAway::AWAY);
+        $this->fixture($team, FixtureStatus::UNPLACED, FixtureHomeAway::AWAY);
         $client->loginUser($this->user);
 
         $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [

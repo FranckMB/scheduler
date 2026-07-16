@@ -588,11 +588,6 @@ function TeamsEditor() {
           { count: reservations.filter((r) => r.teamId === toDelete?.id).length, one: "créneau réservé", many: "créneaux réservés" },
           { count: teamCoaches.filter((l) => l.teamId === toDelete?.id).length, one: "coach lié", many: "coachs liés" },
           { count: coachPlayers.filter((l) => l.teamId === toDelete?.id).length, one: "coach-joueur lié", many: "coach-joueurs liés" },
-          // La cascade emporte les matchs de l'équipe. Une équipe supprimable n'a par
-          // définition aucun match placé (sinon elle serait engagée, donc protégée) :
-          // c'est donc typiquement un import FBI entier qui part, à ré-importer. Le
-          // compte vient du serveur — celui qui les supprime.
-          { count: toDelete?.fixtureCount ?? 0, one: "match importé", many: "matchs importés" },
         ]}
         onConfirm={() => {
           if (toDelete) {

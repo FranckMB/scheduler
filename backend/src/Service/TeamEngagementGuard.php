@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Enum\FixtureStatus;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -18,10 +17,17 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  * niveau ; elle peut être déplacée ou changer de créneau ». Le planning de la saison
  * s'ajuste (rarement) ; le périmètre engagé, non.
  *
- * Engagée = elle porte au moins un match que le solveur n'a plus le droit d'ignorer :
- * tout `Fixture` de statut ≠ UNPLACED. Un match À L'EXTÉRIEUR compte — il naît PLACED
- * à l'import FBI parce que son horaire est imposé par l'adversaire, et l'équipe joue
- * bel et bien. UNPLACED = encore en traitement, il n'engage rien.
+ * Engagée = elle porte AU MOINS UN match, quel que soit son statut. Décision fondateur :
+ * « si import FBI pour les matchs, l'équipe est engagée d'office. Une correspondance pour
+ * les matchs implique que l'équipe est engagée pour la fédération. Même si le statut est
+ * UNPLACED, même si le match n'est pas placé. À partir du moment où l'on valide la
+ * correspondance entre l'import et nos équipes, c'est que l'équipe est engagée. »
+ *
+ * Ne PAS filtrer sur le statut : l'import FBI crée TOUT en `UNPLACED`
+ * (`FbiFixtureImporter` : « Status is always UNPLACED — placing requires a CLUB venue +
+ * an explicit manager action »). Une garde qui exige `PLACED` serait donc inerte au
+ * moment précis où elle doit mordre — juste après l'import, quand la fédération connaît
+ * déjà les rencontres.
  *
  * Ce qui reste LIBRE, et doit le rester : le `priorityTierId` / `tierOrder` (la
  * perception que le club a de son équipe — ça bouge) et `isActive` (qui sert aux
@@ -41,8 +47,8 @@ final class TeamEngagementGuard
     public function isEngaged(string $teamId): bool
     {
         return (bool) $this->entityManager->getConnection()->fetchOne(
-            'SELECT 1 FROM fixture WHERE team_id = :tid AND status <> :unplaced LIMIT 1',
-            ['tid' => $teamId, 'unplaced' => FixtureStatus::UNPLACED->value],
+            'SELECT 1 FROM fixture WHERE team_id = :tid LIMIT 1',
+            ['tid' => $teamId],
         );
     }
 
@@ -52,41 +58,6 @@ final class TeamEngagementGuard
         if ($this->isEngaged($teamId)) {
             throw new ConflictHttpException($message);
         }
-    }
-
-    /**
-     * Le nombre de matchs de chaque équipe, engagés ou non — en UNE requête.
-     *
-     * Sert la confirmation de suppression : `purgeChildrenOfTeam` emporte les `Fixture`
-     * de l'équipe, et une équipe supprimable est justement une équipe dont AUCUN match
-     * n'est encore placé — donc typiquement un import FBI entier (14 matchs) qui
-     * disparaîtrait sans un mot. Le compte vient du serveur, celui qui les supprime :
-     * le recalculer côté front demanderait de charger tous les matchs sur l'écran des
-     * équipes, et divergerait un jour de ce que la cascade fait vraiment.
-     *
-     * @param list<string> $teamIds
-     *
-     * @return array<string, int>
-     */
-    public function fixtureCountByTeam(array $teamIds): array
-    {
-        if ([] === $teamIds) {
-            return [];
-        }
-
-        /** @var list<array{team_id: string, n: int}> $rows */
-        $rows = $this->entityManager->getConnection()->fetchAllAssociative(
-            'SELECT team_id, COUNT(*) AS n FROM fixture WHERE team_id IN (:tids) GROUP BY team_id',
-            ['tids' => $teamIds],
-            ['tids' => \Doctrine\DBAL\ArrayParameterType::STRING],
-        );
-
-        $counts = [];
-        foreach ($rows as $row) {
-            $counts[(string) $row['team_id']] = (int) $row['n'];
-        }
-
-        return $counts;
     }
 
     /**
@@ -105,8 +76,8 @@ final class TeamEngagementGuard
 
         /** @var list<string> $rows */
         $rows = $this->entityManager->getConnection()->fetchFirstColumn(
-            'SELECT DISTINCT team_id FROM fixture WHERE team_id IN (:tids) AND status <> :unplaced',
-            ['tids' => $teamIds, 'unplaced' => FixtureStatus::UNPLACED->value],
+            'SELECT DISTINCT team_id FROM fixture WHERE team_id IN (:tids)',
+            ['tids' => $teamIds],
             ['tids' => \Doctrine\DBAL\ArrayParameterType::STRING],
         );
 

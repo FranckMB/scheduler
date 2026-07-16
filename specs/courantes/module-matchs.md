@@ -136,10 +136,18 @@ font de la compétition. Une fois les matchs envoyés à la fédération, on n'y
 joue ne peut pas être supprimée, ni avoir son niveau modifié ; elle peut être déplacée ou changer de
 créneau ». Le planning de saison, lui, ne change **quasiment jamais** ; il s'ajuste dans de rares cas.
 
-**Engagée** = ≥1 `Fixture` de statut ≠ `UNPLACED`. Un match à l'**extérieur** engage : il naît `PLACED` à
-l'import FBI (son horaire est imposé par l'adversaire) et l'équipe joue bel et bien. `UNPLACED` = encore en
-traitement, il n'engage rien. Conséquence assumée : **dès l'import FBI**, presque toutes les équipes en
-compétition sont figées.
+**Engagée** = elle porte **au moins un `Fixture`**, quel qu'en soit le statut. Décision fondateur : « si
+import FBI pour les matchs, l'équipe est engagée d'office. Une correspondance pour les matchs implique que
+l'équipe est engagée pour la fédération. Même si le statut est `UNPLACED`, même si le match n'est pas placé. »
+
+⚠️ **Ne PAS filtrer sur le statut.** `FbiFixtureImporter` crée TOUT en `UNPLACED` — domicile **et** extérieur
+(« Status is always UNPLACED : placing requires a CLUB venue + an explicit manager action »). Seul un geste
+du gestionnaire (`FixtureStateProcessor`) pose un autre statut. Une garde exigeant `PLACED` serait donc
+**inerte au moment précis où elle doit mordre** : juste après l'import, quand la fédération connaît déjà les
+rencontres. *(Le docblock de `FixtureStatus` a longtemps prétendu qu'un match extérieur naissait `PLACED` —
+c'était faux, et ça a coûté une règle bâtie sur du vide.)*
+
+Conséquence assumée : **dès l'import FBI**, toutes les équipes de la compétition sont figées.
 
 | Sur une équipe engagée | |
 |---|---|
