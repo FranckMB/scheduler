@@ -45,6 +45,9 @@ final class SuperAdminAccessTest extends WebTestCase
 
         $this->client->request('GET', '/api/admin/overview', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('GET', '/api/admin/health', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
     }
 
     public function testAuthenticatedAdminCanReadCrossTenantMonitoringAggregates(): void
@@ -95,6 +98,26 @@ final class SuperAdminAccessTest extends WebTestCase
 
         $this->client->request('GET', '/api/admin/clubs?limit=101');
         self::assertResponseStatusCodeSame(400);
+    }
+
+    public function testAuthenticatedAdminCanReadBoundedInfrastructureHealthWithoutInternalErrors(): void
+    {
+        [$secret] = $this->createSuperAdmin('health@example.test', 'VeryStrongPassword!');
+        $this->authenticate('health@example.test', 'VeryStrongPassword!', $secret);
+
+        $this->client->request('GET', '/api/admin/health');
+        self::assertResponseIsSuccessful();
+        $health = $this->responseBody();
+        self::assertContains($health['status'], ['healthy', 'degraded']);
+        self::assertArrayHasKey('checkedAt', $health);
+        foreach (['database', 'redis', 'engine', 'worker', 'mercure'] as $service) {
+            self::assertArrayHasKey($service, $health['services']);
+            self::assertContains($health['services'][$service]['status'], ['up', 'down', 'unknown']);
+        }
+        self::assertContains($health['messenger']['status'], ['up', 'degraded', 'unknown']);
+        self::assertArrayHasKey('backlog', $health['messenger']);
+        self::assertArrayHasKey('failed', $health['messenger']);
+        self::assertArrayHasKey('retriesToday', $health['messenger']);
     }
 
     public function testPasswordAloneDoesNotAuthenticateAndTotpIsMandatory(): void

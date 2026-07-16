@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\AdminHealthService;
 use App\Service\AdminMonitoringService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -12,7 +13,16 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api/admin')]
 final readonly class AdminMonitoringController
 {
-    public function __construct(private AdminMonitoringService $monitoring) {}
+    public function __construct(
+        private AdminMonitoringService $monitoring,
+        private AdminHealthService $health,
+    ) {}
+
+    #[Route('/health', methods: ['GET'])]
+    public function health(): JsonResponse
+    {
+        return new JsonResponse($this->health->health());
+    }
 
     #[Route('/overview', methods: ['GET'])]
     public function overview(): JsonResponse
