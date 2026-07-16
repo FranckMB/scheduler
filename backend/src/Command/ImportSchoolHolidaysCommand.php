@@ -24,7 +24,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * current school year + the next one, across all 13 zones (A/B/C, Corse, DOM/TOM).
  * Idempotent: upsert by the natural key (zone, holidayType, schoolYear), like
  * app:school-holidays:seed — which stays as the offline JSON fallback.
- * Run manually today; a yearly cron / superadmin trigger comes later.
+ * Scheduled quarterly by the operational job runner; remains manually callable.
  * See specs/evolution/roadmap.md §2.
  */
 #[AsCommand(

@@ -24,7 +24,7 @@ use Throwable;
  * Retention purge (spec transition-de-saison §3): keep a sliding window of two
  * seasons — the CURRENT one and its immediate predecessor (N-1, read-only) —
  * plus any future draft. Everything older (N-2 and beyond) is deleted, Season
- * row included. AUTOMATED since RGPD PR-3 (cron-runner, hourly): the retention
+ * row included. AUTOMATED since RGPD PR-3 (cron-runner, daily): the retention
  * policy must be effectively enforced, not merely available (P0-1).
  *
  * Walks clubs on the runtime (RLS) connection like PeriodReminderCommand —
@@ -32,7 +32,7 @@ use Throwable;
  */
 #[AsCommand(
     name: 'app:seasons:purge',
-    description: 'Delete seasons older than N-1 (retention: current + predecessor + futures kept). Runs hourly (cron-runner, RGPD).',
+    description: 'Delete seasons older than N-1 (retention: current + predecessor + futures kept). Runs daily (cron-runner, RGPD).',
 )]
 final class PurgeSeasonsCommand extends Command
 {

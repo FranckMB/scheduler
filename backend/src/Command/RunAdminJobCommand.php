@@ -8,6 +8,8 @@ use App\AdminJob\AdminJobAlreadyRunning;
 use App\AdminJob\AdminJobCatalog;
 use App\AdminJob\AdminJobDefinition;
 use App\AdminJob\AdminJobRunner;
+use DateTimeImmutable;
+use DateTimeInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -33,7 +35,8 @@ final class RunAdminJobCommand extends Command
     {
         $this
             ->addArgument('job', InputArgument::REQUIRED, 'Allowlisted job key.')
-            ->addOption('source', null, InputOption::VALUE_REQUIRED, 'Execution source: cli or scheduled.', 'cli');
+            ->addOption('source', null, InputOption::VALUE_REQUIRED, 'Execution source: cli or scheduled.', 'cli')
+            ->addOption('scheduled-for', null, InputOption::VALUE_REQUIRED, 'Scheduled slot in ISO-8601 format.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -41,8 +44,20 @@ final class RunAdminJobCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $jobKey = (string) $input->getArgument('job');
         $source = (string) $input->getOption('source');
+        $scheduledForRaw = $input->getOption('scheduled-for');
         if (!\in_array($source, ['cli', 'scheduled'], true)) {
             $io->error('Invalid --source: expected cli or scheduled.');
+
+            return Command::INVALID;
+        }
+        if (('scheduled' === $source) !== \is_string($scheduledForRaw)) {
+            $io->error('--scheduled-for is required only when --source=scheduled.');
+
+            return Command::INVALID;
+        }
+        $scheduledFor = \is_string($scheduledForRaw) ? DateTimeImmutable::createFromFormat(DateTimeInterface::ATOM, $scheduledForRaw) : null;
+        if (false === $scheduledFor) {
+            $io->error('Invalid --scheduled-for: expected ISO-8601.');
 
             return Command::INVALID;
         }
@@ -68,7 +83,7 @@ final class RunAdminJobCommand extends Command
                 $targetInput->setInteractive(false);
 
                 return $target->run($targetInput, $output);
-            });
+            }, $scheduledFor);
         } catch (AdminJobAlreadyRunning $error) {
             $io->warning($error->getMessage());
 

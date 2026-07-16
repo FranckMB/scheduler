@@ -1,6 +1,6 @@
 # Vacances scolaires & jours fériés — référentiels calendaires
 
-Last verified @ 2026-07-06 (graduation depuis `specs/evolution/roadmap.md` §2, PRs #53/#62/#63)
+Last verified @ 2026-07-16 (imports automatiques SA3-C)
 
 Feed d'affichage du cockpit (accueil temporel) : vacances scolaires de la zone du club + jours fériés applicables. **Display-only — jamais consommé par le solveur** : si un férié ou une vacance gêne un entraînement, le gestionnaire pose une période (`CalendarEntry` `closure`/`holiday`), il n'y a aucune règle implicite.
 
@@ -31,7 +31,10 @@ Règles de mapping vacances (`FrenchSchoolCalendarMapper`) :
 - une période est une **vacance** ssi elle couvre **strictement plus de 3 jours ouvrés** (lun–ven) **et** son libellé ne commence pas par `Pont` — écarte ponts (l'Ascension = 4-5 jours calendaires mais 3 ouvrés), semaines courtes, marqueurs 1 jour ;
 - `holidayType` = **slug ouvert** dérivé du libellé (`toussaint`, `noel`… mais aussi `carnaval`, `ete_austral`, `apres_1ere_periode` pour les DOM/TOM) — pas d'enum fermé, les calendriers territoriaux ont leurs propres régimes.
 
-Exécution **manuelle** aujourd'hui (cron annuel + bouton superadmin différés — rattachés à la future console superadmin, voir roadmap §2).
+Les deux imports restent appelables manuellement et sont aussi planifiés par SA3-C le
+1er janvier, avril, juillet et octobre (`Europe/Paris`) : vacances à 04:00, jours fériés
+à 04:30. Le tick minute rattrape le dernier créneau manqué après un arrêt et déduplique
+chaque créneau. Le bouton superadmin reste différé.
 
 ## Lecture (API)
 

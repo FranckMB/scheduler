@@ -87,7 +87,8 @@ const jobs: AdminJobsResponse = {
       key: "period-reminders",
       label: "Rappels de périodes",
       command: "app:periods:remind",
-      cadence: "hourly",
+      cadence: "daily",
+      nextRunAt: "2099-07-17T08:00:00+02:00",
       latestRun: {
         id: "run-1",
         status: "succeeded",
@@ -102,7 +103,8 @@ const jobs: AdminJobsResponse = {
       key: "purge-seasons",
       label: "Purge des anciennes saisons",
       command: "app:seasons:purge",
-      cadence: "hourly",
+      cadence: "quarterly",
+      nextRunAt: "2099-10-01T03:00:00+02:00",
       latestRun: null,
     },
   ],
@@ -129,6 +131,8 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("Base de données")).toBeInTheDocument();
     expect(screen.getByText("Découverte")).toBeInTheDocument();
     expect(screen.getByText("Rappels de périodes")).toBeInTheDocument();
+    expect(screen.getByText("Quotidien")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Prochain passage" })).toBeInTheDocument();
     expect(screen.getByText("Réussi")).toBeInTheDocument();
     expect(screen.getByText("Jamais exécuté")).toBeInTheDocument();
     expect(mockOverview).toHaveBeenCalledOnce();

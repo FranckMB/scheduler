@@ -1,8 +1,8 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
 > **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2, le socle
-> d'historisation SA3-A et la supervision read-only des jobs SA3-B sont livrés. La
-> planification étendue, les relances et les actions cross-tenant restent dans
+> d'historisation SA3-A, la supervision SA3-B et la planification fiable SA3-C sont
+> livrés. Les relances et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -126,8 +126,8 @@ clubs effacés, comptes inactifs, anciennes saisons et audit. Un verrou advisory
 PostgreSQL empêche le chevauchement d'un même job ; une tentative `running` abandonnée
 est marquée `interrupted` au prochain démarrage acquis.
 
-SA3-A ne change pas la cadence existante. Les imports annuels, les autres purges, le
-prochain run et la relance superadmin appartiennent aux PR suivantes de SA3.
+SA3-A ne changeait pas la cadence existante ; SA3-C la remplace par les horaires décrits
+ci-dessous. La relance superadmin appartient à une PR ultérieure.
 
 ## Supervision read-only des jobs SA3-B
 
@@ -137,11 +137,30 @@ la clé, le libellé, la commande, la cadence déclarée et, lorsqu'elle existe,
 exécution avec son statut, son origine, ses dates, sa durée et son code de sortie. Un JWT
 club ne peut pas accéder à cette route.
 
-Le dashboard React `/admin` affiche ces huit jobs dans un panneau indépendant. Un job sans
+Le dashboard React `/admin` affiche les dix jobs du catalogue dans un panneau indépendant. Un job sans
 historique est explicitement marqué « Jamais exécuté » ; une indisponibilité de ce flux ne
 masque ni la santé technique, ni les indicateurs, ni les comptes clubs. Le flux est
 rafraîchi toutes les 60 secondes et par le bouton d'actualisation global.
 
-La cadence `hourly` est descriptive : la boucle actuelle repose encore sur `sleep 3600`,
-donc SA3-B n'affiche pas de prochain run calculé qui serait trompeur après un redémarrage.
-Cette PR reste entièrement en lecture seule et n'ajoute aucun bouton de relance.
+## Planification fiable des jobs SA3-C
+
+`cron-runner` lance `app:jobs:run-due` chaque minute. Chaque définition porte une cadence
+fermée calculée en `Europe/Paris` :
+
+- réconciliation des générations bloquées toutes les 10 minutes (`--older-than 60`) ;
+- rappels de périodes et de transition chaque jour à 08:00 ;
+- purges comptes non vérifiés à 02:00, clubs effacés à 02:15, comptes inactifs à 02:30,
+  saisons à 03:00 et audit à 03:30 ;
+- imports des vacances scolaires à 04:00 et des jours fériés à 04:30, le 1er janvier,
+  avril, juillet et octobre.
+
+Après un arrêt, le tick rattrape uniquement le dernier créneau dû. `scheduled_for`
+identifie ce créneau dans `admin_job_run` et un index PostgreSQL unique sur
+`(job_key, scheduled_for)` empêche une seconde exécution ; une ligne `interrupted` libère
+le créneau pour permettre le rattrapage d'un processus réellement interrompu. Le verrou
+advisory par clé continue d'interdire deux exécutions simultanées.
+
+`GET /api/admin/jobs` expose désormais `nextRunAt`, calculé avec le même modèle et le
+dernier créneau enregistré. Le tableau React affiche ce prochain passage avec les
+cadences « toutes les 10 minutes », « quotidien » ou « trimestriel ». Il n'existe toujours
+aucun bouton de relance. `app:purge-orphans` reste volontairement manuel.

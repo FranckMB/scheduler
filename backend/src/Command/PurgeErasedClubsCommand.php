@@ -23,7 +23,7 @@ use Throwable;
 /**
  * RGPD — exécute la purge des workspaces dont le délai de grâce est échu
  * (Club.erasureScheduledAt <= maintenant, posé par AccountErasureService quand
- * le dernier gestionnaire s'est effacé). Tourne au cron-runner (horaire) ;
+ * le dernier gestionnaire s'est effacé). Tourne au cron-runner (quotidien) ;
  * chaque club sous son propre GUC, un échec n'en bloque pas un autre (pattern
  * PurgeSeasonsCommand). L'identité publique FFBB survit (ErasedClubPurger).
  */

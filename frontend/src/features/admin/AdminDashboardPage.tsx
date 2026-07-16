@@ -265,17 +265,17 @@ function JobsSection({ data, loading, error, retry }: DataSectionProps<AdminJobs
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Exploitation</p>
           <h2 id="jobs-heading" className="mt-2 text-xl font-semibold text-white">Jobs opérationnels</h2>
         </div>
-        <p className="text-xs text-slate-500">Cadence déclarée et dernière exécution connue</p>
+        <p className="text-xs text-slate-500">Cadence, prochain passage et dernière exécution connue</p>
       </div>
       {data.items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/15 px-6 py-12 text-center text-sm text-slate-500">Aucun job opérationnel configuré.</div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
+            <table className="w-full min-w-[1080px] text-left text-sm">
               <caption className="sr-only">État des jobs opérationnels allowlistés</caption>
               <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wider text-slate-500">
-                <tr><th className="px-5 py-4 font-medium">Job</th><th className="px-4 py-4 font-medium">Cadence</th><th className="px-4 py-4 font-medium">Dernière exécution</th><th className="px-4 py-4 font-medium">Durée</th><th className="px-4 py-4 font-medium">Résultat</th></tr>
+                <tr><th className="px-5 py-4 font-medium">Job</th><th className="px-4 py-4 font-medium">Cadence</th><th className="px-4 py-4 font-medium">Prochain passage</th><th className="px-4 py-4 font-medium">Dernière exécution</th><th className="px-4 py-4 font-medium">Durée</th><th className="px-4 py-4 font-medium">Résultat</th></tr>
               </thead>
               <tbody className="divide-y divide-white/10">
                 {data.items.map((job) => <JobRow key={job.key} job={job} />)}
@@ -293,11 +293,16 @@ function JobRow({ job }: { job: AdminJob }) {
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
       <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><History className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{job.label}</p><p className="mt-1 font-mono text-[11px] text-slate-600">{job.command}</p></div></div></td>
       <td className="px-4 py-5">{formatCadence(job.cadence)}</td>
+      <td className="px-4 py-5"><NextRun value={job.nextRunAt} /></td>
       <td className="px-4 py-5">{job.latestRun ? <><p>{formatDateTime(job.latestRun.startedAt)}</p><p className="mt-1 text-xs text-slate-600">{formatJobSource(job.latestRun.source)}</p></> : <span className="text-slate-500">Jamais exécuté</span>}</td>
       <td className="px-4 py-5 tabular-nums">{job.latestRun ? formatDuration(job.latestRun.durationMs) : "—"}</td>
       <td className="px-4 py-5"><JobStatus status={job.latestRun?.status ?? null} />{job.latestRun?.exitCode !== null && job.latestRun?.exitCode !== undefined ? <p className="mt-1 text-[11px] text-slate-600">Code {job.latestRun.exitCode}</p> : null}</td>
     </tr>
   );
+}
+
+function NextRun({ value }: { value: string }) {
+  return <p className="text-slate-300">{formatDateTime(value)}</p>;
 }
 
 function JobStatus({ status }: { status: AdminJobStatus | null }) {
@@ -422,7 +427,11 @@ function formatHeartbeat(worker: AdminHealthResponse["services"]["worker"]): Rea
 }
 
 function formatCadence(cadence: AdminJob["cadence"]): string {
-  return cadence === "hourly" ? "Toutes les heures" : cadence;
+  return {
+    every_10_minutes: "Toutes les 10 minutes",
+    daily: "Quotidien",
+    quarterly: "Trimestriel",
+  }[cadence];
 }
 
 function formatJobSource(source: NonNullable<AdminJob["latestRun"]>["source"]): string {

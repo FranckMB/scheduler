@@ -29,7 +29,7 @@ final readonly class AdminJobRunStore
         );
     }
 
-    public function start(AdminJobDefinition $definition, string $source, ?string $superAdminId): string
+    public function start(AdminJobDefinition $definition, string $source, ?string $superAdminId, ?DateTimeImmutable $scheduledFor = null): string
     {
         $connection = $this->connection();
         $connection->executeStatement(
@@ -46,9 +46,17 @@ final readonly class AdminJobRunStore
             'status' => 'running',
             'started_at' => (new DateTimeImmutable)->format('Y-m-d H:i:sP'),
             'super_admin_id' => $superAdminId,
+            'scheduled_for' => $scheduledFor?->format('Y-m-d H:i:sP'),
         ]);
 
         return $id;
+    }
+
+    public function latestScheduledFor(string $jobKey): ?DateTimeImmutable
+    {
+        $value = $this->connection()->fetchOne('SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> \'interrupted\'', ['job_key' => $jobKey]);
+
+        return false === $value || null === $value ? null : new DateTimeImmutable((string) $value);
     }
 
     public function finish(string $runId, string $status, int $exitCode): void
