@@ -62,6 +62,15 @@ Reset quota Découverte · purge saison (`app:seasons:purge`) · reset club (`Re
 ### SA5 — Impersonation support *(🔴 le plus sensible, en dernier)*
 Se mettre à la place d'un club — **lecture d'abord**, bornée dans le temps, **bannière visible**, **tout audité**. Écriture éventuelle = décision ultérieure séparée.
 
+### Reste à implémenter après SA3
+
+Le socle de supervision est en place. Le reliquat concret du lot est maintenant :
+
+- **SA4 — actions support durcies** : reset quota Découverte, purge saison, reset club, suspension / désactivation de club, validation d'un gestionnaire en fallback.
+- **SA5 — impersonation support** : lecture bornée dans le temps, bannière visible, audit complet, aucune écriture tant qu'elle n'est pas décidée séparément.
+- **Hygiène de la console** : partitionnement mensuel + purge 6 mois de `solver_metrics`, et arbitrage de la rétention / des filtres de l'audit viewer.
+- **Data ops FFBB** : le refresh club existe, mais le mode batch de rattrapage des ligues / comités périmés reste à cadrer si on le garde dans le lot.
+
 ## 4. Fonctionnalités intéressantes (au-delà de l'évident)
 
 - **Clubs « chauds » pour la vente** : quota Découverte épuisé **+** activité récente → liste de prospects (conversion Découverte→payant). *Business.*
