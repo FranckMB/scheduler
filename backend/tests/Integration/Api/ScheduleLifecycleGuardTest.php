@@ -60,7 +60,38 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
     public function testAnUnchosenCompletedVersionIsDeletable(): void
     {
         [$user, $club, $season] = $this->seed('SLG3');
+        // Deux versions : celle qu'on supprime n'est pas la dernière, donc la saison
+        // reste ancrée — c'est bien « une version de travail ordinaire » qu'on teste.
+        $this->makeSchedule($club, $season, ScheduleStatus::COMPLETED);
         $schedule = $this->makeSchedule($club, $season, ScheduleStatus::COMPLETED);
+
+        $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(204);
+    }
+
+    public function testTheLastFinishedSeasonVersionCannotBeDeleted(): void
+    {
+        // Décision fondateur : le plan SEASON est la base de tout. Rouvrir dépointe
+        // (inv. 2), mais ne doit pas rendre supprimable le SEUL planning de la saison —
+        // sinon un clic renvoie un club établi dans le wizard guidé, matchs orphelins.
+        [$user, $club, $season] = $this->seed('SLG8');
+        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::COMPLETED);
+
+        $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
+
+        self::assertResponseStatusCodeSame(409, 'la dernière version terminée ancre la saison');
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($schedule->getId()));
+    }
+
+    public function testAFailedVersionIsDeletableEvenAlone(): void
+    {
+        // La garde protège le CALENDRIER de la saison, pas n'importe quelle ligne : un
+        // solve en échec n'est pas un planning, il n'ancre rien.
+        [$user, $club, $season] = $this->seed('SLG9');
+        $schedule = $this->makeSchedule($club, $season, ScheduleStatus::FAILED);
 
         $this->client->request('DELETE', "/api/schedules/{$schedule->getId()}", [], [], $this->authHeaders($user, $club));
 

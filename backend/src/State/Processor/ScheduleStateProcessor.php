@@ -164,6 +164,14 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
                     throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
                 }
+                // La DERNIÈRE version terminée du plan de la saison ancre la saison :
+                // la supprimer laisserait un club établi sans aucun calendrier, donc
+                // sans cockpit ni matchs (inv. 8/16 le renverrait au wizard guidé, ses
+                // matchs orphelins). Rouvrir dépointe (inv. 2) mais ne doit pas ouvrir
+                // cette porte : le geste pour remplacer un planning, c'est régénérer.
+                if ($this->isLastFinishedSeasonVersion($schedule)) {
+                    throw new ConflictHttpException('C\'est le seul planning de la saison — régénérez-en un autre plutôt que de supprimer celui-ci.');
+                }
                 // Atomique : purgeScheduleArtifacts relâche le pointeur via un
                 // UPDATE brut qui s'auto-commit. Sans transaction, un échec du
                 // remove/flush du parent laisserait le pointeur vidé alors que la
@@ -237,5 +245,26 @@ class ScheduleStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ScheduleResource
     {
         return ScheduleResource::fromEntity($entity);
+    }
+
+    /**
+     * Cette version est-elle la seule version TERMINÉE du plan de la saison ? Les
+     * overlays de période ne comptent pas : ils ont leur propre plan, et une période
+     * sans planning est un état normal.
+     */
+    private function isLastFinishedSeasonVersion(Schedule $schedule): bool
+    {
+        if (null !== $schedule->getCalendarEntryId() || ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
+            return false;
+        }
+
+        $others = $this->entityManager->getRepository(Schedule::class)->count([
+            'clubId' => $schedule->getClubId(),
+            'seasonId' => $schedule->getSeasonId(),
+            'calendarEntryId' => null,
+            'status' => ScheduleStatus::COMPLETED,
+        ]);
+
+        return $others <= 1;
     }
 }

@@ -9,7 +9,7 @@ import { addDays, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
-let conflictsData: { conflicts: { dates: string[] }[] } | undefined;
+let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -78,11 +78,22 @@ describe("RadarPanel", () => {
   });
 
   it("counts the sessions to replace on a closure without overlay", () => {
-    conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }] };
+    conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }], seasonPlanChosen: true };
     renderRadar({ entries: [closure({})] });
 
     expect(screen.getByText(/3 séances à replacer · planning secondaire absent/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+  });
+
+  it("says the impact is unknown when the season plan points at nothing", () => {
+    // Le serveur ne rend AUCUN conflit faute de calendrier à comparer. Sans
+    // distinguer ce cas de « zéro conflit », le gestionnaire déclare une fermeture
+    // de gymnase, lit que tout va bien, et n'adapte rien.
+    conflictsData = { conflicts: [], seasonPlanChosen: false };
+    renderRadar({ entries: [closure({})] });
+
+    expect(screen.getByText(/Impact inconnu · validez le planning de la saison/)).toBeInTheDocument();
+    expect(screen.queryByText("Indisponibilité signalée")).not.toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {

@@ -29,8 +29,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * period's season, which may differ). Raw SQL dodges that filter; RLS still
  * scopes every statement by club, and INSERTs (persist) are never filtered.
  *
- * chosenScheduleId is NOT set here (Lot A) — it is backfilled at migration and
- * becomes live only when Lot B moves validation onto the plan pointer.
+ * chosenScheduleId — le pointeur — est LE calendrier de la saison : choose() le
+ * pose (valider), releaseSchedule() le retire (rouvrir). Rien ne le pose
+ * automatiquement : seul le gestionnaire choisit.
  */
 final class SchedulePlanProvisioner
 {
@@ -158,10 +159,13 @@ final class SchedulePlanProvisioner
         $row = $this->entityManager->getConnection()->fetchAssociative(
             'SELECT p.id, p.name, p.chosen_schedule_id, EXISTS ( '
             . 'SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id '
-            // Une version « terminée » = le solveur a rendu sa réponse, quelle qu'elle
-            // soit. C'est ce qui déverrouille le cockpit (inv. 8/16) — indépendant du
-            // pointeur : avoir généré une fois suffit, choisir est un autre geste.
-            . 'AND s.status IN (\'COMPLETED\', \'FAILED\')) AS has_finished '
+            // Déverrouille le cockpit (inv. 8/16) : il faut une PREMIÈRE version
+            // COMPLETED — décision fondateur. Un solve en échec ne donne aucun planning ;
+            // envoyer le club au cockpit sur un FAILED l'y laisserait devant rien, alors
+            // que sa place est dans le wizard, à corriger ses contraintes.
+            // Indépendant du pointeur : avoir généré une fois suffit, choisir est un
+            // autre geste — donc rouvrir ne re-verrouille jamais.
+            . 'AND s.status = \'COMPLETED\') AS has_finished '
             . 'FROM schedule_plan p WHERE p.season_id = :sid AND p.type = \'SEASON\'',
             ['sid' => $seasonId],
         );

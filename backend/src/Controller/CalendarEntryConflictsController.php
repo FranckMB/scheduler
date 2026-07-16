@@ -61,7 +61,7 @@ final class CalendarEntryConflictsController extends AbstractController
         // An IGNORED entry was explicitly dismissed by the manager: it must not
         // keep raising conflicts (the radar would resurrect it as a to-do).
         if (CalendarEntryKind::PERIOD !== $entry->getKind() || CalendarEntryStatus::IGNORED === $entry->getStatus()) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => true]);
         }
 
         // Closed venues = active FACILITY constraints attached to this entry.
@@ -76,21 +76,28 @@ final class CalendarEntryConflictsController extends AbstractController
         )));
 
         if ([] === $venueIds) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => true]);
         }
 
         // The entry's OWN season baseline (not the active season) — an entry may
         // belong to a past/other season; scoring it against a different season's
         // plan would be wrong.
-        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON.
-        $baselineId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($entry->getSeasonId());
-        if (null === $baselineId) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => []]);
+        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON. Rien
+        // ne le pose automatiquement — tant que le gestionnaire n'a pas validé, la
+        // saison n'a PAS de calendrier et le radar n'a rien à comparer.
+        //
+        // `seasonPlanChosen: false` dit exactement ça. Rendre `conflicts: []` sans le
+        // dire se lisait « aucun impact » : le gestionnaire déclarait une fermeture de
+        // gymnase, lisait que tout allait bien, et n'adaptait rien — alors que le radar
+        // n'avait simplement rien regardé. Un silence qui ment est pire qu'un blanc.
+        $seasonScheduleId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($entry->getSeasonId());
+        if (null === $seasonScheduleId) {
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'seasonPlanChosen' => false]);
         }
 
         /** @var list<ScheduleSlotTemplate> $slots */
         $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([
-            'scheduleId' => $baselineId,
+            'scheduleId' => $seasonScheduleId,
             'venueId' => $venueIds,
         ]);
 
@@ -119,6 +126,7 @@ final class CalendarEntryConflictsController extends AbstractController
             'entryId' => $entry->getId(),
             'venueIds' => $venueIds,
             'conflicts' => $conflicts,
+            'seasonPlanChosen' => true,
         ]);
     }
 

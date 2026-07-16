@@ -62,6 +62,13 @@ export interface EntryConflictsResponse {
   entryId: string;
   venueIds: string[];
   conflicts: EntryConflict[];
+  /**
+   * Le plan de la saison pointe-t-il une version ? Sinon la saison n'a PAS de
+   * calendrier et le radar n'a rien pu comparer : `conflicts: []` veut alors dire
+   * « je ne sais pas », pas « aucun impact ». Sans ce drapeau les deux se lisent
+   * pareil, et le gestionnaire conclut que sa fermeture de gymnase ne gêne personne.
+   */
+  seasonPlanChosen: boolean;
 }
 
 export interface CreateEventPayload {

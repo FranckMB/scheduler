@@ -152,12 +152,23 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
   const hasOverlay = null !== entry.overlayScheduleId;
+  // Sans calendrier de saison (plan non validé), le serveur n'a rien pu comparer :
+  // dire « aucun impact » serait un mensonge rassurant. On dit qu'on ne sait pas.
+  const cannotScore = false === data?.seasonPlanChosen;
+
+  const detail = hasOverlay
+    ? "Planning secondaire généré"
+    : cannotScore
+      ? "Impact inconnu · validez le planning de la saison"
+      : count > 0
+        ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`
+        : "Indisponibilité signalée";
 
   return (
     <RadarCard
       icon={<AlertTriangle className={hasOverlay ? "size-4 text-accent" : "size-4 text-destructive"} />}
       title={entry.title}
-      detail={hasOverlay ? "Planning secondaire généré" : count > 0 ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent` : "Indisponibilité signalée"}
+      detail={detail}
     >
       {hasOverlay ? (
         <>
