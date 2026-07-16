@@ -91,10 +91,11 @@ class TeamResource
     public ?TeamLevel $level = null;
 
     /**
-     * Cette équipe joue-t-elle déjà en compétition (≥1 match non-UNPLACED, extérieur
-     * compris) ? Alors elle ne peut plus être supprimée ni changer de `level` — elle
-     * est inscrite ainsi auprès de la fédération. Son tier, ses créneaux et son nom
-     * restent libres.
+     * Cette équipe joue-t-elle déjà en compétition ? Vrai dès qu'elle porte AU MOINS UN
+     * match, quel qu'en soit le statut : la correspondance faite par l'import FBI entre
+     * une rencontre et cette équipe suffit — la fédération la connaît. Elle ne peut alors
+     * plus être supprimée ni changer de `level`. Son nom, son tier, son `isActive` et ses
+     * créneaux restent libres.
      *
      * Exposé pour que l'UI grise ces deux gestes sans re-dériver la règle de son côté :
      * un second endroit qui répond « engagée ? » finirait par répondre autre chose que

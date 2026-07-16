@@ -47,6 +47,13 @@ export function useCoaches() {
 /** Any fixture write changes the radar → invalidate both. */
 function invalidateFixtures(queryClient: ReturnType<typeof useQueryClient>): void {
   void queryClient.invalidateQueries({ queryKey: ["fixtures"] });
+  // Un match créé ou supprimé change l'ENGAGEMENT de son équipe (elle est engagée dès
+  // qu'elle porte un match), et `isEngaged` ne voyage que dans ["wizard","teams"] —
+  // que rien d'autre n'invalide. Sans ça, l'écran des équipes garde jusqu'à 30 s des
+  // lignes déverrouillées juste après l'import FBI, c'est-à-dire au moment PRÉCIS où
+  // l'engagement naît : il offrirait « Supprimer » sur une équipe que le serveur
+  // refuse — le geste qui finit en 409 que ce champ existe pour ne jamais proposer.
+  void queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] });
 }
 
 export function useCreateFixture() {

@@ -28,9 +28,10 @@ export interface Team {
   sessionsPerWeek: number;
   isActive: boolean;
   /**
-   * L'équipe joue déjà en compétition (≥1 match non-UNPLACED, extérieur compris) :
-   * elle est inscrite ainsi auprès de la fédération, donc ni suppression ni
-   * changement de niveau. Son nom, son rang et ses créneaux restent libres.
+   * L'équipe joue déjà en compétition — vrai dès qu'elle porte AU MOINS UN match, quel
+   * qu'en soit le statut : la correspondance faite par l'import FBI suffit, la
+   * fédération la connaît. Donc ni suppression ni changement de niveau. Son nom, son
+   * rang, son `isActive` et ses créneaux restent libres.
    *
    * Vient du serveur — celui-là même qui refuse ces écritures. Le recalculer ici
    * ferait un second endroit qui répond « engagée ? », et il finirait par répondre

@@ -120,6 +120,7 @@ Les dettes croisées pendant cette session y sont des lignes à part entière :
 | **P3-12** | Doc ops : tunnel Cloudflare pour les démos |
 | **DOC-1** | Divergence doc↔code : le module matchs est-il découplé du socle ? **À trancher** |
 | **DOC-2** | Un match déposé à la fédération peut perdre sa salle sans avertissement (suppression de gymnase / restore). **À trancher** |
+| **DOC-3** | `PUT /api/teams` : `level` absent est indiscernable de `level` effacé → 409 nommant un champ non envoyé. **À trancher** |
 
 Et les lots structurants : **P2-6** (pattern « Plan », dont le **lot C** — réglages de
 période & génération pilotés par plan, inv. 5, cf.

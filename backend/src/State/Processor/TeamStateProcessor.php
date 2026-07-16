@@ -143,11 +143,32 @@ class TeamStateProcessor extends AbstractStateProcessor
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);
         }
-        $entity->setMinSessionsOverride($input->minSessionsOverride);
-        $entity->setMatchDay($input->matchDay);
-        $entity->setForcedVenueId($input->forcedVenueId);
+
+        // PUT PARTIEL : un champ ABSENT du payload garde sa valeur. Aucun client
+        // n'envoie ces quatre-là — `TeamPayload` ne les déclare même pas — donc les
+        // écrire inconditionnellement les mettait à NULL à CHAQUE édition. Renommer une
+        // équipe effaçait ainsi son gymnase forcé, son jour de match, son plancher de
+        // séances et sa filiation de saison (posée par la transition N→N+1). Les quatre
+        // partent DIRECTEMENT au payload du solveur (`ScheduleConstraintBuilder`) : la
+        // génération suivante replaçait l'équipe n'importe où, n'importe quand, sans une
+        // erreur ni un moyen de s'en apercevoir.
+        //
+        // Même idiome que `SeasonStateProcessor` (« absent dates keep the current
+        // values »). Ils ne deviennent pas non plus effaçables par l'API : ils ne l'ont
+        // jamais été — aucun client ne peut les poser.
+        if (null !== $input->minSessionsOverride) {
+            $entity->setMinSessionsOverride($input->minSessionsOverride);
+        }
+        if (null !== $input->matchDay) {
+            $entity->setMatchDay($input->matchDay);
+        }
+        if (null !== $input->forcedVenueId) {
+            $entity->setForcedVenueId($input->forcedVenueId);
+        }
+        if (null !== $input->parentTeamId) {
+            $entity->setParentTeamId($input->parentTeamId);
+        }
         $entity->setIsActive($input->isActive ?? $entity->getIsActive());
-        $entity->setParentTeamId($input->parentTeamId);
     }
 
     /**
