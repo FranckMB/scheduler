@@ -1,5 +1,5 @@
 import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
@@ -22,6 +22,8 @@ import {
   usePeriodConstraintOverrides,
   usePeriodSlots,
   usePriorityTiers,
+  useWizardTeamTagAssignments,
+  useWizardTeamTags,
   useTeamPeriodOverrides,
   useUpdatePeriodConstraintOverride,
   useUpdateTeamPeriodOverride,
@@ -331,6 +333,9 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
   const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
+  const { data: teams = [] } = useWizardTeams();
+  const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useWizardTeamTags();
+  const { data: tagAssignments = [], isLoading: tagAssignmentsLoading, isError: tagAssignmentsError } = useWizardTeamTagAssignments();
   // Off an overlay period, null disables both queries (no wasted fetch).
   const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
@@ -347,12 +352,31 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   // the first settles would rebind it and drop the first's onSettled — one write at a time
   // keeps every onSettled reliable.
   const [inflight, setInflight] = useState<Map<string, boolean>>(new Map());
-
-  if (!isOverlay) {
-    return null;
-  }
-
-  const deactivatedTeams = new Set(teamOverrides.filter((o) => !o.isActive).map((o) => o.teamId));
+  const deactivatedTeamIds = useMemo(() => new Set(teamOverrides.filter((o) => !o.isActive).map((o) => o.teamId)), [teamOverrides]);
+  const activeTeamIds = useMemo(() => new Set(teams.filter((t) => !deactivatedTeamIds.has(t.id)).map((t) => t.id)), [teams, deactivatedTeamIds]);
+  const tagTeamIdsByName = useMemo(() => {
+    const tagNameById = new Map(tags.map((t) => [t.id, t.name]));
+    const byTag = new Map<string, Set<string>>();
+    for (const assignment of tagAssignments) {
+      const tagName = tagNameById.get(assignment.tagId);
+      if (undefined === tagName) {
+        continue;
+      }
+      const teamIds = byTag.get(tagName) ?? new Set<string>();
+      teamIds.add(assignment.teamId);
+      byTag.set(tagName, teamIds);
+    }
+    return byTag;
+  }, [tags, tagAssignments]);
+  const activeTagTeamIdsByName = useMemo(() => {
+    const byTag = new Map<string, Set<string>>();
+    for (const [tagName, teamIds] of tagTeamIdsByName) {
+      byTag.set(tagName, new Set([...teamIds].filter((teamId) => activeTeamIds.has(teamId))));
+    }
+    return byTag;
+  }, [activeTeamIds, tagTeamIdsByName]);
+  const needsTagResolution = constraints.some((c) => "string" === typeof c.config?.targetTag && "" !== c.config.targetTag);
+  const tagResolutionReady = !needsTagResolution || (!tagsLoading && !tagAssignmentsLoading && !tagsError && !tagAssignmentsError);
   // Smart default, mirrored server-side (ScheduleConstraintBuilder::inheritedPermanents, reprise predicate).
   const defaultKept = (c: Constraint): boolean => {
     if (isClosure) {
@@ -362,15 +386,21 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
       case "FACILITY":
         return false;
       case "TEAM":
-        return !deactivatedTeams.has(c.scopeTargetId ?? "");
+        return !deactivatedTeamIds.has(c.scopeTargetId ?? "");
       default:
         return true; // CLUB, COACH
     }
   };
   // A TEAM constraint whose team is paused can't ship (server-side buildForOverlay drops it) —
   // show it struck & disabled, never toggle-able, so the checklist matches the payload.
-  const notApplicable = (c: Constraint): boolean => "TEAM" === c.scope && deactivatedTeams.has(c.scopeTargetId ?? "");
+  const notApplicable = (c: Constraint): boolean => "TEAM" === c.scope && deactivatedTeamIds.has(c.scopeTargetId ?? "");
   const overrideOf = new Map(overrides.map((o) => [o.constraintId, o]));
+  const activeTagTeamIds = (tagName: string): Set<string> => activeTagTeamIdsByName.get(tagName) ?? new Set();
+  const targetTagOf = (c: Constraint): string | null => ("string" === typeof c.config?.targetTag && "" !== c.config.targetTag ? (c.config.targetTag as string) : null);
+  const hidden = (c: Constraint): boolean => {
+    const tagName = targetTagOf(c);
+    return tagResolutionReady && "CLUB" === c.scope && null !== tagName && 0 === activeTagTeamIds(tagName).size;
+  };
   const activeOf = (c: Constraint): boolean => (notApplicable(c) ? false : inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
@@ -407,6 +437,10 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     create.mutate({ calendarEntryId, constraintId: c.id, isActive: desired }, { onSettled: settle });
   };
 
+  if (!isOverlay) {
+    return null;
+  }
+
   return (
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
@@ -416,17 +450,19 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
           + the non-applicable strike). On a fetch ERROR we still render: the backend stays
           authoritative on the payload, so a transient error only glitches the strike, and
           hiding the whole panel would strand the closure editor (query-error UX = dette P4-1). */}
-      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.length ? (
+      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.filter((c) => !hidden(c)).length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
-          {constraints.map((c) => {
+          {constraints.filter((c) => !hidden(c)).map((c) => {
             const active = activeOf(c);
             const naf = notApplicable(c);
+            const tagName = targetTagOf(c);
+            const tagUnknown = "CLUB" === c.scope && null !== tagName && !tagResolutionReady;
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={active} disabled={mutating || naf || overridesError || teamStateUnknown(c)} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
+                  <input type="checkbox" checked={active} disabled={mutating || naf || overridesError || teamStateUnknown(c) || tagUnknown} onChange={(e) => toggle(c, e.target.checked)} aria-label={`${c.name} appliquée cette période`} />
                   <span className={cn(!active && "text-muted-foreground line-through")}>{c.name}</span>
                   {naf ? <span className="text-xs text-muted-foreground">(équipe en pause)</span> : null}
                 </label>

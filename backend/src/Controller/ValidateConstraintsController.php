@@ -4,11 +4,20 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Team;
+use App\Entity\TeamPeriodOverride;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Repository\ConstraintRepository;
+use App\Repository\CalendarEntryRepository;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonResolver;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintScope;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -24,11 +33,13 @@ final class ValidateConstraintsController extends AbstractController
 {
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
+        private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Repository\TeamRepository $teamRepository,
+        private readonly \Doctrine\ORM\EntityManagerInterface $entityManager,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -49,12 +60,14 @@ final class ValidateConstraintsController extends AbstractController
             return $this->json(['error' => 'No active season.'], Response::HTTP_BAD_REQUEST);
         }
 
-        // Period scope (palier B): validate a period's dated constraints; else the
-        // base plan only (dated constraints excluded). See §9ter.c.
         $calendarEntryId = $this->requestedCalendarEntryId($request);
         if (null !== $calendarEntryId) {
-            /** @var list<Constraint> $constraints */
-            $constraints = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntryId, 'clubId' => $clubId]);
+            $calendarEntry = $this->calendarEntryRepository->find($calendarEntryId);
+            if (!$calendarEntry instanceof CalendarEntry) {
+                return $this->json(['error' => 'No active period.'], Response::HTTP_BAD_REQUEST);
+            }
+
+            $constraints = $this->constraintsForPeriod($clubId, $seasonId, $calendarEntry);
         } else {
             /** @var list<Constraint> $constraints */
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
@@ -110,5 +123,84 @@ final class ValidateConstraintsController extends AbstractController
         $id = \is_array($data) ? ($data['calendarEntryId'] ?? null) : null;
 
         return \is_string($id) && '' !== $id ? $id : null;
+    }
+
+    /**
+     * @return list<Constraint>
+     */
+    private function constraintsForPeriod(string $clubId, string $seasonId, CalendarEntry $calendarEntry): array
+    {
+        /** @var list<Constraint> $dated */
+        $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->getId(), 'clubId' => $clubId]);
+        $periodType = $calendarEntry->getPeriodType();
+        if (!\in_array($periodType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
+            return $dated;
+        }
+
+        $periodOverrides = [];
+        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $calendarEntry->getId()]) as $override) {
+            $periodOverrides[$override->getConstraintId()] = $override->isActive();
+        }
+
+        $deactivatedTeamIds = [];
+        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $calendarEntry->getId()]) as $override) {
+            if (!$override->isActive()) {
+                $deactivatedTeamIds[$override->getTeamId()] = true;
+            }
+        }
+
+        $activeTeamIds = [];
+        foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+            if ($team instanceof Team && !isset($deactivatedTeamIds[$team->getId()])) {
+                $activeTeamIds[$team->getId()] = true;
+            }
+        }
+
+        $activeTagTeamIds = $this->activeTagTeamIdsByName($clubId, $seasonId, $activeTeamIds);
+        $permanent = [];
+        foreach ($this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId) as $constraint) {
+            $keepByDefault = CalendarEntryPeriodType::CLOSURE === $periodType || ConstraintScope::FACILITY !== $constraint->getScope();
+            $keep = \array_key_exists($constraint->getId(), $periodOverrides) ? $periodOverrides[$constraint->getId()] : $keepByDefault;
+            if (!$keep) {
+                continue;
+            }
+            if (ConstraintScope::TEAM === $constraint->getScope() && isset($deactivatedTeamIds[$constraint->getScopeTargetId() ?? ''])) {
+                continue;
+            }
+            $targetTag = $constraint->getConfig()['targetTag'] ?? null;
+            if (ConstraintScope::CLUB === $constraint->getScope() && \is_string($targetTag) && '' !== $targetTag && [] === ($activeTagTeamIds[$targetTag] ?? [])) {
+                continue;
+            }
+            $permanent[] = $constraint;
+        }
+
+        return [...$permanent, ...$dated];
+    }
+
+    /**
+     * @param array<string, true> $activeTeamIds
+     *
+     * @return array<string, array<string, true>>
+     */
+    private function activeTagTeamIdsByName(string $clubId, string $seasonId, array $activeTeamIds): array
+    {
+        $tagNameById = [];
+        foreach ($this->entityManager->getRepository(TeamTag::class)->findBy(['clubId' => $clubId]) as $tag) {
+            $tagNameById[$tag->getId()] = $tag->getName();
+        }
+
+        $tagTeamIdsByName = [];
+        foreach ($this->entityManager->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $seasonId]) as $assignment) {
+            if (!isset($activeTeamIds[$assignment->getTeamId()])) {
+                continue;
+            }
+            $tagName = $tagNameById[$assignment->getTagId()] ?? null;
+            if (!\is_string($tagName) || '' === $tagName) {
+                continue;
+            }
+            $tagTeamIdsByName[$tagName][$assignment->getTeamId()] = true;
+        }
+
+        return $tagTeamIdsByName;
     }
 }
