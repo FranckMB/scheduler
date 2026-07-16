@@ -1,7 +1,10 @@
-Last verified @ feature/superadmin-sa1 2026-07-16
+Last verified @ feature/superadmin-sa2-api 2026-07-16
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **77 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **79 paths.**
 Changements récents :
+- **Supervision superadmin SA2 API (2026-07-16)** : `GET /api/admin/overview`
+  expose les agrégats parc/solveur et `GET /api/admin/clubs` la liste transverse
+  paginée/recherchable avec saison, volumétrie et métriques sur 30 jours.
 - **SA1 métriques (2026-07-16)** : les métriques de génération sont persistées côté
   backend et `Club.lastActivityAt` est un champ de lecture pour les futurs agrégats.
 - **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous

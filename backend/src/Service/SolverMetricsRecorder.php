@@ -18,11 +18,13 @@ final class SolverMetricsRecorder
     {
         $metric = $result['metrics'] ?? $result['solver_metrics'] ?? [];
         $metric = \is_array($metric) ? $metric : [];
+        $engineStatus = strtolower((string) ($result['status'] ?? ''));
+        $status = 'infeasible' === $engineStatus ? 'INFEASIBLE' : $schedule->getStatus()->value;
 
         $this->entityManager->persist(new SolverMetric(
             scheduleId: $schedule->getId(),
             clubId: $schedule->getClubId(),
-            status: $schedule->getStatus()->value,
+            status: $status,
             wallTimeMs: $this->intMetric($metric, 'wall_time_ms', 'wallTimeMs') ?? $schedule->getSolverWallTimeMs(),
             nbVariables: $this->intMetric($metric, 'nb_variables', 'nbVariables') ?? $schedule->getSolverNbVariables(),
             nbConstraints: $this->intMetric($metric, 'nb_constraints', 'nbConstraints') ?? $schedule->getSolverNbConstraints(),

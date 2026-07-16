@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0 backend + frontend et SA1 plomberie livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent SA2 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
+> **Statut** : **SA0, SA1 et SA2 API parc/solveur livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent les sondes techniques et l'interface React de SA2, puis SA3 → SA5.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` puis persistées par SA1 dans `solver_metrics` · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -34,10 +34,10 @@ Livré : identité distincte hors tenant, session séparée mot de passe + TOTP,
 Livré : persistance `solver_metrics` à chaque tentative de génération (statut, durée, taille, conflits, score, version), RLS tenant-scoped, et `Club.lastActivityAt` alimenté par activité authentifiée + génération mise en file. Le partitionnement mensuel et la purge six mois restent à rattacher aux jobs d'exploitation ; l'audit des accès admin est déjà livré en SA0.
 
 ### SA2 — Console read-only (monitoring) *(🟢 lecture seule)*
+- **Livré côté API** : parc global, activité 7/30 jours, nouveaux/semaine, charge solveur
+  sur 30 jours et liste paginée/recherchable des clubs avec saison, volumétrie et métriques.
 - **Santé technique** : engine up, worker up, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries) ; erreurs (Sentry si branché).
-- **Parc** : nb clubs total, **actifs 7 j / 30 j**, nouveaux/semaine.
-- **Par club** : volumétrie (équipes/gymnases/coachs/contraintes), générations (compteur quota, dernière date+statut, **taux d'INFEASIBLE**, p50/p95), plan (Découverte/payant), création, **dernière activité**, saison courante.
-- **Charge solveur** : générations/jour, p50/p95 globaux, INFEASIBLE global.
+- **Reste** : écran React consommant ces agrégats et branchement des sondes techniques.
 
 ### SA3 — Jobs de données auto + supervision *(🟡 — répond au besoin « mise à jour auto »)*
 - **Planifier** les commandes existantes sur `cron-runner` : **vacances scolaires/publiques** (annuel), **purges** (saisons N-2, users non vérifiés, orphelins), **rappels** (périodes, transition), **reconcile** stuck schedules.
