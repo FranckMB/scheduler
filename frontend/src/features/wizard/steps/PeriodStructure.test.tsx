@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Constraint } from "../api";
+
 const createOverride = vi.fn();
 const updateOverride = vi.fn();
 const deleteOverride = vi.fn();
@@ -11,7 +13,20 @@ const createConstraintOverride = vi.fn();
 const updateConstraintOverride = vi.fn();
 const deleteConstraintOverride = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
-const constraintsState: { data: Array<{ id: string; name: string; ruleType: string; scope?: string; scopeTargetId?: string | null }> } = { data: [] };
+// Le VRAI type, pas une copie étroite : une seconde description du même objet finit
+// toujours par diverger — celle d'avant ignorait family/config/isActive, que les tests
+// envoient pourtant. Le helper porte les défauts, chaque test ne dit que ce qui compte.
+const constraintsState: { data: Constraint[] } = { data: [] };
+
+const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">): Constraint => ({
+  scope: "CLUB",
+  scopeTargetId: null,
+  family: "TIME",
+  ruleType: "PREFERRED",
+  config: {},
+  isActive: true,
+  ...over,
+});
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
 const tagsState: { data: Array<{ id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }> } = { data: [] };
 const tagAssignmentsState: { data: Array<{ id: string; teamId: string; tagId: string; seasonId: string }> } = { data: [] };
@@ -139,7 +154,7 @@ describe("PeriodVenues — borrowed period slots", () => {
 
 describe("PeriodConstraints — inherited constraints toggle", () => {
   it("closure: lists the club's permanent constraints, all kept by default", () => {
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
     expect(checkbox).toBeChecked();
@@ -147,14 +162,14 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("toggling a constraint off creates a disabling override", async () => {
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
     expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "k1", isActive: false }, expect.anything());
   });
 
   it("toggling a disabled constraint back on deletes its override", async () => {
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: false, calendarEntryId: "e1" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     // Rendered unchecked (disabled) → clicking re-activates by removing the row.
@@ -163,7 +178,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("a rapid second click does NOT fire a duplicate create (in-flight guard)", async () => {
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
     // The mock mutate never calls onSettled, so the write stays "in flight": the
@@ -175,8 +190,8 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("blocks a second constraint's toggle while the first write is in flight (one mutation at a time)", async () => {
     constraintsState.data = [
-      { id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" },
-      { id: "k2", name: "Jamais le lundi", ruleType: "HARD" },
+      constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }),
+      constraint({ id: "k2", name: "Jamais le lundi", ruleType: "HARD" }),
     ];
     render(<PeriodConstraints calendarEntryId="e1" />);
     // Toggle k1 off → it stays in flight (mock never settles), so every checkbox
@@ -192,10 +207,10 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
     constraintsState.data = [
-      { id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null },
-      { id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" },
-      { id: "kt1", name: "SM1 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t1" }, // équipe active
-      { id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }, // équipe en pause
+      constraint({ id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null }),
+      constraint({ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" }),
+      constraint({ id: "kt1", name: "SM1 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t1" }), // équipe active
+      constraint({ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }), // équipe en pause
     ];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.getByRole("checkbox", { name: "Club rule appliquée cette période" })).toBeChecked();
@@ -207,7 +222,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   it("reprise: waits for team overrides before rendering (no wrong-default flash)", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
     teamOverridesLoadingState.value = true; // team overrides still fetching
-    constraintsState.data = [{ id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }];
+    constraintsState.data = [constraint({ id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     // The team-derived default isn't known yet → the checklist must not render (nor be clickable).
     expect(screen.queryByRole("checkbox", { name: "U13 rule appliquée cette période" })).not.toBeInTheDocument();
@@ -215,14 +230,14 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("waits for the period overrides query too (no create→422 flash)", () => {
     constraintOverridesLoadingState.value = true; // period overrides still fetching
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
   });
 
   it("disables toggles (read-only) when the period overrides query errors — no create→422", async () => {
     constraintOverridesErrorState.value = true; // overrides list unavailable
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />); // closure, renders (not hidden)
     const checkbox = screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" });
     expect(checkbox).toBeDisabled();
@@ -233,8 +248,8 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   it("locks only TEAM constraints on a team-overrides fetch error (non-TEAM stay usable)", () => {
     teamOverridesErrorState.value = true; // can't tell which teams are paused
     constraintsState.data = [
-      { id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" },
-      { id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null },
+      constraint({ id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }),
+      constraint({ id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null }),
     ];
     render(<PeriodConstraints calendarEntryId="e1" />); // closure
     expect(screen.getByRole("checkbox", { name: "U13 rule appliquée cette période" })).toBeDisabled();
@@ -243,7 +258,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("a TEAM constraint of a paused team is non-applicable (disabled, struck, never toggled)", async () => {
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
-    constraintsState.data = [{ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" }];
+    constraintsState.data = [constraint({ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" })];
     render(<PeriodConstraints calendarEntryId="e1" />); // closure by default
     const checkbox = screen.getByRole("checkbox", { name: "U13 rule appliquée cette période" });
     expect(checkbox).toBeDisabled();
@@ -255,7 +270,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("reprise: keeping a facility (off by default) creates an isActive=true override", async () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
-    constraintsState.data = [{ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" }];
+    constraintsState.data = [constraint({ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Gym rule appliquée cette période" }));
     expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "kf", isActive: true }, expect.anything());
@@ -263,7 +278,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("re-toggling a redundant isActive=true override updates instead of duplicating (P4-12d, no 422)", async () => {
     // closure default = kept; a stale isActive=true row → box checked. Unchecking must PUT, not POST.
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: true, calendarEntryId: "e1" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).toBeChecked();
@@ -277,7 +292,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     tagsState.data = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
     tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-sen", seasonId: "s1" }];
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
-    constraintsState.data = [{ id: "cg", name: "Groupe SENIOR · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "SENIOR" }, isActive: true }];
+    constraintsState.data = [constraint({ id: "cg", name: "Groupe SENIOR · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "SENIOR" }, isActive: true })];
 
     render(<PeriodConstraints calendarEntryId="e1" />);
 
@@ -286,14 +301,14 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {
     entryState.data = { teamSelectionInitialized: false, periodType: "cutoff" };
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
   });
 
   it("does not render while the calendar entry is still loading (no holiday flash / dead override)", () => {
     entryState.data = undefined; // entry not resolved yet
-    constraintsState.data = [{ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" }];
+    constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();
   });
