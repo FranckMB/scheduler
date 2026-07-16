@@ -177,5 +177,12 @@ final class OverlayManager
         foreach ($this->entityManager->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $scheduleId]) as $snapshot) {
             $this->entityManager->remove($snapshot);
         }
+        // Les métriques du solveur pendent aussi à la version. Avant la bascule ce
+        // chemin ne servait qu'aux overlays ; il supprime désormais les versions sœurs
+        // à CHAQUE validation, donc les oublier accumulerait des métriques nommant des
+        // plannings morts (et fausserait les agrégats superadmin).
+        foreach ($this->entityManager->getRepository(\App\Entity\SolverMetric::class)->findBy(['scheduleId' => $scheduleId]) as $metric) {
+            $this->entityManager->remove($metric);
+        }
     }
 }

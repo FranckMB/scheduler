@@ -51,6 +51,12 @@ final class SeasonDataPurger
     {
         $this->disableTenantFilters($this->entityManager);
 
+        // ADR-0002 inv. 12 : le nom du planning vit sur le plan — et le plan est
+        // supprimé plus bas. Avant la bascule il vivait sur la saison et survivait donc
+        // au reset ; il faut le capturer AVANT la purge, sinon « réinitialiser la
+        // saison » renomme silencieusement le planning du gestionnaire.
+        $seasonPlanName = $deleteSeasonRow ? null : $this->currentSeasonPlanName($seasonId);
+
         $deleted = 0;
 
         // Children WITHOUT club/season columns first, resolved through their
@@ -120,7 +126,13 @@ final class SeasonDataPurger
                 // ADR-0002: the reset wiped the season's SchedulePlan above, but the
                 // season row survives — re-provision its empty SEASON plan so the
                 // invariant "a SEASON plan exists as soon as the season does" holds.
-                $this->schedulePlanProvisioner->ensureSeasonPlan($season);
+                $plan = $this->schedulePlanProvisioner->ensureSeasonPlan($season);
+                // Le reset vide les DONNÉES de la saison ; il ne rebaptise pas son
+                // planning. Le nom re-provisionné est un défaut — on rend au plan celui
+                // que le gestionnaire avait choisi.
+                if (null !== $seasonPlanName && '' !== $seasonPlanName) {
+                    $plan->setName($seasonPlanName);
+                }
                 $this->entityManager->flush();
             }
         }
@@ -128,6 +140,21 @@ final class SeasonDataPurger
         $this->entityManager->clear();
 
         return $deleted;
+    }
+
+    /**
+     * Le nom du plan SEASON tel qu'il est AVANT la purge. SQL brut : le plan est
+     * supprimé en DQL de masse juste après, et on ne veut pas d'une entité gérée qui
+     * ressusciterait au flush.
+     */
+    private function currentSeasonPlanName(string $seasonId): ?string
+    {
+        $name = $this->entityManager->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $seasonId],
+        );
+
+        return \is_string($name) ? $name : null;
     }
 
     /**

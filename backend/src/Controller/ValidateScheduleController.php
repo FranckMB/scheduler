@@ -67,68 +67,80 @@ final class ValidateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
         }
 
-        // Version model: validating a version archives its SIBLINGS of the same
-        // scope — season plans share calendarEntryId=null, a period's overlay
-        // versions share that period's id. Collect them (refuse while one solves).
+        // TOUT ce qui décide vit sous le verrou de portée du plan, DANS la transaction :
+        // `pg_advisory_xact_lock` n'existe qu'en transaction, et lire les sœurs ou le
+        // pointeur avant de le prendre laisse deux validations concurrentes décider sur
+        // la même photo. Avant la bascule, cette course ne faisait que mal poser deux
+        // statuts, et ARCHIVED rendait tout récupérable. Désormais les sœurs sont
+        // SUPPRIMÉES : deux validations simultanées (deux onglets, un double-clic)
+        // détruiraient DÉFINITIVEMENT toutes les versions de la saison et laisseraient
+        // `chosen_schedule_id` nommer une ligne morte.
+        //
+        // La portée est celle du linkSchedule : les versions de saison partagent
+        // `season:{id}`, celles d'une période l'id de cette période — sérialiser sur une
+        // autre clé ne protégerait rien.
         $entryId = $schedule->getCalendarEntryId();
-        /** @var list<Schedule> $versions */
-        $versions = $this->entityManager->getRepository(Schedule::class)->findBy([
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-            'calendarEntryId' => $entryId,
-        ]);
-        $siblings = [];
-        foreach ($versions as $sibling) {
-            if ($sibling->getId() === $schedule->getId()) {
-                continue;
-            }
-            if (\in_array($sibling->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
-                return $this->json(['error' => 'Une autre version est en cours de génération — attendez sa fin avant de valider.'], Response::HTTP_CONFLICT);
-            }
-            $siblings[] = $sibling;
-        }
-        $overlayEntry = null !== $entryId
-            ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId)
-            : null;
 
-        $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+        return $this->entityManager->wrapInTransaction(function () use ($schedule, $entryId): JsonResponse {
+            $this->schedulePlanProvisioner->lockPlanScope($entryId ?? ('season:' . $schedule->getSeasonId()));
 
-        // Garde destructive (même idiome que ReopenScheduleController) : choisir une
-        // AUTRE version déplace le calendrier de base, ce qui invalide les plans
-        // secondaires bâtis sur l'ancien socle. Clé sur le POINTEUR — la seule
-        // vérité (inv. 1/14) — et jamais composer silencieusement un ajustement
-        // par-dessus un autre plan de base.
-        // Un pointeur NULL n'exempte pas : le plan est alors un espace de travail, mais
-        // des plans secondaires peuvent survivre (socle rouvert, donnée migrée). Choisir
-        // cette version leur donnerait un autre socle que celui sur lequel ils ont été
-        // bâtis — silencieusement. La seule question est « le plan pointe-t-il DÉJÀ cette
-        // version ? » ; sinon le calendrier bouge, et il faut le confirmer.
-        // (Cas normal : à la 1re validation aucun plan secondaire n'existe — inv. 13 les
-        // interdit sans socle pointé — donc la garde ne coûte rien.)
-        $currentlyChosen = $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId());
-        $overlaysToDelete = [];
-        if (null === $schedule->getCalendarEntryId()
-            && $schedule->getId() !== $currentlyChosen
-        ) {
-            $overlaysToDelete = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
-            if ([] !== $overlaysToDelete && !$this->confirmedDeleteOverlays()) {
-                return $this->json([
-                    'code' => 'overlays_exist',
-                    'error' => 'Choisir cette version remplace le planning de la saison et supprime ses plannings secondaires.',
-                    'count' => \count($overlaysToDelete),
-                    'overlays' => array_map(static fn (CalendarEntry $e): array => [
-                        'entryId' => $e->getId(),
-                        'title' => $e->getTitle(),
-                        'overlayScheduleId' => $e->getOverlayScheduleId(),
-                    ], $overlaysToDelete),
-                ], Response::HTTP_CONFLICT);
+            // Les versions sœurs de MÊME portée. Une sœur en cours de solve bloque :
+            // on ne supprime pas un planning sous les pieds du worker qui l'écrit.
+            /** @var list<Schedule> $versions */
+            $versions = $this->entityManager->getRepository(Schedule::class)->findBy([
+                'clubId' => $schedule->getClubId(),
+                'seasonId' => $schedule->getSeasonId(),
+                'calendarEntryId' => $entryId,
+            ]);
+            $siblings = [];
+            foreach ($versions as $sibling) {
+                if ($sibling->getId() === $schedule->getId()) {
+                    continue;
+                }
+                if (\in_array($sibling->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+                    return $this->json(['error' => 'Une autre version est en cours de génération — attendez sa fin avant de valider.'], Response::HTTP_CONFLICT);
+                }
+                $siblings[] = $sibling;
             }
-        }
+            $overlayEntry = null !== $entryId
+                ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId)
+                : null;
 
-        // Atomique : suppression des plans secondaires + pointeur + suppression des
-        // versions sœurs commitent ensemble (un échec en cours de route ne doit pas
-        // laisser un plan à moitié basculé).
-        $this->entityManager->wrapInTransaction(function () use ($schedule, $season, $siblings, $overlaysToDelete, $entryId, $overlayEntry): void {
+            $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
+
+            // Garde destructive (même idiome que ReopenScheduleController) : choisir une
+            // AUTRE version déplace le calendrier de base, ce qui invalide les plans
+            // secondaires bâtis sur l'ancien socle. Clé sur le POINTEUR — la seule
+            // vérité (inv. 1/14) — et jamais composer silencieusement un ajustement
+            // par-dessus un autre plan de base.
+            // Un pointeur NULL n'exempte pas : le plan est alors un espace de travail, mais
+            // des plans secondaires peuvent survivre (socle rouvert, donnée migrée). Choisir
+            // cette version leur donnerait un autre socle que celui sur lequel ils ont été
+            // bâtis — silencieusement. La seule question est « le plan pointe-t-il DÉJÀ cette
+            // version ? » ; sinon le calendrier bouge, et il faut le confirmer.
+            // (Cas normal : à la 1re validation aucun plan secondaire n'existe — inv. 13 les
+            // interdit sans socle pointé — donc la garde ne coûte rien.)
+            $currentlyChosen = $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId());
+            $overlaysToDelete = [];
+            if (null === $entryId && $schedule->getId() !== $currentlyChosen) {
+                $overlaysToDelete = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
+                if ([] !== $overlaysToDelete && !$this->confirmedDeleteOverlays()) {
+                    return $this->json([
+                        'code' => 'overlays_exist',
+                        'error' => 'Choisir cette version remplace le planning de la saison et supprime ses plannings secondaires.',
+                        'count' => \count($overlaysToDelete),
+                        'overlays' => array_map(static fn (CalendarEntry $e): array => [
+                            'entryId' => $e->getId(),
+                            'title' => $e->getTitle(),
+                            'overlayScheduleId' => $e->getOverlayScheduleId(),
+                        ], $overlaysToDelete),
+                    ], Response::HTTP_CONFLICT);
+                }
+            }
+
+            // Suppression des plans secondaires + pointeur + suppression des versions
+            // sœurs commitent ensemble (un échec en cours de route ne doit pas laisser
+            // un plan à moitié basculé).
             foreach ($overlaysToDelete as $entry) {
                 // force : le gestionnaire a explicitement confirmé la destruction.
                 $this->overlayManager->deleteOverlayForEntry($entry, force: true);
@@ -162,9 +174,9 @@ final class ValidateScheduleController extends AbstractController implements Sea
             foreach ($siblings as $sibling) {
                 $this->overlayManager->deleteVersion($sibling);
             }
-        });
 
-        return $this->json(['id' => $schedule->getId(), 'chosen' => true], Response::HTTP_OK);
+            return $this->json(['id' => $schedule->getId(), 'chosen' => true], Response::HTTP_OK);
+        });
     }
 
     private function confirmedDeleteOverlays(): bool

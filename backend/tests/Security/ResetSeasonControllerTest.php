@@ -94,6 +94,11 @@ final class ResetSeasonControllerTest extends WebTestCase
         $em->persist($schedule);
         $em->flush();
         $this->choosePlanVersion($schedule);
+        // Un nom choisi par le gestionnaire, pour prouver qu'il survit au reset.
+        $em->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET name = \'Planning de la montée\' WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $season->getId()],
+        );
 
         $entry = new CalendarEntry;
         $entry->setClubId($clubId);
@@ -125,6 +130,14 @@ final class ResetSeasonControllerTest extends WebTestCase
         // qui nommerait un planning disparu laisserait le cockpit « déverrouillé »
         // sans rien derrière.
         self::assertNull($this->chosenPlanVersion($freshSeason), 'the plan must point at nothing — its version is gone');
+        // Le nom du planning est le choix du gestionnaire : réinitialiser les DONNÉES
+        // de la saison ne le rebaptise pas. Il ne vit plus que sur le plan, que la purge
+        // supprime — sans capture explicite il repartirait au nom par défaut, en silence.
+        self::assertSame('Planning de la montée', $em->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $seasonId],
+        ), 'le reset garde le nom que le gestionnaire a donné à son planning');
+
         // ADR-0002: the reset wipes the season's SchedulePlan rows but re-provisions
         // the empty SEASON plan — a surviving season always owns its SEASON plan.
         self::assertSame(

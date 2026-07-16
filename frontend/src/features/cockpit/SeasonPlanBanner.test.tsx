@@ -26,7 +26,7 @@ import { SeasonPlanBanner } from "./SeasonPlanBanner";
 function renderBanner() {
   return render(
     <MemoryRouter>
-      <SeasonPlanBanner schedules={[chosen]} chosenScheduleId="b1" socleValidated />
+      <SeasonPlanBanner schedules={[chosen]} socleValidated />
     </MemoryRouter>,
   );
 }

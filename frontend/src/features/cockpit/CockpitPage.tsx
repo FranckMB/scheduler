@@ -64,7 +64,7 @@ export function CockpitPage() {
           </span>
         </div>
       ) : null}
-      <SeasonPlanBanner schedules={schedules} chosenScheduleId={me?.seasonPlan?.chosenScheduleId ?? null} socleValidated={socleValidated} loading={schedulesLoading} />
+      <SeasonPlanBanner schedules={schedules} socleValidated={socleValidated} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel

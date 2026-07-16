@@ -162,6 +162,10 @@ export function useValidateSchedule() {
     mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) => planningApi.validateSchedule(id, { confirmDeleteOverlays }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      // Valider peut SUPPRIMER les plans secondaires (confirmDeleteOverlays) — même
+      // destruction serveur que rouvrir, qui l'invalide déjà. Sans ça le cockpit
+      // continue d'afficher des périodes dont l'overlay n'existe plus.
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
       // Validating moves the plan's pointer (surfaced on /me.seasonPlan), which
       // unlocks matches + secondary plans — refresh it so the home screen follows.
       void queryClient.invalidateQueries({ queryKey: ["me"] });
