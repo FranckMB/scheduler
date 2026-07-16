@@ -14,6 +14,9 @@ let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolea
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
+  // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
+  // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
+  useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData })),
 }));
 
 const FUTURE = "2999-01-05";
@@ -96,11 +99,15 @@ describe("RadarPanel", () => {
     expect(screen.queryByText("Rien à signaler")).not.toBeInTheDocument();
   });
 
-  it("says there is nothing to report when the plan points at a version and nothing collides", () => {
+  it("hides a closure that hits nothing on a validated plan — the radar is a to-do list, not an inventory", () => {
+    // Décision fondateur : « un planning sans conflit qui a été validé, je veux rien
+    // voir ». Le radar montre ce qui CHANGE par rapport au quotidien.
     conflictsData = { conflicts: [], seasonPlanChosen: true };
-    renderRadar({ entries: [closure({})] });
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
 
-    expect(screen.getByText("Rien à signaler")).toBeInTheDocument();
+    expect(screen.queryByText("Gymnase fermé")).not.toBeInTheDocument();
+    // …et le panneau redevient franchement vide, au lieu d'un cadre « À traiter » désert.
+    expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {

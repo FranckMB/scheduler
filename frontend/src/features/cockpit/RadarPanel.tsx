@@ -6,7 +6,7 @@ import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
-import { useCreateHolidayPeriod, useEntryConflicts } from "./queries";
+import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList } from "./queries";
 import { daysUntil, frDateShort, todayISO } from "./lib/date";
 
 /** Public holidays further out than this are noise, not a to-do. */
@@ -62,6 +62,26 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     active.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const closures = upcomingPeriods("closure");
+  // Le radar montre ce qui CHANGE par rapport au quotidien, pas un inventaire : une
+  // fermeture qui ne heurte aucune séance, sur un planning validé, ne demande rien —
+  // elle n'a rien à faire dans une liste « à traiter ». On ne peut le savoir qu'en
+  // lisant l'impact, que le serveur seul calcule ; d'où la lecture groupée ici, dont
+  // le résultat sert aussi à garder `isEmpty` honnête (une carte qui s'efface toute
+  // seule laisserait le panneau vide SANS son « Rien à l'horizon »).
+  const closureImpacts = useEntryConflictsList(closures.map((e) => e.id));
+  const visibleClosures = closures.filter((entry, i) => {
+    if (null !== entry.overlayScheduleId) {
+      return true; // un planning secondaire existe : cette semaine EST différente
+    }
+    const impact = closureImpacts[i]?.data;
+    if (undefined === impact) {
+      return false; // pas encore su : ne pas faire clignoter une carte qui va disparaître
+    }
+    if (false === impact.seasonPlanChosen) {
+      return true; // plan incomplet : impact non évalué, ça se traite
+    }
+    return impact.conflicts.some((c) => c.dates.length > 0);
+  });
   // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
   const cutoffs = upcomingPeriods("cutoff");
 
@@ -72,7 +92,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const isEmpty =
     upcomingHolidays.length === 0 &&
     disruptiveEvents.length === 0 &&
-    closures.length === 0 &&
+    visibleClosures.length === 0 &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
@@ -126,7 +146,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${frDateShort(e.startDate)} · pas d'entraînement`} />
       ))}
 
-      {closures.map((e) => (
+      {visibleClosures.map((e) => (
         <ClosureRadarItem key={e.id} entry={e} onAdapt={() => adapt(e.id)} onView={() => e.overlayScheduleId && viewOverlay(e.overlayScheduleId)} />
       ))}
 
@@ -159,13 +179,14 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   // vraiment rien à signaler : les deux états ne doivent pas se dire pareil.
   const planIncomplete = false === data?.seasonPlanChosen;
 
+  // Le parent ne monte cette carte que s'il y a quelque chose à traiter (voir
+  // visibleClosures) : pas de branche « rien à signaler » ici, elle ne serait
+  // jamais rendue — et l'écrire laisserait croire que le radar inventorie.
   const detail = hasOverlay
     ? "Planning secondaire généré"
     : planIncomplete
       ? "Planning de la saison incomplet · impact non évalué"
-      : count > 0
-        ? `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`
-        : "Rien à signaler";
+      : `${count} séance${count > 1 ? "s" : ""} à replacer · planning secondaire absent`;
 
   return (
     <RadarCard

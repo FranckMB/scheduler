@@ -29,6 +29,7 @@ vi.mock("./queries", () => ({
   },
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), isPending: false }),
   useEntryConflicts: () => ({ data: undefined }),
+  useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: undefined })),
 }));
 
 function renderCockpit() {
