@@ -125,6 +125,13 @@ classiques avec `#[Route]`.
 | `/api/me/export` | GET | **RGPD portabilité** (self-only, `RgpdExportController`) : compte + adhésions + preuve de consentement + lastLoginAt, JAMAIS le hash. JSON en téléchargement (`Content-Disposition`). Rate-limité `rgpd_export` (10/h par user). NR : `RgpdExportTest`. |
 | `/api/club/export` | GET | **RGPD portabilité club** (management SEC-07, tenant du JWT — pas d'id de chemin ; 404 sans membership actif, 403 non-management) : workspace complet en lignes brutes par table (19 tables, `schedule` sans `snapshot_data`), tenant-scoped garanti par RLS. Rate-limité `rgpd_export`. NR : `RgpdExportTest`. |
 
+### Authentification superadmin (`AdminAuthController.php`)
+
+Identité, provider et firewall stateful séparés de `User`/`ClubUser` et du JWT club. Le
+parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont spécifiés dans
+[`superadmin-auth.md`](superadmin-auth.md). Routes : `POST /api/admin/auth/password`,
+`POST /api/admin/auth/totp`, `GET /api/admin/auth/me`, `POST /api/admin/auth/logout`.
+
 > **RGPD — mécanismes transverses** (rétention comptes inactifs 24 mois, purges cron, journal
 > d'audit append-only, consentement) : registre des traitements et pointeurs code dans
 > [`docs/security/rgpd.md`](../../docs/security/rgpd.md).

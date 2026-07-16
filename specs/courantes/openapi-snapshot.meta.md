@@ -1,7 +1,10 @@
-Last verified @ feat/period-constraint-toggle 2026-07-12
+Last verified @ feature/superadmin-sa0 2026-07-16
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **73 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **77 paths.**
 Changements récents :
+- **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous
+  `/api/admin/auth/{password,totp,me,logout}` documentent l'authentification séparée
+  mot de passe + TOTP, la session admin et le token CSRF exigé au logout.
 - **ADR-0002 pattern « Plan » — Lot A (2026-07-12)** : nouvelle ressource **`SchedulePlan`**
   (`/api/schedule_plans`, lecture seule) — le conteneur nommé des versions d'une saison/période
   (`type` SEASON/CLOSURE/HOLIDAY, `name`, `startDate`/`endDate`, `calendarEntryId?`,

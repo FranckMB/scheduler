@@ -67,8 +67,8 @@ if [[ "$code" == "502" ]]; then
 fi
 
 # 6. Fresh dev token (valid regardless of keypair regeneration above)
-TOKEN=$(php "php bin/console lexik:jwt:generate-token $USER_EMAIL --ttl=$TOKEN_TTL" | tr -d '[:space:]')
-[[ ${#TOKEN} -ge 200 ]] || die "could not mint dev token"
+TOKEN=$(php "php bin/console lexik:jwt:generate-token $USER_EMAIL --ttl=$TOKEN_TTL --user-class='App\\Entity\\User'" | tr -d '[:space:]')
+[[ "$TOKEN" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]] || die "could not mint dev token"
 
 # 7. Drive the real e2e: create -> generate -> poll to terminal status
 info "generating schedule for club $CLUB_ID"

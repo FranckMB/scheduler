@@ -5,6 +5,8 @@ security:
 
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
     providers:
+        super_admin_provider:
+            id: App\Security\SuperAdminProvider
         app_user_provider:
             entity:
                 class: App\Entity\User
@@ -18,6 +20,7 @@ security:
         login:
             pattern: ^/api/login
             stateless: true
+            provider: app_user_provider
             user_checker: App\Security\UserChecker
             json_login:
                 check_path: /api/login
@@ -27,6 +30,10 @@ security:
                 failure_handler: lexik_jwt_authentication.handler.authentication_failure
             login_throttling:
                 max_attempts: 5
+        admin:
+            pattern: ^/api/admin
+            lazy: true
+            provider: super_admin_provider
         api:
             pattern: ^/api
             stateless: true
@@ -35,6 +42,9 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
+        - { path: ^/api/admin/auth/password$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/admin/auth/totp$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/admin, roles: ROLE_SUPER_ADMIN }
         - { path: ^/api/login, roles: PUBLIC_ACCESS }
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
         - { path: ^/api/password, roles: PUBLIC_ACCESS }

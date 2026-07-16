@@ -25,7 +25,7 @@ All PHP test jobs first **create + migrate the test DB** (`doctrine:database:cre
 |-----|--------------|
 | `lint` | `docker compose config` + `make -n help` |
 | `phpstan` | `composer phpstan` (level 8) — needs postgres + redis |
-| `blocking-tests` | the `--group phase1` security/queue/contract tests — **gate for the rest of the PHP suite**. Full list (12 steps): `TenantIsolationTest`, `SeasonIsolationTest`, `SeasonReadonlyTest`, `MatchTenantIsolationTest`, `TenantCacheIsolationTest`, `ConcurrentGenerationTest`, `ContractSchemaTest`, `RlsIsolationTest`, `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06), `ManagementRoleTest` (SEC-07), `ApiRateLimitTest` (SEC-11) — canonical list in `CLAUDE.md` §4 |
+| `blocking-tests` | the `--group phase1` security/queue/contract tests — **gate for the rest of the PHP suite**. Full list (13 steps): `TenantIsolationTest`, `SeasonIsolationTest`, `SeasonReadonlyTest`, `MatchTenantIsolationTest`, `TenantCacheIsolationTest`, `ConcurrentGenerationTest`, `ContractSchemaTest`, `RlsIsolationTest`, `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06), `ManagementRoleTest` (SEC-07), `ApiRateLimitTest` (SEC-11), `SuperAdminAccessTest` (SA0) — canonical list in `CLAUDE.md` §4 |
 | `unit-tests` | full PHPUnit `tests/` (does NOT gate build-docker) |
 | `e2e` | Playwright (full stack + Vite), needs blocking-tests |
 | `engine-tests` | `pytest` + `ruff check .` + `mypy` (in the engine container) |
@@ -49,6 +49,7 @@ Groups (PHP attributes): `#[Group('phase1')]`, `#[Group('integration')]`, `#[Gro
 | `Security/TenantCacheIsolationTest` | Implemented (B3, resolved 2026-07-01) — 2 real tests: cache invalidation isolates clubs; entity without `club_id` purges nothing. |
 | `Queue/ConcurrentGenerationTest` | 2nd `ClubGenerationLock` acquire for same club fails · different clubs acquire concurrently · wrong token cannot release |
 | `CrossStack/ContractSchemaTest` (`phase1`+`contract`) | engine payload shape valid (version, clubId, seasonId, teams, venues, coaches, constraints, trainingSlots, sportCategoryId, scopeTargetId…) · POSTs to the real engine when reachable, else skips |
+| `Security/SuperAdminAccessTest` | club JWT rejected · password without TOTP rejected · MFA session isolated from tenants · disabled/expired admin rejected · logout protected by CSRF · IP rate limit · runtime DB role has no admin-table privilege |
 
 `ContractSchemaTest` is the **only** guardrail for the manually-synced backend↔engine contract (no codegen). Any change to engine Pydantic schemas or the backend payload must keep it green.
 
