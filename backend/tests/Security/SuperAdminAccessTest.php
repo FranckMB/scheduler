@@ -31,11 +31,70 @@ final class SuperAdminAccessTest extends WebTestCase
 
     private string $requestIp;
 
+    /** @var list<string> */
+    private array $metricIds = [];
+
+    /** @var list<string> */
+    private array $monitoringClubIds = [];
+
     public function testClubJwtCanNeverCrossTheAdminFirewall(): void
     {
         $token = $this->registerVerified('SAA1');
         $this->client->request('GET', '/api/admin/auth/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('GET', '/api/admin/overview', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+    }
+
+    public function testAuthenticatedAdminCanReadCrossTenantMonitoringAggregates(): void
+    {
+        $suffix = strtoupper(substr(md5(uniqid('', true)), 0, 6));
+        $clubId = Uuid::v4()->toRfc4122();
+        $clubName = 'Club monitoring ' . $suffix;
+        $this->monitoringClubIds[] = $clubId;
+        $this->admin()->executeStatement(
+            'INSERT INTO club (id, version, created_at, updated_at, name, slug, generation_count_season, timezone, locale, onboarding_completed) VALUES (:id, 1, NOW(), NOW(), :name, :slug, 2, :timezone, :locale, FALSE)',
+            ['id' => $clubId, 'name' => $clubName, 'slug' => 'monitoring-' . strtolower($suffix), 'timezone' => 'Europe/Paris', 'locale' => 'fr'],
+        );
+        self::assertNotSame('', $clubId);
+
+        foreach (['COMPLETED', 'INFEASIBLE'] as $status) {
+            $metricId = Uuid::v4()->toRfc4122();
+            $this->metricIds[] = $metricId;
+            $this->admin()->executeStatement(
+                'INSERT INTO solver_metrics (id, schedule_id, club_id, status, wall_time_ms, created_at) VALUES (:id, :schedule, :club, :status, :duration, NOW())',
+                [
+                    'id' => $metricId,
+                    'schedule' => Uuid::v4()->toRfc4122(),
+                    'club' => $clubId,
+                    'status' => $status,
+                    'duration' => 'COMPLETED' === $status ? 1000 : 3000,
+                ],
+            );
+        }
+
+        [$secret] = $this->createSuperAdmin('monitoring@example.test', 'VeryStrongPassword!');
+        $this->authenticate('monitoring@example.test', 'VeryStrongPassword!', $secret);
+
+        $this->client->request('GET', '/api/admin/overview');
+        self::assertResponseIsSuccessful();
+        $overview = $this->responseBody();
+        self::assertGreaterThanOrEqual(1, $overview['clubs']['total']);
+        self::assertGreaterThanOrEqual(2, $overview['solver']['generations']);
+        self::assertArrayHasKey('daily', $overview['solver']);
+
+        $this->client->request('GET', '/api/admin/clubs?query=' . urlencode($clubName) . '&limit=10');
+        self::assertResponseIsSuccessful();
+        $clubs = $this->responseBody();
+        self::assertSame(1, $clubs['pagination']['total']);
+        self::assertSame($clubId, $clubs['items'][0]['id']);
+        self::assertSame(2, $clubs['items'][0]['solver']['generations']);
+        self::assertSame(1, $clubs['items'][0]['solver']['infeasible']);
+        self::assertSame(0.5, $clubs['items'][0]['solver']['infeasibleRate']);
+
+        $this->client->request('GET', '/api/admin/clubs?limit=101');
+        self::assertResponseStatusCodeSame(400);
     }
 
     public function testPasswordAloneDoesNotAuthenticateAndTotpIsMandatory(): void
@@ -168,6 +227,12 @@ final class SuperAdminAccessTest extends WebTestCase
 
     protected function tearDown(): void
     {
+        if ([] !== $this->metricIds) {
+            $this->admin()->executeStatement('DELETE FROM solver_metrics WHERE id IN (:ids)', ['ids' => $this->metricIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+        }
+        if ([] !== $this->monitoringClubIds) {
+            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->monitoringClubIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+        }
         if (isset($this->adminId)) {
             $this->admin()->executeStatement('DELETE FROM admin_audit_log WHERE super_admin_id = :id OR super_admin_id IS NULL', ['id' => $this->adminId]);
             $this->admin()->executeStatement('DELETE FROM super_admin WHERE id = :id', ['id' => $this->adminId]);

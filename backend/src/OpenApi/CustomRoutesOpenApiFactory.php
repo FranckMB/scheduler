@@ -227,6 +227,10 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        foreach ($this->adminMonitoringPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         $paths->addPath('/api/seasons/{id}/transition', new PathItem(post: new Operation(
             operationId: 'transitionSeason',
             tags: ['Season'],
@@ -387,6 +391,113 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'required' => true,
                     'schema' => ['type' => 'string'],
                 ]],
+            )),
+        ];
+    }
+
+    /**
+     * @return array<string, PathItem>
+     */
+    private function adminMonitoringPaths(): array
+    {
+        $solverSummary = [
+            'type' => 'object',
+            'properties' => [
+                'generations' => ['type' => 'integer'],
+                'infeasible' => ['type' => 'integer'],
+                'infeasibleRate' => ['type' => 'number', 'format' => 'float'],
+                'p50WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+                'p95WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+            ],
+        ];
+
+        return [
+            '/api/admin/overview' => new PathItem(get: new Operation(
+                operationId: 'getAdminOverview',
+                tags: ['AdminMonitoring'],
+                responses: [
+                    '200' => $this->jsonResponse('Cross-tenant fleet and 30-day solver aggregates', [
+                        'type' => 'object',
+                        'properties' => [
+                            'clubs' => ['type' => 'object', 'properties' => [
+                                'total' => ['type' => 'integer'],
+                                'active7d' => ['type' => 'integer'],
+                                'active30d' => ['type' => 'integer'],
+                                'new7d' => ['type' => 'integer'],
+                                'unsubscribed' => ['type' => 'integer'],
+                            ]],
+                            'solver' => [...$solverSummary, 'properties' => [
+                                ...$solverSummary['properties'],
+                                'windowDays' => ['type' => 'integer', 'enum' => [30]],
+                                'completed' => ['type' => 'integer'],
+                                'failed' => ['type' => 'integer'],
+                                'daily' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'date' => ['type' => 'string', 'format' => 'date'],
+                                    'generations' => ['type' => 'integer'],
+                                    'infeasible' => ['type' => 'integer'],
+                                    'p50WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+                                    'p95WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+                                ]]],
+                            ]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Read the global fleet and solver monitoring overview',
+            )),
+            '/api/admin/clubs' => new PathItem(get: new Operation(
+                operationId: 'getAdminClubs',
+                tags: ['AdminMonitoring'],
+                responses: [
+                    '200' => $this->jsonResponse('Paginated cross-tenant club supervision list', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string', 'format' => 'uuid'],
+                                'name' => ['type' => 'string'],
+                                'slug' => ['type' => 'string'],
+                                'ffbbClubCode' => ['type' => 'string', 'nullable' => true],
+                                'planId' => ['type' => 'integer', 'nullable' => true],
+                                'billingCycle' => ['type' => 'string', 'nullable' => true],
+                                'generationCountSeason' => ['type' => 'integer'],
+                                'createdAt' => ['type' => 'string', 'format' => 'date-time'],
+                                'lastActivityAt' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
+                                'unsubscribed' => ['type' => 'boolean'],
+                                'currentSeason' => ['type' => 'object', 'nullable' => true, 'properties' => [
+                                    'id' => ['type' => 'string', 'format' => 'uuid'],
+                                    'name' => ['type' => 'string'],
+                                    'status' => ['type' => 'string'],
+                                ]],
+                                'volumes' => ['type' => 'object', 'properties' => [
+                                    'teams' => ['type' => 'integer'],
+                                    'venues' => ['type' => 'integer'],
+                                    'coaches' => ['type' => 'integer'],
+                                    'constraints' => ['type' => 'integer'],
+                                ]],
+                                'solver' => [...$solverSummary, 'properties' => [
+                                    ...$solverSummary['properties'],
+                                    'latestStatus' => ['type' => 'string', 'nullable' => true],
+                                    'latestAt' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
+                                ]],
+                            ]]],
+                            'pagination' => ['type' => 'object', 'properties' => [
+                                'page' => ['type' => 'integer'],
+                                'limit' => ['type' => 'integer'],
+                                'total' => ['type' => 'integer'],
+                                'pages' => ['type' => 'integer'],
+                            ]],
+                            'metricsWindowDays' => ['type' => 'integer', 'enum' => [30]],
+                        ],
+                    ]),
+                    '400' => new Response('Invalid pagination or query parameters'),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Search and paginate all clubs with current-season and solver indicators',
+                parameters: [
+                    ['name' => 'page', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1]],
+                    ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 25]],
+                    ['name' => 'query', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'maxLength' => 100]],
+                ],
             )),
         ];
     }

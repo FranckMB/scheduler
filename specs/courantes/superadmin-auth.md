@@ -1,6 +1,6 @@
-# Authentification superadmin et télémétrie — SA0/SA1
+# Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : socle backend + interface React SA0 et capture métriques SA1 livrés. La supervision et les actions cross-tenant restent dans
+> **État courant (2026-07-16)** : SA0, SA1 et le premier incrément backend SA2 sont livrés. Les sondes de santé, l'écran de supervision React et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -52,7 +52,7 @@ les primitives TOTP et le fail-closed audit ont leurs tests unitaires.
 ## Capture métriques SA1
 
 - `solver_metrics` conserve une ligne immutable par tentative de génération : club,
-  schedule, statut terminal, durée solveur, taille du problème, conflits, score,
+  schedule, issue terminale (`COMPLETED`, `FAILED` ou `INFEASIBLE`), durée solveur, taille du problème, conflits, score,
   version du solveur et horodatage.
 - La table porte `club_id`, est sous RLS `FORCE` et respecte `TenantOwnedInterface`.
   Le rôle runtime ne peut jamais lire les métriques d'un autre club ; la connexion
@@ -60,3 +60,22 @@ les primitives TOTP et le fail-closed audit ont leurs tests unitaires.
 - `Club.lastActivityAt` est mis à jour au plus une fois par jour lors d'une activité
   authentifiée et à la mise en file d'une génération. La rétention six mois, le
   partitionnement mensuel et la purge sont reportés au lot d'exploitation dédié.
+
+## Supervision read-only SA2 — API parc et solveur
+
+Deux routes protégées par la session `ROLE_SUPER_ADMIN` exposent des agrégats calculés
+sur la connexion Doctrine `admin`. Elles ne positionnent jamais `app.club_id` et ne
+réutilisent ni le firewall ni le JWT club :
+
+- `GET /api/admin/overview` retourne le nombre de clubs opérationnels, actifs à 7/30
+  jours, nouveaux sur 7 jours et désabonnés, ainsi que les métriques solveur des 30
+  derniers jours (volumes, issues, taux `INFEASIBLE`, p50/p95 et série journalière) ;
+- `GET /api/admin/clubs?page=1&limit=25&query=...` recherche sur nom, slug ou code FFBB
+  et retourne une liste paginée avec offre/compteur, dates d'activité, saison courante,
+  volumétrie active de la saison et indicateurs solveur sur 30 jours. `limit` est borné
+  à 100 et `query` à 100 caractères.
+
+La « saison courante » est la saison couvrant la date du jour ; en son absence, l'API
+retourne la saison la plus récente. Toutes les lectures sont auditées par la garantie
+fail-closed SA0. `SuperAdminAccessTest` couvre le rejet d'un JWT club et la lecture
+cross-tenant par un superadmin authentifié.

@@ -45,4 +45,23 @@ final class SolverMetricsRecorderTest extends TestCase
             'solver_version' => 'solver-1',
         ]]);
     }
+
+    public function testPreservesInfeasibleEngineOutcomeInMetricsHistory(): void
+    {
+        $schedule = (new Schedule)
+            ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+            ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setName('infeasible metrics')
+            ->setStatus(ScheduleStatus::FAILED);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects(self::once())->method('persist')->with(self::callback(
+            static function (SolverMetric $metric): bool {
+                self::assertSame('INFEASIBLE', $metric->getStatus());
+
+                return true;
+            },
+        ));
+
+        new SolverMetricsRecorder($entityManager)->record($schedule, ['status' => 'infeasible']);
+    }
 }
