@@ -1,6 +1,7 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : SA0, SA1 et l'API backend SA2 sont livrés. L'écran de supervision React et les actions cross-tenant restent dans
+> **État courant (2026-07-16)** : SA0, SA1 et la console read-only SA2 sont livrés.
+> Les jobs d'exploitation et actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -95,3 +96,16 @@ Chaque sonde réseau a un timeout court. Une dépendance indisponible ne fait ja
 l'endpoint : son composant passe `down`/`unknown` et le statut global devient `degraded`.
 Les erreurs, DSN et URL internes ne sont jamais incluses dans la réponse. La route reste
 protégée et auditée comme toutes les routes `/api/admin/**`.
+
+## Écran de supervision React SA2
+
+La route protégée `/admin` consomme les trois lectures SA2 sans réutiliser le JWT ni le
+store club. Elle présente les indicateurs du parc et du solveur, la série quotidienne,
+les sondes d'infrastructure, l'état Messenger/worker et la liste paginée des clubs.
+La recherche par nom, slug ou code FFBB est envoyée à l'API ; aucun filtrage cross-tenant
+n'est réalisé côté navigateur.
+
+La santé est rafraîchie toutes les 30 secondes, l'overview toutes les 60 secondes, et un
+bouton permet de rafraîchir les trois panneaux. Chaque flux conserve ses propres états
+chargement, erreur et vide afin qu'une sonde indisponible ne masque pas les autres
+informations. SA2 ne déclenche aucune mutation ou action de support.

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/utils";
 
 import { logoutAdmin } from "./api";
-import { AdminHomePage, AdminShell } from "./AdminShell";
+import { AdminShell } from "./AdminShell";
 import { useAdminStore } from "./store";
 
 vi.mock("./api", () => ({ logoutAdmin: vi.fn() }));
@@ -32,6 +32,5 @@ describe("AdminShell", () => {
 
   it("keeps the SA0 shell accessible", async () => {
     await expectNoA11yViolations(<AdminShell />);
-    await expectNoA11yViolations(<AdminHomePage />);
   });
 });

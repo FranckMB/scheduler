@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0, SA1 et API SA2 parc/solveur/santé livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Reste l'interface React de SA2, puis SA3 → SA5.
+> **Statut** : **SA0, SA1 et console read-only SA2 livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Suite : SA3 → SA5.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` puis persistées par SA1 dans `solver_metrics` · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -21,7 +21,7 @@ Trois usages :
 | # | Décision |
 |---|---|
 | 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
-| 2 | **SA0 backend/frontend et SA1 plomberie sont livrés ; la suite est SA2** (console read-only). |
+| 2 | **SA0, SA1 et SA2 sont livrés ; la suite est SA3** (jobs de données et supervision). |
 | 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
 | 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
@@ -37,7 +37,9 @@ Livré : persistance `solver_metrics` à chaque tentative de génération (statu
 - **Livré côté API** : parc global, activité 7/30 jours, nouveaux/semaine, charge solveur
   sur 30 jours et liste paginée/recherchable des clubs avec saison, volumétrie et métriques.
 - **Livré côté API santé** : engine, heartbeat worker, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries du jour). Sentry reste hors périmètre tant qu'il n'est pas branché.
-- **Reste** : écran React consommant les agrégats et sondes.
+- **Livré côté React** : vue `/admin` des agrégats parc/solveur, sondes et files,
+  recherche/pagination des clubs, rafraîchissement périodique et états partiels erreur/vide.
+  L'écran ne contient aucune mutation.
 
 ### SA3 — Jobs de données auto + supervision *(🟡 — répond au besoin « mise à jour auto »)*
 - **Planifier** les commandes existantes sur `cron-runner` : **vacances scolaires/publiques** (annuel), **purges** (saisons N-2, users non vérifiés, orphelins), **rappels** (périodes, transition), **reconcile** stuck schedules.
