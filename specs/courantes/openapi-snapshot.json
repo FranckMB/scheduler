@@ -194,6 +194,186 @@
                 }
             }
         },
+        "/api/admin/jobs": {
+            "get": {
+                "operationId": "getAdminJobs",
+                "tags": [
+                    "AdminJobs"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Closed operational-job catalog with schedule and latest execution",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "key": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "command": {
+                                                        "type": "string"
+                                                    },
+                                                    "cadence": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "every_10_minutes",
+                                                            "daily",
+                                                            "quarterly"
+                                                        ]
+                                                    },
+                                                    "manualTriggerAllowed": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "nextRunAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    },
+                                                    "latestRun": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "string",
+                                                                "format": "uuid"
+                                                            },
+                                                            "status": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "running",
+                                                                    "succeeded",
+                                                                    "failed",
+                                                                    "interrupted"
+                                                                ]
+                                                            },
+                                                            "source": {
+                                                                "type": "string",
+                                                                "enum": [
+                                                                    "scheduled",
+                                                                    "cli",
+                                                                    "superadmin"
+                                                                ]
+                                                            },
+                                                            "startedAt": {
+                                                                "type": "string",
+                                                                "format": "date-time"
+                                                            },
+                                                            "finishedAt": {
+                                                                "type": "string",
+                                                                "format": "date-time",
+                                                                "nullable": true
+                                                            },
+                                                            "durationMs": {
+                                                                "type": "integer",
+                                                                "nullable": true
+                                                            },
+                                                            "exitCode": {
+                                                                "type": "integer",
+                                                                "nullable": true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Monitor allowlisted operational jobs"
+            }
+        },
+        "/api/admin/jobs/{key}/run": {
+            "post": {
+                "operationId": "postAdminJobRun",
+                "tags": [
+                    "AdminJobs"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reference import completed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "succeeded"
+                                            ]
+                                        },
+                                        "exitCode": {
+                                            "type": "integer",
+                                            "enum": [
+                                                0
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Missing or invalid X-CSRF-Token header"
+                    },
+                    "404": {
+                        "description": "Unknown job or job not manually triggerable"
+                    },
+                    "409": {
+                        "description": "Job already running"
+                    },
+                    "500": {
+                        "description": "Unexpected execution failure"
+                    },
+                    "502": {
+                        "description": "The import command returned a non-zero exit code"
+                    }
+                },
+                "summary": "Run one of the two manually triggerable reference imports",
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "import-school-holidays",
+                                "import-public-holidays"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
         "/api/admin/clubs": {
             "get": {
                 "operationId": "getAdminClubs",

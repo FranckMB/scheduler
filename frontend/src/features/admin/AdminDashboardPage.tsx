@@ -11,6 +11,7 @@ import {
   MapPin,
   Radio,
   RefreshCw,
+  RotateCw,
   Search,
   Server,
   Users,
@@ -20,11 +21,13 @@ import {
 import { type FormEvent, type ReactNode, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
+import { toast } from "@/shared/stores/toastStore";
 
 import type { AdminClub, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview } from "./queries";
+import { useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminJob } from "./queries";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -255,6 +258,20 @@ function HealthSection({ data, loading, error, retry }: DataSectionProps<AdminHe
 }
 
 function JobsSection({ data, loading, error, retry }: DataSectionProps<AdminJobsResponse>) {
+  const [jobToRun, setJobToRun] = useState<AdminJob | null>(null);
+  const runJob = useRunAdminJob();
+
+  function confirmRun() {
+    if (!jobToRun) return;
+
+    const job = jobToRun;
+    setJobToRun(null);
+    runJob.mutate(job.key, {
+      onSuccess: () => toast.success(`${job.label} terminé.`),
+      onError: () => toast.error(`Impossible d’exécuter « ${job.label} ».`),
+    });
+  }
+
   if (loading) return <PanelLoading label="Chargement des jobs opérationnels" />;
   if (error || !data) return <PanelError label="Les jobs opérationnels sont indisponibles." retry={retry} />;
 
@@ -272,23 +289,32 @@ function JobsSection({ data, loading, error, retry }: DataSectionProps<AdminJobs
       ) : (
         <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-left text-sm">
+            <table className="w-full min-w-[1180px] text-left text-sm">
               <caption className="sr-only">État des jobs opérationnels allowlistés</caption>
               <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wider text-slate-500">
-                <tr><th className="px-5 py-4 font-medium">Job</th><th className="px-4 py-4 font-medium">Cadence</th><th className="px-4 py-4 font-medium">Prochain passage</th><th className="px-4 py-4 font-medium">Dernière exécution</th><th className="px-4 py-4 font-medium">Durée</th><th className="px-4 py-4 font-medium">Résultat</th></tr>
+                <tr><th className="px-5 py-4 font-medium">Job</th><th className="px-4 py-4 font-medium">Cadence</th><th className="px-4 py-4 font-medium">Prochain passage</th><th className="px-4 py-4 font-medium">Dernière exécution</th><th className="px-4 py-4 font-medium">Durée</th><th className="px-4 py-4 font-medium">Résultat</th><th className="px-4 py-4 font-medium">Action</th></tr>
               </thead>
               <tbody className="divide-y divide-white/10">
-                {data.items.map((job) => <JobRow key={job.key} job={job} />)}
+                {data.items.map((job) => <JobRow key={job.key} job={job} running={runJob.isPending && runJob.variables === job.key} onRun={() => setJobToRun(job)} />)}
               </tbody>
             </table>
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={jobToRun !== null}
+        title="Relancer cet import ?"
+        description={jobToRun ? `« ${jobToRun.label} » va interroger la source officielle et mettre à jour la référence globale. L’opération est idempotente.` : undefined}
+        confirmLabel="Relancer l’import"
+        destructive={false}
+        onConfirm={confirmRun}
+        onCancel={() => setJobToRun(null)}
+      />
     </section>
   );
 }
 
-function JobRow({ job }: { job: AdminJob }) {
+function JobRow({ job, running, onRun }: { job: AdminJob; running: boolean; onRun: () => void }) {
   return (
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
       <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><History className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{job.label}</p><p className="mt-1 font-mono text-[11px] text-slate-600">{job.command}</p></div></div></td>
@@ -297,6 +323,7 @@ function JobRow({ job }: { job: AdminJob }) {
       <td className="px-4 py-5">{job.latestRun ? <><p>{formatDateTime(job.latestRun.startedAt)}</p><p className="mt-1 text-xs text-slate-600">{formatJobSource(job.latestRun.source)}</p></> : <span className="text-slate-500">Jamais exécuté</span>}</td>
       <td className="px-4 py-5 tabular-nums">{job.latestRun ? formatDuration(job.latestRun.durationMs) : "—"}</td>
       <td className="px-4 py-5"><JobStatus status={job.latestRun?.status ?? null} />{job.latestRun?.exitCode !== null && job.latestRun?.exitCode !== undefined ? <p className="mt-1 text-[11px] text-slate-600">Code {job.latestRun.exitCode}</p> : null}</td>
+      <td className="px-4 py-5">{job.manualTriggerAllowed ? <Button type="button" size="sm" variant="outline" className="border-white/15 text-slate-200 hover:bg-white/10" disabled={running} onClick={onRun}>{running ? <Spinner className="size-3.5" /> : <RotateCw className="size-3.5" aria-hidden="true" />} {running ? "Exécution…" : "Relancer"}</Button> : <span className="text-xs text-slate-600">Supervision seule</span>}</td>
     </tr>
   );
 }

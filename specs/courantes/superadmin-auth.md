@@ -1,8 +1,8 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
 > **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2, le socle
-> d'historisation SA3-A, la supervision SA3-B et la planification fiable SA3-C sont
-> livrés. Les relances et les actions cross-tenant restent dans
+> d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
+> les relances d'imports SA3-D sont livrés. Les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -127,7 +127,7 @@ PostgreSQL empêche le chevauchement d'un même job ; une tentative `running` ab
 est marquée `interrupted` au prochain démarrage acquis.
 
 SA3-A ne changeait pas la cadence existante ; SA3-C la remplace par les horaires décrits
-ci-dessous. La relance superadmin appartient à une PR ultérieure.
+ci-dessous. SA3-D ajoute les deux relances de référence décrites plus bas.
 
 ## Supervision read-only des jobs SA3-B
 
@@ -162,5 +162,18 @@ advisory par clé continue d'interdire deux exécutions simultanées.
 
 `GET /api/admin/jobs` expose désormais `nextRunAt`, calculé avec le même modèle et le
 dernier créneau enregistré. Le tableau React affiche ce prochain passage avec les
-cadences « toutes les 10 minutes », « quotidien » ou « trimestriel ». Il n'existe toujours
-aucun bouton de relance. `app:purge-orphans` reste volontairement manuel.
+cadences « toutes les 10 minutes », « quotidien » ou « trimestriel ».
+
+## Relances d'imports SA3-D
+
+`POST /api/admin/jobs/{key}/run` exige la session superadmin et son jeton CSRF. Le
+catalogue expose `manualTriggerAllowed` et n'autorise la relance que pour
+`import-school-holidays` et `import-public-holidays`. La route n'accepte jamais un nom de
+commande brut : elle exécute la commande et ses arguments fixes issus du catalogue avec
+la source `superadmin` et l'identité de l'acteur dans `admin_job_run`.
+
+L'exécution est synchrone, idempotente et protégée par le même verrou advisory que les
+passages planifiés ; une exécution déjà active répond 409. Le dashboard React demande
+confirmation, affiche l'état en cours puis rafraîchit l'historique. Les rappels,
+réconciliations et purges ne sont pas déclenchables depuis cette route ; en particulier
+`app:purge-orphans` reste volontairement manuel.

@@ -46,8 +46,8 @@ final class AdminJobCatalog
             new AdminJobDefinition('purge-inactive-users', 'Purge des comptes inactifs', 'app:users:purge-inactive', AdminJobSchedule::daily(2, 30)),
             new AdminJobDefinition('purge-seasons', 'Purge des anciennes saisons', 'app:seasons:purge', AdminJobSchedule::daily(3)),
             new AdminJobDefinition('purge-audit-log', 'Purge du journal d’audit', 'app:audit:purge', AdminJobSchedule::daily(3, 30)),
-            new AdminJobDefinition('import-school-holidays', 'Import des vacances scolaires', 'app:school-holidays:import', AdminJobSchedule::quarterly(4)),
-            new AdminJobDefinition('import-public-holidays', 'Import des jours fériés', 'app:public-holidays:import', AdminJobSchedule::quarterly(4, 30)),
+            new AdminJobDefinition('import-school-holidays', 'Import des vacances scolaires', 'app:school-holidays:import', AdminJobSchedule::quarterly(4), manualTriggerAllowed: true),
+            new AdminJobDefinition('import-public-holidays', 'Import des jours fériés', 'app:public-holidays:import', AdminJobSchedule::quarterly(4, 30), manualTriggerAllowed: true),
         ];
     }
 }

@@ -16,6 +16,8 @@ parameters:
     env(FFBB_MEILISEARCH_TOKEN): ''
 
 services:
+    App\AdminJob\AdminJobExecutorInterface: '@App\AdminJob\ConsoleAdminJobExecutor'
+
     # default configuration for services in *this* file
     _defaults:
         autowire: true      # Automatically injects dependencies in your services.

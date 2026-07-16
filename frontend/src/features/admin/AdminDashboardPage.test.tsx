@@ -6,8 +6,9 @@ import { axe } from "vitest-axe";
 import { renderWithProviders } from "@/test/utils";
 
 import type { AdminClubsResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview } from "./api";
+import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, runAdminJob } from "./api";
 import { AdminDashboardPage } from "./AdminDashboardPage";
+import { useAdminStore } from "./store";
 
 vi.mock("./api", async (importOriginal) => {
   const original = await importOriginal<typeof import("./api")>();
@@ -17,6 +18,7 @@ vi.mock("./api", async (importOriginal) => {
     getAdminHealth: vi.fn(),
     getAdminJobs: vi.fn(),
     getAdminClubs: vi.fn(),
+    runAdminJob: vi.fn(),
   };
 });
 
@@ -88,6 +90,7 @@ const jobs: AdminJobsResponse = {
       label: "Rappels de périodes",
       command: "app:periods:remind",
       cadence: "daily",
+      manualTriggerAllowed: false,
       nextRunAt: "2099-07-17T08:00:00+02:00",
       latestRun: {
         id: "run-1",
@@ -104,7 +107,17 @@ const jobs: AdminJobsResponse = {
       label: "Purge des anciennes saisons",
       command: "app:seasons:purge",
       cadence: "quarterly",
+      manualTriggerAllowed: false,
       nextRunAt: "2099-10-01T03:00:00+02:00",
+      latestRun: null,
+    },
+    {
+      key: "import-school-holidays",
+      label: "Import des vacances scolaires",
+      command: "app:school-holidays:import",
+      cadence: "quarterly",
+      manualTriggerAllowed: true,
+      nextRunAt: "2099-10-01T04:00:00+02:00",
       latestRun: null,
     },
   ],
@@ -114,6 +127,7 @@ const mockOverview = vi.mocked(getAdminOverview);
 const mockHealth = vi.mocked(getAdminHealth);
 const mockJobs = vi.mocked(getAdminJobs);
 const mockClubs = vi.mocked(getAdminClubs);
+const mockRunJob = vi.mocked(runAdminJob);
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
@@ -121,6 +135,8 @@ describe("AdminDashboardPage", () => {
     mockHealth.mockReset().mockResolvedValue(health);
     mockJobs.mockReset().mockResolvedValue(jobs);
     mockClubs.mockReset().mockResolvedValue(clubs);
+    mockRunJob.mockReset().mockResolvedValue({ key: "import-school-holidays", status: "succeeded", exitCode: 0 });
+    useAdminStore.setState({ identity: { id: "admin-1", email: "ops@example.test" }, csrfToken: "csrf-123" });
   });
 
   it("renders fleet, health and club data from the SA2 APIs", async () => {
@@ -134,7 +150,7 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("Quotidien")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Prochain passage" })).toBeInTheDocument();
     expect(screen.getByText("Réussi")).toBeInTheDocument();
-    expect(screen.getByText("Jamais exécuté")).toBeInTheDocument();
+    expect(screen.getAllByText("Jamais exécuté")).toHaveLength(2);
     expect(mockOverview).toHaveBeenCalledOnce();
     expect(mockHealth).toHaveBeenCalledOnce();
     expect(mockJobs).toHaveBeenCalledOnce();
@@ -167,6 +183,21 @@ describe("AdminDashboardPage", () => {
       expect(mockJobs).toHaveBeenCalledTimes(2);
       expect(mockClubs).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("confirms and runs only a manually allowed reference import", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    await screen.findByText("Import des vacances scolaires");
+
+    expect(screen.getAllByText("Supervision seule")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Relancer" }));
+    expect(screen.getByRole("dialog", { name: "Relancer cet import ?" })).toBeInTheDocument();
+    expect(mockRunJob).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Relancer l’import" }));
+    await waitFor(() => expect(mockRunJob).toHaveBeenCalledWith("import-school-holidays", "csrf-123"));
+    await waitFor(() => expect(mockJobs).toHaveBeenCalledTimes(2));
   });
 
   it("keeps the other monitoring panels visible when health fails", async () => {
