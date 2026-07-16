@@ -209,9 +209,9 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertResponseStatusCodeSame(429);
     }
 
-    public function testRuntimeRoleHasNoPrivilegeOnAdminIdentityOrAuditTables(): void
+    public function testRuntimeRoleHasNoPrivilegeOnAdminOnlyTables(): void
     {
-        foreach (['super_admin', 'admin_audit_log'] as $table) {
+        foreach (['super_admin', 'admin_audit_log', 'admin_job_run'] as $table) {
             foreach (['SELECT', 'INSERT', 'UPDATE', 'DELETE'] as $privilege) {
                 self::assertFalse((bool) $this->admin()->fetchOne(
                     'SELECT has_table_privilege(\'app_user\', :table, :privilege)',
