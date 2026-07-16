@@ -144,7 +144,7 @@ compétition sont figées.
 | Sur une équipe engagée | |
 |---|---|
 | Suppression (`DELETE /api/teams/{id}`) | **409** — sans ça, `EntityCascadeDeleter::purgeChildrenOfTeam` emporterait ses `Fixture`, y compris ceux déjà connus de la fédé |
-| Changement de `Team.level` | **409** — c'est sous ce niveau qu'elle est inscrite. Un PUT qui ré-écho le MÊME niveau passe (le front renvoie le payload complet ; refuser l'écho casserait un renommage) |
+| Changement de `Team.level` | **409**, sans exception — c'est sous ce niveau qu'elle est inscrite, et il se saisit AVANT de générer (il alimente le tag NIVEAU, donc les contraintes, donc la photo de structure de la version). Le laisser bouger après ferait diverger la photo — qui l'a figé — et la base, puis « Charger cette version » ramènerait l'ancienne valeur en silence. Vaut aussi pour un niveau jamais renseigné (`null` → REGIONAL refusé) et pour un effacement. Seule tolérance, qui n'est pas une exception : un PUT qui ré-écho le MÊME niveau passe — le front renvoie le payload complet, refuser l'écho casserait un renommage sans rien protéger. Le jour où l'import FFBB devra changer un niveau, ce cas sera traité **avec** la photo |
 | `priorityTierId` / `tierOrder` | **libres** — perception interne du club |
 | `isActive` | **libre** — sert aux plannings de période, pas au périmètre de la saison |
 | Nom, créneaux, gymnase | **libres** |
@@ -156,6 +156,11 @@ et le sélecteur de niveau à partir de ce champ — il ne re-dérive rien, sino
 
 Les purges de masse (`SeasonDataPurger`, `ErasedClubPurger`) ne passent pas par la garde : la saison entière
 part, matchs compris.
+
+⚠️ **Dette connue, hors de cette garde** : `StructureRestorer::wipeStructure` (« Charger cette version »)
+supprime les `Team` de la saison en DQL de masse — sans passer par le processor — et `Fixture` n'est ni dans
+ce wipe ni dans la photo (`StructureSnapshotter::FAMILIES`). Une équipe supprimée par un restore laisse donc
+ses matchs orphelins sur un `team_id` mort. Défaut **antérieur** à cette garde, tracé en roadmap.
 
 ## Reste palier A (à venir)
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Integration\Api;
+namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
@@ -23,8 +23,21 @@ use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
+/**
+ * NR BLOQUANT — le PÉRIMÈTRE ENGAGÉ (axe structurant §7.1).
+ *
+ * Valider le planning de la saison valide aussi un périmètre : les équipes qui font de
+ * la compétition. Une fois leurs matchs déposés à la fédération, on n'y revient plus —
+ * « une équipe qui joue ne peut pas être supprimée, ni avoir son niveau modifié ; elle
+ * peut être déplacée ou changer de créneau ».
+ *
+ * Bloquant parce qu'une régression détruit des données RÉELLES et irrattrapables :
+ * `EntityCascadeDeleter::purgeChildrenOfTeam` emporte les `Fixture` de l'équipe, donc
+ * une suppression qui passe efface des matchs que la fédération connaît déjà.
+ */
+#[Group('phase1')]
 #[Group('integration')]
-final class TeamApiTest extends WebTestCase
+final class EngagedTeamGuardTest extends WebTestCase
 {
     use TenantGucTrait;
 
@@ -46,265 +59,209 @@ final class TeamApiTest extends WebTestCase
 
     private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
 
-    public function testCreateTeam(): void
+    /**
+     * ADR — périmètre engagé : une équipe qui joue est inscrite auprès de la
+     * fédération. On ne la supprime plus (ses matchs partiraient avec elle via
+     * purgeChildrenOfTeam) et son niveau ne bouge plus (c'est sous ce niveau
+     * qu'elle est inscrite). Le reste — nom, tier, créneaux — suit le club.
+     */
+    public function testAnEngagedTeamCannotBeDeletedAndKeepsItsFixtures(): void
     {
         $client = $this->client;
+        $team = $this->createTeam('U15 en championnat');
+        $fixture = $this->fixture($team, FixtureStatus::PLACED);
         $client->loginUser($this->user);
 
-        $client->request('POST', '/api/teams', [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode([
-            'name' => 'U11 Boys',
-            'sportCategoryId' => $this->sportCategory->getId(),
-            'priorityTierId' => $this->priorityTier->getId(),
-            'gender' => 'M',
-            'sessionsPerWeek' => 2,
-            'isActive' => true,
-        ], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseStatusCodeSame(201);
-        $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertArrayHasKey('id', $data);
-        self::assertSame('U11 Boys', $data['name']);
-        self::assertSame('M', $data['gender']);
-        self::assertSame(2, $data['sessionsPerWeek']);
-        self::assertTrue($data['isActive']);
-    }
-
-    public function testTierOrderIsWritableOnCreate(): void
-    {
-        $client = $this->client;
-        $client->loginUser($this->user);
-
-        $client->request('POST', '/api/teams', [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode([
-            'name' => 'Ranked',
-            'sportCategoryId' => $this->sportCategory->getId(),
-            'priorityTierId' => $this->priorityTier->getId(),
-            'tierOrder' => 5,
-        ], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseStatusCodeSame(201);
-        self::assertSame(5, json_decode((string) $client->getResponse()->getContent(), true)['tierOrder']);
-    }
-
-    public function testTierOrderIsWritableOnUpdate(): void
-    {
-        $client = $this->client;
-        $team = $this->createTeam('Ranked');
-        $client->loginUser($this->user);
-
-        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode([
-            'name' => 'Ranked',
-            'sportCategoryId' => $this->sportCategory->getId(),
-            'priorityTierId' => $this->priorityTier->getId(),
-            'tierOrder' => 2,
-        ], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseIsSuccessful();
-        self::assertSame(2, json_decode((string) $client->getResponse()->getContent(), true)['tierOrder']);
-    }
-
-    public function testListTeams(): void
-    {
-        $client = $this->client;
-        $client->loginUser($this->user);
-
-        $this->createTeam('Team Alpha');
-        $this->createTeam('Team Beta');
-
-        $client->request('GET', '/api/teams', [], [], [
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
         ]);
 
-        self::assertResponseStatusCodeSame(200);
-        $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertArrayHasKey('member', $data);
-        self::assertCount(2, $data['member']);
+        self::assertResponseStatusCodeSame(409, 'une équipe qui joue ne se supprime pas');
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertNotNull($this->em->getRepository(Team::class)->find($team->getId()));
+        // Le vrai risque : la cascade détruit les Fixture. Le refus doit tomber AVANT.
+        self::assertNotNull($this->em->getRepository(Fixture::class)->find($fixture->getId()), 'ses matchs engagés survivent');
     }
 
-    public function testGetTeam(): void
+    public function testATeamWhoseFixturesAreAllUnplacedIsStillDeletable(): void
     {
+        // UNPLACED = match encore en traitement : il n'engage rien, et la garde ne
+        // doit pas bloquer le cas normal (un club qui range ses équipes avant de jouer).
         $client = $this->client;
+        $team = $this->createTeam('U13 sans engagement');
+        $this->fixture($team, FixtureStatus::UNPLACED);
         $client->loginUser($this->user);
 
-        $team = $this->createTeam('Test Team');
-
-        $client->request('GET', \sprintf('/api/teams/%s', $team->getId()), [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-        ]);
-
-        self::assertResponseStatusCodeSame(200);
-        $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame($team->getId(), $data['id']);
-        self::assertSame('Test Team', $data['name']);
-    }
-
-    public function testUpdateTeam(): void
-    {
-        $client = $this->client;
-        $client->loginUser($this->user);
-
-        $team = $this->createTeam('Original Name');
-
-        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode([
-            'name' => 'Updated Name',
-            'sportCategoryId' => $this->sportCategory->getId(),
-            'priorityTierId' => $this->priorityTier->getId(),
-            'gender' => 'F',
-            'sessionsPerWeek' => 3,
-            'isActive' => false,
-        ], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseStatusCodeSame(200);
-        $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('Updated Name', $data['name']);
-        self::assertSame('F', $data['gender']);
-        self::assertSame(3, $data['sessionsPerWeek']);
-        self::assertFalse($data['isActive']);
-    }
-
-    public function testDeleteTeam(): void
-    {
-        $client = $this->client;
-        $client->loginUser($this->user);
-
-        $team = $this->createTeam('To Delete');
-        $teamId = $team->getId();
-
-        $client->request('DELETE', \sprintf('/api/teams/%s', $teamId), [], [], [
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
         ]);
 
         self::assertResponseStatusCodeSame(204);
-
-        $deleted = $this->em->getRepository(Team::class)->find($teamId);
-        self::assertNull($deleted);
     }
 
-    public function testTenantIsolation(): void
+    public function testAnAwayFixtureEngagesTheTeamToo(): void
     {
+        // Un match à l'extérieur naît PLACED à l'import FBI (horaire imposé par
+        // l'adversaire) : l'équipe joue, donc elle est engagée.
         $client = $this->client;
+        $team = $this->createTeam('U18 qui joue dehors');
+        $this->fixture($team, FixtureStatus::PLACED, FixtureHomeAway::AWAY);
         $client->loginUser($this->user);
 
-        $otherClub = $this->createClub('Other Club');
-        $otherSeason = $this->createSeason($otherClub);
-        $otherSportCategory = $this->createSportCategory($otherClub, $this->sport);
-        $otherTeam = new Team;
-        $otherTeam->setClubId($otherClub->getId());
-        $otherTeam->setSeasonId($otherSeason->getId());
-        $otherTeam->setSportCategoryId($otherSportCategory->getId());
-        $otherTeam->setPriorityTierId($this->priorityTier->getId());
-        $otherTeam->setName('Other Club Team');
-        $otherTeam->setSessionsPerWeek(2);
-        $otherTeam->setIsActive(true);
-        $this->em->persist($otherTeam);
-        $this->em->flush();
-
-        $ownTeam = $this->createTeam('Own Team');
-
-        $client->request('GET', '/api/teams', [], [], [
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
         ]);
 
-        self::assertResponseStatusCodeSame(200);
-        $data = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertArrayHasKey('member', $data);
-        self::assertCount(1, $data['member']);
-        self::assertSame($ownTeam->getId(), $data['member'][0]['id']);
+        self::assertResponseStatusCodeSame(409);
     }
 
-    public function testBulkReorderPersistsTierAndOrderAtomically(): void
+    public function testAnEngagedTeamCannotChangeLevel(): void
     {
         $client = $this->client;
-        $a = $this->createTeam('Alpha');
-        $b = $this->createTeam('Bravo');
+        $team = $this->createTeam('U15 régionale');
+        $team->setLevel(TeamLevel::REGIONAL);
+        $this->em->flush();
+        $this->fixture($team, FixtureStatus::SUBMITTED);
         $client->loginUser($this->user);
 
-        $client->request('POST', '/api/teams/reorder', [], [], [
-            'HTTP_X-Club-Id' => $this->club->getId(),
-            'CONTENT_TYPE' => 'application/json',
-        ], json_encode(['items' => [
-            ['id' => $a->getId(), 'priorityTierId' => $this->priorityTier->getId(), 'tierOrder' => 3],
-            ['id' => $b->getId(), 'priorityTierId' => $this->priorityTier->getId(), 'tierOrder' => 1],
-        ]], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseIsSuccessful();
-        $this->em->clear();
-        self::assertSame(3, $this->em->getRepository(Team::class)->find($a->getId())?->getTierOrder());
-        self::assertSame(1, $this->em->getRepository(Team::class)->find($b->getId())?->getTierOrder());
-    }
-
-    public function testLevelIsWritableAndReadable(): void
-    {
-        $client = $this->client;
-        $client->loginUser($this->user);
-
-        $client->request('POST', '/api/teams', [], [], [
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
-            'name' => 'Regional Team',
+            'name' => 'U15 régionale',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'level' => 'DEPARTEMENTAL',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(409);
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertSame(TeamLevel::REGIONAL, $this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
+    }
+
+    public function testAnEngagedTeamCanStillBeRenamedAndRetiered(): void
+    {
+        // Le PUT renvoie le payload COMPLET : le niveau y est ré-écho à l'identique.
+        // Refuser l'écho casserait un simple renommage. Et le tier reste libre — c'est
+        // la perception interne du club, pas l'inscription fédérale.
+        $client = $this->client;
+        $team = $this->createTeam('U15 à renommer');
+        $team->setLevel(TeamLevel::REGIONAL);
+        $this->em->flush();
+        $this->fixture($team, FixtureStatus::PLACED);
+        $other = $this->otherTier();
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'U15 Élite Filles',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $other->getId(),
+            'level' => 'REGIONAL',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        $fresh = $this->em->getRepository(Team::class)->find($team->getId());
+        self::assertSame('U15 Élite Filles', $fresh?->getName());
+        self::assertSame($other->getId(), $fresh?->getPriorityTierId());
+    }
+
+    public function testTheApiTellsTheClientWhichTeamsAreEngaged(): void
+    {
+        // Le front grise « Supprimer » et le niveau à partir de CE champ : sans lui, il
+        // re-dériverait la règle de son côté et finirait par répondre autre chose que
+        // le serveur — donc à offrir un geste toujours refusé.
+        $client = $this->client;
+        $engaged = $this->createTeam('Engagée');
+        $this->fixture($engaged, FixtureStatus::PLACED);
+        $free = $this->createTeam('Libre');
+        $client->loginUser($this->user);
+
+        $client->request('GET', '/api/teams', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+        self::assertResponseIsSuccessful();
+        $byId = [];
+        foreach (json_decode((string) $client->getResponse()->getContent(), true)['member'] as $row) {
+            $byId[$row['id']] = $row['isEngaged'];
+        }
+
+        self::assertTrue($byId[$engaged->getId()]);
+        self::assertFalse($byId[$free->getId()]);
+    }
+
+    public function testAnEngagedTeamCannotHaveItsLevelRecordedAfterTheFact(): void
+    {
+        // Le niveau est figé, SANS exception — y compris quand il n'a jamais été
+        // renseigné. Il se saisit AVANT de générer : il alimente le tag NIVEAU, donc les
+        // contraintes, donc la photo de structure de la version. Le laisser bouger après
+        // ferait diverger la photo (qui l'a figé) et la base — puis « Charger cette
+        // version » ramènerait l'ancienne valeur en silence.
+        $client = $this->client;
+        $team = $this->createTeam('U15 sans niveau');
+        self::assertNull($team->getLevel());
+        $this->fixture($team, FixtureStatus::PLACED);
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'U15 sans niveau',
             'sportCategoryId' => $this->sportCategory->getId(),
             'priorityTierId' => $this->priorityTier->getId(),
             'level' => 'REGIONAL',
         ], \JSON_THROW_ON_ERROR));
 
-        self::assertResponseStatusCodeSame(201);
-        self::assertSame('REGIONAL', json_decode((string) $client->getResponse()->getContent(), true)['level']);
+        self::assertResponseStatusCodeSame(409);
     }
 
-    public function testLevelIsClearedWhenNullOnUpdate(): void
+    public function testAnEngagedTeamCannotHaveItsLevelCleared(): void
     {
         $client = $this->client;
-        $team = $this->createTeam('Leveled');
+        $team = $this->createTeam('U15 inscrite');
         $team->setLevel(TeamLevel::REGIONAL);
         $this->em->flush();
+        $this->fixture($team, FixtureStatus::PLACED);
         $client->loginUser($this->user);
 
         $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
-            'name' => 'Leveled',
+            'name' => 'U15 inscrite',
             'sportCategoryId' => $this->sportCategory->getId(),
             'priorityTierId' => $this->priorityTier->getId(),
-            'level' => null,
         ], \JSON_THROW_ON_ERROR));
 
-        self::assertResponseIsSuccessful();
-        // API Platform omits null-valued fields from the JSON-LD output, so the
-        // key is absent (not present-and-null) once level is cleared.
-        self::assertNull(json_decode((string) $client->getResponse()->getContent(), true)['level'] ?? null);
-        $this->em->clear();
-        self::assertNull($this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
+        self::assertResponseStatusCodeSame(409);
     }
 
-    public function testInvalidLevelIsRejected(): void
+    public function testWritesAnswerIsEngagedLikeReadsDo(): void
     {
+        // Le même champ ne peut pas répondre autrement selon le verbe : un client qui
+        // fait confiance au corps du PUT ré-ouvrirait « Supprimer » sur une équipe que
+        // le serveur refuse.
         $client = $this->client;
+        $team = $this->createTeam('U15 engagée');
+        $this->fixture($team, FixtureStatus::PLACED);
         $client->loginUser($this->user);
 
-        $client->request('POST', '/api/teams', [], [], [
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
-            'name' => 'Bad Level',
+            'name' => 'U15 engagée renommée',
             'sportCategoryId' => $this->sportCategory->getId(),
             'priorityTierId' => $this->priorityTier->getId(),
-            'level' => 'REGIONALE',
         ], \JSON_THROW_ON_ERROR));
 
-        self::assertResponseStatusCodeSame(422);
+        self::assertResponseIsSuccessful();
+        self::assertTrue(json_decode((string) $client->getResponse()->getContent(), true)['isEngaged']);
     }
 
     protected function setUp(): void

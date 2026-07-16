@@ -120,20 +120,24 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
             </option>
           ))}
         </Select>
-        <Select
-          aria-label="Niveau de jeu"
-          className="h-8 w-32"
-          value={team.level ?? ""}
-          disabled={engaged}
-          title={engaged ? ENGAGED_REASON : undefined}
-          onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}
-        >
-          {LEVELS.map((l) => (
-            <option key={l.value} value={l.value}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
+        {/* Le title vit sur le WRAPPER, pas sur le contrôle : un élément de formulaire
+            `disabled` ne reçoit aucun événement souris, donc son propre title ne
+            s'affiche jamais — le grisage resterait muet. */}
+        <span title={engaged ? ENGAGED_REASON : undefined}>
+          <Select
+            aria-label="Niveau de jeu"
+            className="h-8 w-32"
+            value={team.level ?? ""}
+            disabled={engaged}
+            onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}
+          >
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
+        </span>
         <Input
           aria-label="Séances/sem"
           type="number"
@@ -145,17 +149,11 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         />
         {/* Rang is not edited inline: changing a team's tier is done via the
             "Trier" mode (drag & drop between S/A/B/C/D zones). */}
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-8 text-destructive"
-          aria-label="Supprimer"
-          disabled={engaged}
-          title={engaged ? ENGAGED_REASON : undefined}
-          onClick={() => onDelete(team)}
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        <span title={engaged ? ENGAGED_REASON : undefined}>
+          <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" disabled={engaged} onClick={() => onDelete(team)}>
+            <Trash2 className="size-4" />
+          </Button>
+        </span>
       </div>
       {bonusCompetitionWarning && (
         <p role="alert" className="ml-8 mt-1 text-xs text-warning">

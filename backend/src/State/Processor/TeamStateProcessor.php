@@ -124,13 +124,22 @@ class TeamStateProcessor extends AbstractStateProcessor
             }
         }
 
-        // Le NIVEAU d'une équipe engagée est figé : c'est sous ce niveau qu'elle est
-        // inscrite auprès de la fédération. Le tier, lui, reste libre — c'est la
-        // perception interne du club, elle peut bouger sans rien remettre en cause.
+        // Le NIVEAU d'une équipe engagée est FIGÉ — sans exception. Le tier, lui, reste
+        // libre : c'est la perception interne du club, elle peut bouger sans rien
+        // remettre en cause auprès de la fédération.
         //
-        // Seul un CHANGEMENT est refusé, pas un écho : le front renvoie le payload
-        // complet à chaque PUT, donc refuser une valeur identique casserait un simple
-        // renommage d'équipe.
+        // Le niveau se saisit AVANT de générer : il alimente le tag NIVEAU, donc les
+        // contraintes du solveur, donc la photo de structure de la version. Le laisser
+        // bouger après ferait diverger la photo (qui l'a figé) et la base — deux vérités
+        // sur la même chose, et « Charger cette version » ramènerait silencieusement
+        // l'ancienne. Le figer VRAIMENT rend cette divergence impossible.
+        //
+        // Seule tolérance, et ce n'est pas une exception à la règle : un ÉCHO à
+        // l'identique passe. Le front renvoie le payload complet à chaque PUT ; refuser
+        // une valeur inchangée casserait un simple renommage sans rien protéger.
+        //
+        // (Un jour l'import FFBB pourra vouloir changer un niveau — ce cas sera traité
+        // à ce moment-là, avec la photo. Pas avant, et pas en douce.)
         $newLevel = null !== $input->level ? TeamLevel::tryFrom($input->level) : null;
         if ($newLevel !== $entity->getLevel()) {
             $this->teamEngagementGuard->assertNotEngaged(
@@ -155,6 +164,14 @@ class TeamStateProcessor extends AbstractStateProcessor
      */
     protected function mapEntityToOutput(object $entity): TeamResource
     {
-        return TeamResource::fromEntity($entity);
+        $dto = TeamResource::fromEntity($entity);
+        // `fromEntity` laisse isEngaged à false : sans ça, un POST/PUT répondrait
+        // « isEngaged: false » là où le GET de la même équipe répond true — le même
+        // champ donnant deux réponses selon le verbe, donc deux vérités. Un client qui
+        // fait confiance au corps de l'écriture (setQueryData plutôt qu'invalidate)
+        // ré-ouvrirait « Supprimer » sur une équipe que le serveur refuse.
+        $dto->isEngaged = $this->teamEngagementGuard->isEngaged($entity->getId());
+
+        return $dto;
     }
 }
