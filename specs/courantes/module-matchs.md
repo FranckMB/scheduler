@@ -129,6 +129,34 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   `FixtureApiTest`.
 - Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).
 
+## Le périmètre engagé — `TeamEngagementGuard` (2026-07-16)
+
+**Réalité du terrain** : valider le planning de la saison valide aussi un **périmètre**, les équipes qui
+font de la compétition. Une fois les matchs envoyés à la fédération, on n'y revient plus — « une équipe qui
+joue ne peut pas être supprimée, ni avoir son niveau modifié ; elle peut être déplacée ou changer de
+créneau ». Le planning de saison, lui, ne change **quasiment jamais** ; il s'ajuste dans de rares cas.
+
+**Engagée** = ≥1 `Fixture` de statut ≠ `UNPLACED`. Un match à l'**extérieur** engage : il naît `PLACED` à
+l'import FBI (son horaire est imposé par l'adversaire) et l'équipe joue bel et bien. `UNPLACED` = encore en
+traitement, il n'engage rien. Conséquence assumée : **dès l'import FBI**, presque toutes les équipes en
+compétition sont figées.
+
+| Sur une équipe engagée | |
+|---|---|
+| Suppression (`DELETE /api/teams/{id}`) | **409** — sans ça, `EntityCascadeDeleter::purgeChildrenOfTeam` emporterait ses `Fixture`, y compris ceux déjà connus de la fédé |
+| Changement de `Team.level` | **409** — c'est sous ce niveau qu'elle est inscrite. Un PUT qui ré-écho le MÊME niveau passe (le front renvoie le payload complet ; refuser l'écho casserait un renommage) |
+| `priorityTierId` / `tierOrder` | **libres** — perception interne du club |
+| `isActive` | **libre** — sert aux plannings de période, pas au périmètre de la saison |
+| Nom, créneaux, gymnase | **libres** |
+
+La règle vit à **un seul endroit** (`TeamEngagementGuard`) : la garde d'écriture et le contrat de lecture
+(`TeamResource.isEngaged`, rempli en lot par `TeamStateProvider`) la consultent. Le front grise « Supprimer »
+et le sélecteur de niveau à partir de ce champ — il ne re-dérive rien, sinon un second endroit répondrait
+« engagée ? » et finirait par contredire le serveur.
+
+Les purges de masse (`SeasonDataPurger`, `ErasedClubPurger`) ne passent pas par la garde : la saison entière
+part, matchs compris.
+
 ## Reste palier A (à venir)
 
 `Team.preferredMatchWindow` (backend). **Joueurs** dans le moteur de conflits (nécessite un modèle de

@@ -90,6 +90,20 @@ class TeamResource
     #[Groups(['read'])]
     public ?TeamLevel $level = null;
 
+    /**
+     * Cette équipe joue-t-elle déjà en compétition (≥1 match non-UNPLACED, extérieur
+     * compris) ? Alors elle ne peut plus être supprimée ni changer de `level` — elle
+     * est inscrite ainsi auprès de la fédération. Son tier, ses créneaux et son nom
+     * restent libres.
+     *
+     * Exposé pour que l'UI grise ces deux gestes sans re-dériver la règle de son côté :
+     * un second endroit qui répond « engagée ? » finirait par répondre autre chose que
+     * le serveur, et l'écran offrirait un geste toujours refusé. Rempli en lot par
+     * TeamStateProvider ; false sur le chemin nu de fromEntity.
+     */
+    #[Groups(['read'])]
+    public bool $isEngaged = false;
+
     #[Groups(['read'])]
     public int $sessionsPerWeek = 0;
 

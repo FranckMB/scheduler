@@ -6,12 +6,16 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Fixture;
 use App\Entity\PriorityTier;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\FixtureHomeAway;
+use App\Enum\FixtureStatus;
+use App\Enum\TeamLevel;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -263,7 +267,7 @@ final class TeamApiTest extends WebTestCase
     {
         $client = $this->client;
         $team = $this->createTeam('Leveled');
-        $team->setLevel(\App\Enum\TeamLevel::REGIONAL);
+        $team->setLevel(TeamLevel::REGIONAL);
         $this->em->flush();
         $client->loginUser($this->user);
 
@@ -301,6 +305,141 @@ final class TeamApiTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseStatusCodeSame(422);
+    }
+
+    /**
+     * ADR — périmètre engagé : une équipe qui joue est inscrite auprès de la
+     * fédération. On ne la supprime plus (ses matchs partiraient avec elle via
+     * purgeChildrenOfTeam) et son niveau ne bouge plus (c'est sous ce niveau
+     * qu'elle est inscrite). Le reste — nom, tier, créneaux — suit le club.
+     */
+    public function testAnEngagedTeamCannotBeDeletedAndKeepsItsFixtures(): void
+    {
+        $client = $this->client;
+        $team = $this->createTeam('U15 en championnat');
+        $fixture = $this->fixture($team, FixtureStatus::PLACED);
+        $client->loginUser($this->user);
+
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ]);
+
+        self::assertResponseStatusCodeSame(409, 'une équipe qui joue ne se supprime pas');
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertNotNull($this->em->getRepository(Team::class)->find($team->getId()));
+        // Le vrai risque : la cascade détruit les Fixture. Le refus doit tomber AVANT.
+        self::assertNotNull($this->em->getRepository(Fixture::class)->find($fixture->getId()), 'ses matchs engagés survivent');
+    }
+
+    public function testATeamWhoseFixturesAreAllUnplacedIsStillDeletable(): void
+    {
+        // UNPLACED = match encore en traitement : il n'engage rien, et la garde ne
+        // doit pas bloquer le cas normal (un club qui range ses équipes avant de jouer).
+        $client = $this->client;
+        $team = $this->createTeam('U13 sans engagement');
+        $this->fixture($team, FixtureStatus::UNPLACED);
+        $client->loginUser($this->user);
+
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ]);
+
+        self::assertResponseStatusCodeSame(204);
+    }
+
+    public function testAnAwayFixtureEngagesTheTeamToo(): void
+    {
+        // Un match à l'extérieur naît PLACED à l'import FBI (horaire imposé par
+        // l'adversaire) : l'équipe joue, donc elle est engagée.
+        $client = $this->client;
+        $team = $this->createTeam('U18 qui joue dehors');
+        $this->fixture($team, FixtureStatus::PLACED, FixtureHomeAway::AWAY);
+        $client->loginUser($this->user);
+
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ]);
+
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    public function testAnEngagedTeamCannotChangeLevel(): void
+    {
+        $client = $this->client;
+        $team = $this->createTeam('U15 régionale');
+        $team->setLevel(TeamLevel::REGIONAL);
+        $this->em->flush();
+        $this->fixture($team, FixtureStatus::SUBMITTED);
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'U15 régionale',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+            'level' => 'DEPARTEMENTAL',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(409);
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertSame(TeamLevel::REGIONAL, $this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
+    }
+
+    public function testAnEngagedTeamCanStillBeRenamedAndRetiered(): void
+    {
+        // Le PUT renvoie le payload COMPLET : le niveau y est ré-écho à l'identique.
+        // Refuser l'écho casserait un simple renommage. Et le tier reste libre — c'est
+        // la perception interne du club, pas l'inscription fédérale.
+        $client = $this->client;
+        $team = $this->createTeam('U15 à renommer');
+        $team->setLevel(TeamLevel::REGIONAL);
+        $this->em->flush();
+        $this->fixture($team, FixtureStatus::PLACED);
+        $other = $this->otherTier();
+        $client->loginUser($this->user);
+
+        $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'U15 Élite Filles',
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $other->getId(),
+            'level' => 'REGIONAL',
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        $fresh = $this->em->getRepository(Team::class)->find($team->getId());
+        self::assertSame('U15 Élite Filles', $fresh?->getName());
+        self::assertSame($other->getId(), $fresh?->getPriorityTierId());
+    }
+
+    public function testTheApiTellsTheClientWhichTeamsAreEngaged(): void
+    {
+        // Le front grise « Supprimer » et le niveau à partir de CE champ : sans lui, il
+        // re-dériverait la règle de son côté et finirait par répondre autre chose que
+        // le serveur — donc à offrir un geste toujours refusé.
+        $client = $this->client;
+        $engaged = $this->createTeam('Engagée');
+        $this->fixture($engaged, FixtureStatus::PLACED);
+        $free = $this->createTeam('Libre');
+        $client->loginUser($this->user);
+
+        $client->request('GET', '/api/teams', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+        self::assertResponseIsSuccessful();
+        $byId = [];
+        foreach (json_decode((string) $client->getResponse()->getContent(), true)['member'] as $row) {
+            $byId[$row['id']] = $row['isEngaged'];
+        }
+
+        self::assertTrue($byId[$engaged->getId()]);
+        self::assertFalse($byId[$free->getId()]);
     }
 
     protected function setUp(): void
@@ -481,6 +620,44 @@ final class TeamApiTest extends WebTestCase
         $tier->setOrToolsWeight(100);
         $tier->setDefaultMinSessions(2);
 
+        $this->em->persist($tier);
+        $this->em->flush();
+
+        return $tier;
+    }
+
+    private function fixture(Team $team, FixtureStatus $status, FixtureHomeAway $homeAway = FixtureHomeAway::HOME): Fixture
+    {
+        $this->scopeGucToClub($this->club->getId());
+        $fixture = new Fixture;
+        $fixture->setClubId($this->club->getId());
+        $fixture->setSeasonId($this->season->getId());
+        $fixture->setTeamId($team->getId());
+        $fixture->setMatchDate(new DateTimeImmutable('2026-10-04'));
+        $fixture->setHomeAway($homeAway);
+        $fixture->setOpponentLabel('AS Voisins');
+        $fixture->setStatus($status);
+        $this->em->persist($fixture);
+        $this->em->flush();
+
+        return $fixture;
+    }
+
+    /** Un SECOND rang, pour prouver qu'une équipe engagée peut encore en changer. */
+    private function otherTier(): PriorityTier
+    {
+        $existing = $this->em->getRepository(PriorityTier::class)->find(2);
+        if ($existing instanceof PriorityTier) {
+            return $existing;
+        }
+
+        $tier = new PriorityTier;
+        $tier->setId(2);
+        $tier->setLabel('A');
+        $tier->setName('Compétition');
+        $tier->setColor('#00FF00');
+        $tier->setOrToolsWeight(50);
+        $tier->setDefaultMinSessions(2);
         $this->em->persist($tier);
         $this->em->flush();
 

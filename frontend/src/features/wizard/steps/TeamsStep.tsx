@@ -40,6 +40,14 @@ const LEVELS: { value: TeamLevel | ""; label: string }[] = [
   { value: "LOISIR_JEUNE", label: "Loisir jeune" },
 ];
 
+/**
+ * Une équipe qui JOUE déjà est inscrite sous son niveau auprès de la fédération : on
+ * ne la supprime plus (ses matchs partiraient avec elle) et son niveau ne bouge plus.
+ * Le serveur refuse les deux ; l'écran ne les propose donc pas, plutôt que d'offrir un
+ * geste qui finira en 409.
+ */
+const ENGAGED_REASON = "Cette équipe joue en compétition : ses matchs sont engagés auprès de la fédération.";
+
 /** A team is "competitive" unless it plays at a loisir level (or has none set). */
 const isCompetitive = (level: TeamLevel | null): boolean =>
   null !== level && "LOISIR_ADULTE" !== level && "LOISIR_JEUNE" !== level;
@@ -84,6 +92,8 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
   // Competitive team ranked "Bonus" (D) is likely a mistake — it will be
   // scheduled last. Non-blocking warning (the solver stays the authority).
   const bonusCompetitionWarning = isCompetitive(team.level) && isBonusTier(tiers, team.priorityTierId);
+  // Le serveur le dit (TeamResource.isEngaged) — on ne le recalcule pas ici.
+  const engaged = true === team.isEngaged;
 
   return (
     <div className="border-t border-border py-1.5">
@@ -110,7 +120,14 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
             </option>
           ))}
         </Select>
-        <Select aria-label="Niveau de jeu" className="h-8 w-32" value={team.level ?? ""} onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}>
+        <Select
+          aria-label="Niveau de jeu"
+          className="h-8 w-32"
+          value={team.level ?? ""}
+          disabled={engaged}
+          title={engaged ? ENGAGED_REASON : undefined}
+          onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}
+        >
           {LEVELS.map((l) => (
             <option key={l.value} value={l.value}>
               {l.label}
@@ -128,7 +145,15 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete }: RowProp
         />
         {/* Rang is not edited inline: changing a team's tier is done via the
             "Trier" mode (drag & drop between S/A/B/C/D zones). */}
-        <Button size="icon" variant="ghost" className="size-8 text-destructive" aria-label="Supprimer" onClick={() => onDelete(team)}>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8 text-destructive"
+          aria-label="Supprimer"
+          disabled={engaged}
+          title={engaged ? ENGAGED_REASON : undefined}
+          onClick={() => onDelete(team)}
+        >
           <Trash2 className="size-4" />
         </Button>
       </div>
