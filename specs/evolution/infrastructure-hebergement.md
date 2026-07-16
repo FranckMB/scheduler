@@ -69,15 +69,17 @@ Le risque produit #1 n'est pas le CPU, c'est **la perte de données** (aujourd'h
 
 | Palier | A (VPS seul) | B (VPS + PG managé) | C (PaaS) | D (K8s) |
 |---|---|---|---|---|
-| **Lancement** (≤ ~30 clubs) | 15–40 € | **40–90 €** | 120–300 € | 150–400 € |
-| **Croissance** (~100–300 clubs) | risqué (SPOF/scale) | 90–200 € | 250–600 € | 300–700 € |
+| **Lancement** (≤ ~30 clubs) | **140–170 €** | **150–180 €** | 120–300 € | 150–400 € |
+| **Croissance** (~100–300 clubs) | risqué (SPOF/scale) | 200–350 € | 250–600 € | 300–700 € |
 | **Échelle** (500+ clubs) | inadapté | migrer | scale propre | scale propre |
 
-> Providers UE/🇫🇷 pertinents (RGPD) : **Hetzner** (moins cher, DE), **Scaleway** & **OVHcloud** & **Clever Cloud** (🇫🇷), Postgres managé chez Scaleway/OVH/Clever/Aiven-UE. Éviter les régions US par défaut (RGPD/transfert).
+> ⚠️ **Chiffres A et B révisés le 2026-07-17** (les précédents — 15-40 € / 40-90 € — supposaient du **vCPU partagé** et une grille Hetzner antérieure). Deux causes : (1) le solveur exige du **vCPU dédié** (§6), dont le prix est sans commune mesure avec l'entrée de gamme mutualisée ; (2) **Hetzner a augmenté les gammes CCX de ×2,1 à ×2,7 le 15 juin 2026**. Conséquence : **l'écart de prix entre A et B se réduit à ~11 €/mois** (un Postgres managé d'entrée de gamme suffit — la base n'est pas le goulot d'étranglement, le solveur l'est), ce qui **renforce** la recommandation B du §5. Détail chiffré et sources : `business/hebergement-couts.md` (local, non versionné).
+
+> Providers UE/🇫🇷 pertinents (RGPD) : **Scaleway** & **OVHcloud** & **Clever Cloud** (🇫🇷), **Hetzner** (DE), Postgres managé chez Scaleway/OVH/Clever/Aiven-UE. Éviter les régions US par défaut (RGPD/transfert). **L'avantage tarifaire historique de Hetzner ne vaut plus sur le vCPU dédié** depuis le 15/06/2026 (~20 €/mois d'écart avec Scaleway) : le surcoût d'un hébergement 🇫🇷 est devenu marginal.
 
 ## 5. Recommandation (phasée)
 
-- **Lancement (mi-2027) → Option B.** VPS UE (Hetzner/Scaleway/OVH, 4–8 vCPU) faisant tourner le `docker compose` **moins la base**, + **PostgreSQL managé UE avec PITR**. Migration minime, backups **résolus**, coût **~50–80 €/mois**. Le solveur bursty tient sur les cœurs du VPS au lancement (peu de générations concurrentes). Ajouter : **SMTP tiers**, **Sentry**, un **health/uptime** externe, secrets hors repo, CI/CD de déploiement.
+- **Lancement (mi-2027) → Option B.** VPS UE (Scaleway/OVH/Hetzner, 4–8 vCPU **dédiés** — cf. §6) faisant tourner le `docker compose` **moins la base**, + **PostgreSQL managé UE avec PITR** (gamme d'entrée suffisante). Migration minime, backups **résolus**, coût **~150–180 €/mois** (révisé le 2026-07-17, cf. §4). Le solveur bursty tient sur les cœurs du VPS au lancement (peu de générations concurrentes). Ajouter : **SMTP tiers**, **Sentry**, un **health/uptime** externe, secrets hors repo, CI/CD de déploiement.
 - **Croissance → sortir le solveur du VPS** en premier (c'est lui qui sature en pic) : soit un 2ᵉ VPS worker, soit basculer **engine + workers vers un PaaS scale-to-load** (Option C partielle) pendant que web+DB restent stables. Hybride assumé.
 - **Échelle (500+ clubs) → PaaS complet (C) ou K8s (D)** si la charge et l'équipe le justifient. **Ne pas** commencer par là : c'est du temps d'ingénierie volé au produit avant d'en avoir le besoin.
 
