@@ -13,6 +13,8 @@ const deleteConstraintOverride = vi.fn();
 const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
 const constraintsState: { data: Array<{ id: string; name: string; ruleType: string; scope?: string; scopeTargetId?: string | null }> } = { data: [] };
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
+const tagsState: { data: Array<{ id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }> } = { data: [] };
+const tagAssignmentsState: { data: Array<{ id: string; teamId: string; tagId: string; seasonId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
@@ -37,6 +39,8 @@ vi.mock("../queries", () => ({
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
   usePeriodConstraintOverrides: () => ({ data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value }),
+  useWizardTeamTags: () => ({ data: tagsState.data, isLoading: false, isError: false }),
+  useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: false, isError: false }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
   useUpdatePeriodConstraintOverride: () => ({ mutate: updateConstraintOverride, isPending: false }),
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
@@ -55,6 +59,8 @@ afterEach(() => {
   overridesState.data = [];
   constraintsState.data = [];
   constraintOverridesState.data = [];
+  tagsState.data = [];
+  tagAssignmentsState.data = [];
   teamOverridesLoadingState.value = false;
   teamOverridesErrorState.value = false;
   constraintOverridesLoadingState.value = false;
@@ -264,6 +270,18 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
     expect(updateConstraintOverride).toHaveBeenCalledWith({ id: "ov1", body: { calendarEntryId: "e1", constraintId: "k1", isActive: false } }, expect.anything());
     expect(createConstraintOverride).not.toHaveBeenCalled();
+  });
+
+  it("hides a CLUB+targetTag constraint when every tagged team is paused", () => {
+    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    tagsState.data = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
+    tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-sen", seasonId: "s1" }];
+    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
+    constraintsState.data = [{ id: "cg", name: "Groupe SENIOR · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "SENIOR" }, isActive: true }];
+
+    render(<PeriodConstraints calendarEntryId="e1" />);
+
+    expect(screen.queryByRole("checkbox", { name: "Groupe SENIOR · pas après 21:00 appliquée cette période" })).not.toBeInTheDocument();
   });
 
   it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {

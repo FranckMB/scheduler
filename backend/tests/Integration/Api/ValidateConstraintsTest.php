@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -86,6 +89,28 @@ final class ValidateConstraintsTest extends WebTestCase
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertFalse($data['valid']);
         self::assertNotEmpty($data['errors'], 'the impossible venue minimum must surface as an error');
+    }
+
+    public function testOverlayValidationIncludesInheritedPermanentConstraints(): void
+    {
+        $this->constraint(['maxStartTime' => '10:00']);
+        $this->constraint(['minStartTime' => '12:00']);
+        $entry = $this->period(CalendarEntryPeriodType::CLOSURE);
+
+        $this->client->loginUser($this->user);
+        $this->client->request(
+            'POST',
+            '/api/constraints/validate',
+            [],
+            [],
+            ['HTTP_X-Club-Id' => $this->club->getId()],
+            json_encode(['calendarEntryId' => $entry->getId()], \JSON_THROW_ON_ERROR),
+        );
+
+        self::assertResponseStatusCodeSame(422);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($data['valid']);
+        self::assertNotEmpty($data['conflicts'], 'overlay validation must include inherited permanent constraints');
     }
 
     protected function setUp(): void
@@ -166,5 +191,21 @@ final class ValidateConstraintsTest extends WebTestCase
         $this->em->flush();
 
         return $team->getId();
+    }
+
+    private function period(CalendarEntryPeriodType $type): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($this->club->getId());
+        $entry->setSeasonId($this->season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType($type);
+        $entry->setTitle('Period ' . $type->value);
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry;
     }
 }
