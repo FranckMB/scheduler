@@ -121,6 +121,66 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertCount(0, $this->em->getRepository(\App\Entity\TeamPeriodOverride::class)->findBy(['teamId' => $sm2->getId()]), 'a dangling period override is purged on restore');
     }
 
+    public function testLoadVersionIsRefusedWhenItWouldRemoveAnEngagedTeam(): void
+    {
+        // `wipeStructure` supprime les Team en DQL de MASSE : il ne passe pas par le
+        // processor, donc pas par la garde du périmètre engagé. Sans ce contrôle,
+        // « une équipe qui joue est intouchable » serait vrai par l'API et faux ici —
+        // donc faux, et contournable en un clic. Ses matchs, absents de la photo comme
+        // du wipe, survivraient en nommant un team_id mort (aucune FK ne l'arrête).
+        $this->persistTeam('SM1');
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        $snapshotter = self::getContainer()->get(StructureSnapshotter::class);
+        $snapshotter->store($v1, $snapshotter->serialize($this->club->getId(), $this->season->getId()));
+
+        // Une équipe née APRÈS la photo, puis engagée en compétition.
+        $sm2 = $this->persistTeam('SM2');
+        $fixture = (new \App\Entity\Fixture)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setTeamId($sm2->getId())
+            ->setMatchDate(new DateTimeImmutable('2026-10-04'))
+            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setOpponentLabel('AS Voisins')
+            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+        $this->em->persist($fixture);
+        $this->em->flush();
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+
+        self::assertResponseStatusCodeSame(409, 'charger une photo qui ignore une équipe engagée doit être refusé');
+        $this->em->clear();
+        self::assertNotNull($this->em->getRepository(Team::class)->find($sm2->getId()), 'l\'équipe engagée survit');
+        self::assertNotNull($this->em->getRepository(\App\Entity\Fixture::class)->find($fixture->getId()), 'et son match aussi');
+    }
+
+    public function testLoadVersionStillWorksWhenTheEngagedTeamIsInThePhoto(): void
+    {
+        // Le pendant du test ci-dessus, et le SEUL qui attrape une garde trop stricte :
+        // si `$inPhoto` se remplit mal (mauvaise clé de famille, par ex.), la garde
+        // refuse TOUT — y compris ce cas parfaitement légitime — et le test précédent,
+        // lui, resterait vert. L'équipe engagée est ici DANS la photo : rien ne se perd.
+        $sm1 = $this->persistTeam('SM1');
+        $fixture = (new \App\Entity\Fixture)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setTeamId($sm1->getId())
+            ->setMatchDate(new DateTimeImmutable('2026-10-04'))
+            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setOpponentLabel('AS Voisins')
+            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+        $this->em->persist($fixture);
+        $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
+        $this->em->flush();
+        $snapshotter = self::getContainer()->get(StructureSnapshotter::class);
+        $snapshotter->store($v1, $snapshotter->serialize($this->club->getId(), $this->season->getId()));
+
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/regenerate-from", [], [], $this->headers());
+
+        self::assertResponseStatusCodeSame(200, 'une équipe engagée présente dans la photo ne bloque rien');
+        $this->em->clear();
+        self::assertNotNull($this->em->getRepository(Team::class)->find($sm1->getId()));
+    }
+
     public function testRegenerateFromTheChosenVersionIsRefused(): void
     {
         // The version the plan points at is read-only: replaying its conditions

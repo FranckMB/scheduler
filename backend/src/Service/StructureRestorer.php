@@ -56,6 +56,7 @@ final class StructureRestorer
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly TeamEngagementGuard $teamEngagementGuard,
     ) {}
 
     /**
@@ -87,6 +88,7 @@ final class StructureRestorer
     public function apply(string $clubId, string $seasonId, array $data): void
     {
         $this->disableTenantFilters($this->entityManager);
+        $this->assertRestoreKeepsEngagedTeams($clubId, $seasonId, $data);
         $this->wipeStructure($clubId, $seasonId);
         // Bulk DQL DELETE removes the rows but leaves the (now-stale) objects in
         // the identity map — re-inserting the SAME ids would raise an identity
@@ -170,6 +172,57 @@ final class StructureRestorer
     }
 
     /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
+    /**
+     * Une équipe ENGAGÉE ne peut pas disparaître d'un restore : ses matchs sont déposés
+     * à la fédération, et `Fixture` n'est ni dans le wipe ni dans la photo — elle
+     * survivrait en nommant un `team_id` mort (aucune FK ne l'en empêche).
+     *
+     * `wipeStructure` supprime les Team en DQL de MASSE : il ne passe donc pas par
+     * TeamStateProcessor, où vit la garde de suppression. Sans ce contrôle, l'invariant
+     * « une équipe qui joue est intouchable » serait vrai par l'API et faux ici — donc
+     * faux tout court, et contournable en un clic sur « Charger cette version ».
+     *
+     * On refuse plutôt que d'épargner l'équipe : la garder hors de la photo rendrait la
+     * structure restaurée incohérente avec la version qu'on prétend recharger.
+     *
+     * @param array<string, list<array<string, mixed>>> $data
+     */
+    private function assertRestoreKeepsEngagedTeams(string $clubId, string $seasonId, array $data): void
+    {
+        /** @var list<Team> $teams */
+        $teams = $this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]);
+        if ([] === $teams) {
+            return;
+        }
+
+        $engaged = $this->teamEngagementGuard->engagedTeamIds(array_map(static fn (Team $t): string => $t->getId(), $teams));
+        if ([] === $engaged) {
+            return;
+        }
+
+        // La clé de famille est le nom COURT de la classe ('Team'), pas un pluriel :
+        // la lire en dur ferait taire la garde sur un tableau vide. array_search sur la
+        // table de correspondance qui sert déjà à l'hydratation — une seule source.
+        $teamFamily = array_search(Team::class, self::FAMILY_CLASS, true);
+        $inPhoto = [];
+        foreach ($data[$teamFamily] ?? [] as $row) {
+            if (isset($row['id']) && \is_string($row['id'])) {
+                $inPhoto[$row['id']] = true;
+            }
+        }
+
+        $lost = [];
+        foreach ($teams as $team) {
+            if (isset($engaged[$team->getId()]) && !isset($inPhoto[$team->getId()])) {
+                $lost[] = $team->getName();
+            }
+        }
+
+        if ([] !== $lost) {
+            throw new ConflictHttpException(\sprintf('Cette version est antérieure à %s, qui joue%s déjà en compétition : la charger %s supprimerait et laisserait %s matchs sans équipe.', implode(', ', $lost), 1 === \count($lost) ? '' : 'nt', 1 === \count($lost) ? 'la' : 'les', 1 === \count($lost) ? 'ses' : 'leurs'));
+        }
+    }
+
     private function wipeStructure(string $clubId, string $seasonId): void
     {
         // TeamTagAssignment has a season_id but NO club_id (scoped by season).

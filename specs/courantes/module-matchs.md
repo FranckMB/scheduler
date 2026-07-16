@@ -157,10 +157,16 @@ et le sélecteur de niveau à partir de ce champ — il ne re-dérive rien, sino
 Les purges de masse (`SeasonDataPurger`, `ErasedClubPurger`) ne passent pas par la garde : la saison entière
 part, matchs compris.
 
-⚠️ **Dette connue, hors de cette garde** : `StructureRestorer::wipeStructure` (« Charger cette version »)
-supprime les `Team` de la saison en DQL de masse — sans passer par le processor — et `Fixture` n'est ni dans
-ce wipe ni dans la photo (`StructureSnapshotter::FAMILIES`). Une équipe supprimée par un restore laisse donc
-ses matchs orphelins sur un `team_id` mort. Défaut **antérieur** à cette garde, tracé en roadmap.
+**Le restore aussi** : `StructureRestorer::wipeStructure` (« Charger cette version ») supprime les `Team` de
+la saison en DQL de **masse**, donc sans passer par le processor où vit la garde. `Fixture` n'est ni dans ce
+wipe ni dans la photo (`StructureSnapshotter::FAMILIES`) : une équipe engagée que la photo ignore serait
+supprimée et ses matchs survivraient en nommant un `team_id` mort (aucune FK ne l'arrête). L'invariant serait
+alors vrai par l'API et faux ici — donc faux, et contournable en un clic.
+
+`StructureRestorer::assertRestoreKeepsEngagedTeams` refuse le chargement (**409**) quand la photo ne contient
+pas une équipe engagée. On refuse plutôt que d'épargner l'équipe : la garder hors de la photo rendrait la
+structure incohérente avec la version qu'on prétend recharger. Une équipe engagée **présente** dans la photo
+ne bloque rien.
 
 ## Reste palier A (à venir)
 
