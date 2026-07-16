@@ -1,8 +1,12 @@
 # Authentification superadmin — SA0
 
-> **État courant (2026-07-16)** : socle backend livré. L'interface React, les métriques,
+> **État courant (2026-07-16)** : socle backend + interface React SA0 livrés. Les métriques,
 > la supervision et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
+
+Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
+séparé, store admin en mémoire uniquement, login mot de passe/TOTP, garde de route, shell
+de console et logout CSRF. Il ne lit ni ne persiste le JWT club.
 
 ## Identité et frontière de sécurité
 
