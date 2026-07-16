@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\AdminJob;
 
+use DateTimeImmutable;
+use DateTimeInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Clock\ClockInterface;
 
 /** Read-only operational job state for the super-admin console. */
 final readonly class AdminJobMonitoringService
@@ -13,6 +16,7 @@ final readonly class AdminJobMonitoringService
     public function __construct(
         private AdminJobCatalog $catalog,
         private ManagerRegistry $managerRegistry,
+        private ClockInterface $clock,
     ) {}
 
     /**
@@ -21,6 +25,7 @@ final readonly class AdminJobMonitoringService
      *     label: string,
      *     command: string,
      *     cadence: string,
+     *     nextRunAt: string,
      *     latestRun: array{id: string, status: string, source: string, startedAt: string, finishedAt: ?string, durationMs: ?int, exitCode: ?int}|null
      * }>}
      */
@@ -52,6 +57,7 @@ final readonly class AdminJobMonitoringService
      *     label: string,
      *     command: string,
      *     cadence: string,
+     *     nextRunAt: string,
      *     latestRun: array{id: string, status: string, source: string, startedAt: string, finishedAt: ?string, durationMs: ?int, exitCode: ?int}|null
      * }
      */
@@ -61,7 +67,8 @@ final readonly class AdminJobMonitoringService
             'key' => $definition->key,
             'label' => $definition->label,
             'command' => $definition->command,
-            'cadence' => $definition->cadence,
+            'cadence' => $definition->schedule->cadence,
+            'nextRunAt' => $definition->schedule->nextDueAt(DateTimeImmutable::createFromInterface($this->clock->now()), $this->latestScheduledFor($definition->key))->format(DateTimeInterface::ATOM),
             'latestRun' => null === $latest ? null : [
                 'id' => (string) $latest['id'],
                 'status' => (string) $latest['status'],
@@ -72,6 +79,13 @@ final readonly class AdminJobMonitoringService
                 'exitCode' => null === $latest['exit_code'] ? null : (int) $latest['exit_code'],
             ],
         ];
+    }
+
+    private function latestScheduledFor(string $jobKey): ?DateTimeImmutable
+    {
+        $value = $this->connection()->fetchOne('SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> \'interrupted\'', ['job_key' => $jobKey]);
+
+        return false === $value || null === $value ? null : new DateTimeImmutable((string) $value);
     }
 
     private function connection(): Connection

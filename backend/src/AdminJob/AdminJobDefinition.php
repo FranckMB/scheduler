@@ -12,7 +12,7 @@ final readonly class AdminJobDefinition
         public string $key,
         public string $label,
         public string $command,
+        public AdminJobSchedule $schedule,
         public array $arguments = [],
-        public string $cadence = 'hourly',
     ) {}
 }

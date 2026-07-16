@@ -106,7 +106,8 @@ export interface AdminJob {
   key: string;
   label: string;
   command: string;
-  cadence: "hourly";
+  cadence: "every_10_minutes" | "daily" | "quarterly";
+  nextRunAt: string;
   latestRun: {
     id: string;
     status: AdminJobStatus;

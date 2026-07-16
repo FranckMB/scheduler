@@ -195,9 +195,9 @@ services:
     networks:
       - clubscheduler_network
 
-  # Hourly maintenance loop. The allowlisted app:jobs:run wrapper prevents
-  # overlap and persists every outcome in admin_job_run. The underlying jobs
-  # remain idempotent; a failure is recorded but never stops the next job.
+  # Minute scheduler tick. app:jobs:run-due resolves due slots in Europe/Paris;
+  # the allowlisted app:jobs:run wrapper prevents overlap and persists outcomes.
+  # Missed slots are caught up once after restart; one failure never stops the next job.
   cron-runner:
     build:
       context: .
@@ -215,16 +215,9 @@ services:
     command: >-
       sh -lc 'while true; do
         if [ -f bin/console ]; then
-          php bin/console app:jobs:run period-reminders --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run transition-reminders --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run reconcile-stuck-schedules --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run purge-unverified-users --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run purge-erased-clubs --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run purge-inactive-users --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run purge-seasons --source=scheduled --no-interaction || true;
-          php bin/console app:jobs:run purge-audit-log --source=scheduled --no-interaction || true;
+          php bin/console app:jobs:run-due --no-interaction || true;
         fi;
-        sleep 3600;
+        sleep 60;
       done'
     depends_on:
       php-fpm:
@@ -234,8 +227,8 @@ services:
     healthcheck:
       # Same PID-1 pattern as messenger-worker (no pgrep in the php image; a
       # process-list grep would also self-match). PID 1 is the sh loop whose
-      # command line carries "sleep 3600".
-      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"sleep 3600\") === false ? 1 : 0);'"]
+      # command line carries "sleep 60".
+      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"sleep 60\") === false ? 1 : 0);'"]
       interval: 30s
       timeout: 5s
       retries: 5

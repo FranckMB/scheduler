@@ -38,14 +38,16 @@ final class AdminJobCatalog
     private function defaults(): array
     {
         return [
-            new AdminJobDefinition('period-reminders', 'Rappels de périodes', 'app:periods:remind'),
-            new AdminJobDefinition('transition-reminders', 'Rappels de transition de saison', 'app:seasons:remind-transition'),
-            new AdminJobDefinition('reconcile-stuck-schedules', 'Réconciliation des générations bloquées', 'app:schedules:reconcile-stuck', ['--older-than' => 60]),
-            new AdminJobDefinition('purge-unverified-users', 'Purge des comptes non vérifiés', 'app:users:purge-unverified'),
-            new AdminJobDefinition('purge-erased-clubs', 'Purge des clubs effacés', 'app:clubs:purge-erased'),
-            new AdminJobDefinition('purge-inactive-users', 'Purge des comptes inactifs', 'app:users:purge-inactive'),
-            new AdminJobDefinition('purge-seasons', 'Purge des anciennes saisons', 'app:seasons:purge'),
-            new AdminJobDefinition('purge-audit-log', 'Purge du journal d’audit', 'app:audit:purge'),
+            new AdminJobDefinition('reconcile-stuck-schedules', 'Réconciliation des générations bloquées', 'app:schedules:reconcile-stuck', AdminJobSchedule::everyTenMinutes(), ['--older-than' => 60]),
+            new AdminJobDefinition('period-reminders', 'Rappels de périodes', 'app:periods:remind', AdminJobSchedule::daily(8)),
+            new AdminJobDefinition('transition-reminders', 'Rappels de transition de saison', 'app:seasons:remind-transition', AdminJobSchedule::daily(8)),
+            new AdminJobDefinition('purge-unverified-users', 'Purge des comptes non vérifiés', 'app:users:purge-unverified', AdminJobSchedule::daily(2)),
+            new AdminJobDefinition('purge-erased-clubs', 'Purge des clubs effacés', 'app:clubs:purge-erased', AdminJobSchedule::daily(2, 15)),
+            new AdminJobDefinition('purge-inactive-users', 'Purge des comptes inactifs', 'app:users:purge-inactive', AdminJobSchedule::daily(2, 30)),
+            new AdminJobDefinition('purge-seasons', 'Purge des anciennes saisons', 'app:seasons:purge', AdminJobSchedule::daily(3)),
+            new AdminJobDefinition('purge-audit-log', 'Purge du journal d’audit', 'app:audit:purge', AdminJobSchedule::daily(3, 30)),
+            new AdminJobDefinition('import-school-holidays', 'Import des vacances scolaires', 'app:school-holidays:import', AdminJobSchedule::quarterly(4)),
+            new AdminJobDefinition('import-public-holidays', 'Import des jours fériés', 'app:public-holidays:import', AdminJobSchedule::quarterly(4, 30)),
         ];
     }
 }

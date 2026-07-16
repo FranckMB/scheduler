@@ -24,7 +24,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * Métropole fériés → zone NATIONAL; each DOM/TOM file diffed against métropole →
  * its territory-specific extras tagged with the territory zone code. Idempotent:
  * upsert by the natural key (zone, date). Display-only — never feeds the solver.
- * Run manually today; a yearly cron / superadmin trigger comes later.
+ * Scheduled quarterly by the operational job runner; remains manually callable.
  * See specs/evolution/roadmap.md §2.
  */
 #[AsCommand(

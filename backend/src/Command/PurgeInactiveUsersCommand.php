@@ -34,7 +34,7 @@ use Throwable;
  * Le garde-fou « préavis ≥ 1 mois » garantit qu'un compte n'est JAMAIS effacé
  * sans avoir été prévenu, même si le cron est resté down des semaines.
  *
- * Tourne au cron-runner (horaire). Horloge applicative (SimulatedClock en dev).
+ * Tourne au cron-runner (quotidien). Horloge applicative (SimulatedClock en dev).
  */
 #[AsCommand(
     name: 'app:users:purge-inactive',

@@ -18,13 +18,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * Deletes accounts that registered but never verified their email within the TTL
  * (7 days). Registration is deferred, so an unverified User has NO club/membership
  * (the tenant is only materialised on verify) — deletion is a plain row drop, and
- * its EmailVerificationToken rows cascade (onDelete CASCADE). Runs hourly from the
+ * its EmailVerificationToken rows cascade (onDelete CASCADE). Runs daily from the
  * cron-runner container (idempotent; --dry-run for rehearsal). User has no club_id
  * → no RLS policy → no tenant GUC needed.
  */
 #[AsCommand(
     name: 'app:users:purge-unverified',
-    description: 'Delete accounts left unverified past the 7-day TTL (+ their verification tokens). Runs hourly (cron-runner).',
+    description: 'Delete accounts left unverified past the 7-day TTL (+ their verification tokens). Runs daily (cron-runner).',
 )]
 final class PurgeUnverifiedUsersCommand extends Command
 {

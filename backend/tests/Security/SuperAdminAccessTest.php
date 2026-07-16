@@ -145,6 +145,7 @@ final class SuperAdminAccessTest extends WebTestCase
                 'finished_at' => $run['finished'],
                 'duration_ms' => $run['duration'],
                 'exit_code' => $run['exit'],
+                'scheduled_for' => $run['started'],
             ]);
         }
 
@@ -154,13 +155,15 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/jobs');
         self::assertResponseIsSuccessful();
         $jobs = $this->responseBody()['items'];
-        self::assertCount(8, $jobs);
-        self::assertSame('period-reminders', $jobs[0]['key']);
-        self::assertSame('hourly', $jobs[0]['cadence']);
-        self::assertSame($latestId, $jobs[0]['latestRun']['id']);
-        self::assertSame('succeeded', $jobs[0]['latestRun']['status']);
-        self::assertSame(1000, $jobs[0]['latestRun']['durationMs']);
-        self::assertNull($jobs[1]['latestRun']);
+        self::assertCount(10, $jobs);
+        $jobsByKey = array_column($jobs, null, 'key');
+        self::assertSame('every_10_minutes', $jobsByKey['reconcile-stuck-schedules']['cadence']);
+        self::assertSame('daily', $jobsByKey['period-reminders']['cadence']);
+        self::assertNotEmpty($jobsByKey['period-reminders']['nextRunAt']);
+        self::assertSame($latestId, $jobsByKey['period-reminders']['latestRun']['id']);
+        self::assertSame('succeeded', $jobsByKey['period-reminders']['latestRun']['status']);
+        self::assertSame(1000, $jobsByKey['period-reminders']['latestRun']['durationMs']);
+        self::assertNull($jobsByKey['transition-reminders']['latestRun']);
     }
 
     public function testPasswordAloneDoesNotAuthenticateAndTotpIsMandatory(): void
