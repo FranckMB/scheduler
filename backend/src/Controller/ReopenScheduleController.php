@@ -32,6 +32,7 @@ final class ReopenScheduleController extends AbstractController implements Seaso
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedules/{id}/reopen', name: 'api_schedule_reopen', methods: ['POST'])]
@@ -83,6 +84,8 @@ final class ReopenScheduleController extends AbstractController implements Seaso
                         // VALIDATED ones included (this IS the authorized destructive path).
                         $this->overlayManager->deleteOverlayForEntry($entry, force: true);
                     }
+                    // ADR-0002 lot B1 (ADDITIF) : rouvrir dépointe le plan.
+                    $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
                     $schedule->setStatus(ScheduleStatus::COMPLETED);
                 });
 
@@ -90,8 +93,12 @@ final class ReopenScheduleController extends AbstractController implements Seaso
             }
         }
 
-        $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $this->entityManager->flush();
+        // ADR-0002 lot B1 (ADDITIF) : rouvrir dépointe le plan.
+        $this->entityManager->wrapInTransaction(function () use ($schedule): void {
+            $this->schedulePlanProvisioner->releaseSchedule($schedule->getId());
+            $schedule->setStatus(ScheduleStatus::COMPLETED);
+            $this->entityManager->flush();
+        });
 
         return $this->json(['id' => $schedule->getId(), 'status' => ScheduleStatus::COMPLETED->value], Response::HTTP_OK);
     }

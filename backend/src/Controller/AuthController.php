@@ -305,6 +305,7 @@ final class AuthController extends AbstractController
         $baselineScheduleId = null;
         $socleValidatedAt = null;
         $planningName = null;
+        $seasonPlanHasFinishedVersion = false;
         $seasons = [];
         $currentSeasonId = null;
         if (null !== $clubUser) {
@@ -384,6 +385,23 @@ final class AuthController extends AbstractController
                 $baselineScheduleId = $selected?->getBaselineScheduleId();
                 $socleValidatedAt = $selected?->getSocleValidatedAt()?->format(\DATE_ATOM);
                 $planningName = $selected?->getPlanningName();
+                // ADR-0002 inv. 8/16: the cockpit + the wizard's guided mode unlock
+                // when the SEASON plan owns at least one FINISHED version (COMPLETED
+                // or FAILED) — no longer "the socle was validated". Additive: the
+                // legacy fields above stay until the frontend switches (lot B2).
+                if ($selected instanceof Season) {
+                    $seasonPlanHasFinishedVersion = (bool) $this->entityManager->getConnection()->fetchOne(
+                        // VALIDATED/ARCHIVED comptent comme « terminées » : le legacy
+                        // reste écrit (la version choisie passe VALIDATED, ses sœurs
+                        // ARCHIVED — la SUPPRESSION des sœurs, c'est le lot de bascule,
+                        // pas B1). Les omettre ferait repasser ce flag à false au moment
+                        // exact où l'on valide.
+                        'SELECT 1 FROM schedule s JOIN schedule_plan p ON p.id = s.schedule_plan_id '
+                        . 'WHERE p.season_id = :sid AND p.type = \'SEASON\' '
+                        . 'AND s.status IN (\'COMPLETED\', \'FAILED\', \'VALIDATED\', \'ARCHIVED\') LIMIT 1',
+                        ['sid' => $selected->getId()],
+                    );
+                }
 
                 foreach ($allSeasons as $season) {
                     $seasons[] = [
@@ -409,6 +427,7 @@ final class AuthController extends AbstractController
             'baselineScheduleId' => $baselineScheduleId,
             'socleValidatedAt' => $socleValidatedAt,
             'planningName' => $planningName,
+            'seasonPlanHasFinishedVersion' => $seasonPlanHasFinishedVersion,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
             'seasons' => $seasons,
             'currentSeasonId' => $currentSeasonId,

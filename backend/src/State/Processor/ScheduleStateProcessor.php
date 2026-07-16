@@ -176,7 +176,16 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
                     throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
                 }
-                $this->overlayManager->purgeScheduleArtifacts($schedule);
+                // Atomique : purgeScheduleArtifacts relâche le pointeur via un
+                // UPDATE brut qui s'auto-commit. Sans transaction, un échec du
+                // remove/flush du parent laisserait le pointeur vidé alors que la
+                // version survit (même idiome que deleteOverlayForEntry).
+                $this->entityManager->wrapInTransaction(function () use ($schedule, $uriVariables, $clubId): void {
+                    $this->overlayManager->purgeScheduleArtifacts($schedule);
+                    parent::processDelete($uriVariables, $clubId);
+                });
+
+                return;
             }
         }
 

@@ -79,6 +79,15 @@ class SchedulePlan implements TenantOwnedInterface
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $chosenScheduleId = null;
 
+    /**
+     * Monotonic version counter (ADR-0002 lot B1). Never derived from
+     * MAX(versionNumber): validating a plan DELETES the non-chosen versions, so a
+     * MAX-based number would be reused (a deleted V3 then regenerated as V3
+     * again). Incremented in SQL and never decremented.
+     */
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private int $lastVersionNumber = 0;
+
     public function __construct()
     {
         $this->id = $this->newUuid();

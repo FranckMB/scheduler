@@ -27,6 +27,7 @@ final class OverlayManager
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly CalendarEntryRepository $calendarEntryRepository,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     /**
@@ -62,13 +63,18 @@ final class OverlayManager
                 throw new ConflictHttpException('The period plan is validated (read-only). Reopen it before deleting the period.');
             }
         }
-        foreach ($overlays as $schedule) {
-            $this->purgeArtifacts($schedule->getId());
-            $this->entityManager->remove($schedule);
-        }
+        // Atomique : le release du pointeur est un UPDATE brut qui s'auto-commit hors
+        // transaction — sans ça, un flush en échec (purge des périodes échues, qui
+        // catch et continue) laisserait le pointeur vidé alors que la version survit.
+        $this->entityManager->wrapInTransaction(function () use ($overlays, $entry): void {
+            foreach ($overlays as $schedule) {
+                $this->purgeArtifacts($schedule->getId());
+                $this->entityManager->remove($schedule);
+            }
 
-        $entry->setOverlayScheduleId(null);
-        $this->entityManager->flush();
+            $entry->setOverlayScheduleId(null);
+            $this->entityManager->flush();
+        });
 
         return \count($overlays);
     }
@@ -125,6 +131,12 @@ final class OverlayManager
 
     private function purgeArtifacts(string $scheduleId): void
     {
+        // ADR-0002 lot B1 (ADDITIF) : un pointeur ne doit jamais nommer une version
+        // supprimée. Couvre les chemins ORM (DELETE /api/schedules, suppression de
+        // période, reopen destructeur). PAS SeasonDataPurger, qui supprime en DQL de
+        // masse — mais lui supprime aussi les plans, donc aucun pointeur ne survit.
+        $this->schedulePlanProvisioner->releaseSchedule($scheduleId);
+
         // Per-row remove (not bulk DQL): keeps UnitOfWork + RLS consistent, same
         // reason CalendarEntryStateProcessor avoids bulk DELETE on `constraint`.
         foreach ($this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $scheduleId]) as $slot) {

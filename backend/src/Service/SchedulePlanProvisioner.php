@@ -92,11 +92,7 @@ final class SchedulePlanProvisioner
         }
 
         $this->entityManager->wrapInTransaction(function () use ($schedule): void {
-            $scope = $schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId());
-            $this->entityManager->getConnection()->executeStatement(
-                'SELECT pg_advisory_xact_lock(hashtext(:scope))',
-                ['scope' => 'schedule-plan-link:' . $scope],
-            );
+            $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
             $planId = null === $schedule->getCalendarEntryId()
                 ? $this->ensureSeasonPlanId($schedule->getSeasonId())
@@ -105,10 +101,94 @@ final class SchedulePlanProvisioner
                 return;
             }
 
+            // The plan may have just been persisted and not yet exist in the DB —
+            // flush first, else the counter UPDATE below matches zero rows.
+            $this->entityManager->flush();
+
+            $versionNumber = $this->nextVersionNumber($planId);
+            if (null === $versionNumber) {
+                return; // le plan a disparu (reset concurrent) — on laisse non lié
+            }
+
             $schedule->setSchedulePlanId($planId);
-            $schedule->setVersionNumber($this->nextVersionNumber($planId));
+            $schedule->setVersionNumber($versionNumber);
             $this->entityManager->flush();
         });
+    }
+
+    /**
+     * ADR-0002 inv. 1 — VALIDER = POINTER: the plan names this version as its
+     * chosen one. "Validé" is derived from this pointer; there is no status.
+     * Raw SQL: filter-free (the plan's season may not be the active one) and the
+     * plan is not loaded in the UnitOfWork on the validation path. RLS scopes club.
+     */
+    public function choose(Schedule $schedule): void
+    {
+        $planId = $schedule->getSchedulePlanId();
+        if (null === $planId) {
+            // Self-heal rather than no-op: silently skipping would leave the plan
+            // unpointed while the caller believes it validated (secondary plans
+            // would stay locked with no visible cause). Every creation path links,
+            // so this only catches rows that predate the link (or bypassed it).
+            $this->linkSchedule($schedule);
+            $planId = $schedule->getSchedulePlanId();
+        }
+        if (null === $planId) {
+            return; // aucun ancrage résoluble — transition-safe (rien ne lit le pointeur)
+        }
+
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
+            ['sid' => $schedule->getId(), 'pid' => $planId],
+        );
+    }
+
+    /**
+     * ADR-0002 inv. 10 : le plan d'une période meurt avec la période elle-même.
+     * Appelé UNIQUEMENT depuis la suppression de la CalendarEntry — surtout pas
+     * depuis deleteOverlayForEntry, que la purge des périodes échues appelle sur des
+     * entries qui survivent (leur plan nommé, et son compteur, doivent survivre).
+     */
+    public function deletePeriodPlan(string $calendarEntryId): void
+    {
+        $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): void {
+            $this->lockPlanScope($calendarEntryId);
+            $this->entityManager->getConnection()->executeStatement(
+                'DELETE FROM schedule_plan WHERE calendar_entry_id = :eid',
+                ['eid' => $calendarEntryId],
+            );
+        });
+    }
+
+    /**
+     * Sérialise tout ce qui touche au plan d'un scope (une période, ou la saison).
+     * Verrou de TRANSACTION : relâché au commit, ré-entrant (le reprendre plus bas
+     * dans la même transaction est un no-op).
+     *
+     * À prendre AVANT toute lecture qui décide (balayer les versions, résoudre le
+     * plan) : le prendre après ne sérialise rien — la lecture a déjà eu lieu.
+     */
+    public function lockPlanScope(string $scope): void
+    {
+        $this->entityManager->getConnection()->executeStatement(
+            'SELECT pg_advisory_xact_lock(hashtext(:scope))',
+            ['scope' => 'schedule-plan-link:' . $scope],
+        );
+    }
+
+    /**
+     * A version is being removed OR reopened: if it is its plan's chosen version,
+     * the plan loses its pointer and returns to "espace de travail" (inv. 2) — a
+     * pointer must never name a deleted version. Raw SQL: filter-free, and the
+     * plan is usually not in the UnitOfWork on these paths.
+     */
+    public function releaseSchedule(string $scheduleId): void
+    {
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET chosen_schedule_id = NULL, updated_at = now(), version = version + 1 '
+            . 'WHERE chosen_schedule_id = :sid',
+            ['sid' => $scheduleId],
+        );
     }
 
     private function ensureSeasonPlanId(string $seasonId): ?string
@@ -226,14 +306,40 @@ final class SchedulePlanProvisioner
         return false === $id ? null : (string) $id;
     }
 
-    private function nextVersionNumber(string $schedulePlanId): int
+    /**
+     * ADR-0002 lot B1: the plan owns a MONOTONIC counter. MAX(version_number)+1
+     * would REUSE a number once validation deletes the non-chosen versions (a
+     * deleted V3, regenerated, would be V3 again). The UPDATE ... RETURNING is
+     * atomic on its own; raw SQL also dodges the ORM season_filter (the plan's
+     * season may not be the request's active one). RLS still scopes by club.
+     */
+    /**
+     * ADR-0002 : compteur MONOTONE porté par le plan. Un `MAX+1` réattribuerait le
+     * numéro d'une version supprimée (une V3 supprimée puis régénérée redeviendrait
+     * V3). `GREATEST(compteur, MAX(version_number))` garde la monotonie ET
+     * s'auto-répare : si le compteur dérivait sous le MAX réel (dump antérieur au
+     * seed, plan recréé à la main), un compteur nu rendrait un numéro déjà pris et
+     * chaque génération de ce plan échouerait à jamais sur uniq_schedule_plan_version.
+     * SQL brut : atomique, et il esquive le season_filter (la saison du plan n'est
+     * pas forcément l'active). RLS scope toujours par club.
+     *
+     * @return int|null null si le plan n'existe pas/plus (course avec un reset de
+     *                  saison) — le schedule reste alors simplement non lié
+     */
+    private function nextVersionNumber(string $schedulePlanId): ?int
     {
-        $max = $this->entityManager->getConnection()->fetchOne(
-            'SELECT MAX(version_number) FROM schedule WHERE schedule_plan_id = :pid',
+        $next = $this->entityManager->getConnection()->fetchOne(
+            'UPDATE schedule_plan p SET last_version_number = GREATEST( '
+            . 'p.last_version_number, '
+            . 'COALESCE((SELECT MAX(s.version_number) FROM schedule s WHERE s.schedule_plan_id = p.id), 0) '
+            . ') + 1 WHERE p.id = :pid RETURNING p.last_version_number',
             ['pid' => $schedulePlanId],
         );
 
-        return (int) $max + 1;
+        // Zéro ligne : le plan a disparu entre la résolution et ici. Ne pas lever —
+        // ça fermerait l'EntityManager et transformerait une création qui marchait en
+        // 500. Le lien reste null (nullable pendant la transition).
+        return false === $next ? null : (int) $next;
     }
 
     private function seasonPlanName(Season $season): string
