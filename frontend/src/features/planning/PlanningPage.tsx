@@ -318,7 +318,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           <>
             {/* ADR-0002 inv. 12: THE plan's name lives here, on the plan — not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
-            {true === selectedSchedule?.isChosen ? (
+            {/* « principal » qualifie LE planning de la saison (le plan SEASON), par
+                opposition aux plannings secondaires de période — pas la version choisie. */}
+            {null !== selectedSchedule && null === selectedSchedule.calendarEntryId ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
                 principal

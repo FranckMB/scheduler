@@ -71,7 +71,7 @@ export function SeasonPlanBanner({ schedules, chosenScheduleId, socleValidated, 
         </Button>
       </div>
 
-      {listOpen ? <SeasonSchedulesModal schedules={schedules} chosenScheduleId={chosenScheduleId} onClose={() => setListOpen(false)} /> : null}
+      {listOpen ? <SeasonSchedulesModal schedules={schedules} onClose={() => setListOpen(false)} /> : null}
     </div>
   );
 }

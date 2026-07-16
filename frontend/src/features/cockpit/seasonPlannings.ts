@@ -5,16 +5,17 @@ export interface PlanningRow {
   id: string;
   label: string;
   status: Schedule["status"];
-  /** Le plan de la saison pointe une version = ce planning est en vigueur. */
+  /** Le plan de ce planning pointe cette version : il est en vigueur (≠ « principal »). */
   isChosen: boolean;
+  /** Planning secondaire (plan d'une période) ; sinon c'est LE planning principal de la saison. */
   isOverlay: boolean;
 }
 
-export function seasonPlannings(schedules: Schedule[], chosenScheduleId: string | null): PlanningRow[] {
+export function seasonPlannings(schedules: Schedule[]): PlanningRow[] {
   const rows: PlanningRow[] = [];
   const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
   if (null !== seasonMain) {
-    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isChosen: null !== chosenScheduleId, isOverlay: false });
+    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isChosen: true === seasonMain.isChosen, isOverlay: false });
   }
   const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
   const periods: PlanningRow[] = [];
@@ -30,6 +31,6 @@ export function seasonPlannings(schedules: Schedule[], chosenScheduleId: string 
 }
 
 export function seasonPlanCounts(schedules: Schedule[]): { total: number; overlays: number } {
-  const rows = seasonPlannings(schedules, null);
+  const rows = seasonPlannings(schedules);
   return { total: rows.length, overlays: rows.filter((row) => row.isOverlay).length };
 }

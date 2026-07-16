@@ -104,20 +104,18 @@ describe("PlanningPage (integration)", () => {
     // Standalone /planning (consultation) hides the toolbar's version selector,
     // status badge and score — see PlanningToolbar.test.
     expect(screen.queryByText(/score 9051/i)).not.toBeInTheDocument();
-    // A work version the plan does not point at: it can still be chosen, and it
-    // wears no « principal » badge — that badge IS the pointer (inv. 1).
+    // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur
+    // une version de travail, qui reste offerte à la validation.
+    expect(screen.getByText("principal")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
-    expect(screen.queryByText("principal")).not.toBeInTheDocument();
   });
 
-  it("badges the version the plan points at « principal » and drops « Valider » (it is in force)", async () => {
+  it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
     vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null, isChosen: true }]);
     renderWithProviders(<PlanningPage />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
-    expect(screen.getByText("principal")).toBeInTheDocument();
-    // « principal » and « Valider » are now mutually exclusive: being pointed at
-    // IS being validated, so the only way forward is « Rouvrir ».
+    // Being pointed at IS being validated: the only way forward is « Rouvrir ».
     expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
   });

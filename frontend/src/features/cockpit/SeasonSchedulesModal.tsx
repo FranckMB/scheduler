@@ -12,8 +12,6 @@ import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
   schedules: Schedule[];
-  /** The version the season's plan points at, or null (espace de travail). */
-  chosenScheduleId: string | null;
   onClose: () => void;
 }
 
@@ -63,10 +61,10 @@ function CompactExport({ scheduleId, label }: { scheduleId: string; label: strin
  * versions of a plan. Each row consults (eye) or exports the planning directly.
  * The main plan is a fact (★) — no "set as main" here.
  */
-export function SeasonSchedulesModal({ schedules, chosenScheduleId, onClose }: SeasonSchedulesModalProps) {
+export function SeasonSchedulesModal({ schedules, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const rows = seasonPlannings(schedules, chosenScheduleId);
+  const rows = seasonPlannings(schedules);
 
   // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a
@@ -90,7 +88,9 @@ export function SeasonSchedulesModal({ schedules, chosenScheduleId, onClose }: S
           <li key={row.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                {row.isChosen ? <Star className="size-3.5 fill-accent text-accent" /> : null}
+                {/* ★ = LE planning principal (le plan de la saison), par opposition aux
+                    plannings secondaires de période. Ce n'est pas « la version choisie ». */}
+                {row.isOverlay ? null : <Star className="size-3.5 fill-accent text-accent" />}
                 {row.label}
               </p>
               <p className="text-xs text-muted-foreground">{STATUS_LABELS[row.status]}</p>

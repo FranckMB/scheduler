@@ -1,17 +1,22 @@
-Last verified @ feat/plan-read-model 2026-07-16
+Last verified @ feat/plan-pointer-cutover 2026-07-16
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **80 paths.**
 Changements récents :
-- **ADR-0002 — modèle de lecture du plan (2026-07-16, ADDITIF)** : `GET /api/me` expose
-  **`seasonPlan { id, name, chosenScheduleId, hasFinishedVersion }`** — LE calendrier de
-  base de la saison (le plan SEASON et sa version choisie), plus « le plan porte-t-il une
-  version terminée » (futur déblocage cockpit, inv. 8/16). `SchedulePlan` reste en
-  **lecture seule** : le renommage arrivera avec la bascule, dans le commit qui supprime
-  `Season.planningName`. Le schéma de `/api/me` (déclaré à la main dans
-  `CustomRoutesOpenApiFactory`) est mis à jour : le champ est donc **dans le contrat**,
-  pas seulement dans le payload.
-  **Additif** : `baselineScheduleId`/`socleValidatedAt`/`planningName` restent exposés ET
-  restent la vérité.
+- **ADR-0002 — LA BASCULE (2026-07-16, RUPTURE)** : le plan SEASON et sa version pointée
+  sont LE calendrier de la saison, et le legacy meurt dans le même commit.
+  - `GET /api/me` : `baselineScheduleId` / `socleValidatedAt` / `planningName`
+    **supprimés** (ils n'étaient pas déclarés au contrat, seulement dans le payload).
+    `seasonPlan { id, name, chosenScheduleId, hasFinishedVersion }` est la seule couture.
+  - **`PUT /api/schedule_plans/{id}`** (nouveau, seul changement de path) : renomme le
+    plan — le nom vit sur le plan (inv. 12), donc un seul écrivain. Gate management SEC-07.
+  - `Schedule.status` perd **VALIDATED** et **ARCHIVED** : « validé » se dérive du pointeur
+    et de rien d'autre. Nouveau champ de lecture **`Schedule.isChosen`** — le plan de cette
+    version la pointe (vrai pour le calendrier de la saison comme pour l'overlay d'une
+    période, dont le pointeur n'est pas visible depuis `/api/me`).
+  - `POST /api/schedules/{id}/set-baseline` **supprimé** (inv. 18) — la route n'était pas
+    documentée, donc aucun path ne disparaît du snapshot.
+  - Créer un planning secondaire sans socle en vigueur : **409** (était 422). Les deux
+    conditions legacy fusionnent en une seule, donc un seul code.
 - **Santé technique superadmin SA2 (2026-07-16)** : `GET /api/admin/health`
   sonde DB, Redis, engine, heartbeat worker et Mercure, puis expose backlog,
   échecs et retries Messenger sans propager les pannes individuelles.
@@ -20,7 +25,7 @@ Changements récents :
   paginée/recherchable avec saison, volumétrie et métriques sur 30 jours.
 - **ADR-0002 pattern « Plan » — Lot B1 (2026-07-16, ADDITIF)** : aucun path ni schéma ne
   bouge et **aucun comportement ne change** (le lot maintient le pointeur du plan sans que
-  rien ne le lise). `baselineScheduleId`/`socleValidatedAt` restent la vérité.
+  rien ne le lise). *Périmé par la bascule ci-dessus.*
 - **SA1 métriques (2026-07-16)** : les métriques de génération sont persistées côté
   backend et `Club.lastActivityAt` est un champ de lecture pour les futurs agrégats.
 - **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous

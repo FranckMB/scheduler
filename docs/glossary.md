@@ -17,29 +17,28 @@
 | **Contrainte** | Règle de placement saisie (famille × ruleType × config) ou implicite (no-overlap, capacité…). |
 | **Rang / tier** (`PriorityTier`) | Priorité S/A/B/C/D d'une équipe, poids objectif exponentiel (S=10000…D=1). |
 | **Tag système** (`TeamTag`) | Étiquette auto-assignée (21 tags : U9…U21, JEUNE, ADULTE, EMB, FEMININE…) groupée par **axe** GENRE/NIVEAU/ÂGE. Cible de groupe des contraintes (`targetTag`). |
-| **Socle** | Données minimales validées (équipes+gymnases+créneaux) requises avant d'activer les modules ; `socleValidatedAt` sur la saison. |
+| **Socle** | Le calendrier de la saison en vigueur : la version que **pointe** le plan `SEASON`. Les modules (matchs, plans secondaires) l'exigent. Se lit sur le pointeur — il n'y a pas de jalon qui le dise. |
 | **FFBB / FBI / ARA** | Fédération / son outil de gestion (import matchs `externalRef`) / code d'affiliation club. |
 
 ## Cycle de vie planning
 
-> Vocabulaire **CIBLE** du pattern « Plan » ([ADR-0002](architecture/adr-0002-pattern-plan.md))
-> — **il fait foi pour parler du produit**. Termes **bannis** : *baseline*, *planningName*,
-> *overlayScheduleId*, *liveContext*, statuts *VALIDATED*/*ARCHIVED*.
+> Vocabulaire du pattern « Plan » ([ADR-0002](architecture/adr-0002-pattern-plan.md))
+> — **il fait foi pour parler du produit**, et depuis la bascule du 2026-07-16 il décrit
+> aussi le code. Termes **bannis** : *baseline*, *planningName*, statuts *VALIDATED*/
+> *ARCHIVED* — ils n'existent plus nulle part.
 >
-> ⚠️ **État réel au 2026-07-16** : le lot B1 (additif) *maintient* le pointeur, mais
-> **le legacy décide encore** (baseline, socleValidatedAt, VALIDATED) — routing, mode
-> guidé, radar de conflits matchs. La bascule (tous les consommateurs + drop du legacy,
-> en un seul lot) reste à faire.
+> `CalendarEntry.overlayScheduleId` (pointeur inverse d'une période) et `liveContext`
+> (la ★) survivent : le premier jusqu'au lot C, la seconde **par décision** (inv. 17).
 
 | Terme | Définition |
 |-------|------------|
 | **Plan** (`SchedulePlan`) | LE planning nommé : type (`SEASON`/`CLOSURE`/`HOLIDAY`) + période + nom + **pointeur**. C'est l'objet que le gestionnaire manipule. |
 | **Version** (`Schedule`) | Une résolution du solveur d'un plan : « V3 ». Jamais nommée par l'humain. Cycle : `DRAFT → PENDING → GENERATING → COMPLETED \| FAILED`. |
-| **Version choisie** | Celle que **pointe** le plan (`chosenScheduleId`) = « validée ». **Valider = pointer**, et **les autres versions sont supprimées**. |
+| **Version choisie** | Celle que **pointe** le plan (`chosenScheduleId`) = « validée ». **Valider = pointer**, et **les autres versions sont supprimées**. « Validé » n'est pas un statut : ça se dérive du pointeur, et de rien d'autre (`Schedule.isChosen` le dit par version). |
 | **Espace de travail** | Plan au **pointeur null** : on génère/compare des versions, on choisira. Rouvrir y ramène. **Aucun pointage automatique** — seul le gestionnaire pointe. |
-| **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard (`liveContextScheduleId`). **Ce n'est PAS le pointeur du plan** : elle suit chaque génération COMPLETED du socle. |
+| **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard (`liveContextScheduleId`). **Ce n'est PAS le pointeur du plan** : elle suit chaque génération COMPLETED du socle. C'est l'auto-*pointeur* qui est mort, pas la ★ (inv. 17). |
 | **Plan secondaire** | Plan `CLOSURE`/`HOLIDAY` borné à une période du cockpit — vacances, fermeture. Exige que le plan `SEASON` soit **pointé**. Ne remplace pas le plan de saison. |
-| **Déblocage cockpit** | Le plan `SEASON` possède **≥1 version terminée** — exposé par `/api/me.seasonPlan.hasFinishedVersion`. « Terminée » = le solveur a rendu sa réponse : `COMPLETED`/`FAILED`, et tant que le legacy vit aussi `VALIDATED`/`ARCHIVED` (sinon le flag s'inverserait pile à la validation). |
+| **Déblocage cockpit** | Le plan `SEASON` possède **≥1 version terminée** (`COMPLETED`/`FAILED` — le solveur a rendu sa réponse) — exposé par `/api/me.seasonPlan.hasFinishedVersion`. **Indépendant du pointeur** : avoir généré une fois suffit, donc rouvrir ne re-verrouille jamais le cockpit. |
 | **Cockpit** | Vue temporelle de la saison : périodes (`CalendarEntry` PERIOD/EVENT), overlays, matchs. |
 | **Génération** | Pipeline async : controller → Messenger(Redis) → handler (lock + snapshot figé) → engine CP-SAT → import → Mercure. |
 | **Snapshot figé** | Photo des données au moment du dispatch — le solve est **rejouable**, insensible aux éditions concurrentes. |
