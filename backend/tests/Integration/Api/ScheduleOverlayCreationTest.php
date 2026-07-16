@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -30,6 +31,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ScheduleOverlayCreationTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -126,16 +128,20 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
-    public function testOverlayRejectedWithoutBaseline(): void
+    public function testOverlayRejectedWithoutAChosenSocle(): void
     {
         [$user, $club, $season] = $this->seed('OV9');
-        // Remove the seeded baseline → no socle yet.
-        $season->setBaselineScheduleId(null);
-        $this->em->flush();
+        // Le plan redevient un espace de travail → plus de socle en vigueur.
+        self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)
+            ->releaseSchedule((string) $this->chosenPlanVersion($season));
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
 
+        // 409 : « l'état s'y oppose » — la saison n'a pas de calendrier en vigueur.
+        // Avant la bascule, deux miroirs donnaient deux refus (422 sans baseline,
+        // 409 sans socle) ; il n'y a plus qu'une condition, donc un seul code, et
+        // c'est celui du module matchs (même garde, même message actionnable).
         $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
-        self::assertResponseStatusCodeSame(422);
+        self::assertResponseStatusCodeSame(409);
     }
 
     public function testCalendarEntryIdImmutableOnPut(): void
@@ -249,20 +255,16 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $this->em->persist($season);
         $this->em->flush();
 
-        // An overlay is only allowed once the season has a validated baseline.
+        // Un plan secondaire (overlay de période) n'est autorisé qu'au-dessus d'un
+        // socle POINTÉ (inv. 13) — le geste réel est POST /validate, ici son effet.
         $baseline = new Schedule;
         $baseline->setClubId($club->getId());
         $baseline->setSeasonId($season->getId());
         $baseline->setName('Baseline');
-        $baseline->setStatus(ScheduleStatus::VALIDATED);
+        $baseline->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($baseline);
         $this->em->flush();
-        $season->setBaselineScheduleId($baseline->getId());
-        // A validated baseline stamps the socle — overlays (secondary plans) need
-        // it (cockpit state 3), matching the real validate/set-baseline flow.
-        $season->setSocleValidatedAt(new DateTimeImmutable);
-
-        $this->em->flush();
+        $this->choosePlanVersion($baseline);
 
         return [$user, $club, $season];
     }

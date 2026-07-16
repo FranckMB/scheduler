@@ -52,8 +52,9 @@ export function AppLayout() {
           </div>
           <nav className="flex items-center gap-1">
             <SeasonSelector />
-            {/* Matches stay locked until the season's main plan is validated. */}
-            {null !== data?.socleValidatedAt ? (
+            {/* Matches stay locked until the season's plan points at a version —
+                same condition the server enforces (SocleGuard). */}
+            {null != data?.seasonPlan?.chosenScheduleId ? (
               <NavItem to="/matchs">Matchs</NavItem>
             ) : (
               <span

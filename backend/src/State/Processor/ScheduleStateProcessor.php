@@ -33,6 +33,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
         private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly \App\Service\SocleGuard $socleGuard,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -87,17 +88,9 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             if ($inFlight > 0) {
                 throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
             }
-            // An overlay is built ON the socle: the season must have a baseline
-            // (otherwise the club would be onboarded with only an overlay, no base).
-            $season = $this->entityManager->getRepository(Season::class)->find($entry->getSeasonId());
-            if (!$season instanceof Season || null === $season->getBaselineScheduleId()) {
-                throw new UnprocessableEntityHttpException('The season has no baseline plan yet — validate the base plan first.');
-            }
-            // Secondary plans are locked until the main plan is VALIDATED (cockpit
-            // state 3) — same invariant the SocleGuard enforces on generation.
-            if (null === $season->getSocleValidatedAt()) {
-                throw new ConflictHttpException('Validez le planning principal avant de créer un planning secondaire.');
-            }
+            // ADR-0002 inv. 13 : un plan secondaire se bâtit SUR le calendrier de
+            // base — le plan SEASON doit avoir une version choisie.
+            $this->socleGuard->assertSeasonPlanChosen($entry->getSeasonId());
             // Bind the overlay to the ENTRY's season (not the active one) so the
             // build reads the right season's structure + dated constraints.
             $seasonId = $entry->getSeasonId();
@@ -138,7 +131,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 // regenerate would strand the period on an empty draft.
                 $activeId = $entry->getOverlayScheduleId();
                 $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
-                $activeIsUsable = $active instanceof Schedule && \in_array($active->getStatus(), [ScheduleStatus::COMPLETED, ScheduleStatus::VALIDATED], true);
+                $activeIsUsable = $active instanceof Schedule && ScheduleStatus::COMPLETED === $active->getStatus();
                 if (!$activeIsUsable) {
                     $entry->setOverlayScheduleId($schedule->getId());
                 }
@@ -161,20 +154,23 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         if (\is_string($id) && '' !== $id) {
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
             if ($schedule instanceof Schedule && (null === $clubId || $schedule->getClubId() === $clubId)) {
-                // The baseline is never deletable (§9 cockpit) — it anchors the whole
-                // season (socle, overlays, /api/me.baselineScheduleId).
-                $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
-                if ($season instanceof Season && $season->getBaselineScheduleId() === $schedule->getId()) {
-                    throw new ConflictHttpException('The baseline schedule cannot be deleted. Designate another baseline first.');
-                }
-                // A validated schedule is read-only: reopen it before deleting.
-                if (ScheduleStatus::VALIDATED === $schedule->getStatus()) {
-                    throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before deleting.');
+                // ADR-0002 inv. 1 : la version CHOISIE ancre le plan — la rouvrir
+                // (dépointer) avant de la supprimer.
+                if ($this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+                    throw new ConflictHttpException('La version choisie ne peut pas être supprimée. Rouvrez le planning d\'abord.');
                 }
                 // A version whose solve is still running cannot be deleted out
                 // from under the worker (its import would resurrect artifacts).
                 if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
                     throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
+                }
+                // La DERNIÈRE version terminée du plan de la saison ancre la saison :
+                // la supprimer laisserait un club établi sans aucun calendrier, donc
+                // sans cockpit ni matchs (inv. 8/16 le renverrait au wizard guidé, ses
+                // matchs orphelins). Rouvrir dépointe (inv. 2) mais ne doit pas ouvrir
+                // cette porte : le geste pour remplacer un planning, c'est régénérer.
+                if ($this->isLastFinishedSeasonVersion($schedule)) {
+                    throw new ConflictHttpException('C\'est le seul planning de la saison — régénérez-en un autre plutôt que de supprimer celui-ci.');
                 }
                 // Atomique : purgeScheduleArtifacts relâche le pointeur via un
                 // UPDATE brut qui s'auto-commit. Sans transaction, un échec du
@@ -225,18 +221,16 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        // A validated schedule is read-only: reopen it (POST /reopen) before editing.
-        if (ScheduleStatus::VALIDATED === $entity->getStatus()) {
-            throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
+        // ADR-0002 inv. 1 : la version choisie est le planning en vigueur — la
+        // rouvrir (dépointer) avant de l'éditer.
+        if ($this->schedulePlanProvisioner->isChosen($entity->getId())) {
+            throw new ConflictHttpException('La version choisie est le planning en vigueur. Rouvrez-le avant de l\'éditer.');
         }
         // Status transitions go through the dedicated endpoints (generate/validate/reopen),
         // never a free-form PUT. The field is accepted but IGNORED (never applied):
         // the frontend rename echoes a possibly-stale cached status, so rejecting a
         // mismatch would 409 legitimate renames — while silently ignoring still makes
         // fabricating a COMPLETED plan without generation impossible.
-        if ('VALIDATED' === $input->status) {
-            throw new ConflictHttpException('Use POST /schedules/{id}/validate to validate a schedule.');
-        }
         if (null !== $input->name) {
             $entity->setName($input->name);
         }
@@ -251,5 +245,26 @@ class ScheduleStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ScheduleResource
     {
         return ScheduleResource::fromEntity($entity);
+    }
+
+    /**
+     * Cette version est-elle la seule version TERMINÉE du plan de la saison ? Les
+     * overlays de période ne comptent pas : ils ont leur propre plan, et une période
+     * sans planning est un état normal.
+     */
+    private function isLastFinishedSeasonVersion(Schedule $schedule): bool
+    {
+        if (null !== $schedule->getCalendarEntryId() || ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
+            return false;
+        }
+
+        $others = $this->entityManager->getRepository(Schedule::class)->count([
+            'clubId' => $schedule->getClubId(),
+            'seasonId' => $schedule->getSeasonId(),
+            'calendarEntryId' => null,
+            'status' => ScheduleStatus::COMPLETED,
+        ]);
+
+        return $others <= 1;
     }
 }

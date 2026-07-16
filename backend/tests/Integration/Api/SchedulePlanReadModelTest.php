@@ -69,13 +69,14 @@ final class SchedulePlanReadModelTest extends WebTestCase
     }
 
     /**
-     * Le déblocage ne doit JAMAIS s'inverser à la validation. Le miroir legacy fait
-     * passer la version choisie en VALIDATED et ses sœurs en ARCHIVED : si la liste
-     * des statuts « terminés » les omettait, le plan validé n'aurait plus aucune
-     * version « terminée » → cockpit et mode guidé se re-verrouilleraient pile au
-     * moment où le gestionnaire valide (inv. 8/16, axe structurant §7.1).
+     * Le déblocage ne doit JAMAIS s'inverser à la validation (inv. 8/16, axe
+     * structurant §7.1). Valider POINTE une version et SUPPRIME ses sœurs : si
+     * « terminé » se lisait mal, le cockpit se re-verrouillerait pile au moment
+     * où le gestionnaire valide. C'est ce qu'un miroir de statut avait déjà
+     * failli provoquer ; le pointeur laisse la version choisie en COMPLETED,
+     * donc « terminée », et le déblocage tient.
      */
-    public function testTheUnlockSurvivesValidationAndItsStatusTransitions(): void
+    public function testTheUnlockSurvivesValidation(): void
     {
         [$user, , $season] = $this->seed('RDM2');
         $v1 = $this->version($season, ScheduleStatus::COMPLETED);
@@ -84,10 +85,10 @@ final class SchedulePlanReadModelTest extends WebTestCase
 
         $this->validate($user, $v2);
 
-        // v2 → VALIDATED, v1 → ARCHIVED : plus une seule version COMPLETED.
         $this->em->clear();
-        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
-        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus());
+        // La sœur non choisie disparaît ; la choisie reste une version terminée.
+        self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()));
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
 
         $plan = $this->me($user)['seasonPlan'];
         self::assertTrue($plan['hasFinishedVersion'], 'valider ne doit jamais re-verrouiller le cockpit');

@@ -349,12 +349,12 @@ final class GenerateScheduleHandler
         if (!$season instanceof Season) {
             return;
         }
-        // First successful season plan wins the baseline; re-designation is explicit.
-        if (null === $season->getBaselineScheduleId()) {
-            $season->setBaselineScheduleId($schedule->getId());
-        }
-        // Every COMPLETED season plan IS the freshly loaded context (★) — its
-        // structure fed this solve. "Charger cette version" later re-points this.
+        // ADR-0002 inv. 2 : AUCUN pointage automatique. Générer ne choisit pas —
+        // seul le gestionnaire choisit, en validant. (L'ancienne auto-baseline au
+        // 1er COMPLETED désignait un « calendrier de base » que personne n'avait
+        // choisi.) L'auto-★ RESTE (inv. 17) : chaque plan de saison COMPLETED EST
+        // le contexte fraîchement chargé — sa structure a nourri ce solve.
+        // « Charger cette version » la repointe ensuite.
         $season->setLiveContextScheduleId($schedule->getId());
     }
 

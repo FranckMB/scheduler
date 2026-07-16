@@ -19,19 +19,19 @@ vi.mock("./seasonPlannings", () => ({ seasonPlanCounts: () => ({ total: 2, overl
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
-const baseline: Schedule = { id: "b1", name: "Socle", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null };
+const chosen: Schedule = { id: "b1", name: "Socle", status: "COMPLETED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null, isChosen: true };
 
-import { BaselineBanner } from "./BaselineBanner";
+import { SeasonPlanBanner } from "./SeasonPlanBanner";
 
 function renderBanner() {
   return render(
     <MemoryRouter>
-      <BaselineBanner schedules={[baseline]} baselineScheduleId="b1" socleValidated />
+      <SeasonPlanBanner schedules={[chosen]} socleValidated />
     </MemoryRouter>,
   );
 }
 
-describe("BaselineBanner", () => {
+describe("SeasonPlanBanner", () => {
   it("offers only « Ouvrir » (no « Modifier… » — modification happens on the planning page)", () => {
     renderBanner();
     expect(screen.getByRole("button", { name: "Ouvrir" })).toBeInTheDocument();

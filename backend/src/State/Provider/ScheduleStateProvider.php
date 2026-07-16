@@ -7,6 +7,7 @@ namespace App\State\Provider;
 use ApiPlatform\Metadata\Operation;
 use App\ApiResource\ScheduleResource;
 use App\Entity\Schedule;
+use App\Entity\SchedulePlan;
 use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 
@@ -16,11 +17,11 @@ use App\Entity\Season;
 class ScheduleStateProvider extends AbstractStateProvider
 {
     /**
-     * Enrich the mapped DTO(s) with `hasStructurePhoto` (D3 gating) and
-     * `isLiveContext` (★) in TWO batch queries — a per-DTO EXISTS would N+1 the
-     * schedules collection. Both lookups are tenant-scoped by the Doctrine
-     * tenant_filter (ScheduleStructureSnapshot / Season own a club_id), so they
-     * never cross clubs.
+     * Enrich the mapped DTO(s) with `hasStructurePhoto` (D3 gating), `isLiveContext`
+     * (★) and `isChosen` (ADR-0002: its plan points at it) in THREE batch queries —
+     * a per-DTO EXISTS would N+1 the schedules collection. All three lookups are
+     * tenant-scoped by the Doctrine tenant_filter (ScheduleStructureSnapshot /
+     * Season / SchedulePlan each own a club_id), so they never cross clubs.
      */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
@@ -41,9 +42,11 @@ class ScheduleStateProvider extends AbstractStateProvider
 
         $withPhoto = $this->scheduleIdsWithPhoto($ids);
         $liveContext = $this->liveContextScheduleIds($ids);
+        $chosen = $this->chosenScheduleIds($ids);
         foreach ($dtos as $dto) {
             $dto->hasStructurePhoto = isset($withPhoto[$dto->id]);
             $dto->isLiveContext = isset($liveContext[$dto->id]);
+            $dto->isChosen = isset($chosen[$dto->id]);
         }
 
         return $result;
@@ -80,6 +83,16 @@ class ScheduleStateProvider extends AbstractStateProvider
     private function liveContextScheduleIds(array $scheduleIds): array
     {
         return $this->idSetFromColumn(Season::class, 'liveContextScheduleId', $scheduleIds);
+    }
+
+    /**
+     * @param list<string> $scheduleIds
+     *
+     * @return array<string, true> set of schedule ids their plan POINTS at (ADR-0002 inv. 1)
+     */
+    private function chosenScheduleIds(array $scheduleIds): array
+    {
+        return $this->idSetFromColumn(SchedulePlan::class, 'chosenScheduleId', $scheduleIds);
     }
 
     /**

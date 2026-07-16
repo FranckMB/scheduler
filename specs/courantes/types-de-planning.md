@@ -44,12 +44,12 @@
   suivante » (transition N→N+1).
 - **Contenu** : toute la structure du club (équipes, gymnases + créneaux, coachs, liens,
   contraintes permanentes) → génération CP-SAT → plan de saison.
-- **Cycle de vie (cible ADR-0002)** : des **versions** (V1, V2… nom auto) ; **valider = le
-  plan pointe** sur la version choisie et les autres sont supprimées ; **pointeur null =
-  espace de travail**. Modifier le socle invalide les plans construits dessus
-  (confirmation proportionnée). *(Implémentation actuelle : statuts VALIDATED/ARCHIVED +
-  baseline — à démolir/reconstruire selon l'ADR.)*
-- **État** : ✅ livré et rodé — c'est le flux de référence (refonte du cycle de vie à venir, ADR-0002).
+- **Cycle de vie (ADR-0002, livré)** : des **versions** (V1, V2… nom auto) ; **valider = le
+  plan pointe** sur la version choisie et les autres sont **supprimées** ; **rouvrir =
+  dépointer**, la version survit ; **pointeur null = espace de travail**. Générer ne pointe
+  jamais — seul le gestionnaire choisit. Modifier le socle invalide les plans construits
+  dessus (confirmation proportionnée).
+- **État** : ✅ livré et rodé — c'est le flux de référence (cycle de vie basculé sur le pointeur du plan, ADR-0002, 2026-07-16).
 
 ## 2. Overlay d'ajustement (indisponibilité)
 

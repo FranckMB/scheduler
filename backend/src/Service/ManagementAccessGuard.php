@@ -16,7 +16,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  * The tenant listener already proved the caller holds an *active* membership on
  * the current club (spoofed `X-Club-Id` → 403). This guard adds the missing
  * layer for the write choke points that only compared the club id
- * (validate/reopen/set-baseline/manual-edit/generate/reorder/appearance):
+ * (validate/reopen/manual-edit/generate/reorder/appearance):
  * the membership must be a **management** role (owner/admin).
  *
  * Benign today (every member is `admin`), but it is the boundary that keeps the

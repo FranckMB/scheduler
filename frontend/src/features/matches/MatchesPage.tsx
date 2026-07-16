@@ -86,8 +86,9 @@ export function MatchesPage() {
     );
   }
 
-  // Matches are locked until the season's main plan is validated (cockpit state 2).
-  if (null === (me?.socleValidatedAt ?? null)) {
+  // Matches are locked until the season's plan points at a version (cockpit
+  // state 2) — the same condition the server's SocleGuard enforces on writes.
+  if (null == me?.seasonPlan?.chosenScheduleId) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <Lock className="mx-auto mb-3 size-8 text-accent" />
@@ -140,7 +141,24 @@ export function MatchesPage() {
             />
           ) : null}
 
-          <ConflictRadar conflicts={conflicts.data?.conflicts ?? []} teams={teamsMap} coaches={coachesMap} />
+          {/* Trois états, jamais deux : « pas de conflit » ne doit pas se confondre avec
+              « je n'ai pas pu regarder ». Sans ça, une requête en échec affiche le
+              ShieldCheck vert « Aucun conflit détecté » et fait poser un match sur un
+              entraînement vivant — exactement ce qui a été corrigé dans RadarPanel. */}
+          {false === conflicts.data?.seasonPlanChosen ? (
+            // Le planning a été rouvert (ici, ou dans un autre onglet — /api/me peut
+            // avoir jusqu'à 60 s de retard) : sans calendrier, rien n'est détectable.
+            <p className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+              Le planning de la saison n'est plus validé — les conflits avec les entraînements ne sont pas évalués.
+            </p>
+          ) : conflicts.isError ? (
+            <p className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+              Les conflits n'ont pas pu être vérifiés — rechargez la page avant de placer un match.
+            </p>
+          ) : null}
+          {undefined === conflicts.data ? null : (
+            <ConflictRadar conflicts={conflicts.data.conflicts} teams={teamsMap} coaches={coachesMap} />
+          )}
         </div>
 
         <div className="flex flex-col gap-2">

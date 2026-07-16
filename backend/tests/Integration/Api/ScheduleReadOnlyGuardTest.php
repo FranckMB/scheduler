@@ -10,6 +10,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -19,14 +20,15 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * A VALIDATED schedule is read-only: content mutations are rejected server-side
- * (409). Covers the regenerate path (the primary work-loop entry point); the
- * guard returns before any status change or message dispatch.
+ * The version a plan POINTS at is read-only: content mutations are rejected
+ * server-side (409). Covers the regenerate path (the primary work-loop entry
+ * point); the guard returns before any status change or message dispatch.
  */
 #[Group('phase1')]
 #[Group('integration')]
 final class ScheduleReadOnlyGuardTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -35,18 +37,21 @@ final class ScheduleReadOnlyGuardTest extends WebTestCase
 
     private UserPasswordHasherInterface $hasher;
 
-    public function testRegenerateIsBlockedOnValidatedSchedule(): void
+    public function testRegenerateIsBlockedOnTheChosenVersion(): void
     {
         [$user, , $season] = $this->seed('GRD1');
-        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($schedule);
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/generate");
 
         self::assertResponseStatusCodeSame(409);
         $this->em->clear();
-        $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
-        self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
+        // The guard returns before any status change or dispatch, and the plan
+        // still points at the version — nothing was disturbed.
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($schedule->getId())?->getStatus());
+        self::assertSame($schedule->getId(), $this->chosenPlanVersion($season));
     }
 
     protected function setUp(): void

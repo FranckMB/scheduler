@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Service\SeasonResolver;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,6 +26,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class FixtureApiTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private const TEAM_ID = '11111111-1111-4111-8111-111111111111';
@@ -181,11 +183,11 @@ final class FixtureApiTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
-        // Matches need a validated socle (cockpit state 3); stamp it so this API
-        // test targets fixture behaviour, not the socle guard.
-        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
         $this->em->flush();
+        // Matches need a settled season plan (cockpit state 3); point the plan at a
+        // version so this API test targets fixture behaviour, not the socle guard.
+        $this->settleSeasonPlan($season);
 
         return $user;
     }

@@ -16,11 +16,11 @@ export function useMe() {
   });
 }
 
-/** planning-versions: rename THE season plan (title next to the club logo). */
+/** ADR-0002: rename THE season plan (title next to the club logo). */
 export function useRenamePlanning() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ seasonId, planningName }: { seasonId: string; planningName: string }) => authApi.renamePlanning(seasonId, planningName),
+    mutationFn: ({ planId, name }: { planId: string; name: string }) => authApi.renamePlanning(planId, name),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
   });
 }

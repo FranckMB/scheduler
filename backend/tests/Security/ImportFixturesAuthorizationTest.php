@@ -9,6 +9,7 @@ use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\User;
 use App\Service\SeasonResolver;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
@@ -29,6 +30,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ImportFixturesAuthorizationTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
     use VerifiesRegistration;
 
@@ -109,11 +111,11 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
         $season->setStatus('active');
         $season->setTransitionData([]);
-        // Import needs a validated socle (cockpit state 3) so the auth tests reach
-        // their expected outcome (400/403/404), not the socle guard's 409.
-        $season->setSocleValidatedAt(new DateTimeImmutable);
         $this->em->persist($season);
         $this->em->flush();
+        // Import needs a settled season plan (cockpit state 3) so the auth tests
+        // reach their expected outcome (400/403/404), not the socle guard's 409.
+        $this->settleSeasonPlan($season);
 
         return $season;
     }
@@ -124,11 +126,10 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         if (null === $seasonId) {
             $season = $this->em->getRepository(Season::class)->findOneBy(['clubId' => $clubId])
                 ?? $this->createSeason($clubId, SeasonResolver::seasonYear(new DateTimeImmutable('today')));
-            // The register endpoint seeds the current season without a validated
-            // socle; matches need one (state 3), so stamp it here.
-            if (null === $season->getSocleValidatedAt()) {
-                $season->setSocleValidatedAt(new DateTimeImmutable);
-                $this->em->flush();
+            // The register endpoint seeds the current season with an empty plan
+            // (espace de travail); matches need a settled one (state 3).
+            if (null === $this->chosenPlanVersion($season)) {
+                $this->settleSeasonPlan($season);
             }
             $seasonId = $season->getId();
         }

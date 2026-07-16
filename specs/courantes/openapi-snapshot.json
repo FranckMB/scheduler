@@ -903,10 +903,6 @@
                                                 }
                                             }
                                         },
-                                        "baselineScheduleId": {
-                                            "type": "string",
-                                            "nullable": true
-                                        },
                                         "seasonPlan": {
                                             "type": [
                                                 "object",
@@ -6895,6 +6891,135 @@
                         "explode": false
                     }
                 ]
+            },
+            "put": {
+                "operationId": "api_schedule_plans_id_put",
+                "tags": [
+                    "SchedulePlan"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SchedulePlan resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the SchedulePlan resource.",
+                "description": "Replaces the SchedulePlan resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "SchedulePlan identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated SchedulePlan resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.SchedulePlanInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.SchedulePlanInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.SchedulePlanInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/api/schedule_slot_templates": {
@@ -14227,9 +14352,7 @@
                             "PENDING",
                             "GENERATING",
                             "COMPLETED",
-                            "FAILED",
-                            "VALIDATED",
-                            "ARCHIVED"
+                            "FAILED"
                         ]
                     },
                     "calendarEntryId": {
@@ -14351,6 +14474,11 @@
                         "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "isChosen": {
+                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -14373,8 +14501,7 @@
                             "PENDING",
                             "GENERATING",
                             "COMPLETED",
-                            "FAILED",
-                            "VALIDATED"
+                            "FAILED"
                         ],
                         "type": [
                             "string",
@@ -14426,9 +14553,7 @@
                             "PENDING",
                             "GENERATING",
                             "COMPLETED",
-                            "FAILED",
-                            "VALIDATED",
-                            "ARCHIVED"
+                            "FAILED"
                         ]
                     },
                     "calendarEntryId": {
@@ -14550,6 +14675,11 @@
                         "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "isChosen": {
+                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -14588,9 +14718,7 @@
                                     "PENDING",
                                     "GENERATING",
                                     "COMPLETED",
-                                    "FAILED",
-                                    "VALIDATED",
-                                    "ARCHIVED"
+                                    "FAILED"
                                 ]
                             },
                             "calendarEntryId": {
@@ -14710,6 +14838,11 @@
                             },
                             "isLiveContext": {
                                 "description": "planning-versions: is THIS the version whose structure is the season's\ncurrently loaded context (\u2605)? Set on every COMPLETED season plan and\nre-pointed by \"Charger cette version\". The \u2605 tracks the loaded context,\nnot the version being viewed. Set by ScheduleStateProvider (batched).",
+                                "default": false,
+                                "type": "boolean"
+                            },
+                            "isChosen": {
+                                "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                                 "default": false,
                                 "type": "boolean"
                             }
@@ -15003,7 +15136,7 @@
             },
             "SchedulePlan": {
                 "type": "object",
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -15059,9 +15192,23 @@
                     }
                 }
             },
+            "SchedulePlan.SchedulePlanInput": {
+                "type": "object",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
+                "required": [
+                    "name"
+                ],
+                "properties": {
+                    "name": {
+                        "maxLength": 180,
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
             "SchedulePlan.html": {
                 "type": "object",
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -15180,7 +15327,7 @@
                         }
                     }
                 ],
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version."
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable."
             },
             "ScheduleSlotTemplate": {
                 "type": "object",
@@ -15589,19 +15736,6 @@
                             "null"
                         ]
                     },
-                    "baselineScheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
                     "transitionData": {
                         "type": "object",
                         "additionalProperties": {
@@ -15652,14 +15786,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "planningName": {
-                        "maxLength": 120,
-                        "description": "Name of THE season plan (planning-versions) \u2014 null keeps the current value.",
-                        "type": [
-                            "string",
-                            "null"
-                        ]
                     }
                 }
             },
@@ -15699,19 +15825,6 @@
                         "type": "string"
                     },
                     "exportPdfUrl": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "baselineScheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "planningName": {
-                        "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                         "type": [
                             "string",
                             "null"
@@ -15769,19 +15882,6 @@
                                 "type": "string"
                             },
                             "exportPdfUrl": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "baselineScheduleId": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "planningName": {
-                                "description": "Manager-chosen name of THE season plan (planning-versions); null \u2192 default display.",
                                 "type": [
                                     "string",
                                     "null"
@@ -18029,7 +18129,7 @@
         },
         {
             "name": "SchedulePlan",
-            "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version."
+            "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable."
         },
         {
             "name": "Schedule",

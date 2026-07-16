@@ -46,10 +46,6 @@ class Season implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 2048, nullable: true)]
     private ?string $exportPdfUrl = null;
 
-    /** The season's chosen/baseline schedule (the "main" plan). First COMPLETED wins, re-designable. */
-    #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $baselineScheduleId = null;
-
     /**
      * planning-versions: the version whose structure is the CURRENTLY LOADED
      * context (★). Set to the generated version on every COMPLETED season plan,
@@ -59,22 +55,6 @@ class Season implements TenantOwnedInterface
      */
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $liveContextScheduleId = null;
-
-    /**
-     * Sticky cockpit-unlock milestone: set once when the baseline schedule is
-     * first VALIDATED; NEVER reset (reopen does not re-lock the cockpit).
-     * See accueil-cockpit-temporel.md §2ter.
-     */
-    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
-    private ?DateTimeImmutable $socleValidatedAt = null;
-
-    /**
-     * Manager-chosen name of THE season plan (planning-versions: one plan per
-     * season, declined in versions). Editable next to the club logo; null →
-     * the frontend shows "Planning {season name}".
-     */
-    #[ORM\Column(type: 'string', length: 120, nullable: true)]
-    private ?string $planningName = null;
 
     /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
@@ -207,11 +187,6 @@ class Season implements TenantOwnedInterface
         return $this;
     }
 
-    public function getBaselineScheduleId(): ?string
-    {
-        return $this->baselineScheduleId;
-    }
-
     public function getLiveContextScheduleId(): ?string
     {
         return $this->liveContextScheduleId;
@@ -220,37 +195,6 @@ class Season implements TenantOwnedInterface
     public function setLiveContextScheduleId(?string $liveContextScheduleId): self
     {
         $this->liveContextScheduleId = $liveContextScheduleId;
-
-        return $this;
-    }
-
-    public function getSocleValidatedAt(): ?DateTimeImmutable
-    {
-        return $this->socleValidatedAt;
-    }
-
-    public function setSocleValidatedAt(?DateTimeImmutable $socleValidatedAt): self
-    {
-        $this->socleValidatedAt = $socleValidatedAt;
-
-        return $this;
-    }
-
-    public function setBaselineScheduleId(?string $baselineScheduleId): self
-    {
-        $this->baselineScheduleId = $baselineScheduleId;
-
-        return $this;
-    }
-
-    public function getPlanningName(): ?string
-    {
-        return $this->planningName;
-    }
-
-    public function setPlanningName(?string $planningName): self
-    {
-        $this->planningName = $planningName;
 
         return $this;
     }

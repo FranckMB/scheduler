@@ -18,6 +18,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class CalendarEntryConflictsTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private const VENUE_X = '11111111-1111-4111-8111-111111111111';
@@ -101,6 +103,29 @@ final class CalendarEntryConflictsTest extends WebTestCase
         self::assertSame(1, $data['conflicts'][0]['dayOfWeek']);
     }
 
+    public function testWithoutAChosenSeasonPlanTheRadarSaysSoInsteadOfZero(): void
+    {
+        // Rien ne pointe automatiquement (décision fondateur) : tant que le gestionnaire
+        // n'a pas validé, la saison n'a PAS de calendrier et le radar n'a rien à
+        // comparer. Il DOIT le dire : `conflicts: []` seul se lit « aucun impact », et
+        // le gestionnaire n'adapte pas une fermeture qui, en vrai, touchera ses séances.
+        [$user, $club, $season] = $this->seed('CF5');
+        $schedule = $this->baseline($club, $season);
+        $this->slot($club, $season, $schedule, self::VENUE_X, 1, self::TEAM_MON);
+        $this->em->flush();
+        // Le plan redevient un espace de travail — l'état après un reopen.
+        self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->releaseSchedule($schedule->getId());
+
+        $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertFalse($data['seasonPlanChosen'], 'le radar annonce qu\'il n\'a aucun calendrier à comparer');
+        self::assertSame([], $data['conflicts'], 'et ne rend aucun conflit — « je ne sais pas », pas « tout va bien »');
+    }
+
     public function testIgnoredEntryRaisesNoConflicts(): void
     {
         [$user, $club, $season] = $this->seed('CF5');
@@ -161,8 +186,9 @@ final class CalendarEntryConflictsTest extends WebTestCase
         $this->em->persist($schedule);
         $this->em->flush();
 
-        $season->setBaselineScheduleId($schedule->getId());
-        $this->em->flush();
+        // The conflict radar reads the season's calendar = the version the plan
+        // points at. Without the pointer it has nothing to compare periods against.
+        $this->choosePlanVersion($schedule);
 
         return $schedule;
     }

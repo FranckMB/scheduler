@@ -35,10 +35,10 @@ const schedules = [
   plan({ id: "o2", name: "Vacances Toussaint", calendarEntryId: "p1", createdAt: "2026-07-04T10:00:00+00:00" }),
 ];
 
-function open(list: Schedule[], baselineScheduleId: string | null = "v2") {
+function open(list: Schedule[]) {
   return render(
     <MemoryRouter>
-      <SeasonSchedulesModal schedules={list} baselineScheduleId={baselineScheduleId} onClose={vi.fn()} />
+      <SeasonSchedulesModal schedules={list} onClose={vi.fn()} />
     </MemoryRouter>,
   );
 }
@@ -66,19 +66,19 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
 
   it("represents each planning by its latest FINISHED version, never a failed/in-flight one", () => {
     // v2 is FAILED and v3 GENERATING → the principal row must fall back to the finished v1.
-    open([plan({ id: "v1", status: "COMPLETED", createdAt: "2026-07-01T10:00:00+00:00" }), plan({ id: "v2", status: "FAILED", createdAt: "2026-07-02T10:00:00+00:00" }), plan({ id: "v3", status: "GENERATING", createdAt: "2026-07-03T10:00:00+00:00" })], null);
+    open([plan({ id: "v1", status: "COMPLETED", createdAt: "2026-07-01T10:00:00+00:00" }), plan({ id: "v2", status: "FAILED", createdAt: "2026-07-02T10:00:00+00:00" }), plan({ id: "v3", status: "GENERATING", createdAt: "2026-07-03T10:00:00+00:00" })]);
     expect(screen.getByText("Terminé")).toBeInTheDocument(); // v1's COMPLETED label, not FAILED/GENERATING
   });
 
-  it("eye on a validated planning opens the planning page", async () => {
-    open([plan({ id: "v1", status: "VALIDATED" })], "v1");
+  it("eye on the planning in force opens the planning page", async () => {
+    open([plan({ id: "v1", status: "COMPLETED", isChosen: true })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("v1");
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
   it("eye on an in-progress SEASON planning opens the wizard's generation step", async () => {
-    open([plan({ id: "v1", status: "COMPLETED" })], null);
+    open([plan({ id: "v1", status: "COMPLETED" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(jumpTo).toHaveBeenCalledWith("generate");
     expect(navigate).toHaveBeenCalledWith("/wizard");
@@ -87,7 +87,7 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("eye on a finished PERIOD overlay opens it on the planning page (never the wizard)", async () => {
     // A COMPLETED overlay is a finished period plan → consult it, not the wizard
     // (whose generate step renders the season plan, not the overlay).
-    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", calendarEntryId: "p1" })], null);
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", calendarEntryId: "p1" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
     expect(navigate).toHaveBeenCalledWith("/planning");
@@ -95,7 +95,7 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   });
 
   it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {
-    open([plan({ id: "v1", status: "COMPLETED" })], null);
+    open([plan({ id: "v1", status: "COMPLETED" })]);
     expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^Exporter/ }));
     expect(screen.getByRole("menuitem", { name: "PDF" })).toBeInTheDocument();

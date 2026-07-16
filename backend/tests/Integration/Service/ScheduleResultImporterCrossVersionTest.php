@@ -47,7 +47,7 @@ final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
     public function testImportingIntoAnotherVersionDoesNotStealTheSlot(): void
     {
         [$club, $season] = $this->seed();
-        $a = $this->schedule($club, $season, ScheduleStatus::VALIDATED);
+        $a = $this->schedule($club, $season, ScheduleStatus::COMPLETED);
         $b = $this->schedule($club, $season, ScheduleStatus::PENDING);
         // A owns a HARD-locked slot at placement P (id scoped to A).
         $this->slot($club, $season, $a, LockLevel::HARD);

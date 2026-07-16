@@ -9,11 +9,15 @@ import { addDays, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
-let conflictsData: { conflicts: { dates: string[] }[] } | undefined;
+let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
+let conflictsPending = false;
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
+  // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
+  // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
+  useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
 }));
 
 const FUTURE = "2999-01-05";
@@ -51,6 +55,7 @@ describe("RadarPanel", () => {
   beforeEach(() => {
     createHolidayMutate.mockReset();
     conflictsData = undefined;
+    conflictsPending = false;
   });
 
   it("asks for the school zone when unknown", () => {
@@ -78,11 +83,58 @@ describe("RadarPanel", () => {
   });
 
   it("counts the sessions to replace on a closure without overlay", () => {
-    conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }] };
+    conflictsData = { conflicts: [{ dates: [FUTURE, "2999-01-12"] }, { dates: ["2999-01-06"] }], seasonPlanChosen: true };
     renderRadar({ entries: [closure({})] });
 
     expect(screen.getByText(/3 séances à replacer · planning secondaire absent/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+  });
+
+  it("shows the season plan as incomplete when it points at nothing", () => {
+    // Le serveur ne rend AUCUN conflit faute de calendrier à comparer. Sans
+    // distinguer ce cas de « zéro conflit », le gestionnaire déclare une fermeture
+    // de gymnase, lit que tout va bien, et n'adapte rien.
+    conflictsData = { conflicts: [], seasonPlanChosen: false };
+    renderRadar({ entries: [closure({})] });
+
+    expect(screen.getByText(/Planning de la saison incomplet · impact non évalué/)).toBeInTheDocument();
+    expect(screen.queryByText("Rien à signaler")).not.toBeInTheDocument();
+  });
+
+  it("never announces « tout roule » while a closure's impact is still loading", () => {
+    // Masquer une carte parce qu'on ne sait pas ENCORE, tout en annonçant que tout va
+    // bien, c'est le silence qui ment — juste déplacé du libellé vers le filtre.
+    conflictsPending = true;
+    conflictsData = undefined;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.queryByText("Gymnase fermé")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+  });
+
+  it("surfaces a closure whose impact could NOT be read (failed request) instead of silently dropping it", () => {
+    // Requête en échec : `data` reste undefined pour toujours. La masquer cacherait
+    // définitivement une fermeture qui, en vrai, tombe sur 6 séances.
+    conflictsPending = false;
+    conflictsData = undefined;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.getByText("Gymnase fermé")).toBeInTheDocument();
+    // …et sans PRÉTENDRE savoir pourquoi : « planning incomplet » serait affirmer un
+    // fait sur le plan qu'on n'a justement pas pu vérifier.
+    expect(screen.getByText("Impact non évalué · réessayez")).toBeInTheDocument();
+    expect(screen.queryByText(/Planning de la saison incomplet/)).not.toBeInTheDocument();
+  });
+
+  it("hides a closure that hits nothing on a validated plan — the radar is a to-do list, not an inventory", () => {
+    // Décision fondateur : « un planning sans conflit qui a été validé, je veux rien
+    // voir ». Le radar montre ce qui CHANGE par rapport au quotidien.
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.queryByText("Gymnase fermé")).not.toBeInTheDocument();
+    // …et le panneau redevient franchement vide, au lieu d'un cadre « À traiter » désert.
+    expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the overlay exists", () => {

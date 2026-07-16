@@ -4,33 +4,32 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Entity\Season;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
- * Guards actions that require the season's MAIN plan to be validated first
- * (cockpit state machine, accueil-cockpit-temporel.md): matches and secondary
- * plans (period overlays) can only be created once the socle is stamped. Before
- * that the club is still finalising the main plan.
+ * Garde les actions qui se construisent SUR le calendrier de base de la saison :
+ * matchs et plans secondaires (ADR-0002 inv. 13).
  *
- * 409 mirrors the archived-season / VALIDATED-lock idiom — the frontend toast
- * pipeline already surfaces it.
+ * Le calendrier de base = le plan SEASON **et sa version choisie**. Tant que le
+ * gestionnaire n'a choisi aucune version, la saison est un espace de travail : il
+ * n'y a rien contre quoi placer un match ni sur quoi bâtir un ajustement.
+ *
+ * 409 : le pipeline de toasts du frontend le remonte déjà.
  */
 final class SocleGuard
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
-    /** @throws ConflictHttpException when the season's socle is not validated yet */
-    public function assertValidated(?string $seasonId): void
+    /** @throws ConflictHttpException tant que le plan de saison n'a pas de version choisie */
+    public function assertSeasonPlanChosen(?string $seasonId): void
     {
         if (null === $seasonId) {
-            return; // no resolved season → other guards handle it
+            return; // aucune saison résolue → d'autres gardes s'en chargent
         }
-        $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
-        if ($season instanceof Season && null === $season->getSocleValidatedAt()) {
+
+        if (null === $this->schedulePlanProvisioner->chosenOfSeasonPlan($seasonId)) {
             throw new ConflictHttpException('Validez le planning principal avant de créer un match ou un planning secondaire.');
         }
     }

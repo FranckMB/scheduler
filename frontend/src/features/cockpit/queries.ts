@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { createConstraint } from "@/features/wizard/api";
 import { errorMessage } from "@/shared/lib/errorMessage";
@@ -48,6 +48,22 @@ export function usePublicHolidays(from: string, to: string) {
     queryKey: ["public-holidays", from, to],
     queryFn: () => cockpitApi.getPublicHolidays(from, to),
     staleTime: 3_600_000,
+  });
+}
+
+/**
+ * Les conflits de PLUSIEURS périodes d'un coup. Le radar est une liste « à traiter » :
+ * il ne peut décider de masquer une fermeture sans impact qu'en connaissant l'impact,
+ * or seul le serveur le sait. Même queryKey que useEntryConflicts → le cache dédoublonne,
+ * la carte enfant ne refait aucune requête.
+ */
+export function useEntryConflictsList(entryIds: string[]) {
+  return useQueries({
+    queries: entryIds.map((entryId) => ({
+      queryKey: ["entry-conflicts", entryId],
+      queryFn: () => cockpitApi.getEntryConflicts(entryId),
+      staleTime: 30_000,
+    })),
   });
 }
 

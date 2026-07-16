@@ -12,6 +12,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -22,18 +23,17 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * Validating a COMPLETED schedule locks it (→ VALIDATED, read-only); only within
- * the caller's own club, and only when completed.
- *
- * Version model (§7.1 planning lifecycle, specs/evolution/planning-versions.md):
- * validating a SEASON plan also makes it the season baseline and ARCHIVES its
- * sibling season-plan versions — never the overlays; a sibling still generating
- * blocks the validation (409).
+ * §7.1 planning lifecycle — ADR-0002 inv. 1: validating a COMPLETED version makes
+ * the plan POINT at it. There is no VALIDATED status: "validated" is derived from
+ * the pointer alone. Choosing also DELETES the sibling versions of the same scope
+ * (never the overlays); a sibling still generating blocks the choice (409). Only
+ * within the caller's own club, and only when completed.
  */
 #[Group('phase1')]
 #[Group('integration')]
 final class ValidateScheduleTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -42,7 +42,7 @@ final class ValidateScheduleTest extends WebTestCase
 
     private UserPasswordHasherInterface $hasher;
 
-    public function testValidateLocksCompletedSchedule(): void
+    public function testValidateMakesThePlanPointAtTheVersion(): void
     {
         [$user, , $season] = $this->seed('VAL1');
         $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
@@ -52,53 +52,35 @@ final class ValidateScheduleTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         $this->em->clear();
+        self::assertSame($schedule->getId(), $this->chosenPlanVersion($season), 'validating = the plan points at this version');
+        // The version keeps the solver's verdict: "chosen" is carried by the
+        // pointer, never mirrored back onto the status.
         $reloaded = $this->em->getRepository(Schedule::class)->find($schedule->getId());
-        self::assertSame(ScheduleStatus::VALIDATED, $reloaded?->getStatus());
+        self::assertSame(ScheduleStatus::COMPLETED, $reloaded?->getStatus());
     }
 
-    public function testValidatingBaselineStampsStickyCockpitUnlock(): void
+    public function testTheChosenVersionSurfacesOnMe(): void
     {
         [$user, , $season] = $this->seed('VAL5');
         $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-        $season->setBaselineScheduleId($schedule->getId());
-        $this->em->flush();
 
         $this->client->loginUser($user);
         $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
         self::assertResponseIsSuccessful();
 
-        $this->em->clear();
-        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertNotNull($reloaded?->getSocleValidatedAt(), 'validating the baseline must stamp socleValidatedAt');
-
-        // Surfaced to the frontend via /api/me (stateless firewall → Bearer).
+        // The frontend reads the whole "is the season settled?" question from
+        // /api/me.seasonPlan — the single seam (stateless firewall → Bearer).
         $jwt = self::getContainer()->get(JWTTokenManagerInterface::class);
         $this->client->request('GET', '/api/me', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $jwt->create($user),
         ]);
         self::assertResponseIsSuccessful();
         $me = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertNotNull($me['socleValidatedAt']);
+        self::assertSame($schedule->getId(), $me['seasonPlan']['chosenScheduleId']);
+        self::assertTrue($me['seasonPlan']['hasFinishedVersion']);
     }
 
-    public function testValidatingSeasonPlanBecomesBaselineAndStampsUnlock(): void
-    {
-        // Version model: "this version IS the plan" — validating a season plan
-        // that was NOT the baseline makes it the baseline and unlocks the cockpit.
-        [$user, , $season] = $this->seed('VAL6');
-        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedules/{$schedule->getId()}/validate");
-        self::assertResponseIsSuccessful();
-
-        $this->em->clear();
-        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertSame($schedule->getId(), $reloaded?->getBaselineScheduleId(), 'the validated version becomes the baseline');
-        self::assertNotNull($reloaded?->getSocleValidatedAt());
-    }
-
-    public function testValidateArchivesSiblingSeasonPlansButNotOverlays(): void
+    public function testValidateDeletesSiblingSeasonVersionsButNotOverlays(): void
     {
         [$user, , $season] = $this->seed('VAL7');
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
@@ -111,10 +93,12 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertResponseIsSuccessful();
 
         $this->em->clear();
-        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
-        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus(), 'sibling COMPLETED version archived');
-        self::assertSame(ScheduleStatus::ARCHIVED, $this->em->getRepository(Schedule::class)->find($failed->getId())?->getStatus(), 'sibling FAILED version archived');
-        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($overlay->getId())?->getStatus(), 'an overlay is NEVER archived by season-plan validation');
+        // inv. 1: the plan keeps the ONE version it points at — the losers are
+        // deleted, not archived. There is no hidden safety net any more.
+        self::assertSame($v2->getId(), $this->chosenPlanVersion($season));
+        self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'sibling COMPLETED version deleted');
+        self::assertNull($this->em->getRepository(Schedule::class)->find($failed->getId()), 'sibling FAILED version deleted');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'an overlay is NEVER touched by a season-plan choice');
     }
 
     public function testValidateBlockedWhileSiblingIsGenerating(): void
@@ -133,13 +117,13 @@ final class ValidateScheduleTest extends WebTestCase
 
     public function testValidatingAnotherVersionWithOverlaysRequiresConfirmation(): void
     {
-        // Baseline V1 VALIDATED with a period overlay built on its socle;
-        // validating V2 MOVES the baseline → the overlay would silently compose
-        // over a different base plan. Same destructive idiom as reopen:
-        // 409 overlays_exist, then confirmDeleteOverlays deletes the overlay.
+        // The plan points at V1, with a period overlay built on it; choosing V2
+        // MOVES the pointer → the overlay would silently compose over a different
+        // base plan (inv. 14). Same destructive idiom as reopen: 409 overlays_exist,
+        // then confirmDeleteOverlays deletes the overlay.
         [$user, , $season] = $this->seed('VAL9');
-        $v1 = $this->createSchedule($season, ScheduleStatus::VALIDATED);
-        $season->setBaselineScheduleId($v1->getId());
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($v1);
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
@@ -167,8 +151,84 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $this->em->clear();
         self::assertNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'the stale overlay is deleted after explicit confirmation');
-        self::assertSame($v2->getId(), $this->em->getRepository(Season::class)->find($season->getId())?->getBaselineScheduleId());
-        self::assertSame(ScheduleStatus::VALIDATED, $this->em->getRepository(Schedule::class)->find($v2->getId())?->getStatus());
+        self::assertSame($v2->getId(), $this->chosenPlanVersion($season), 'the pointer moved to V2');
+        self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'the version it no longer points at is deleted');
+    }
+
+    public function testValidatingWithLiveOverlaysAsksEvenWhenThePlanPointsAtNothing(): void
+    {
+        // Le plan est un espace de travail (pointeur null) MAIS des plans secondaires
+        // survivent — cas réel : le socle a été rouvert, ou la donnée vient d'avant la
+        // bascule. Choisir une version donne alors aux overlays un autre socle que celui
+        // sur lequel ils ont été bâtis. La garde doit s'armer sur « le plan ne pointe pas
+        // DÉJÀ cette version », pas sur « le plan pointe quelque chose » — sinon elle
+        // saute exactement là où elle est nécessaire, et sans rien dire.
+        [$user, , $season] = $this->seed('VAL10');
+        $entry = (new CalendarEntry)
+            ->setClubId($season->getClubId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->flush();
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        self::assertNull($this->chosenPlanVersion($season), 'le plan ne pointe rien : c\'est le cas qui désarmait la garde');
+
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
+        $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json'];
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate", [], [], $auth);
+
+        self::assertResponseStatusCodeSame(409);
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('overlays_exist', $body['code'] ?? null);
+        $this->em->clear();
+        self::assertNull($this->chosenPlanVersion($season), 'rien n\'est commité sur le 409');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'le plan secondaire survit tant que rien n\'est confirmé');
+    }
+
+    public function testFirstValidationWithoutOverlaysNeedsNoConfirmation(): void
+    {
+        // Le pendant du test ci-dessus : sans plan secondaire, la garde ne coûte rien.
+        // Sinon on aurait remplacé un trou par une demande de confirmation absurde à
+        // la toute première validation d'un club.
+        [$user, , $season] = $this->seed('VAL11');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate");
+
+        self::assertResponseIsSuccessful();
+        self::assertSame($v1->getId(), $this->chosenPlanVersion($season));
+    }
+
+    public function testValidatingAVersionThatVanishedMeanwhileIsRefused(): void
+    {
+        // LA course qui m'a échappé deux fois. Deux onglets valident V1 et V2 : la
+        // première supprime V2 (sa sœur), la seconde arrive avec une entité V2 chargée
+        // AVANT le verrou. Si elle ne relit pas la BASE, elle croit V2 COMPLETED,
+        // pointe le plan sur une ligne morte (colonne guid nue, aucune FK) et supprime
+        // V1 : zéro version, pointeur fantôme, club renvoyé au wizard.
+        //
+        // On simule l'issue de la course : la version disparaît de la base pendant que
+        // la requête la tient encore en mémoire.
+        [$user, , $season] = $this->seed('VAL12');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $v2Id = $v2->getId();
+
+        // Suppression HORS ORM : l'identity map garde V2, comme la requête concurrente.
+        $this->em->getConnection()->executeStatement('DELETE FROM schedule WHERE id = :id', ['id' => $v2Id]);
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v2Id}/validate");
+
+        self::assertResponseStatusCodeSame(409, 'une version disparue ne peut pas être choisie');
+        $this->em->clear();
+        self::assertNull($this->chosenPlanVersion($season), 'le plan ne pointe pas une ligne morte');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'et la survivante n\'est pas emportée');
     }
 
     public function testNonCompletedScheduleCannotBeValidated(): void

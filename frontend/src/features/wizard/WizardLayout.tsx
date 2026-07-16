@@ -105,10 +105,10 @@ export function WizardPage() {
   const [footerExtra, setFooterExtra] = useState<ReactNode>(null);
   const [suppressScrollJump, setSuppressScrollJump] = useState(false);
   const footerCtx = useMemo(() => ({ setFooterExtra, setSuppressScrollJump }), []);
-  // Onboarding (no main plan / baseline yet) → guided: forward steps stay locked
+  // Onboarding (the club has never generated) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely. Period mode is never
   // guided (structure is inherited read-only; nav is open).
-  const guided = !periodMode && null === (me?.baselineScheduleId ?? null);
+  const guided = !periodMode && !me?.seasonPlan?.hasFinishedVersion;
 
   // On first entry of a guided wizard, land on the first incomplete step (no
   // team → Équipes, …); when everything is filled, land on Récap — the last

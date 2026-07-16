@@ -142,20 +142,24 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 20. **Validation pré-solve** (`ValidateConstraintsController`) : filtre par **plan**
     (ses réglages + datées du fait), plus par entry — absorbe la dette P4-13.
 
-## Mapping actuel → cible
+## Mapping legacy → modèle (livré par la bascule du 2026-07-16)
 
-| Aujourd'hui | Cible |
+Le legacy de la colonne de gauche **n'existe plus** : la bascule a déplacé tous ses
+lecteurs et l'a supprimé dans le même commit. Le tableau se lit désormais comme une
+table de correspondance pour relire du code ou des specs antérieurs.
+
+| Legacy (supprimé) | Ce qui le remplace |
 |---|---|
-| Regroupement implicite `(seasonId, calendarEntryId)` | `Schedule.planId` |
+| Regroupement implicite `(seasonId, calendarEntryId)` | `Schedule.schedulePlanId` |
 | `Season.baselineScheduleId` + auto-assignation 1er COMPLETED | `Plan(SEASON).chosenScheduleId`, posé par validation seule |
 | `Season.planningName` | `Plan.name` |
 | `CalendarEntry.overlayScheduleId` (1:1) | `Plan.chosenScheduleId` (N plans par entry via `Plan.calendarEntryId`) |
 | `Schedule.status VALIDATED` + `ARCHIVED` (validation archive les frères) | supprimés — valider = pointer + **supprimer** les autres versions |
 | `Season.liveContextScheduleId` | ★ conservée (version dont la photo est chargée) — hors du Plan |
 | `Season.socleValidatedAt` (gate cockpit, sticky) | dérivé : plan SEASON a ≥ 1 version terminée |
-| Réglages sur `calendarEntryId` (overrides, créneaux, datées, seed flag) | re-keyés sur `planId` |
-| « V3 » dérivé de l'ordre de création | `Schedule.versionNumber` stocké |
-| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) |
+| Réglages sur `calendarEntryId` (overrides, créneaux, datées, seed flag) | re-keyés sur `planId` — **pas encore fait, lot C** |
+| « V3 » dérivé de l'ordre de création | `Schedule.versionNumber` stocké (côté serveur ; les libellés du front dérivent encore de l'ordre de création — voir Questions ouvertes) |
+| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) — **pas encore fait, lot C** |
 
 ## Conséquences
 
@@ -265,9 +269,9 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     l'EntityManager et fait échouer le reste du passage. Pré-existant (le flush était
     déjà dans la boucle) ; à traiter avec la commande, hors scope B1.
 
-- **Lot B-bascule — LA LEÇON (à faire en UN SEUL lot, back + front + drop du legacy)** :
-  une **demi-migration est structurellement impossible**. Le legacy n'est PAS un miroir
-  passif : `baselineScheduleId`/`socleValidatedAt` sont **lus pour décider** par ~16
+- **Lot B-bascule — LA LEÇON, puis la bascule (livrée 2026-07-16)** :
+  une **demi-migration est structurellement impossible**. Le legacy n'était PAS un miroir
+  passif : `baselineScheduleId`/`socleValidatedAt` étaient **lus pour décider** par ~16
   fichiers — radar de conflits matchs (`FixtureConflictsController`,
   `CalendarEntryConflictsController`, `MatchConflictDetector`), routing et mode guidé
   (`AuthGuard`, `CockpitPage`, `WizardLayout`), bannière et atterrissage
@@ -275,16 +279,38 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   `GenerateScheduleHandler` (auto-baseline). Une tentative de basculer les seules gardes
   backend en gardant le legacy vivant a produit **deux vérités divergentes** et ~15
   défauts confirmés en 4 rounds de revue (gardes destructives désarmées, baseline
-  pendante ⇒ zéro conflit match détecté, V1 indélébile…). La bascule doit donc déplacer
-  **tous** les consommateurs et **supprimer** le legacy dans le même commit — une seule
-  vérité, par construction. Elle emporte alors : valider = pointer **+ supprimer les
-  autres versions** (inv. 1), gate des plans secondaires sur le pointeur (inv. 13),
-  destruction confirmée (inv. 14), déblocage cockpit (inv. 8/16), suppression de
-  `SetBaselineController` (inv. 18) et le `plans[]` du 409.
+  pendante ⇒ zéro conflit match détecté, V1 indélébile…). La bascule a donc déplacé
+  **tous** les consommateurs et **supprimé** le legacy dans le même commit — une seule
+  vérité, par construction.
+
+  Ce qu'elle a emporté : valider = pointer **+ supprimer les autres versions** (inv. 1) ;
+  rouvrir = dépointer (inv. 2) ; aucun pointage automatique (inv. 2) ; gate des plans
+  secondaires et du module matchs sur le pointeur (inv. 13) ; destruction confirmée
+  (inv. 14) ; déblocage cockpit sur « ≥ 1 version terminée », donc insensible au pointeur
+  (inv. 8/16) ; le nom sur le plan, renommé par `PUT /api/schedule_plans/{id}` (inv. 12) ;
+  suppression de `SetBaselineController` (inv. 18) ; disparition de `Season.baselineScheduleId`,
+  `socleValidatedAt`, `planningName` et des statuts `VALIDATED`/`ARCHIVED`.
+
+  **Deux gardes s'appuyaient en silence sur le statut `VALIDATED`** pour refuser d'écraser
+  le planning en vigueur (`/regenerate`, `/regenerate-from`), plus le bouton « Valider » du
+  front : supprimer le statut les désarmait. Elles ont été restaurées sur le pointeur dans
+  le même lot — c'est exactement la classe de défaut que l'atomicité sert à rendre visible,
+  et ce sont les tests qui l'ont attrapée.
+
+  **Effet de bord assumé** : créer un plan secondaire sans socle en vigueur rend **409**
+  (avant : 422 sans baseline, 409 sans socle). Les deux conditions legacy fusionnent en une
+  seule, donc un seul code — celui du module matchs, même garde et même message actionnable.
+
+  Nouveau champ de lecture **`Schedule.isChosen`** (batché par `ScheduleStateProvider`) : le
+  statut ne pouvait pas répondre « cette version-ci est en vigueur » pour un overlay, dont le
+  pointeur vit sur le plan de sa période et n'est pas visible depuis `/api/me`.
 
 - **Lot C** — réglages de période & génération pilotés par plan.
-- **Lot D** — nettoyage : suppression du legacy (baseline/overlay/liveContext, VALIDATED/
-  ARCHIVED), colonnes `schedule_plan_id`/`version_number` rendues `NOT NULL`.
+- **Lot D** — nettoyage résiduel : la bascule a déjà supprimé baseline / socle / nom legacy
+  et les statuts `VALIDATED`/`ARCHIVED`. Restent : `CalendarEntry.overlayScheduleId` (pointeur
+  inverse, encore utile tant que le lot C n'a pas re-keyé les périodes) et les colonnes
+  `schedule_plan_id`/`version_number` à rendre `NOT NULL`. La ★ (`liveContextScheduleId`)
+  **reste par décision** (inv. 17) — c'est l'auto-pointeur qui est mort, pas la ★.
 
 ### Note de nommage (résolution de collision)
 

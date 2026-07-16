@@ -11,8 +11,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  * `_club_id` attribute, else the `X-Club-Id` header). Shared by cockpit
  * controllers so this security-sensitive idiom lives in one place.
  *
- * NOTE: several older controllers (Validate/Reopen/SetBaseline/Generate…) still
- * inline the same helper — migrating them is a separate cleanup.
+ * NOTE: several older controllers (Validate/Reopen/Generate…) still inline the
+ * same helper — migrating them is a separate cleanup.
  */
 trait ResolvesCurrentClubTrait
 {

@@ -14,6 +14,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +32,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class CalendarEntryApiTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -345,19 +347,13 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($slotId), 'overlay slots must be purged');
     }
 
-    public function testDeletingPeriodWithValidatedOverlayIsRefused(): void
+    public function testDeletingPeriodWhoseOverlayIsChosenIsRefused(): void
     {
         [$user, $club, $season] = $this->seed('CE17');
 
+        // The period entry first: its plan is keyed on the entry, so the overlay
+        // must carry calendarEntryId to belong to it.
         $this->scopeGucToClub($club->getId());
-        $overlay = new Schedule;
-        $overlay->setClubId($club->getId());
-        $overlay->setSeasonId($season->getId());
-        $overlay->setName('Overlay validé');
-        $overlay->setStatus(ScheduleStatus::VALIDATED);
-        $this->em->persist($overlay);
-        $this->em->flush();
-
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($season->getId());
@@ -366,18 +362,29 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setTitle('Gym fermé');
         $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
-        $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
         $this->em->flush();
 
-        // The entry-delete cascade must not bypass the read-only guard that
-        // DELETE /api/schedules enforces on a VALIDATED plan.
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setCalendarEntryId($entry->getId());
+        $overlay->setName('Overlay en vigueur');
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+        $this->choosePlanVersion($overlay);
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->flush();
+
+        // The entry-delete cascade must not bypass the read-only guard: the period's
+        // plan POINTS at this overlay, so it is in force.
         $this->client->request('DELETE', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
         self::assertResponseStatusCodeSame(409);
 
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
-        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'the validated overlay must survive');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'the overlay in force must survive');
         self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()), 'the entry must survive');
     }
 

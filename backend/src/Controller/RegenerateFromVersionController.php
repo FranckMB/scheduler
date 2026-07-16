@@ -8,6 +8,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\StructureRestorer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -36,6 +37,7 @@ final class RegenerateFromVersionController extends AbstractController implement
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly StructureRestorer $structureRestorer,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedules/{id}/regenerate-from', name: 'api_schedule_regenerate_from', methods: ['POST'])]
@@ -63,12 +65,15 @@ final class RegenerateFromVersionController extends AbstractController implement
             return $this->json(['error' => 'Only a season version can be regenerated from.'], Response::HTTP_CONFLICT);
         }
 
-        // Only a FINISHED, non-locked version's conditions can be replayed: a
-        // VALIDATED plan is read-only (D1 model archives its siblings), an
-        // ARCHIVED one is never resurrected, and a DRAFT/FAILED/in-flight one
-        // has no meaningful structure to restore.
+        // A DRAFT/FAILED/in-flight version has no meaningful structure to restore.
         if (ScheduleStatus::COMPLETED !== $source->getStatus()) {
-            return $this->json(['error' => 'Seule une version terminée peut être régénérée (rouvrez un planning validé d\'abord).'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Seule une version terminée peut être régénérée.'], Response::HTTP_CONFLICT);
+        }
+        // ADR-0002 inv. 1 — la version CHOISIE est le planning en vigueur, et le
+        // restore écrase la structure du club : on rouvre avant d'y toucher. Le
+        // statut VALIDATED portait cette garde ; seul le pointeur la porte désormais.
+        if ($this->schedulePlanProvisioner->isChosen($source->getId())) {
+            return $this->json(['error' => 'La version choisie est le planning en vigueur. Rouvrez-le avant de charger une autre version.'], Response::HTTP_CONFLICT);
         }
 
         // The restore wipes the club structure — refuse while ANY version of the

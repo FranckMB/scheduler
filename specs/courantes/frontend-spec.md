@@ -53,10 +53,10 @@ layouts (`src/app/router.tsx`).
 | `/forgot-password` | Demande de réinitialisation de mot de passe (`POST /api/password/forgot`) | Public | `AuthLayout` |
 | `/reset-password/:token` | Saisie du nouveau mot de passe (`POST /api/password/reset`) | Public | `AuthLayout` |
 | `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
-| `/` | **Cockpit temporel** (`CockpitPage`) : bandeau planning principal (Ouvrir/**Modifier** = reopen · Tous les plannings) · calendrier mensuel des exceptions · radar (à traiter). **Débloqué (sticky) dès `me.socleValidatedAt` non null** ; sinon redirige vers `/planning`. **Palier B** : CTAs radar « Adapter » actifs (→ wizard mode période) ; « Voir le plan » (overlay généré → consultation) ; « Modifier » le socle avec overlays → **confirmation proportionnée** (409 `overlays_exist` → dialog « supprimera N secondaires »). Overlays exclus du sélecteur de plannings (badge « Période ») | Required | `AppLayout` |
-| `/planning` | **Boucle de travail planning** (`PlanningPage`, ex-`/`) : grille `WeekGrid`, toolbar (**sélecteur de versions** « V3 — 10 juil. 14:32 » — planning-versions D1 : versions non renommables, suppression d'une version de travail avec confirmation, ARCHIVED masquées ; régénérer, valider — archive les sœurs et fixe la baseline —, rouvrir, planning principal ★), **nom du planning éditable au header** (`Season.planningName`), bandeau divergence structure, diagnostics, détail créneau | Required | `AppLayout` |
+| `/` | **Cockpit temporel** (`CockpitPage`) : bandeau planning principal (Ouvrir/**Modifier** = reopen · Tous les plannings) · calendrier mensuel des exceptions · radar (à traiter). **Débloqué dès `me.seasonPlan.hasFinishedVersion`** (le plan de saison porte ≥1 version terminée — dérivé, indépendant du pointeur : rouvrir ne re-verrouille pas) ; sinon redirige vers `/wizard`. **Palier B** : CTAs radar « Adapter » actifs (→ wizard mode période) ; « Voir le plan » (overlay généré → consultation) ; « Modifier » le socle avec overlays → **confirmation proportionnée** (409 `overlays_exist` → dialog « supprimera N secondaires »). Overlays exclus du sélecteur de plannings (badge « Période ») | Required | `AppLayout` |
+| `/planning` | **Boucle de travail planning** (`PlanningPage`, ex-`/`) : grille `WeekGrid`, toolbar (**sélecteur de versions** « V3 — 10 juil. 14:32 » — versions non renommables, suppression d'une version de travail avec confirmation ; régénérer, valider — **le plan pointe la version et ses sœurs sont supprimées** (ADR-0002 inv. 1) —, rouvrir = **dépointer**, planning principal ★), **nom du planning éditable au header** (porté par le plan, `PUT /api/schedule_plans/{id}`), bandeau divergence structure, diagnostics, détail créneau | Required | `AppLayout` |
 | `/matchs` | **Module matchs** (`MatchesPage`) : placement des rencontres domicile (grille week-end), radar de conflits coach/joueur, import FBI (`ImportFbiDialog`) | Required | `AppLayout` |
-| `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `onboardingCompleted === false`) | Required | `AppLayout` |
+| `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `me.seasonPlan.hasFinishedVersion === false`, c.-à-d. tant que le club n'a jamais généré) | Required | `AppLayout` |
 | `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette), **section « Informations du club »** (champs FFBB — voir ci-dessous, admin) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
 
@@ -66,8 +66,9 @@ layouts (`src/app/router.tsx`).
 
 - Pas de JWT dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`).
 - `membershipStatus === "pending"` → `/waiting`.
-- `club.onboardingCompleted === false` → redirect `/wizard` (sauf si déjà sur `/wizard`).
-- **Gate cockpit (sticky)** : `CockpitPage` redirige vers `/planning` tant que `me.socleValidatedAt === null` (le socle n'a jamais été validé). Le jalon est posé côté backend à la 1re validation du baseline et **jamais retiré** — voir `planning-lifecycle-validated.md` et `specs/courantes/accueil-cockpit-temporel.md` §2ter.
+- **Onboarding** : `AuthGuard` verrouille l'app au wizard tant que `me.seasonPlan.hasFinishedVersion === false` (le club n'a jamais généré). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage**.
+- **Gate cockpit** : `CockpitPage` redirige vers `/wizard` tant que `me.seasonPlan.hasFinishedVersion === false`. Le critère est **dérivé** (le plan de saison porte ≥1 version terminée) et **indépendant du pointeur** : rouvrir un planning ne re-verrouille **pas** le cockpit — voir `planning-lifecycle-validated.md` et `specs/courantes/accueil-cockpit-temporel.md` §2ter.
+- **Gate matchs / plans secondaires** : bloqués tant que `me.seasonPlan.chosenScheduleId === null` (front désactivé + `SocleGuard` **409** côté serveur).
 
 ### Routes non livrées
 
@@ -223,7 +224,7 @@ Le planning est une semaine type (lun-sam), rendu par le composant maison `WeekG
 
 - Créneaux colorés, filtre par ressource (`ResourceFilter` : équipe / coach / salle)
 - Click sur créneau → détail (`SlotDetail` : équipe, coach, salle, verrou)
-- Lecture seule quand le planning est `VALIDATED` (verrou d'édition)
+- Lecture seule quand le plan **pointe** la version affichée (`Schedule.isChosen` — le verrou d'édition)
 - Pas de vue mensuelle — le planning est hebdomadaire type
 
 ### 6.3 Tri des équipes drag & drop (mode « Trier » du wizard)
@@ -263,15 +264,18 @@ Le gestionnaire ne voit jamais le concept de `club_id` ou `season_id`. Le fronte
 - N'affiche jamais de sélecteur de club (un user = un club en MVP)
 - Le sélecteur de saison est implicite (saison active par défaut)
 
-### 6.6 bis Cycle de vie du planning (VALIDATED)
+### 6.6 bis Cycle de vie du planning (le pointeur du plan)
 
 - Un planning `COMPLETED` peut être **validé** (bouton « Valider » de la toolbar) → modale de
   confirmation (`ValidateDialog`, avertit si des alertes subsistent) → `POST /api/schedules/{id}/validate`
-  → statut `VALIDATED`, planning en **lecture seule** (grille non éditable, renommage et
-  régénération masqués).
-- « Rouvrir » (`POST /api/schedules/{id}/reopen`) ramène en `COMPLETED` (rééditable).
-- « Définir principal » (`POST /api/schedules/{id}/set-baseline`) marque le planning ★ de la
-  saison (affiché dans le sélecteur ; `baselineScheduleId` vient de `/api/me`).
+  → **le plan pointe cette version** et **ses versions sœurs sont supprimées** (ADR-0002 inv. 1) ;
+  le planning passe en **lecture seule** (grille non éditable, renommage et régénération masqués).
+  Le statut, lui, **reste `COMPLETED`** : « validé » se lit sur le pointeur (`Schedule.isChosen`).
+- « Rouvrir » (`POST /api/schedules/{id}/reopen`) **dépointe** le plan (inv. 2) : la version survit
+  et redevient éditable.
+- Il n'existe **pas** de « Définir principal » : le pointeur se déplace **en validant**, et par rien
+  d'autre (`set-baseline` supprimé, inv. 18). Le ★ de la saison = `seasonPlan.chosenScheduleId`
+  de `/api/me`.
 
 ### 6.6 ter Informations du club (fiche FFBB — lot B)
 
@@ -406,7 +410,7 @@ type AuthState = {
   clear: () => void;
 };
 
-// Tout le reste (user, club, membershipStatus, baselineScheduleId, accent)
+// Tout le reste (user, club, membershipStatus, seasonPlan, accent)
 // vient de GET /api/me via TanStack Query (queryKey ["me"]).
 ```
 
@@ -443,7 +447,7 @@ type AuthState = {
 | `/verify-email/:token` | `POST /api/register/verify` (émet le JWT → app) |
 | `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
 | `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
-| `/` (planning) | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/set-baseline`, `PUT /api/schedules/{id}` (renommage), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/` (planning) | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
 | `/wizard` | CRUD `teams`/`venues`/`coaches`/`constraints`/`venue_training_slots`…, `GET /api/priority_tiers`, `GET /api/sport_categories`, `POST /api/teams/reorder` (mode tri), `POST /api/constraints/validate`, `POST /api/schedules` + `generate` (étape Génération) |
 | `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload) |
 | `/pending-members` | `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` |
@@ -466,7 +470,7 @@ override (tests), mais le frontend ne les envoie pas — le tenant est dérivé 
 | `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
 | `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name?, consent }` (consent obligatoire — RGPD) | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
 | `/api/register/verify` | POST | `{ token }` (du lien email) | `{ token, membershipStatus, user }` | Stocker token ; `pending` → `/waiting`, sinon `/` |
-| `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, baselineScheduleId, hasGenerated }` | Query `["me"]` — source des guards, du thème (accent) et du planning principal |
+| `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, seasonPlan: { id, name, chosenScheduleId, hasFinishedVersion } \| null, hasGenerated, seasons }` | Query `["me"]` — source des guards, du thème (accent) et de l'état du plan de saison (ADR-0002) |
 
 Référence : `backend-inventory.md` §3 (AuthController, PasswordController, MembershipController).
 

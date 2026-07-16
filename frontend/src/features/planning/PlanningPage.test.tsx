@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
@@ -61,28 +61,33 @@ vi.mock("./api", () => {
   moveSlot: vi.fn(),
   generateSchedule: vi.fn(),
   validateSchedule: vi.fn(),
-  STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec", VALIDATED: "Validé" },
+  STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec" },
   };
 });
 
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
-const { meState } = vi.hoisted(() => ({ meState: { socleValidatedAt: null as string | null } }));
+const { meState } = vi.hoisted(() => ({ meState: { chosenScheduleId: null as string | null } }));
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({
     data: {
       id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" },
-      baselineScheduleId: SID, socleValidatedAt: meState.socleValidatedAt,
-      planningName: null, seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
+      seasonPlan: { id: "plan-1", name: "Planning A", chosenScheduleId: meState.chosenScheduleId, hasFinishedVersion: true },
+      seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
     },
   }),
   useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
+
 beforeEach(() => {
-  meState.socleValidatedAt = null;
+  meState.chosenScheduleId = null;
+  // Default: an editable work version. Re-armed per test so a case that swaps in
+  // an in-force version (read-only → panels hidden) cannot leak into the next.
+  vi.mocked(listSchedules).mockResolvedValue(workVersion);
   navigate.mockClear();
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
 });
@@ -91,17 +96,28 @@ describe("PlanningPage (integration)", () => {
   // The "validate to unlock the cockpit" banner moved to the cockpit itself
   // (state 2) — PlanningPage no longer carries it (see CockpitPage.test).
 
-  it("renders the base planning grid: team + coach on the slot, main-plan badge", async () => {
+  it("renders the base planning grid: team + coach on the slot, on an editable work version", async () => {
     renderWithProviders(<PlanningPage />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    expect(screen.getByText("principal")).toBeInTheDocument();
     // Standalone /planning (consultation) hides the toolbar's version selector,
     // status badge and score — see PlanningToolbar.test.
     expect(screen.queryByText(/score 9051/i)).not.toBeInTheDocument();
-    // A COMPLETED schedule offers validation (→ VALIDATED, read-only).
+    // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur
+    // une version de travail, qui reste offerte à la validation.
+    expect(screen.getByText("principal")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
+  });
+
+  it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null, isChosen: true }]);
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // Being pointed at IS being validated: the only way forward is « Rouvrir ».
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
   });
 
   it("switches to the coach view (coach resolved from the team)", async () => {
@@ -145,17 +161,14 @@ describe("PlanningPage (integration)", () => {
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
   });
 
-  // planning lifecycle (§7.1): reopening a VALIDATED plan that has period overlays
-  // 409s; the UI escalates to a proportional confirm, then re-sends with the flag.
-  describe("reopen escalation (validated plan with overlays)", () => {
-    const validated: Schedule[] = [{ id: SID, name: "Planning A", status: "VALIDATED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
+  // planning lifecycle (§7.1): reopening the version the plan POINTS at, when the
+  // season has period overlays, 409s; the UI escalates to a proportional confirm,
+  // then re-sends with the flag.
+  describe("reopen escalation (the plan in force, with overlays)", () => {
+    const validated: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null, isChosen: true }];
 
     beforeEach(() => {
       vi.mocked(reopenSchedule).mockReset(); // per-test call count + queued once-values
-    });
-
-    afterEach(() => {
-      vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }]);
     });
 
     it("409 → confirm naming the overlay count → re-sends confirmDeleteOverlays", async () => {

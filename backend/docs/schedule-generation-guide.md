@@ -281,13 +281,13 @@ Erreur: Backend unreachable while calling POST http://localhost:8080/api/schedul
 ## 5. Cycle de vie des statuts
 
 ```
-DRAFT ──► PENDING ──► GENERATING ──► COMPLETED ──► VALIDATED
-                          │                │
-                          ▼                ▼
-                        FAILED          ARCHIVED
+DRAFT ──► PENDING ──► GENERATING ──► COMPLETED
+                          │
+                          ▼
+                        FAILED
 ```
 
-Le cycle compte **sept** statuts :
+Le cycle compte **cinq** statuts :
 
 | Statut | Signification | Qui le positionne |
 |--------|---------------|-------------------|
@@ -296,8 +296,8 @@ Le cycle compte **sept** statuts :
 | **GENERATING** | Le worker est en train de traiter la demande | `GenerateScheduleHandler` |
 | **COMPLETED** | Le moteur a retourné un planning valide | `ScheduleResultImporter` |
 | **FAILED** | Une erreur est survenue à n'importe quelle étape | `GenerateScheduleHandler` ou `ScheduleResultImporter` |
-| **VALIDATED** | Planning validé (lecture seule) | **Côté API** (validation explicite) — jamais par le worker |
-| **ARCHIVED** | Ancienne version conservée pour historique | **Côté API** (gestion des versions) — jamais par le worker |
+
+**« Validé » n'est pas un statut** (ADR-0002 inv. 1) : c'est le **plan** (`schedule_plan`) qui **pointe** la version faisant foi (`chosen_schedule_id`) — une version pointée reste `COMPLETED`. Il n'y a pas d'archive non plus : valider **supprime** les versions sœurs.
 
 ### Règles de transition
 
@@ -305,7 +305,7 @@ Le cycle compte **sept** statuts :
 - `COMPLETED` peut repasser à `PENDING` si tu demandes une nouvelle génération (les anciens créneaux non verrouillés sont remplacés).
 - `FAILED` peut repasser à `PENDING` après correction des contraintes.
 - Seul le worker peut écrire `GENERATING`, `COMPLETED` ou `FAILED`.
-- `VALIDATED` et `ARCHIVED` sont posés côté API et **bloquent `POST /generate` en 409** (rouvrir le planning validé, ou générer une nouvelle version).
+- La version que son plan **pointe** est le planning en vigueur : elle **bloque `POST /generate` en 409** — il faut d'abord la **rouvrir** (dépointer, `POST /api/schedules/{id}/reopen`).
 
 ---
 

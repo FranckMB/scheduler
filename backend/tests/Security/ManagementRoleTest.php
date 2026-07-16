@@ -16,7 +16,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * SEC-07 non-regression: the cockpit write endpoints
- * (validate/reopen/set-baseline/generate/reorder/appearance/manual-edit) require
+ * (validate/reopen/generate/reorder/appearance/manual-edit) require
  * a management membership (owner/admin), not merely an authenticated active
  * member. Benign today (every member is admin) but the boundary that keeps the
  * cockpit closed to the forthcoming non-management `coach` role.
@@ -43,7 +43,6 @@ final class ManagementRoleTest extends WebTestCase
         return [
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/validate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/reopen'],
-            ['POST', '/api/schedules/' . self::DUMMY_ID . '/set-baseline'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/regenerate'],
             ['POST', '/api/schedules/' . self::DUMMY_ID . '/generate'],
             ['POST', '/api/teams/reorder'],
@@ -146,16 +145,53 @@ final class ManagementRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(405, \sprintf('%s %s must be method-not-allowed (write removed)', $method, $url));
     }
 
+    /**
+     * ADR-0002: renommer LE planning de la saison est la seule écriture cliente
+     * qu'ouvre la bascule, et elle remplace `PUT /api/seasons` (planningName) qui
+     * n'était PAS gaté management. Elle ne peut pas s'épingler dans le provider
+     * statique : un id bidon rend 404 (la lecture précède le processor), donc la
+     * garde ne se prouve que sur un plan qui existe — celui du club du membre.
+     */
+    public function testRenamingTheSeasonPlanIsManagementOnly(): void
+    {
+        [$adminToken, , $clubA] = $this->register('MGE');
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+
+        // Le plan de la saison, tel que le frontend le lit.
+        $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken]);
+        $me = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        $planId = $me['seasonPlan']['id'];
+        self::assertNotNull($planId, 'un club neuf possède le plan de sa saison');
+
+        $rename = static fn (string $token): array => [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+
+        // Un membre actif NON-management voit le plan mais ne peut pas le renommer.
+        $this->client->request('PUT', '/api/schedule_plans/' . $planId, [], [], $rename($editorToken), '{"name":"forgé"}');
+        self::assertResponseStatusCodeSame(403, 'renommer le planning est réservé au management');
+
+        // Le manager, lui, passe — sinon le 403 ci-dessus ne prouverait rien.
+        $this->client->request('PUT', '/api/schedule_plans/' . $planId, [], [], $rename($adminToken), '{"name":"Saison de la montée"}');
+        self::assertResponseIsSuccessful();
+        $this->client->request('GET', '/api/me', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken]);
+        $me = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertSame('Saison de la montée', $me['seasonPlan']['name']);
+    }
+
     public function testScheduleCannotBeCreatedWithNonDraftStatus(): void
     {
-        // Review finding: POST accepted any status — fabricating a VALIDATED
-        // plan without generation. Even a manager gets 409 for non-DRAFT.
+        // Review finding: POST accepted any status — fabricating a finished plan
+        // without ever generating. Even a manager gets 409 for non-DRAFT.
+        // COMPLETED is the forge that matters now: it is what the solver's own
+        // answer looks like, and choosing a version only ever picks a COMPLETED one.
         [$adminToken] = $this->register('MGD');
 
         $this->client->request('POST', '/api/schedules', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
             'CONTENT_TYPE' => 'application/ld+json',
-        ], '{"name":"forged","status":"VALIDATED"}');
+        ], '{"name":"forged","status":"COMPLETED"}');
 
         self::assertResponseStatusCodeSame(409, 'a schedule must be created as DRAFT only');
     }

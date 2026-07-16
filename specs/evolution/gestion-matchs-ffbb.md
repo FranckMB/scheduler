@@ -113,7 +113,7 @@ même sans chevauchement horaire strict. C'est là qu'entre la **matrice trajet*
 > gradué dans [`../courantes/module-matchs.md`](../courantes/module-matchs.md)). Croise via **`TeamCoach`** :
 > **`MATCH_MATCH`** (deux matchs d'un même coach qui se chevauchent) et **`MATCH_TRAINING`** (match ↔
 > entraînement d'une équipe du coach, lu dans le **planning effectif à la date** — overlay de la période
-> ACTIVE si elle couvre la date, sinon baseline — créneau hebdo projeté sur le jour du match). Le volet
+> ACTIVE si elle couvre la date, sinon la **version choisie du plan SEASON** — créneau hebdo projeté sur le jour du match). Le volet
 > **joueur** (`CoachPlayerMembership`) et l'**envelope HARD** (jour/coup d'envoi imposé §6) restent à venir ;
 > le **trajet** (dimension spatiale) est palier B → un match AWAY sans coup d'envoi estimé ne produit pas
 > encore de conflit.

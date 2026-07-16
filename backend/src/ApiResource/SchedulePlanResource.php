@@ -7,8 +7,11 @@ namespace App\ApiResource;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Put;
+use App\Dto\SchedulePlanInput;
 use App\Entity\SchedulePlan;
 use App\Enum\SchedulePlanType;
+use App\State\Processor\SchedulePlanStateProcessor;
 use App\State\Provider\SchedulePlanStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
@@ -22,8 +25,8 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * Le Plan — le conteneur nommé des versions d'une saison ou d'une période. Le plan
  * de saison et sa version choisie sont le calendrier de base de la saison.
  *
- * Lecture seule : un plan est créé et supprimé par le serveur, et sa version
- * choisie est désignée en validant cette version.
+ * Un plan est créé et supprimé par le serveur, et sa version choisie est désignée
+ * en validant cette version. Seul son nom est éditable.
  */
 // The ?calendarEntryId / ?type query filters are implemented by the custom
 // provider (SchedulePlanStateProvider::applyRequestFilters) — a Doctrine
@@ -32,7 +35,8 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiResource(shortName: 'SchedulePlan', operations: [
     new GetCollection,
     new Get,
-], paginationEnabled: false, provider: SchedulePlanStateProvider::class)]
+    new Put,
+], input: SchedulePlanInput::class, paginationEnabled: false, provider: SchedulePlanStateProvider::class, processor: SchedulePlanStateProcessor::class)]
 class SchedulePlanResource
 {
     #[Groups(['read'])]

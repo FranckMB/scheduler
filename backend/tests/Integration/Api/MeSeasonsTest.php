@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Service\SeasonResolver;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class MeSeasonsTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -49,35 +51,33 @@ final class MeSeasonsTest extends WebTestCase
         self::assertSame([true, false, false], array_column($data['seasons'], 'isReadonly'));
     }
 
-    public function testGateFieldsFollowTheSelectedSeason(): void
+    public function testTheSeasonPlanFollowsTheSelectedSeason(): void
     {
+        // /api/me.seasonPlan is the frontend's ONLY seam onto "is this season
+        // settled?" — it must describe the SELECTED season, not the current one,
+        // or switching seasons would strand the cockpit on the wrong plan.
         [$user, , $seasons] = $this->createClubWithThreeSeasons();
         [, $current, $draft] = $seasons;
 
-        $current->setBaselineScheduleId('11111111-1111-4111-8111-111111111111');
-        $current->setSocleValidatedAt(new DateTimeImmutable('2026-01-15T10:00:00+00:00'));
-        $this->em->flush();
-
+        $chosen = $this->settleSeasonPlan($current);
         $auth = $this->authHeaders($user);
 
-        // No header → the current season's gates.
+        // No header → the current season's plan.
         $this->client->request('GET', '/api/me', [], [], $auth);
         self::assertResponseStatusCodeSame(200);
         $data = $this->responseData();
-        self::assertSame('11111111-1111-4111-8111-111111111111', $data['baselineScheduleId']);
-        self::assertNotNull($data['socleValidatedAt']);
+        self::assertSame($chosen->getId(), $data['seasonPlan']['chosenScheduleId']);
+        self::assertTrue($data['seasonPlan']['hasFinishedVersion']);
 
-        // Draft season selected → its own (empty) gates: the cockpit must
-        // fall back to the work-loop for the brand-new season.
+        // Draft season selected → its own plan: an empty espace de travail, so
+        // the cockpit falls back to the guided mode for the brand-new season.
         $this->client->request('GET', '/api/me', [], [], $auth + [
             'HTTP_X-Season-Id' => $draft->getId(),
         ]);
         self::assertResponseStatusCodeSame(200);
         $data = $this->responseData();
-        self::assertArrayHasKey('baselineScheduleId', $data);
-        self::assertArrayHasKey('socleValidatedAt', $data);
-        self::assertNull($data['baselineScheduleId']);
-        self::assertNull($data['socleValidatedAt']);
+        self::assertNull($data['seasonPlan']['chosenScheduleId']);
+        self::assertFalse($data['seasonPlan']['hasFinishedVersion']);
     }
 
     protected function setUp(): void
@@ -125,6 +125,12 @@ final class MeSeasonsTest extends WebTestCase
         $current = $this->createSeason($club, $year);
         $draft = $this->createSeason($club, $year + 1);
         $this->em->flush();
+
+        // A real season owns its (empty) SEASON plan from birth — persisting the
+        // rows by hand skips the provisioning every creation path does.
+        foreach ([$past, $current, $draft] as $season) {
+            $this->provisionSeasonPlan($season);
+        }
 
         return [$user, $club, [$past, $current, $draft]];
     }

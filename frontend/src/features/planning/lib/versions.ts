@@ -2,6 +2,7 @@ import type { Schedule } from "../api";
 
 /** Structural subset shared with PlanningPage's LandingSchedule (single predicate owner). */
 interface VersionLike {
+  id: string;
   status: string;
   createdAt: string;
   calendarEntryId: string | null;
@@ -9,22 +10,57 @@ interface VersionLike {
   isLiveContext?: boolean;
 }
 
+/** Une version en cours de solve bloque la validation (409) au lieu d'être supprimée. */
+const IN_FLIGHT_STATUS = ["PENDING", "GENERATING"];
+
 /**
- * planning-versions (specs/evolution/planning-versions.md): the selector lists
- * the WORK VERSIONS of one season plan, not named schedules. ARCHIVED versions
- * (siblings set aside at validation) are hidden everywhere.
+ * Les versions que valider `selected` va SUPPRIMER — miroir exact de la règle du
+ * serveur (`ValidateScheduleController`) : même portée que la version choisie (les
+ * versions de saison partagent `calendarEntryId = null`, celles d'une période
+ * partagent l'id de cette période), soi-même exclu, et une version en vol bloque
+ * la validation plutôt que d'être emportée.
+ *
+ * À garder aligné sur le serveur : c'est ce compte qu'on montre AVANT une
+ * destruction irréversible. Le compter dans une autre portée, ou en écarter la
+ * version en vigueur (elle est supprimée comme les autres), fait consentir le
+ * gestionnaire à moins que ce qu'il perd.
  */
-export function visibleSeasonPlans<T extends VersionLike>(schedules: T[]): T[] {
-  return schedules.filter((s) => null === s.calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+/**
+ * La version qui REPRÉSENTE un plan : celle qu'il pointe si le gestionnaire en a
+ * choisi une (c'est le planning en vigueur, la seule qui compte), sinon la dernière
+ * terminée — le plan est alors un espace de travail et « le planning », c'est l'état
+ * le plus abouti. Prendre la plus récente sans regarder le pointeur ferait désigner
+ * une version que le plan ne pointe pas, puis lire `isChosen: false` dessus.
+ *
+ * Entrée : un ensemble visible* (trié createdAt asc) d'UN seul plan.
+ */
+export function planRepresentative<T extends VersionLike & { isChosen?: boolean }>(versions: T[]): T | null {
+  return versions.find((v) => true === v.isChosen) ?? representativeVersion(versions);
+}
+
+export function versionsDeletedByValidating<T extends VersionLike>(schedules: T[], selected: T): T[] {
+  return schedules.filter(
+    (s) => s.id !== selected.id
+      && s.calendarEntryId === selected.calendarEntryId
+      && !IN_FLIGHT_STATUS.includes(s.status),
+  );
 }
 
 /**
- * planning-versions (overlay versions): the visible work versions of ONE period's
- * overlay (same calendarEntryId), ARCHIVED hidden, chronological — the period's
- * own version selector, mirroring visibleSeasonPlans for a season plan.
+ * ADR-0002: the selector lists the WORK VERSIONS of one season plan, not named
+ * schedules — the plan's NAME lives on the plan. Nothing to hide any more:
+ * validating deletes the siblings outright instead of archiving them.
+ */
+export function visibleSeasonPlans<T extends VersionLike>(schedules: T[]): T[] {
+  return schedules.filter((s) => null === s.calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/**
+ * The visible work versions of ONE period's overlay (same calendarEntryId),
+ * chronological — the period's own version selector, mirroring visibleSeasonPlans.
  */
 export function visibleOverlayVersions<T extends VersionLike>(schedules: T[], calendarEntryId: string): T[] {
-  return schedules.filter((s) => s.calendarEntryId === calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return schedules.filter((s) => s.calendarEntryId === calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 /**
@@ -44,15 +80,15 @@ export function liveContextScheduleId<T extends VersionLike & { id: string }>(sc
 
 /**
  * The version a PLANNING row should represent (cockpit "Tous les plannings"):
- * the latest FINISHED one (VALIDATED or COMPLETED), so its Eye / Export never
+ * the latest FINISHED one (COMPLETED), so its Eye / Export never
  * target a FAILED or in-flight (PENDING/GENERATING) version — which would open
  * an empty planning or export an empty file. Returns null when nothing has
  * finished yet (a brand-new planning still solving): there is no plan to consult
  * or export, so the row is omitted rather than pointing at an in-flight version.
- * Input is a visible* set (sorted createdAt asc, ARCHIVED excluded).
+ * Input is a visible* set (sorted createdAt asc).
  */
 export function representativeVersion<T extends VersionLike>(versions: T[]): T | null {
-  const finished = versions.filter((s) => "VALIDATED" === s.status || "COMPLETED" === s.status);
+  const finished = versions.filter((s) => "COMPLETED" === s.status);
   return finished.at(-1) ?? null;
 }
 
@@ -64,12 +100,11 @@ function versionStamp(createdAt: string, index: number): string {
 }
 
 /**
- * Version label "V3 — 10 juil. 14:32": chronological index among ALL season
- * plans (createdAt asc), ARCHIVED included — an archived sibling keeps its
- * number slot, so the version the manager just validated as "V2" is still
- * labelled V2 after its siblings are archived. Numbers only shift on a hard
- * delete (workspace semantics; the date keeps the anchor). An overlay keeps
- * its period title (the caller falls back to schedule.name).
+ * Version label "V3 — 10 juil. 14:32": chronological index among the plan's
+ * season versions (createdAt asc). Numbers shift when a version is deleted —
+ * workspace semantics, and the date keeps the anchor. Validating collapses the
+ * plan to the single version it points at, which is then simply V1. An overlay
+ * keeps its period title (the caller falls back to schedule.name).
  */
 export function versionLabels(schedules: Schedule[]): Map<string, string> {
   const plans = schedules.filter((s) => null === s.calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -79,9 +114,8 @@ export function versionLabels(schedules: Schedule[]): Map<string, string> {
 }
 
 /**
- * V{n} labels for the overlay versions of ONE period (chronological, ARCHIVED
- * included so a validated version keeps its number after its siblings are set
- * aside — same stable-numbering rule as season versionLabels).
+ * V{n} labels for the overlay versions of ONE period (chronological) — same rule
+ * as season versionLabels.
  */
 export function overlayVersionLabels(schedules: Schedule[], calendarEntryId: string): Map<string, string> {
   const versions = schedules.filter((s) => s.calendarEntryId === calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));

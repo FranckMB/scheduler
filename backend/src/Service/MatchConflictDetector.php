@@ -36,19 +36,19 @@ final class MatchConflictDetector
     public function __construct(private readonly MatchFootprint $footprint) {}
 
     /**
-     * @param list<Fixture>                                                                          $fixtures           season fixtures (already club+season scoped)
-     * @param list<TeamCoach>                                                                        $teamCoachRows      coach↔team links (scoped)
-     * @param string|null                                                                            $baselineScheduleId the season's base plan, or null if none yet
+     * @param list<Fixture>                                                                          $fixtures         season fixtures (already club+season scoped)
+     * @param list<TeamCoach>                                                                        $teamCoachRows    coach↔team links (scoped)
+     * @param string|null                                                                            $seasonScheduleId the season's calendar (the version its plan points at), or null
      * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
-     *                                                                                                                   active period windows (ordered), scheduleId = their overlay or null
-     * @param array<string, list<ScheduleSlotTemplate>>                                              $slotsBySchedule    slots indexed by their scheduleId
+     *                                                                                                                 active period windows (ordered), scheduleId = their overlay or null
+     * @param array<string, list<ScheduleSlotTemplate>>                                              $slotsBySchedule  slots indexed by their scheduleId
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
     public function detect(
         array $fixtures,
         array $teamCoachRows,
-        ?string $baselineScheduleId,
+        ?string $seasonScheduleId,
         array $activePeriods,
         array $slotsBySchedule,
     ): array {
@@ -75,7 +75,7 @@ final class MatchConflictDetector
 
         return [
             ...$this->matchMatchConflicts($views),
-            ...$this->matchTrainingConflicts($views, $coachesByTeam, $baselineScheduleId, $activePeriods, $slotsBySchedule),
+            ...$this->matchTrainingConflicts($views, $coachesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
         ];
     }
 
@@ -123,7 +123,7 @@ final class MatchConflictDetector
     private function matchTrainingConflicts(
         array $views,
         array $coachesByTeam,
-        ?string $baselineScheduleId,
+        ?string $seasonScheduleId,
         array $activePeriods,
         array $slotsBySchedule,
     ): array {
@@ -132,7 +132,7 @@ final class MatchConflictDetector
             // A footprint can cross midnight (late kickoff) — check every calendar
             // day it spans, each resolving its own effective schedule + weekday.
             foreach ($this->spannedDates($view['window']) as $date) {
-                $scheduleId = $this->effectiveScheduleId($date, $activePeriods, $baselineScheduleId);
+                $scheduleId = $this->effectiveScheduleId($date, $activePeriods, $seasonScheduleId);
                 if (null === $scheduleId) {
                     continue;
                 }
@@ -208,12 +208,12 @@ final class MatchConflictDetector
     /**
      * The schedule effective on a date. An active period covering the date
      * captures it — its overlay (may be null → no training plan) wins; the first
-     * covering period in the ordered list decides. Outside any period the season
-     * baseline applies.
+     * covering period in the ordered list decides. Outside any period the season's
+     * own calendar applies.
      *
      * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
      */
-    private function effectiveScheduleId(DateTimeImmutable $date, array $activePeriods, ?string $baselineScheduleId): ?string
+    private function effectiveScheduleId(DateTimeImmutable $date, array $activePeriods, ?string $seasonScheduleId): ?string
     {
         foreach ($activePeriods as $period) {
             if ($date >= $period['start'] && $date <= $period['end']) {
@@ -221,7 +221,7 @@ final class MatchConflictDetector
             }
         }
 
-        return $baselineScheduleId;
+        return $seasonScheduleId;
     }
 
     /**

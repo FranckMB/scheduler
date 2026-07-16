@@ -8,9 +8,11 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +31,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('phase1')]
 final class RegenerateTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -36,6 +39,8 @@ final class RegenerateTest extends WebTestCase
     private EntityManagerInterface $em;
 
     private Club $club;
+
+    private Season $season;
 
     private string $token;
 
@@ -64,13 +69,14 @@ final class RegenerateTest extends WebTestCase
         self::assertCount(2, $this->em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $source->getId()]));
     }
 
-    public function testValidatedVersionIsRefused(): void
+    public function testTheChosenVersionIsRefused(): void
     {
-        $source = $this->seedSchedule(ScheduleStatus::VALIDATED);
+        $source = $this->seedSchedule(ScheduleStatus::COMPLETED);
         $this->em->flush();
+        $this->choosePlanVersion($source);
 
         $this->post($source->getId());
-        self::assertResponseStatusCodeSame(409, 'a validated (read-only) version must be reopened first');
+        self::assertResponseStatusCodeSame(409, 'the version the plan points at is read-only — reopen it first');
     }
 
     public function testDraftIsRefused(): void
@@ -101,7 +107,20 @@ final class RegenerateTest extends WebTestCase
 
         $this->scopeGucToClub($this->club->getId());
         $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
+
+        // A real season: the versions live in its SEASON plan, and the pointer is
+        // what says "in force". Fabricating a seasonId would leave them plan-less.
+        $year = \App\Service\SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+        $this->season = (new Season)
+            ->setClubId($this->club->getId())
+            ->setName((string) $year)
+            ->setStartDate(new DateTimeImmutable($year . '-08-01'))
+            ->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'))
+            ->setStatus('active');
+        $this->season->setTransitionData([]);
+        $this->em->persist($this->season);
         $this->em->flush();
+        $this->provisionSeasonPlan($this->season);
 
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
     }
@@ -118,7 +137,7 @@ final class RegenerateTest extends WebTestCase
     {
         $schedule = (new Schedule)
             ->setClubId($this->club->getId())
-            ->setSeasonId($this->newUuid())
+            ->setSeasonId($this->season->getId())
             ->setName('V source')
             ->setStatus($status);
         $this->em->persist($schedule);

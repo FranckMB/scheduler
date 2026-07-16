@@ -58,7 +58,7 @@ final class SchedulePlanLifecycleTest extends WebTestCase
     private JWTTokenManagerInterface $jwt;
 
     /** inv. 1 : valider = le plan pointe la version. Le legacy reste intact (additif). */
-    public function testValidatingPointsThePlanAndKeepsTheLegacyMirror(): void
+    public function testValidatingPointsThePlan(): void
     {
         [$user, , $season] = $this->seed('LCY1');
         $v1 = $this->version($season, ScheduleStatus::COMPLETED);
@@ -66,11 +66,11 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $this->post($user, "/api/schedules/{$v1->getId()}/validate");
         self::assertResponseIsSuccessful();
 
+        // Le pointeur est la SEULE vérité : plus de miroir legacy à tenir à jour,
+        // donc plus de risque de divergence entre deux sources.
         self::assertSame($v1->getId(), $this->chosenOfSeason($season), 'valider = pointer');
         $this->em->clear();
-        $reloaded = $this->em->getRepository(Season::class)->find($season->getId());
-        self::assertSame($v1->getId(), $reloaded?->getBaselineScheduleId(), 'le miroir legacy reste écrit (rien ne casse côté front)');
-        self::assertNotNull($reloaded?->getSocleValidatedAt());
+        self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($v1->getId())?->getStatus(), 'aucun statut ne redit « choisi »');
     }
 
     /** inv. 2 : rouvrir relâche le pointeur (espace de travail). */

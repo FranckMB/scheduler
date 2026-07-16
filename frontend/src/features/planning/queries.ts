@@ -162,14 +162,23 @@ export function useValidateSchedule() {
     mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) => planningApi.validateSchedule(id, { confirmDeleteOverlays }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      // Validating the baseline stamps Season.socleValidatedAt (surfaced on /me),
-      // which unlocks the cockpit — refresh it so the home screen opens at once.
+      // Valider peut SUPPRIMER les plans secondaires (confirmDeleteOverlays) — même
+      // destruction serveur que rouvrir, qui l'invalide déjà. Sans ça le cockpit
+      // continue d'afficher des périodes dont l'overlay n'existe plus.
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+      // Le radar dérive désormais du POINTEUR, que ce geste déplace : ses conflits ET
+      // son `seasonPlanChosen` changent. L'ancienne baseline était auto-posée et
+      // collante, donc valider/rouvrir ne changeaient jamais cette réponse — d'où
+      // l'oubli. Sans ça le cockpit garde jusqu'à 30 s un radar d'avant le geste.
+      void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
+      // Validating moves the plan's pointer (surfaced on /me.seasonPlan), which
+      // unlocks matches + secondary plans — refresh it so the home screen follows.
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }
 
-/** Reopen a VALIDATED schedule → COMPLETED (editable again). Accepts the overlay-delete confirm flag. */
+/** Reopen the version the plan points at → editable again. Accepts the overlay-delete confirm flag. */
 export function useReopenSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -186,6 +195,14 @@ export function useReopenSchedule() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+      // Rouvrir DÉPOINTE le plan (inv. 2), donc /me.seasonPlan.chosenScheduleId
+      // passe à null — et c'est lui qui verrouille le module matchs côté client.
+      // Sans ça, useMe (staleTime 60 s) laisse l'onglet Matchs ouvert pendant une
+      // minute alors que le serveur refuse déjà les écritures (SocleGuard, 409).
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      // Même raison que pour la validation : le radar dérive du pointeur, qui vient
+      // de tomber — ses conflits deviennent « impact non évalué ».
+      void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
     },
   });
 }

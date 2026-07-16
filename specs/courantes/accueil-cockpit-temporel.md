@@ -41,10 +41,10 @@ secondaires**.
    │    WIZARD     │◀───────────────┐
    │   (guidé)     │                │  (socle pas encore bon)
    └──────┬───────┘                 │
-          │  VALIDER  ──────────────┘
+          │  GÉNÉRER  ──────────────┘
           ▼
    ┌───────────────────────────────────────────────────┐
-   │   COCKPIT (accueil) — débloqué par la validation    │
+   │   COCKPIT (accueil) — débloqué par la génération    │
    │   bandeau (socle) · calendrier d'exceptions · radar  │
    └──────┬───────────────────────────────┬──────────────┘
           │ clic date / « Adapter »         │ « Modifier » le socle
@@ -62,7 +62,8 @@ secondaires**.
         └────────────────────────────────────────────┘
 ```
 
-> **La boucle est validée** : un compte → un socle (wizard) → validation → cockpit → la vie de la
+> **La boucle est validée** : un compte → un socle (wizard) → génération → cockpit → choix de la
+> version qui fait foi → la vie de la
 > saison se joue en **exceptions / overlays**, jamais en retouchant la base. On ne quitte jamais
 > les **2 familles d'écrans** (consultation / wizard).
 
@@ -139,24 +140,29 @@ fermetures, événements) qui bougent ensuite — plus la base.
 dépendants** — **silencieuse s'il n'y en a pas**, avec confirmation sévère sinon. Le work-loop
 « générer → ajuster → régénérer » vit surtout **avant** que des secondaires existent.
 
-## 2ter. La validation du socle débloque le cockpit (le plancher d'abord)
+## 2ter. Le socle débloque le cockpit (le plancher d'abord)
 
-> **Le plan principal est le plancher.** Tant qu'il n'est pas **validé**, le cockpit n'a **aucun
-> sens** — à quoi bon des périodes, des overlays, un calendrier d'exceptions, si la base n'est pas
-> bonne ? → **le reste est verrouillé.**
+> **Le plan principal est le plancher.** Tant qu'il n'a **rien généré**, le cockpit n'a **aucun
+> sens** — à quoi bon des périodes, des overlays, un calendrier d'exceptions, si la base n'existe
+> pas ? → **le reste est verrouillé.** Et tant qu'aucune version n'est **choisie**, ce qui se
+> **bâtit sur** ce socle (matchs, calendriers secondaires) reste bloqué.
 
-D'où le parcours :
-- **Compte créé / socle non validé → l'accueil EST le wizard.** C'est pour ça qu'on part **direct
+D'où le parcours, en **deux seuils** (ADR-0002 — `/api/me` les expose ensemble dans `seasonPlan`) :
+- **Compte créé / jamais généré → l'accueil EST le wizard.** C'est pour ça qu'on part **direct
   dans le wizard** à l'inscription : il est la **base de connaissance et de travail**. On y reste
-  jusqu'à avoir un socle qu'on **valide**.
-- **Plan principal `VALIDATED` → l'accueil devient le cockpit**, et **les fonctionnalités
-  temporelles se débloquent** (créer des événements, signaler des indispos, adapter des périodes,
-  générer des calendriers secondaires, radar).
+  jusqu'à ce que le plan de saison porte **au moins une version terminée**
+  (`seasonPlan.hasFinishedVersion`, inv. 8/16).
+- **Seuil 1 — le plan a généré → l'accueil devient le cockpit.** Le critère est **dérivé** des
+  versions du plan et **indépendant du pointeur** : rouvrir un planning ne re-verrouille donc
+  **jamais** le cockpit et ne renvoie personne à l'onboarding.
+- **Seuil 2 — le plan pointe une version** (`seasonPlan.chosenScheduleId ≠ null`, inv. 13) → les
+  fonctions qui se **bâtissent sur le calendrier de base** se débloquent : **matchs** et
+  **calendriers secondaires** (`SocleGuard` → **409** tant qu'aucune version n'est choisie).
+  Créer des événements, signaler des indispos et le radar relèvent du seuil 1.
 
-**La validation est le jalon qui ouvre tout le reste.** « Si le socle n'est pas bon, ça ne sert à
-rien de faire le reste. » (Nuance vs l'existant : le déclencheur est la **validation** du plan,
-pas la simple première génération — `onboardingCompleted` devra s'aligner sur `VALIDATED`, à
-préciser à l'implémentation.)
+**Choisir une version est le jalon qui ouvre ce qui se construit dessus.** « Si le socle n'est pas
+bon, ça ne sert à rien de faire le reste. » Le flag legacy `club.onboardingCompleted` n'est plus lu
+pour le routage.
 
 > **Ex.** Club inscrit le 1ᵉʳ sept : il tombe **direct sur le wizard**, pas sur un cockpit vide et
 > inutile. Il saisit équipes/salles/coachs, génère, ajuste, **valide** → l'accueil bascule en
@@ -504,9 +510,12 @@ exceptions », toute la §2 devient **incrémentale** au lieu d'un mur 🔴.
   **destructeur dès qu'il y a des secondaires** (supprime les N, confirmation proportionnée).
   **Gel de facto, pas une serrure.** Grille en lecture seule ; l'édition = « Modifier » → wizard
   (= `reopen`). Le quotidien passe par les périodes/overlays.
-- **La validation du socle DÉBLOQUE le cockpit (§2ter)** : avant validation, l'accueil **est** le
-  wizard (le plancher d'abord) ; après `VALIDATED`, l'accueil devient le cockpit et les fonctions
-  temporelles s'ouvrent. La validation = le jalon qui ouvre tout le reste.
+- **Le socle DÉBLOQUE le cockpit, en DEUX seuils (§2ter)** : tant que le plan n'a **rien généré**,
+  l'accueil **est** le wizard (le plancher d'abord) ; dès qu'il porte une **version terminée**
+  (`hasFinishedVersion`), l'accueil devient le cockpit et les fonctions temporelles s'ouvrent ;
+  dès qu'il **pointe** une version (`chosenScheduleId`), ce qui se **bâtit dessus** s'ouvre à son
+  tour (matchs, calendriers secondaires). Le premier seuil est **indépendant du pointeur** :
+  rouvrir ne re-verrouille pas le cockpit.
 - **DEUX familles d'écrans réutilisées partout (§6ter)** : **consultation** (grille R/O — principal
   ET secondaires) et **wizard** (onboarding · libre · période). Navigation à 3 endroits : Accueil ↔
   Consultation ↔ Wizard. Valider → consultation ; « Accueil » → cockpit ; éditer → wizard.

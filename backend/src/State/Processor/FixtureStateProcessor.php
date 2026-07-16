@@ -37,7 +37,7 @@ class FixtureStateProcessor extends AbstractStateProcessor
         $method = $operation instanceof HttpOperation ? $operation->getMethod() : '';
         if (\in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
             $request = $this->requestStack->getCurrentRequest();
-            $this->socleGuard->assertValidated($request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id'));
+            $this->socleGuard->assertSeasonPlanChosen($request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id'));
         }
 
         return parent::process($data, $operation, $uriVariables, $context);

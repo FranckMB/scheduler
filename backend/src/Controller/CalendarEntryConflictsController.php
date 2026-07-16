@@ -38,6 +38,7 @@ final class CalendarEntryConflictsController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/calendar-entries/{id}/conflicts', name: 'api_calendar_entry_conflicts', methods: ['GET'])]
@@ -57,10 +58,18 @@ final class CalendarEntryConflictsController extends AbstractController
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
+        // Le pointeur est lu UNE fois, avant toute sortie : `seasonPlanChosen` ne doit
+        // jamais être affirmé sans l'avoir consulté. Codé en dur à `true` sur les
+        // sorties courtes, il affirmait un fait non vérifié — et le radar, qui masque
+        // désormais les fermetures sans impact, faisait disparaître une période sur ce
+        // mensonge.
+        $seasonScheduleId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($entry->getSeasonId());
+        $planChosen = null !== $seasonScheduleId;
+
         // An IGNORED entry was explicitly dismissed by the manager: it must not
         // keep raising conflicts (the radar would resurrect it as a to-do).
         if (CalendarEntryKind::PERIOD !== $entry->getKind() || CalendarEntryStatus::IGNORED === $entry->getStatus()) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => $planChosen]);
         }
 
         // Closed venues = active FACILITY constraints attached to this entry.
@@ -75,21 +84,27 @@ final class CalendarEntryConflictsController extends AbstractController
         )));
 
         if ([] === $venueIds) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => []]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => $planChosen]);
         }
 
         // The entry's OWN season baseline (not the active season) — an entry may
         // belong to a past/other season; scoring it against a different season's
         // plan would be wrong.
-        $season = $this->entityManager->find(Season::class, $entry->getSeasonId());
-        $baselineId = $season?->getBaselineScheduleId();
-        if (null === $baselineId) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => []]);
+        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON (lue plus
+        // haut). Rien ne la pose automatiquement — tant que le gestionnaire n'a pas
+        // validé, la saison n'a PAS de calendrier et le radar n'a rien à comparer.
+        //
+        // `seasonPlanChosen: false` dit exactement ça. Rendre `conflicts: []` sans le
+        // dire se lisait « aucun impact » : le gestionnaire déclarait une fermeture de
+        // gymnase, lisait que tout allait bien, et n'adaptait rien — alors que le radar
+        // n'avait simplement rien regardé. Un silence qui ment est pire qu'un blanc.
+        if (null === $seasonScheduleId) {
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'seasonPlanChosen' => false]);
         }
 
         /** @var list<ScheduleSlotTemplate> $slots */
         $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([
-            'scheduleId' => $baselineId,
+            'scheduleId' => $seasonScheduleId,
             'venueId' => $venueIds,
         ]);
 
@@ -118,6 +133,7 @@ final class CalendarEntryConflictsController extends AbstractController
             'entryId' => $entry->getId(),
             'venueIds' => $venueIds,
             'conflicts' => $conflicts,
+            'seasonPlanChosen' => $planChosen,
         ]);
     }
 

@@ -28,10 +28,12 @@ export function AuthGuard() {
   // but the account-menu routes (profile, club) stay reachable. Landing on the
   // cockpit home gets an ephemeral hint on the redirect — only for an ACTIVE
   // member (pending users are sent to /waiting by the guard below).
-  // Onboarding phase = no baseline yet (single source of truth; the legacy
-  // club.onboardingCompleted flag is no longer read for routing).
+  // Onboarding phase = the club has never generated a plan (single source of
+  // truth; the legacy club.onboardingCompleted flag is no longer read for
+  // routing). Keyed on "has a finished version", NOT on the plan's pointer:
+  // reopening a plan must not send an established club back to onboarding.
   const membershipActive = "active" === data?.membershipStatus;
-  const onboardingLocked = Boolean(data) && null === (data?.baselineScheduleId ?? null);
+  const onboardingLocked = Boolean(data) && !data?.seasonPlan?.hasFinishedVersion;
   const showCockpitHint = membershipActive && onboardingLocked && "/" === location.pathname;
   useEffect(() => {
     if (showCockpitHint) {

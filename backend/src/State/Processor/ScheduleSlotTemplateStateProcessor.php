@@ -8,7 +8,6 @@ use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
-use App\Enum\ScheduleStatus;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -16,6 +15,15 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  */
 class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
 {
+    private \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner;
+
+    /** #[Required] plutôt que le ctor : la classe hérite celui d'AbstractStateProcessor. */
+    #[\Symfony\Contracts\Service\Attribute\Required]
+    public function setSchedulePlanProvisioner(\App\Service\SchedulePlanProvisioner $schedulePlanProvisioner): void
+    {
+        $this->schedulePlanProvisioner = $schedulePlanProvisioner;
+    }
+
     /**
      * SEC-07: raw slot CRUD mutates the same fields the guarded manual-edit
      * routes protect (lockLevel, temporaryLock, move/create/delete a slot) —
@@ -145,7 +153,8 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
             return;
         }
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($scheduleId);
-        if ($schedule instanceof Schedule && ScheduleStatus::VALIDATED === $schedule->getStatus()) {
+        // ADR-0002 inv. 1 : « verrouillé » = c'est la version choisie du plan.
+        if ($schedule instanceof Schedule && $this->schedulePlanProvisioner->isChosen($schedule->getId())) {
             throw new ConflictHttpException('This schedule is validated (read-only). Reopen it before editing.');
         }
     }

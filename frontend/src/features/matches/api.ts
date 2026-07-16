@@ -91,6 +91,13 @@ export interface ConflictsResponse {
   clubId: string;
   seasonId: string | null;
   conflicts: Conflict[];
+  /**
+   * Le plan de la saison pointe-t-il une version ? Sinon la saison n'a pas de
+   * calendrier : les conflits match↔entraînement ne peuvent pas être détectés hors
+   * période, et `conflicts: []` devient indiscernable d'une saison saine. Atteignable
+   * quand /api/me est périmé (staleTime 60 s) face à un planning rouvert ailleurs.
+   */
+  seasonPlanChosen: boolean;
 }
 
 /** Team reference row — carries the axes the league envelope maps on. */

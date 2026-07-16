@@ -302,9 +302,6 @@ final class AuthController extends AbstractController
         $membershipStatus = 'none';
         $club = null;
         $clubEntity = null;
-        $baselineScheduleId = null;
-        $socleValidatedAt = null;
-        $planningName = null;
         $seasonPlan = null;
         $seasons = [];
         $currentSeasonId = null;
@@ -382,9 +379,6 @@ final class AuthController extends AbstractController
                         }
                     }
                 }
-                $baselineScheduleId = $selected?->getBaselineScheduleId();
-                $socleValidatedAt = $selected?->getSocleValidatedAt()?->format(\DATE_ATOM);
-                $planningName = $selected?->getPlanningName();
                 // ADR-0002 : LE calendrier de base de la saison, c'est le plan SEASON
                 // et sa version choisie. Exposé ici pour que la bascule n'ait plus
                 // qu'à déplacer les lecteurs — ADDITIF : les 3 champs legacy
@@ -414,9 +408,6 @@ final class AuthController extends AbstractController
             'membershipStatus' => $membershipStatus,
             'role' => null !== $clubUser ? $clubUser->getRole() : null,
             'club' => $club,
-            'baselineScheduleId' => $baselineScheduleId,
-            'socleValidatedAt' => $socleValidatedAt,
-            'planningName' => $planningName,
             'seasonPlan' => $seasonPlan,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
             'seasons' => $seasons,

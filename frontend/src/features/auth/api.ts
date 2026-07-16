@@ -10,6 +10,14 @@ export interface MeSeason {
   isReadonly: boolean;
 }
 
+/** THE season's plan and where it stands (ADR-0002). See `MeResponse.seasonPlan`. */
+export interface MeSeasonPlan {
+  id: string;
+  name: string;
+  chosenScheduleId: string | null;
+  hasFinishedVersion: boolean;
+}
+
 /** FFBB institutional contact block (lot C) — league or committee. */
 export interface FfbbOrganisme {
   name: string;
@@ -60,12 +68,20 @@ export interface MeResponse {
     ffbbCommittee: FfbbOrganisme | null;
     ffbbLeague: FfbbOrganisme | null;
   } | null;
-  /** Gates of the SELECTED season (X-Season-Id), else the current one. */
-  baselineScheduleId: string | null;
-  /** Sticky cockpit-unlock milestone (ISO) of the selected season. */
-  socleValidatedAt: string | null;
-  /** Manager-chosen name of THE season plan (planning-versions); null → default display. */
-  planningName: string | null;
+  /**
+   * THE season's plan (ADR-0002) for the SELECTED season (X-Season-Id), else the
+   * current one — the single seam onto "where is this season at?".
+   *
+   * `chosenScheduleId` = the version the manager settled on; it IS the season's
+   * calendar, and null means the plan is still an espace de travail.
+   * `hasFinishedVersion` = the club has generated at least once, which is what
+   * unlocks the cockpit — independent of the pointer, so reopening a plan does
+   * not throw the manager back into the guided wizard.
+   *
+   * null only for a season with no plan row at all: every creation path provisions
+   * one, so treat it as an empty plan rather than a special case.
+   */
+  seasonPlan: MeSeasonPlan | null;
   hasGenerated: boolean;
   /** All the club's seasons, startDate ASC. */
   seasons: MeSeason[];
@@ -86,12 +102,11 @@ export function transitionSeason(sourceSeasonId: string): Promise<TransitionSeas
 }
 
 /**
- * Rename THE season plan (planning-versions). Partial PUT: only planningName
- * travels — the season's name/dates are never echoed (a stale cached copy
- * would silently revert a concurrent edit; the server keeps absent fields).
+ * Rename THE season plan (ADR-0002 inv. 12: the name lives on the plan, not on
+ * the season — one writer, so a season edit can never clobber it).
  */
-export function renamePlanning(seasonId: string, planningName: string): Promise<unknown> {
-  return api.put(`seasons/${seasonId}`, { json: { planningName } }).json();
+export function renamePlanning(planId: string, name: string): Promise<unknown> {
+  return api.put(`schedule_plans/${planId}`, { json: { name } }).json();
 }
 
 export interface RegisterPayload {

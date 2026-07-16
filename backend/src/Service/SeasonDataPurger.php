@@ -51,6 +51,12 @@ final class SeasonDataPurger
     {
         $this->disableTenantFilters($this->entityManager);
 
+        // ADR-0002 inv. 12 : le nom du planning vit sur le plan — et le plan est
+        // supprimé plus bas. Avant la bascule il vivait sur la saison et survivait donc
+        // au reset ; il faut le capturer AVANT la purge, sinon « réinitialiser la
+        // saison » renomme silencieusement le planning du gestionnaire.
+        $seasonPlanName = $deleteSeasonRow ? null : $this->currentSeasonPlanName($seasonId);
+
         $deleted = 0;
 
         // Children WITHOUT club/season columns first, resolved through their
@@ -58,6 +64,10 @@ final class SeasonDataPurger
         // entries. They must go before their parents' bulk DELETE or they
         // orphan silently.
         $deleted += $this->deleteBySubQuery(ConstraintConflict::class, 'scheduleId', Schedule::class, $clubId, $seasonId);
+        // SolverMetric porte un clubId mais PAS de seasonId : il se résout par son
+        // planning, comme les conflits. Oublié, il survivait au reset ET à l'effacement
+        // RGPD en nommant des plannings supprimés — aucune FK ne pend à `schedule`.
+        $deleted += $this->deleteBySubQuery(\App\Entity\SolverMetric::class, 'scheduleId', Schedule::class, $clubId, $seasonId);
         $deleted += $this->deleteBySubQuery(PeriodReminderLog::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
 
         // TeamTagAssignment has a season_id but NO club_id → deleted by season.
@@ -110,18 +120,23 @@ final class SeasonDataPurger
                 ->getQuery()
                 ->execute();
         } else {
-            // Keep the Season row but clear its anchors: the baseline points at
-            // a deleted schedule, and socleValidatedAt is sticky — leaving them
-            // would keep the cockpit "unlocked" with no plan behind it.
+            // Keep the Season row but drop its loaded-context star: it names a
+            // schedule the purge just deleted. The plan's pointer goes with the
+            // plan rows above — a plan naming a deleted planning would keep the
+            // cockpit "unlocked" with nothing behind it.
             $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
             if ($season instanceof Season && $season->getClubId() === $clubId) {
-                $season->setBaselineScheduleId(null);
                 $season->setLiveContextScheduleId(null);
-                $season->setSocleValidatedAt(null);
                 // ADR-0002: the reset wiped the season's SchedulePlan above, but the
                 // season row survives — re-provision its empty SEASON plan so the
                 // invariant "a SEASON plan exists as soon as the season does" holds.
-                $this->schedulePlanProvisioner->ensureSeasonPlan($season);
+                $plan = $this->schedulePlanProvisioner->ensureSeasonPlan($season);
+                // Le reset vide les DONNÉES de la saison ; il ne rebaptise pas son
+                // planning. Le nom re-provisionné est un défaut — on rend au plan celui
+                // que le gestionnaire avait choisi.
+                if (null !== $seasonPlanName && '' !== $seasonPlanName) {
+                    $plan->setName($seasonPlanName);
+                }
                 $this->entityManager->flush();
             }
         }
@@ -129,6 +144,21 @@ final class SeasonDataPurger
         $this->entityManager->clear();
 
         return $deleted;
+    }
+
+    /**
+     * Le nom du plan SEASON tel qu'il est AVANT la purge. SQL brut : le plan est
+     * supprimé en DQL de masse juste après, et on ne veut pas d'une entité gérée qui
+     * ressusciterait au flush.
+     */
+    private function currentSeasonPlanName(string $seasonId): ?string
+    {
+        $name = $this->entityManager->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $seasonId],
+        );
+
+        return \is_string($name) ? $name : null;
     }
 
     /**

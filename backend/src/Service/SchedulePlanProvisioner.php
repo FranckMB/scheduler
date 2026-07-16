@@ -29,8 +29,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * period's season, which may differ). Raw SQL dodges that filter; RLS still
  * scopes every statement by club, and INSERTs (persist) are never filtered.
  *
- * chosenScheduleId is NOT set here (Lot A) — it is backfilled at migration and
- * becomes live only when Lot B moves validation onto the plan pointer.
+ * chosenScheduleId — le pointeur — est LE calendrier de la saison : choose() le
+ * pose (valider), releaseSchedule() le retire (rouvrir). Rien ne le pose
+ * automatiquement : seul le gestionnaire choisit.
  */
 final class SchedulePlanProvisioner
 {
@@ -49,22 +50,16 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * Keep the SEASON plan's derived fields (name, period) in sync when the
-     * season is edited — during the additive phase the plan mirrors the season
-     * (planningName + dates), so the now-exposed /api/schedule_plans must not go
-     * stale. Raw SQL: filter-free (the edited season may not be the active one)
-     * and it never touches a version-locked ORM-managed plan mid-request.
+     * ADR-0002 : la PÉRIODE du plan SEASON suit celle de la saison. Le NOM, lui,
+     * appartient au plan (inv. 12) et n'est écrit que par son renommage — un
+     * second écrivain le rendrait non durable.
      */
     public function syncSeasonPlan(Season $season): void
     {
         $this->entityManager->getConnection()->executeStatement(
-            // version = version + 1: this raw UPDATE mutates the row out of band,
-            // so it must bump the optimistic-lock column like an ORM update would
-            // — otherwise a stale ORM copy could later flush a lost update.
-            'UPDATE schedule_plan SET name = :name, start_date = :start, end_date = :end, updated_at = now(), version = version + 1 '
+            'UPDATE schedule_plan SET start_date = :start, end_date = :end, updated_at = now(), version = version + 1 '
             . 'WHERE season_id = :sid AND type = \'SEASON\'',
             [
-                'name' => $this->seasonPlanName($season),
                 'start' => $season->getStartDate(),
                 'end' => $season->getEndDate(),
                 'sid' => $season->getId(),
@@ -122,7 +117,7 @@ final class SchedulePlanProvisioner
      * Raw SQL: filter-free (the plan's season may not be the active one) and the
      * plan is not loaded in the UnitOfWork on the validation path. RLS scopes club.
      */
-    public function choose(Schedule $schedule): void
+    public function choose(Schedule $schedule): bool
     {
         $planId = $schedule->getSchedulePlanId();
         if (null === $planId) {
@@ -134,13 +129,18 @@ final class SchedulePlanProvisioner
             $planId = $schedule->getSchedulePlanId();
         }
         if (null === $planId) {
-            return; // aucun ancrage résoluble — transition-safe (rien ne lit le pointeur)
+            // Aucun ancrage résoluble. Le rapporter plutôt que faire semblant :
+            // l'appelant supprime les versions sœurs juste après, un no-op silencieux
+            // les détruirait pour rien ET laisserait le plan non pointé en répondant 200.
+            return false;
         }
 
         $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
             ['sid' => $schedule->getId(), 'pid' => $planId],
         );
+
+        return true;
     }
 
     /**
@@ -159,11 +159,13 @@ final class SchedulePlanProvisioner
         $row = $this->entityManager->getConnection()->fetchAssociative(
             'SELECT p.id, p.name, p.chosen_schedule_id, EXISTS ( '
             . 'SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id '
-            // Une version « terminée » = le solveur a rendu sa réponse. Les statuts
-            // legacy VALIDATED/ARCHIVED en font partie tant que la bascule n'a pas eu
-            // lieu : les omettre ferait repasser le flag à false pile à la validation
-            // (la version choisie porte le miroir VALIDATED).
-            . 'AND s.status IN (\'COMPLETED\', \'FAILED\', \'VALIDATED\', \'ARCHIVED\')) AS has_finished '
+            // Déverrouille le cockpit (inv. 8/16) : il faut une PREMIÈRE version
+            // COMPLETED — décision fondateur. Un solve en échec ne donne aucun planning ;
+            // envoyer le club au cockpit sur un FAILED l'y laisserait devant rien, alors
+            // que sa place est dans le wizard, à corriger ses contraintes.
+            // Indépendant du pointeur : avoir généré une fois suffit, choisir est un
+            // autre geste — donc rouvrir ne re-verrouille jamais.
+            . 'AND s.status = \'COMPLETED\') AS has_finished '
             . 'FROM schedule_plan p WHERE p.season_id = :sid AND p.type = \'SEASON\'',
             ['sid' => $seasonId],
         );
@@ -178,6 +180,34 @@ final class SchedulePlanProvisioner
             'chosenScheduleId' => null === $row['chosen_schedule_id'] ? null : (string) $row['chosen_schedule_id'],
             'hasFinishedVersion' => (bool) $row['has_finished'],
         ];
+    }
+
+    /**
+     * La version CHOISIE du plan SEASON d'une saison — LE calendrier de base
+     * (ADR-0002). null = espace de travail : le gestionnaire n'a rien choisi.
+     * C'est la seule vérité : « validé » se dérive de ce pointeur.
+     */
+    public function chosenOfSeasonPlan(?string $seasonId): ?string
+    {
+        if (null === $seasonId) {
+            return null;
+        }
+
+        $chosen = $this->entityManager->getConnection()->fetchOne(
+            'SELECT chosen_schedule_id FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
+            ['sid' => $seasonId],
+        );
+
+        return \is_string($chosen) ? $chosen : null;
+    }
+
+    /** Cette version est-elle celle que pointe son plan ? (= « validée ») */
+    public function isChosen(string $scheduleId): bool
+    {
+        return (bool) $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM schedule_plan WHERE chosen_schedule_id = :sid',
+            ['sid' => $scheduleId],
+        );
     }
 
     /**
@@ -219,13 +249,20 @@ final class SchedulePlanProvisioner
      * pointer must never name a deleted version. Raw SQL: filter-free, and the
      * plan is usually not in the UnitOfWork on these paths.
      */
-    public function releaseSchedule(string $scheduleId): void
+    /**
+     * Dépointe la version : le plan qui la nommait redevient un espace de travail.
+     *
+     * @return bool false si AUCUN plan ne la pointait — l'appelant ne doit alors pas
+     *              annoncer une réouverture qui n'a pas eu lieu (une validation
+     *              concurrente a pu déplacer le pointeur entre-temps)
+     */
+    public function releaseSchedule(string $scheduleId): bool
     {
-        $this->entityManager->getConnection()->executeStatement(
+        return $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = NULL, updated_at = now(), version = version + 1 '
             . 'WHERE chosen_schedule_id = :sid',
             ['sid' => $scheduleId],
-        );
+        ) > 0;
     }
 
     private function ensureSeasonPlanId(string $seasonId): ?string
@@ -381,11 +418,6 @@ final class SchedulePlanProvisioner
 
     private function seasonPlanName(Season $season): string
     {
-        $custom = $season->getPlanningName();
-        if (null !== $custom && '' !== trim($custom)) {
-            return $custom;
-        }
-
         return 'Planning de la saison ' . $season->getName();
     }
 }

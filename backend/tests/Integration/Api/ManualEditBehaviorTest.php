@@ -13,6 +13,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +32,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class ManualEditBehaviorTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -134,10 +136,11 @@ final class ManualEditBehaviorTest extends WebTestCase
         self::assertResponseStatusCodeSame(409, 'a move overlapping another slot in the same venue must 409');
     }
 
-    public function testValidatedScheduleIsReadOnly(): void
+    public function testTheChosenVersionIsReadOnly(): void
     {
         [$user, , $season] = $this->seed('MED5');
-        $schedule = $this->createSchedule($season, ScheduleStatus::VALIDATED);
+        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($schedule);
         $slot = $this->createSlot($schedule, dayOfWeek: 2, startHm: '18:00');
 
         $this->client->loginUser($user);

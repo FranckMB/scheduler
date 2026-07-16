@@ -1,41 +1,48 @@
-# Cycle de vie des plannings — statut `VALIDATED` (N3)
+# Cycle de vie des plannings — le pointeur du plan (N3)
 
-> **Amendement 2026-07-10 (planning-versions D1, `specs/evolution/planning-versions.md`)** :
-> le sélecteur liste désormais des **versions de travail** d'UN planning de saison (étiquettes
-> « V3 — 10 juil. 14:32 », nom du planning = `Season.planningName`). **Valider ⇒ la version
-> devient AUSSI la baseline** (la séparation valider/définir-principal décrite plus bas est
-> caduque pour les plans de saison) **et les versions sœurs passent `ARCHIVED`** (invisibles,
-> jamais ressuscitées au reopen, purgées avec la saison). Nouveau statut `ARCHIVED`
-> (posé serveur uniquement). Une version peut être supprimée (409 si baseline / VALIDATED /
-> en cours de génération).
+> **Bascule 2026-07-16 (ADR-0002, `docs/architecture/adr-0002-pattern-plan.md`)** : le **plan de
+> type SEASON** (`schedule_plan`) et **la version qu'il pointe** (`chosen_schedule_id`) SONT le
+> calendrier de la saison. **« Validé » n'est plus un statut** : ça se dérive du pointeur, et de
+> rien d'autre — une version choisie reste `COMPLETED`. **Valider = POINTER + SUPPRIMER les
+> versions sœurs** (inv. 1, plus d'archivage) ; **rouvrir = DÉPOINTER** (inv. 2, la version
+> survit). Les statuts `VALIDATED`/`ARCHIVED`, `Season.baselineScheduleId`,
+> `Season.socleValidatedAt`, `Season.planningName` et la route `set-baseline` **n'existent plus**.
+> Les sections ci-dessous ont été corrigées ; ce qui décrit encore l'ancien modèle est daté et
+> signalé comme tel.
 
-> **But** : permettre au gestionnaire de **finaliser/verrouiller** un planning (lecture seule), de le **rouvrir** pour l'éditer, et distinguer le **« Planning de la saison »** (baseline) des **plannings secondaires**. Spec d'exécution pour la PR-3 de la série wizard/boucle-de-travail.
+> **But** : permettre au gestionnaire de **choisir** la version qui fait foi pour la saison, de la **rouvrir** pour l'éditer, et distinguer le **« Planning de la saison »** (le plan SEASON pointé) des **plannings secondaires** (les plans de période).
 > **Source de vérité** : le **code** (confronté au besoin exprimé). La roadmap n'est qu'une base de discussion.
 
 ## 0. Machine à états accueil/onboarding (cockpit) — 2026-07-08
 
-Le point d'entrée après login dérive d'un **seul critère : le planning principal existe-t-il** (`season.baselineScheduleId`, posé à la 1ʳᵉ génération) et **est-il validé** (`season.socleValidatedAt`, sticky). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage** (dérivé du baseline ; toujours écrit en base par cohérence).
+Le point d'entrée après login dérive de **deux critères portés par le plan SEASON**, exposés ensemble par `/api/me` dans `seasonPlan` : le plan **porte-t-il au moins une version terminée** (`hasFinishedVersion`, ADR-0002 inv. 8/16) et **pointe-t-il une version** (`chosenScheduleId`, inv. 13). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage**.
+
+Les deux critères sont **indépendants** : `hasFinishedVersion` est dérivé des versions du plan et jamais retiré par un dépointage — **rouvrir ne re-verrouille donc pas le cockpit** et ne renvoie personne à l'onboarding.
 
 | État | Condition | Landing | « Ouvrir » (carte planning principal) | Restrictions |
 |---|---|---|---|---|
-| **1. Pas de planning principal** | `baselineScheduleId = null` | **/wizard** — étape **Récap** (ou 1ʳᵉ étape incomplète) | — | app verrouillée au wizard (`AuthGuard`, burger profil/club autorisé) |
-| **2. Existe, non validé** | baseline ≠ null, `socleValidatedAt = null` | **cockpit** (déverrouillé) + bandeau « valider pour débloquer » | → **/wizard** étape **Génération** | **matchs** + **plannings secondaires** bloqués (front désactivé + `SocleGuard` 409) |
-| **3. Existe et validé** | baseline ≠ null, socle validé | **cockpit** (tout ouvert) | → /planning | aucune |
+| **1. Jamais généré** | `hasFinishedVersion = false` | **/wizard** — étape **Récap** (ou 1ʳᵉ étape incomplète) | — | app verrouillée au wizard (`AuthGuard`, burger profil/club autorisé) |
+| **2. A généré, rien de choisi** | `hasFinishedVersion = true`, `chosenScheduleId = null` | **cockpit** (déverrouillé) + bandeau « valider pour débloquer » | → **/wizard** étape **Génération** | **matchs** + **plannings secondaires** bloqués (front désactivé + `SocleGuard` 409) |
+| **3. Une version choisie** | `chosenScheduleId ≠ null` | **cockpit** (tout ouvert) | → /planning | aucune |
 
-Ancrages : `AuthGuard.tsx` (onboarding = baseline null), `CockpitPage.tsx` (baseline null → /wizard), `WizardLayout.tsx` (guided = baseline null, landing Récap), `BaselineBanner.tsx` (« Ouvrir » état 2→wizard génération), `AppLayout.tsx` + `MatchesPage.tsx` (matchs verrouillés hors état 3), `App\Service\SocleGuard` (409 création match/import/overlay en état ≠ 3, appliqué dans `FixtureStateProcessor`, `ImportFixturesController`, `GenerateScheduleController`). Fixtures : BCCL = état 3 (baseline validé seedé), FakeClub = état 1.
+Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `CockpitPage.tsx` (idem → /wizard), `WizardLayout.tsx` (guided = `!hasFinishedVersion`, landing Récap), `SeasonPlanBanner.tsx` (« Ouvrir » état 2→wizard génération), `AppLayout.tsx` + `MatchesPage.tsx` (matchs verrouillés tant que `chosenScheduleId` est null), `App\Service\SocleGuard::assertSeasonPlanChosen` (409 création match/import/overlay tant qu'aucune version n'est pointée, appliqué dans `FixtureStateProcessor`, `ImportFixturesController`, `ScheduleStateProcessor` et `GenerateScheduleController`). Fixtures : BCCL et FakeClub sont seedés en **état 1** (données saisies, aucune génération).
 
 ## 1. Modèle produit (validé avec le gestionnaire)
 
-- **`VALIDATED`** = planning **fini + verrouillé (lecture seule)**. **Plusieurs** plannings peuvent être VALIDATED (c'est bon signe).
-- **Rouvrir** un planning validé → il **redevient éditable** (repasse `COMPLETED`), puis re-validable.
-- **« Planning principal de la saison »** (main planning / baseline, `season.baselineScheduleId`) = le planning **général de référence** de la saison, auto-assigné au **1er** succès de génération. **Badge distinct** du statut VALIDATED. Les autres = **plannings secondaires**.
-- **Invariant (UX-02)** : un **overlay de période** (`calendarEntryId` non-null, plan d'exception borné du cockpit) n'est **jamais** le baseline — l'auto-assignation le saute (call-site + garde interne `assignBaselineIfFirst`) et `set-baseline` le refuse (409). Côté front, la sélection d'atterrissage (`pickLandingScheduleId`) ignore un baseline overlay/en-vol → jamais d'ouverture sur un « ★ · période » vide.
-- Le gestionnaire consulte **tous** les plannings de l'année ; il édite ceux qui ne sont pas verrouillés.
+- **Valider = POINTER** (inv. 1) : le plan nomme la version qui fait foi (`schedule_plan.chosen_schedule_id`). **« Validé » n'est pas un statut** — ça se dérive du pointeur, et de rien d'autre ; la version choisie reste `COMPLETED`. Un plan pointe **au plus une** version.
+- **Valider SUPPRIME les versions sœurs** du même périmètre (inv. 1) : le plan porte la version qui compte, pas un cimetière. Plus d'archivage, plus de filet. Une sœur encore en génération bloque le choix (409).
+- **Rouvrir = DÉPOINTER** (inv. 2) : le plan redevient un **espace de travail** et la version **survit**, éditable, puis re-choisissable.
+- **Aucun pointage automatique** (inv. 2) : générer ne pointe **jamais**. Seul le gestionnaire choisit.
+- **« Planning de la saison »** = le plan **SEASON** et sa version choisie. Les **plans de période** (`CLOSURE`/`HOLIDAY`, plans d'exception bornés du cockpit) = **plannings secondaires** ; chacun porte **son propre** pointeur, sur son propre plan.
+- **Invariant (UX-02)** : le pointeur du plan SEASON ne peut nommer qu'une version de saison (`calendarEntryId` null) — un overlay de période appartient au plan de sa période, pas au plan SEASON. Côté front, la sélection d'atterrissage (`pickLandingScheduleId`) ignore une version choisie qui serait un overlay ou en vol → jamais d'ouverture sur un « ★ · période » vide.
+- Le gestionnaire consulte **tous** les plannings de l'année ; il édite ceux que leur plan ne pointe pas.
 
 ### Hors scope (reporté, raison technique)
-- **Cascade « éditer le baseline ⇒ répercuter sur les plannings secondaires »** : suppose que les secondaires dérivent du baseline (modèle **templates → occurrences**, roadmap §2, **absent**). Impossible proprement aujourd'hui → différé, documenté.
+- **Cascade « éditer le calendrier de la saison ⇒ répercuter sur les plannings secondaires »** : suppose que les secondaires dérivent du calendrier de base (modèle **templates → occurrences**, roadmap §2, **absent**). Impossible proprement aujourd'hui → différé, documenté. En attendant, déplacer ou retirer le pointeur du plan SEASON **détruit** les plans secondaires, sur confirmation explicite (inv. 14, §6).
 
-## 2. État réel du code (ancrages)
+## 2. État du code au moment de la rédaction (ancrages)
+
+> *Instantané daté d'avant la PR-3, conservé pour la traçabilité — **périmé par la bascule ADR-0002 (2026-07-16)**. Le `/validate` qui pose le baseline, l'auto-assignation `assignBaselineIfFirst` et `set-baseline` n'existent plus ; voir §0/§1 et §3 pour le modèle en vigueur.*
 
 | Élément | Réel |
 |---------|------|
@@ -50,27 +57,26 @@ Ancrages : `AuthGuard.tsx` (onboarding = baseline null), `CockpitPage.tsx` (base
 
 ## 3. Décisions de conception
 
-### 3.1 Séparer les deux actions orthogonales
-Le `/validate` actuel **mélange** deux concepts. On sépare :
+### 3.1 Les actions et leur effet (ADR-0002)
 
 | Action | Endpoint | Effet | Garde |
 |--------|----------|-------|-------|
-| **Valider (verrouiller)** | `POST /api/schedules/{id}/validate` *(repurposé)* | `status COMPLETED → VALIDATED` | 409 si status ≠ `COMPLETED` |
-| **Rouvrir** | `POST /api/schedules/{id}/reopen` *(nouveau)* | `status VALIDATED → COMPLETED` | 409 si status ≠ `VALIDATED` |
-| **Désigner planning principal** | `POST /api/schedules/{id}/set-baseline` *(extrait de l'ancien /validate)* | `season.baselineScheduleId = id` | 409 si status ∉ {`COMPLETED`,`VALIDATED`} |
+| **Valider (choisir)** | `POST /api/schedules/{id}/validate` | le **plan POINTE** cette version (`chosen_schedule_id`) **et ses versions sœurs du même périmètre sont SUPPRIMÉES** (inv. 1) | 409 si status ≠ `COMPLETED` · 409 si une sœur est `PENDING`/`GENERATING` · 409 `overlays_exist` si déplacer le pointeur de la saison détruirait des plans secondaires |
+| **Rouvrir** | `POST /api/schedules/{id}/reopen` | le plan **DÉPOINTE** — il redevient un espace de travail, la version survit (inv. 2) | 409 si la version n'est pas celle que pointe son plan · 409 `overlays_exist` (voir §6) |
+| **Renommer le plan** | `PUT /api/schedule_plans/{id}` | `plan.name` — le **nom appartient au plan** (inv. 12) | gate management (SEC-07) |
 
-- « Valider » = le mot FR du bouton demandé par le gestionnaire → `/validate` = verrouiller (aligné).
-- L'ancien comportement baseline **n'est pas perdu** : déplacé sur `/set-baseline` (capacité de re-promotion préservée, cf. contrarian-review).
-- Baseline auto (1er succès) **inchangé** — orthogonal à la validation.
-- **Tenant** : les 3 endpoints réutilisent le pattern `resolveCurrentClubId` (null → skip, RLS 404 ; mismatch → 403).
+- « Valider » reste le mot FR du bouton demandé par le gestionnaire ; ce qu'il fait, c'est **pointer**.
+- **`POST /api/schedules/{id}/set-baseline` est supprimé** (inv. 18) : il n'y a plus qu'une vérité — le pointeur — donc plus de second geste pour la déplacer.
+- **Aucun pointage automatique** (inv. 2) : la génération ne pointe jamais.
+- **Tenant** : les deux endpoints de cycle de vie réutilisent le pattern `resolveCurrentClubId` (null → skip, RLS 404 ; mismatch → 403). Les deux exigent en plus le rôle management (SEC-07).
 
 ### 3.2 Verrou lecture seule **côté serveur** (les 4 chemins)
-`VALIDATED` bloque les mutations de **contenu** (409 « planning verrouillé ») :
-- `GenerateScheduleController` : refuse la régénération si `schedule.status == VALIDATED`.
-- `ManualEditController` (constraint/lock/one-time) : refuse si le `schedule` du slot est `VALIDATED`.
-- `ScheduleSlotTemplateStateProcessor` : refuse create/update/delete si le schedule parent est `VALIDATED`.
-- `ScheduleStateProcessor` PUT : refuse **toute** modification, **nom inclus**, si `VALIDATED` — le verrou est **total** (« read only means read only »). Le nom s'édite **pendant l'édition** (états non verrouillés) ; pour renommer un planning validé → le **rouvrir** d'abord. Les transitions de statut passent par `generate`/`validate`/`reopen`, jamais via PUT : le champ `status` est **accepté mais tout changement → 409** (le rename frontend échoe le statut courant — inchangé = OK). Fabriquer un `COMPLETED` sans génération est donc impossible.
-- `ScheduleStateProcessor` DELETE : le **baseline n'est jamais supprimable** (409 — désigner un autre principal d'abord) et un planning `VALIDATED` **ne se supprime pas** (409 — le rouvrir d'abord). Gardé par `ScheduleLifecycleGuardTest` (phase1).
+Le verrou se dérive du **pointeur** : « verrouillé » = **le plan pointe cette version** (`SchedulePlanProvisioner::isChosen`), jamais un statut. Les mutations de **contenu** sont alors refusées (409 « planning en vigueur ») :
+- `GenerateScheduleController` : refuse la régénération de la version choisie — la rouvrir (dépointer) d'abord.
+- `ManualEditController` (constraint/lock/one-time) : refuse si le `schedule` du slot est la version choisie de son plan.
+- `ScheduleSlotTemplateStateProcessor` : refuse create/update/delete si le schedule parent est la version choisie.
+- `ScheduleStateProcessor` PUT : refuse **toute** modification si la version est choisie — le verrou est **total** (« read only means read only »). Le **nom du plan** se renomme, lui, par `PUT /api/schedule_plans/{id}` (inv. 12), indépendamment de ce verrou. Les transitions de statut passent par `generate`/`validate`/`reopen`, jamais via PUT : le champ `status` est **accepté mais tout changement → 409**. Fabriquer un `COMPLETED` sans génération est donc impossible.
+- `ScheduleStateProcessor` DELETE : la **version choisie ne se supprime pas** (409 — la rouvrir d'abord) et une version en cours de génération non plus (409). Gardé par `ScheduleLifecycleGuardTest` (phase1).
 
 > Le verrou front seul serait une illusion (contrarian-review) : l'enforcement est **serveur**.
 
@@ -83,52 +89,54 @@ Le « Valider » de la modale déclenche `POST /validate`. (Détection des alert
 
 ### 3.3 Machine à états
 ```
-DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED ──validate──▶ VALIDATED
-                                        └──▶ FAILED           ◀──reopen────┘
+DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
+                                        └──▶ FAILED
 ```
-- `set-baseline` : transversal, ne change pas `status` (agit sur la saison).
-- `COMPLETED` inclut les plannings **partiels/dégradés** (commit `0fd895f`) → on peut valider un planning partiel (assumé).
+- `validate` / `reopen` **ne changent aucun statut** : ils posent et retirent le **pointeur du plan** (`schedule_plan.chosen_schedule_id`). Une version choisie reste `COMPLETED` ; « validé » se lit sur le pointeur (`Schedule.isChosen` en lecture d'API).
+- `COMPLETED` inclut les plannings **partiels/dégradés** (commit `0fd895f`) → on peut choisir un planning partiel (assumé).
 
-### 3.4 Pas de migration
-`ScheduleStatus` = colonne string `enumType`, sans contrainte DB → ajouter `VALIDATED` = **0 migration**. Mettre à jour la liste `Choice` de `ScheduleInput`.
+### 3.4 Pas de nouveau statut
+`ScheduleStatus` reste `DRAFT/PENDING/GENERATING/COMPLETED/FAILED` : « validé » se dérive du pointeur, donc **aucun statut à ajouter** (inv. 1).
 
 ## 4. Frontend
 
-- **Unions** : ajouter `VALIDATED` (`planning/api.ts:43`, `wizard/api.ts:205`).
-- **API/hooks** : `reopenSchedule()` + `useReopenSchedule()` (nouveau) ; `setBaseline()` + hook ; réutiliser `useValidateSchedule` (déjà là, à brancher).
+- **Unions** : `ScheduleStatus` reste à **5** statuts (`planning/api.ts`, `wizard/api.ts`) — « validé » n'en est pas un.
+- **API/hooks** : `reopenSchedule()` + `useReopenSchedule()` ; `useValidateSchedule`. Le pointeur se lit sur `/api/me` (`seasonPlan.chosenScheduleId`) et, par version, sur le champ de lecture `Schedule.isChosen`.
 - **PlanningToolbar** :
-  - Boutons contextuels : **« Valider »** si `COMPLETED` (→ ouvre la **modale** §3.3bis) · **« Rouvrir »** si `VALIDATED` (+ indicateur 🔒 « Lecture seule »).
-  - Badge statut **traduit** (FR) pour les 6 statuts (voir §5).
-  - Badge baseline renommé **« Planning principal »** vs **« Secondaire »**.
-  - **Nom éditable** en ligne (PUT `name`) **uniquement si le planning n'est pas `VALIDATED`** (verrou total).
-- **pickDefaultSchedule** : priorité baseline → `VALIDATED` → `COMPLETED` → plus récent.
-- **Read-only gating** : si `selected.status == VALIDATED` → désactiver régénérer + renommage + passer `readOnly` à `SlotDetail` (move/lock off) et `WeekGrid` (clic slot off).
+  - Boutons contextuels : **« Valider »** si `COMPLETED` et non choisie (→ ouvre la **modale** §3.3bis) · **« Rouvrir »** si la version est choisie (+ indicateur 🔒 « Lecture seule »).
+  - Badge statut **traduit** (FR) pour les 5 statuts (voir §5).
+  - Badge **« Planning principal »** vs **« Secondaire »**.
+  - **Nom éditable** en ligne **uniquement si la version n'est pas choisie** (verrou total) ; le **nom du plan** se renomme par `PUT /api/schedule_plans/{id}`.
+- **pickLandingScheduleId** : la version choisie du plan SEASON (hors overlay, hors vol) → sinon `pickDefaultSchedule` (`COMPLETED` le plus récent).
+- **Read-only gating** : si la version sélectionnée est celle que pointe son plan → désactiver régénérer + renommage + passer `readOnly` à `SlotDetail` (move/lock off) et `WeekGrid` (clic slot off).
 - Dédupliquer `IN_FLIGHT` (une source).
 
 ## 5. Libellés FR des statuts
-`DRAFT`=Brouillon · `PENDING`=En attente · `GENERATING`=Génération… · `COMPLETED`=Terminé · `FAILED`=Échec · **`VALIDATED`=Validé (verrouillé)**.
+`DRAFT`=Brouillon · `PENDING`=En attente · `GENERATING`=Génération… · `COMPLETED`=Terminé · `FAILED`=Échec (`STATUS_LABELS`, `planning/api.ts`). « Validé » ne figure pas dans cette liste : ce n'est pas un statut mais l'état du **pointeur**, affiché à part (badge / 🔒 « Lecture seule »).
 
 ## 6. Tests
 
 **Backend** (`--group phase1` pour l'isolation) :
-- `ValidateScheduleTest` **mis à jour** : `/validate` pose désormais `VALIDATED` (plus le baseline) ; 409 si non-`COMPLETED`.
-- `ReopenScheduleTest` (nouveau) : `VALIDATED → COMPLETED` ; 409 sinon.
-- `SetBaselineTest` (nouveau) : pose `season.baselineScheduleId` ; 409 si status invalide.
-- **Gardes** : régénération / manual-edit / slot-template → **409** quand le schedule est `VALIDATED`.
-- **Tenant isolation** (blocking) : `/validate`, `/reopen`, `/set-baseline` cross-club → 403.
-- **Jalon sticky cockpit** (cockpit palier A) : `Season.socleValidatedAt` est posé **une fois** quand le planning **baseline** de la saison est **validé** (`/validate`) ou qu'un planning déjà `VALIDATED` est désigné baseline (`/set-baseline`) ; **jamais retiré** — `/reopen` le conserve. Exposé sur `/api/me`. Débloque l'accueil cockpit (vs work-loop). Voir `specs/courantes/accueil-cockpit-temporel.md` §2ter.
-- **Reopen destructeur du baseline** (cockpit palier B) : rouvrir le **baseline** alors que des calendriers secondaires (overlays de période) existent les **supprime** (spec §2bis). `POST /api/schedules/{id}/reopen` renvoie **409 `{code:"overlays_exist", count, overlays:[{entryId,title,overlayScheduleId}]}`** ; le client confirme avec le body `{"confirmDeleteOverlays": true}` → les overlays sont supprimés (schedules + slots + diagnostics ; **les entrées de période et leurs contraintes datées sont conservées** — la période redevient « signalée, non adaptée ») puis le reopen procède. Zéro overlay ou reopen d'un overlay non-baseline : comportement inchangé. Overlay = `Schedule.calendarEntryId` non null, jamais baseline.
+- `ValidateScheduleTest` : `/validate` **pointe** la version sur son plan et **supprime les versions sœurs** ; 409 si non-`COMPLETED` ; 409 si une sœur est en génération.
+- `ReopenScheduleTest` : `/reopen` **dépointe** le plan (la version survit) ; 409 si la version n'est pas celle que pointe son plan.
+- `SchedulePlanLifecycleTest` / `SchedulePlanReadModelTest` / `SchedulePlanProvisionerTest` : pointeur, compteur de versions, provisioning et modèle de lecture du plan.
+- **Gardes** (`ScheduleLifecycleGuardTest`) : régénération / manual-edit / slot-template / PUT / DELETE → **409** quand le plan pointe la version.
+- **Tenant isolation** (blocking) : `/validate` et `/reopen` cross-club → 403.
+- **Déblocage du cockpit** (cockpit palier A) : `seasonPlan.hasFinishedVersion` = le plan SEASON porte ≥1 version terminée (`COMPLETED`/`FAILED`). **Dérivé, jamais posé, indépendant du pointeur** — `/reopen` ne re-verrouille pas. Exposé sur `/api/me`. Débloque l'accueil cockpit (vs work-loop). Voir `specs/courantes/accueil-cockpit-temporel.md` §2ter.
+- **Reopen destructeur du calendrier de saison** (cockpit palier B) : rouvrir la **version choisie du plan SEASON** alors que des calendriers secondaires (overlays de période) existent les **supprime** (spec §2bis, inv. 14). `POST /api/schedules/{id}/reopen` renvoie **409 `{code:"overlays_exist", count, overlays:[{entryId,title,overlayScheduleId}]}`** ; le client confirme avec le body `{"confirmDeleteOverlays": true}` → les overlays sont supprimés (schedules + slots + diagnostics ; **les entrées de période et leurs contraintes datées sont conservées** — la période redevient « signalée, non adaptée ») puis le reopen procède. Même garde, même code, sur `/validate` quand choisir une **autre** version déplacerait le calendrier de la saison. Zéro overlay, ou reopen d'un overlay de période : comportement inchangé.
 
 **Frontend** :
-- Toolbar : bouton Valider (COMPLETED) / Rouvrir (VALIDATED), read-only gating, libellés statut, badge « Planning de la saison ».
+- Toolbar : bouton Valider (`COMPLETED` non choisie) / Rouvrir (version choisie), read-only gating, libellés statut, badge « Planning de la saison ». Bandeau cockpit : `SeasonPlanBanner`.
 
 ## 7. Vérification (backend touché ⇒ obligatoire)
 - `cd backend && make test` (CS-Fixer + PHPStan lvl8 + PHPUnit)
 - **`backend/scripts/smoke-solver.sh` → planning `COMPLETED`**
 - `frontend` : `npm run test` + `npm run build`
-- Contrat engine inchangé (VALIDATED backend-only) — aucun bump `CONTRACT_VERSION`.
+- Contrat engine inchangé (le pointeur est backend-only, l'engine ne le voit pas) — aucun bump `CONTRACT_VERSION`.
 
 ## 8. Checklist de scope (§9 CLAUDE.md)
+
+> *Checklist datée de la PR-3, conservée pour la traçabilité — **périmée par la bascule ADR-0002 (2026-07-16)** : `SetBaselineController` n'existe plus et le cycle de vie repose sur le pointeur du plan.*
 - **Zone** : `backend/src` (Enum, Entity, Controller, State, Dto) + `backend/tests` + `frontend/src/features/planning` (+ union `wizard/api.ts`).
 - **Interdit** : `engine/**` (aucun changement) · `specs/initiales/**` · la **cascade** baseline→secondaires · le modèle occurrences.
 - **Fichiers probables** : `Enum/ScheduleStatus.php`, `Controller/{ValidateSchedule,Reopen,SetBaseline}Controller.php`, `Controller/GenerateScheduleController.php`, `Controller/ManualEditController.php`, `State/Processor/{Schedule,ScheduleSlotTemplate}StateProcessor.php`, `Dto/ScheduleInput.php` ; front `planning/{api,queries,PlanningToolbar,PlanningPage,SlotDetail,WeekGrid}.tsx`, `wizard/api.ts`. **Tests** : `ValidateScheduleTest`, `ReopenScheduleTest`, `SetBaselineTest`, gardes, tenant.
