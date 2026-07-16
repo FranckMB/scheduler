@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0 backend livré** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent le frontend React SA0 puis SA1 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
+> **Statut** : **SA0 backend + frontend livrés** (2026-07-16) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Restent SA1 → SA5. Le détail d'implémentation de chaque lot reste à `/plan` au moment de l'attaquer.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` (**pas encore persistées**) · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -27,8 +27,8 @@ Trois usages :
 
 ## 3. Découpage en lots (ordre imposé : SA0 → SA5)
 
-### SA0 — Socle sécurité & auth superadmin *(backend ✅ · frontend ⬜)*
-Backend livré : identité distincte hors tenant, session séparée mot de passe + TOTP, firewall `/api/admin/**`, rate limit, CSRF des mutations, audit fail-closed et NR `phase1`. Voir [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Reste : feature React lazy sous `/admin` (login mot de passe + TOTP, session, logout et layout dédié), sans réutiliser le JWT/store club.
+### SA0 — Socle sécurité & auth superadmin *(backend ✅ · frontend ✅)*
+Livré : identité distincte hors tenant, session séparée mot de passe + TOTP, firewall `/api/admin/**`, rate limit, CSRF, audit fail-closed et NR `phase1`, plus feature React lazy sous `/admin` (login, TOTP, hydratation de session, logout et layout dédié). Le frontend n'utilise pas le JWT/store club. Voir [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md).
 
 ### SA1 — Capture des métriques *(plomberie, avant l'UI, 🟡)*
 Persister **`solver_metrics`** à chaque génération (durée p50/p95, statut, INFEASIBLE, taille problème) — aujourd'hui calculées par `SolverMetricsMapper` puis **jetées** · **`Club.lastActivityAt`** (connexion / génération) · brancher l'**audit trail**. Sans SA1, la console n'a aucune donnée historique.

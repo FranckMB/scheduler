@@ -2,6 +2,9 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
+import { AdminGuard } from "@/features/admin/AdminGuard";
+import { AdminHomePage, AdminShell } from "@/features/admin/AdminShell";
+import { AdminLoginPage } from "@/features/admin/AdminLoginPage";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
@@ -18,6 +21,20 @@ import { WizardPage } from "@/features/wizard/WizardLayout";
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+  { path: "/admin/login", element: <AdminLoginPage /> },
+  {
+    path: "/admin",
+    element: <AdminGuard />,
+    children: [
+      {
+        element: <AdminShell />,
+        children: [
+          { index: true, element: <AdminHomePage /> },
+          { path: "*", element: <Navigate to="/admin" replace /> },
+        ],
+      },
+    ],
+  },
   { path: "/register", element: <RegisterPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password/:token", element: <ResetPasswordPage /> },
