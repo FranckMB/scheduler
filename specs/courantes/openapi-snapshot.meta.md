@@ -1,19 +1,26 @@
-Last verified @ feature/superadmin-sa2-health 2026-07-16
+Last verified @ feat/plan-read-model 2026-07-16
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **80 paths.**
 Changements récents :
+- **ADR-0002 — modèle de lecture du plan (2026-07-16, ADDITIF)** : `GET /api/me` expose
+  **`seasonPlan { id, name, chosenScheduleId, hasFinishedVersion }`** — LE calendrier de
+  base de la saison (le plan SEASON et sa version choisie), plus « le plan porte-t-il une
+  version terminée » (futur déblocage cockpit, inv. 8/16). `SchedulePlan` reste en
+  **lecture seule** : le renommage arrivera avec la bascule, dans le commit qui supprime
+  `Season.planningName`. Le schéma de `/api/me` (déclaré à la main dans
+  `CustomRoutesOpenApiFactory`) est mis à jour : le champ est donc **dans le contrat**,
+  pas seulement dans le payload.
+  **Additif** : `baselineScheduleId`/`socleValidatedAt`/`planningName` restent exposés ET
+  restent la vérité.
 - **Santé technique superadmin SA2 (2026-07-16)** : `GET /api/admin/health`
   sonde DB, Redis, engine, heartbeat worker et Mercure, puis expose backlog,
   échecs et retries Messenger sans propager les pannes individuelles.
 - **Supervision superadmin SA2 API (2026-07-16)** : `GET /api/admin/overview`
   expose les agrégats parc/solveur et `GET /api/admin/clubs` la liste transverse
   paginée/recherchable avec saison, volumétrie et métriques sur 30 jours.
-- **ADR-0002 pattern « Plan » — Lot B1 (2026-07-16, ADDITIF)** : aucun path ni schéma
-  généré ne bouge, et **aucun comportement ne change**. Seule évolution de contrat :
-  `GET /api/me` gagne **`seasonPlanHasFinishedVersion`** (bool — le plan SEASON a ≥1
-  version terminée COMPLETED/FAILED/VALIDATED). Champ **préparatoire non consommé** : il
-  servira au lot de bascule pour le déblocage cockpit (inv. 8/16).
-  `baselineScheduleId`/`socleValidatedAt` restent la vérité jusqu'à ce lot-là.
+- **ADR-0002 pattern « Plan » — Lot B1 (2026-07-16, ADDITIF)** : aucun path ni schéma ne
+  bouge et **aucun comportement ne change** (le lot maintient le pointeur du plan sans que
+  rien ne le lise). `baselineScheduleId`/`socleValidatedAt` restent la vérité.
 - **SA1 métriques (2026-07-16)** : les métriques de génération sont persistées côté
   backend et `Club.lastActivityAt` est un champ de lecture pour les futurs agrégats.
 - **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous

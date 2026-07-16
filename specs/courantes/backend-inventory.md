@@ -85,7 +85,7 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | 9 | SportCategory | `/api/sport-categories` | Catégories d'âge | |
 | 10 | PriorityTier | `/api/priority-tiers` | Niveaux de priorité (S/A/B/C/D) | |
 | 11 | SubscriptionPlan | `/api/subscription_plans` | Plans d'abonnement (facturation ; renommé depuis `Plan`/`/api/plans` — ADR-0002 lot A, le nom « plan » revient au domaine planning) | |
-| 11bis | SchedulePlan | `/api/schedule_plans` | Conteneur nommé des versions d'une saison/période (lecture seule ; ADR-0002 lot A) — filtres `calendarEntryId`, `type` | |
+| 11bis | SchedulePlan | `/api/schedule_plans` | Conteneur nommé des versions d'une saison/période (lecture seule ; ADR-0002) — filtres `calendarEntryId`, `type`. Le renommage arrive avec la bascule (le nom vit alors sur le plan, inv. 12) | |
 | 12 | Schedule | `/api/schedules` | Générations de planning | `mercure: true` ; opérations custom `generate` et `export-pdf` ; filtres `isActive` (booléen) et `seasonId` (exact). Les routes de cycle de vie (`validate`/`reopen`/`set-baseline`) sont des routes Symfony hors API Platform (§3). |
 | 13 | ScheduleSlotTemplate | `/api/schedule-slot-templates` | Créneaux générés | |
 | 14 | ScheduleDiagnostic | `/api/schedule-diagnostics` | Erreurs / avertissements | |

@@ -119,6 +119,21 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'accentPalette' => ['type' => 'array', 'nullable' => true, 'items' => ['type' => 'string']],
                         ]],
                         'baselineScheduleId' => ['type' => 'string', 'nullable' => true],
+                        // ADR-0002 : le plan de saison — le calendrier de base. null si
+                        // la saison n'en a pas encore. `chosenScheduleId` = la version
+                        // choisie (« validée ») ; `hasFinishedVersion` = le plan porte au
+                        // moins une version terminée.
+                        // Le document est en OpenAPI 3.1 : `nullable` y a disparu, un
+                        // consommateur l'ignore. Il faut l'union JSON-Schema, sinon le
+                        // contrat promet du non-null là où null est l'état NORMAL
+                        // (saison sans plan ; aucune version choisie = espace de travail)
+                        // et un client généré déréférence null.
+                        'seasonPlan' => ['type' => ['object', 'null'], 'properties' => [
+                            'id' => ['type' => 'string'],
+                            'name' => ['type' => 'string'],
+                            'chosenScheduleId' => ['type' => ['string', 'null']],
+                            'hasFinishedVersion' => ['type' => 'boolean'],
+                        ]],
                         'hasGenerated' => ['type' => 'boolean'],
                     ]]],
                 ])),

@@ -13,11 +13,17 @@ use App\State\Provider\SchedulePlanStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// ⚠️ Le DOCBLOCK ci-dessous est PUBLIÉ : API Platform le recopie verbatim dans la
+// description OpenAPI, et /api/docs est en PUBLIC_ACCESS (security.yaml). N'y écrire
+// que ce qu'un consommateur externe doit lire — jamais de raisonnement interne, de
+// chemin de fichier, ni d'état de migration. Ces commentaires `//`, eux, ne sont pas
+// publiés. Le raisonnement vit dans docs/architecture/adr-0002-pattern-plan.md.
 /**
- * ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container
- * of a season/period's versions). Exposed for the frontend to consume in Lot B;
- * plans are born by provisioning (season/schedule creation), never via the API,
- * so no Post/Put/Delete here — Lot B adds the lifecycle mutations.
+ * Le Plan — le conteneur nommé des versions d'une saison ou d'une période. Le plan
+ * de saison et sa version choisie sont le calendrier de base de la saison.
+ *
+ * Lecture seule : un plan est créé et supprimé par le serveur, et sa version
+ * choisie est désignée en validant cette version.
  */
 // The ?calendarEntryId / ?type query filters are implemented by the custom
 // provider (SchedulePlanStateProvider::applyRequestFilters) — a Doctrine
