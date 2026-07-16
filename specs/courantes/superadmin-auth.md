@@ -1,7 +1,6 @@
-# Authentification superadmin — SA0
+# Authentification superadmin et télémétrie — SA0/SA1
 
-> **État courant (2026-07-16)** : socle backend + interface React SA0 livrés. Les métriques,
-> la supervision et les actions cross-tenant restent dans
+> **État courant (2026-07-16)** : socle backend + interface React SA0 et capture métriques SA1 livrés. La supervision et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -49,3 +48,15 @@ admin est invalidée : la surface échoue fermée.
 
 La non-régression de l'axe auth/memberships est dans `SuperAdminAccessTest` (`phase1`) ;
 les primitives TOTP et le fail-closed audit ont leurs tests unitaires.
+
+## Capture métriques SA1
+
+- `solver_metrics` conserve une ligne immutable par tentative de génération : club,
+  schedule, statut terminal, durée solveur, taille du problème, conflits, score,
+  version du solveur et horodatage.
+- La table porte `club_id`, est sous RLS `FORCE` et respecte `TenantOwnedInterface`.
+  Le rôle runtime ne peut jamais lire les métriques d'un autre club ; la connexion
+  `admin` les lira pour les agrégations SA2.
+- `Club.lastActivityAt` est mis à jour au plus une fois par jour lors d'une activité
+  authentifiée et à la mise en file d'une génération. La rétention six mois, le
+  partitionnement mensuel et la purge sont reportés au lot d'exploitation dédié.

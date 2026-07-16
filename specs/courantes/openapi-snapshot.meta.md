@@ -1,7 +1,9 @@
-Last verified @ feature/superadmin-sa0 2026-07-16
+Last verified @ feature/superadmin-sa1 2026-07-16
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **77 paths.**
 Changements récents :
+- **SA1 métriques (2026-07-16)** : les métriques de génération sont persistées côté
+  backend et `Club.lastActivityAt` est un champ de lecture pour les futurs agrégats.
 - **Superadmin SA0 backend (2026-07-16)** : quatre routes custom sous
   `/api/admin/auth/{password,totp,me,logout}` documentent l'authentification séparée
   mot de passe + TOTP, la session admin et le token CSRF exigé au logout.

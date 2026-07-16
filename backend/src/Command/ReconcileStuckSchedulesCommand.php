@@ -10,6 +10,7 @@ use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Mercure\ClubTopicUpdate;
+use App\Service\SolverMetricsRecorder;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -46,6 +47,7 @@ final class ReconcileStuckSchedulesCommand extends Command
         private readonly EntityManagerInterface $entityManager,
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly HubInterface $hub,
+        private readonly ?SolverMetricsRecorder $metricsRecorder = null,
     ) {
         parent::__construct();
     }
@@ -128,6 +130,7 @@ final class ReconcileStuckSchedulesCommand extends Command
             $failedIds = [];
             foreach ($stuck as $schedule) {
                 $schedule->setStatus(ScheduleStatus::FAILED);
+                $this->metricsRecorder?->record($schedule);
                 $this->entityManager->persist(
                     (new ScheduleDiagnostic)
                         ->setClubId($schedule->getClubId())

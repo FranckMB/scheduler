@@ -48,6 +48,10 @@ class Club
     #[ORM\Column(type: 'integer')]
     private int $generationCountSeason = 0;
 
+    /** Last authenticated or generation activity observed for this club. */
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $lastActivityAt = null;
+
     #[ORM\Column(type: 'string', length: 24, nullable: true)]
     private ?string $schoolZone = null;
 
@@ -279,6 +283,18 @@ class Club
     public function setGenerationCountSeason(int $generationCountSeason): self
     {
         $this->generationCountSeason = $generationCountSeason;
+
+        return $this;
+    }
+
+    public function getLastActivityAt(): ?DateTimeImmutable
+    {
+        return $this->lastActivityAt;
+    }
+
+    public function setLastActivityAt(?DateTimeImmutable $lastActivityAt): self
+    {
+        $this->lastActivityAt = $lastActivityAt;
 
         return $this;
     }

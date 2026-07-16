@@ -19,6 +19,7 @@ use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
+use App\Service\SolverMetricsRecorder;
 use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
@@ -51,6 +52,7 @@ final class GenerateScheduleHandler
         private StructureSnapshotter $structureSnapshotter,
         private ?LoggerInterface $logger = null,
         private ?DevScheduleReportWriter $devReportWriter = null,
+        private ?SolverMetricsRecorder $metricsRecorder = null,
     ) {}
 
     public function __invoke(GenerateScheduleMessage $message): void
@@ -144,6 +146,7 @@ final class GenerateScheduleHandler
             }
 
             $schedule->setStatus(ScheduleStatus::FAILED);
+            $this->metricsRecorder?->record($schedule);
             // Generic message: never leak raw exception detail (SQL, DSNs) to the
             // client-facing diagnostic. The full exception is logged above.
             $this->diagnosticsRecorder->recordSingle($schedule, 'internal_error', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation failed unexpectedly. Please regenerate.');
@@ -164,6 +167,7 @@ final class GenerateScheduleHandler
             if (!$overlayEntry instanceof CalendarEntry) {
                 // The period was deleted between queueing and running — fail terminally.
                 $this->failSchedule($schedule, 'overlay_entry_missing', 'The overlay period no longer exists.');
+                $this->metricsRecorder?->record($schedule);
                 $this->entityManager->flush();
                 $this->progressPublisher->publishSafely($schedule, ['warnings' => ['The overlay period no longer exists.']]);
 
@@ -214,6 +218,7 @@ final class GenerateScheduleHandler
         } catch (TransportExceptionInterface) {
             $schedule->setStatus(ScheduleStatus::FAILED);
             $this->diagnosticsRecorder->recordSingle($schedule, 'engine_timeout', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation timed out.');
+            $this->metricsRecorder?->record($schedule);
             $this->entityManager->flush();
             $this->progressPublisher->publishSafely($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
@@ -221,6 +226,7 @@ final class GenerateScheduleHandler
             return;
         } catch (Throwable $exception) {
             $this->failSchedule($schedule, 'engine_error', $exception->getMessage());
+            $this->metricsRecorder?->record($schedule);
             $this->entityManager->flush();
             $this->progressPublisher->publishSafely($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
@@ -231,6 +237,7 @@ final class GenerateScheduleHandler
         // Persist the result BEFORE notifying: a COMPLETED solve must be durable
         // even if Mercure is momentarily down (publish is best-effort below).
         $this->applyEngineResult($schedule, $result);
+        $this->metricsRecorder?->record($schedule, $result);
         $this->entityManager->flush();
 
         // planning-versions D2 (phase 2/2): store the photo ONLY on a COMPLETED

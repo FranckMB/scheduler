@@ -125,6 +125,14 @@ classiques avec `#[Route]`.
 | `/api/me/export` | GET | **RGPD portabilité** (self-only, `RgpdExportController`) : compte + adhésions + preuve de consentement + lastLoginAt, JAMAIS le hash. JSON en téléchargement (`Content-Disposition`). Rate-limité `rgpd_export` (10/h par user). NR : `RgpdExportTest`. |
 | `/api/club/export` | GET | **RGPD portabilité club** (management SEC-07, tenant du JWT — pas d'id de chemin ; 404 sans membership actif, 403 non-management) : workspace complet en lignes brutes par table (19 tables, `schedule` sans `snapshot_data`), tenant-scoped garanti par RLS. Rate-limité `rgpd_export`. NR : `RgpdExportTest`. |
 
+### Télémétrie de génération (`SolverMetric.php`)
+
+`solver_metrics` conserve une ligne par tentative de génération (`schedule_id`, `club_id`,
+statut, durée, taille du problème, conflits, score, version du solveur, horodatage). La
+table est sous RLS `FORCE` et le rôle runtime ne voit que le club courant. `Club.lastActivityAt`
+est mis à jour au login authentifié et à la mise en file d'une génération. La rétention et
+le partitionnement sont différés aux jobs SA3.
+
 ### Authentification superadmin (`AdminAuthController.php`)
 
 Identité, provider et firewall stateful séparés de `User`/`ClubUser` et du JWT club. Le

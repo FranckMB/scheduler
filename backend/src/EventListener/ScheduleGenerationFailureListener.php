@@ -10,6 +10,7 @@ use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Mercure\ClubTopicUpdate;
 use App\Message\GenerateScheduleMessage;
+use App\Service\SolverMetricsRecorder;
 use App\Service\TenantConnectionContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -37,6 +38,7 @@ final readonly class ScheduleGenerationFailureListener
         private TenantConnectionContext $tenantConnectionContext,
         private HubInterface $hub,
         private ?LoggerInterface $logger = null,
+        private ?SolverMetricsRecorder $metricsRecorder = null,
     ) {}
 
     public function __invoke(WorkerMessageFailedEvent $event): void
@@ -62,6 +64,7 @@ final readonly class ScheduleGenerationFailureListener
             }
 
             $schedule->setStatus(ScheduleStatus::FAILED);
+            $this->metricsRecorder?->record($schedule);
             $this->entityManager->persist(
                 (new ScheduleDiagnostic)
                     ->setClubId($schedule->getClubId())
