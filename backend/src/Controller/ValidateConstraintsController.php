@@ -7,17 +7,16 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
-use App\Entity\Team;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
-use App\Repository\ConstraintRepository;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintScope;
 use App\Repository\CalendarEntryRepository;
+use App\Repository\ConstraintRepository;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonResolver;
-use App\Enum\CalendarEntryPeriodType;
-use App\Enum\ConstraintScope;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -151,7 +150,7 @@ final class ValidateConstraintsController extends AbstractController
 
         $activeTeamIds = [];
         foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
-            if ($team instanceof Team && !isset($deactivatedTeamIds[$team->getId()])) {
+            if (!isset($deactivatedTeamIds[$team->getId()])) {
                 $activeTeamIds[$team->getId()] = true;
             }
         }
