@@ -63,7 +63,7 @@
   équipe loisir pour la semaine. Les **contraintes** sont l'outil principal d'ajustement.
 - **Résultat** : un calendrier secondaire borné à la semaine ; hors des jours d'indispo,
   les créneaux du socle restants **sont conservés**.
-- **État** : 🟡 partiel — le moteur overlay existe (closure : contraintes héritées
+- **État** : 🟡 partiel — le moteur overlay existe (closure/reprise : contraintes héritées
   cochables #211, expansion venue_closed, créneaux du socle) mais couvre **la fenêtre
   d'indispo entière**, sans découpage hebdo ni notification multi-semaines, et les
   séances/équipe n'y sont pas encore ajustables côté UI (le moteur les supporte —

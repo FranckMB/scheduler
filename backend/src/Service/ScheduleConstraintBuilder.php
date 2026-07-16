@@ -165,6 +165,9 @@ final class ScheduleConstraintBuilder
      *   explicitly disabled) + dated ; each closed venue is expanded into per-team
      *   FACILITY HARD `forbiddenVenueId` constraints — the engine understands
      *   `forbiddenVenueId` (→ forbidden_assignments) but NOT `config.type=venue_closed`.
+     * - holiday (reprise): same expansion applies when a dated venue closure is present;
+     *   the engine still only consumes `forbiddenVenueId`, so the dated cockpit entry is
+     *   rewritten the same way before solve.
      * - holiday (reprise): permanent constraints inherited with a SMART default that
      *   follows the team selection (inheritedPermanents, reprise predicate) + dated.
      *
@@ -264,7 +267,7 @@ final class ScheduleConstraintBuilder
         $this->currentAvailabilitiesByVenue = [];
         $this->currentSessionOverrides = [];
 
-        if (CalendarEntryPeriodType::CLOSURE === $periodType) {
+        if (CalendarEntryPeriodType::CLOSURE === $periodType || CalendarEntryPeriodType::HOLIDAY === $periodType) {
             $payload['constraints'] = array_merge(
                 $payload['constraints'],
                 $this->expandClosedVenues($dated, $teams),
