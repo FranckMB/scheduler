@@ -727,6 +727,29 @@
                                             "type": "string",
                                             "nullable": true
                                         },
+                                        "seasonPlan": {
+                                            "type": [
+                                                "object",
+                                                "null"
+                                            ],
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "name": {
+                                                    "type": "string"
+                                                },
+                                                "chosenScheduleId": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "hasFinishedVersion": {
+                                                    "type": "boolean"
+                                                }
+                                            }
+                                        },
                                         "hasGenerated": {
                                             "type": "boolean"
                                         }
@@ -11277,6 +11300,13 @@
                         "default": 0,
                         "type": "integer"
                     },
+                    "lastActivityAt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
                     "schoolZone": {
                         "type": [
                             "string",
@@ -11458,6 +11488,13 @@
                         "default": 0,
                         "type": "integer"
                     },
+                    "lastActivityAt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
                     "schoolZone": {
                         "type": [
                             "string",
@@ -11559,6 +11596,13 @@
                             "generationCountSeason": {
                                 "default": 0,
                                 "type": "integer"
+                            },
+                            "lastActivityAt": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "date-time"
                             },
                             "schoolZone": {
                                 "type": [
@@ -14779,7 +14823,7 @@
             },
             "SchedulePlan": {
                 "type": "object",
-                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -14837,7 +14881,7 @@
             },
             "SchedulePlan.html": {
                 "type": "object",
-                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -14956,7 +15000,7 @@
                         }
                     }
                 ],
-                "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations."
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version."
             },
             "ScheduleSlotTemplate": {
                 "type": "object",
@@ -17805,7 +17849,7 @@
         },
         {
             "name": "SchedulePlan",
-            "description": "ADR-0002 Lot A: read-only view of the SchedulePlan model (the named container\nof a season/period's versions). Exposed for the frontend to consume in Lot B;\nplans are born by provisioning (season/schedule creation), never via the API,\nso no Post/Put/Delete here \u2014 Lot B adds the lifecycle mutations."
+            "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nLecture seule : un plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version\nchoisie est d\u00e9sign\u00e9e en validant cette version."
         },
         {
             "name": "Schedule",

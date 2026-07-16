@@ -39,7 +39,7 @@
 | **Espace de travail** | Plan au **pointeur null** : on génère/compare des versions, on choisira. Rouvrir y ramène. **Aucun pointage automatique** — seul le gestionnaire pointe. |
 | **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard (`liveContextScheduleId`). **Ce n'est PAS le pointeur du plan** : elle suit chaque génération COMPLETED du socle. |
 | **Plan secondaire** | Plan `CLOSURE`/`HOLIDAY` borné à une période du cockpit — vacances, fermeture. Exige que le plan `SEASON` soit **pointé**. Ne remplace pas le plan de saison. |
-| **Déblocage cockpit** | Le plan `SEASON` possède **≥1 version terminée** (COMPLETED ou FAILED) — exposé par `/api/me.seasonPlanHasFinishedVersion`. |
+| **Déblocage cockpit** | Le plan `SEASON` possède **≥1 version terminée** — exposé par `/api/me.seasonPlan.hasFinishedVersion`. « Terminée » = le solveur a rendu sa réponse : `COMPLETED`/`FAILED`, et tant que le legacy vit aussi `VALIDATED`/`ARCHIVED` (sinon le flag s'inverserait pile à la validation). |
 | **Cockpit** | Vue temporelle de la saison : périodes (`CalendarEntry` PERIOD/EVENT), overlays, matchs. |
 | **Génération** | Pipeline async : controller → Messenger(Redis) → handler (lock + snapshot figé) → engine CP-SAT → import → Mercure. |
 | **Snapshot figé** | Photo des données au moment du dispatch — le solve est **rejouable**, insensible aux éditions concurrentes. |

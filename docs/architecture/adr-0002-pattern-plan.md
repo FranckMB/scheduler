@@ -229,12 +229,25 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   la **numérotation devient monotone** (`SchedulePlan.lastVersionNumber` — une version
   supprimée ne rend jamais son numéro : déféré du lot A). **Rien ne lit encore le
   pointeur pour décider** : aucun comportement ne change (aucun test existant n'a bougé).
-  `/api/me` expose `seasonPlanHasFinishedVersion` (préparé pour la bascule, non consommé).
+  `/api/me` expose le plan de saison (voir le point suivant).
   **Correction d'un vrai bug du lot A (déjà sur main)** : le backfill avait seedé
   `chosenScheduleId` depuis `baselineScheduleId`, or cette baseline est posée
   **automatiquement** à la 1re génération COMPLETED — ce n'est pas une validation. La
   migration **répare** le pointeur (`chosen` := la version `VALIDATED`, sinon `null`) et
   ne supprime **rien**.
+
+- **Modèle de lecture du plan (livré 2026-07-16, ADDITIF)** : `/api/me` expose
+  `seasonPlan { id, name, chosenScheduleId, hasFinishedVersion }` — LE calendrier de base
+  de la saison. **Lecture seule.** Rien ne bascule : le legacy reste exposé et reste la
+  vérité. But : que la bascule n'ait plus qu'à **déplacer des lecteurs**, pas à inventer
+  son contrat en même temps.
+  **Le renommage part AVEC la bascule** (pas avant) : tant que `Season.planningName`
+  possède le nom et le pousse sur le plan (`syncSeasonPlan` à chaque édition de saison),
+  un `PUT` sur le plan serait un **second écrivain** — rename non durable, gate SEC-07
+  contournable par le `PUT /api/seasons` qui écrit le même champ, et contraintes
+  divergentes (varchar 180 vs 120). C'est la demi-migration en miniature. Le nom devient
+  éditable sur le plan dans le commit qui **supprime** `planningName` (et qui devra
+  backfiller `schedule_plan.name` depuis `planningName` une dernière fois).
 
 - **Limites assumées du lot B1** (revues, tracées, à reprendre au lot de bascule) :
   - `SetBaselineController` déplace encore la baseline **sans toucher au pointeur** →

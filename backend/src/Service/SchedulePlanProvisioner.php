@@ -144,6 +144,43 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * ADR-0002 : le plan SEASON d'une saison — LE calendrier de base. Exposé par
+     * /api/me. `chosenScheduleId` = la version choisie (« validée ») ;
+     * `hasFinishedVersion` = le plan porte au moins une version terminée
+     * (déblocage cockpit + mode guidé, inv. 8/16).
+     *
+     * SQL brut, comme le reste des lectures de plan ici : filter-free (la saison
+     * demandée n'est pas forcément l'active) et une seule requête. RLS scope par club.
+     *
+     * @return array{id: string, name: string, chosenScheduleId: string|null, hasFinishedVersion: bool}|null
+     */
+    public function seasonPlanPayload(string $seasonId): ?array
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT p.id, p.name, p.chosen_schedule_id, EXISTS ( '
+            . 'SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id '
+            // Une version « terminée » = le solveur a rendu sa réponse. Les statuts
+            // legacy VALIDATED/ARCHIVED en font partie tant que la bascule n'a pas eu
+            // lieu : les omettre ferait repasser le flag à false pile à la validation
+            // (la version choisie porte le miroir VALIDATED).
+            . 'AND s.status IN (\'COMPLETED\', \'FAILED\', \'VALIDATED\', \'ARCHIVED\')) AS has_finished '
+            . 'FROM schedule_plan p WHERE p.season_id = :sid AND p.type = \'SEASON\'',
+            ['sid' => $seasonId],
+        );
+
+        if (false === $row) {
+            return null; // saison sans plan SEASON (donnée antérieure au lot A)
+        }
+
+        return [
+            'id' => (string) $row['id'],
+            'name' => (string) $row['name'],
+            'chosenScheduleId' => null === $row['chosen_schedule_id'] ? null : (string) $row['chosen_schedule_id'],
+            'hasFinishedVersion' => (bool) $row['has_finished'],
+        ];
+    }
+
+    /**
      * ADR-0002 inv. 10 : le plan d'une période meurt avec la période elle-même.
      * Appelé UNIQUEMENT depuis la suppression de la CalendarEntry — surtout pas
      * depuis deleteOverlayForEntry, que la purge des périodes échues appelle sur des
