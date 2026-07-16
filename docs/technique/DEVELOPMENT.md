@@ -40,7 +40,11 @@ ClubScheduler is a monorepo with three main stacks:
 | redis | 6379 | Cache + Messenger transport |
 | engine | 8000 | Python solver microservice |
 | mercure | 3000 | SSE hub for real-time updates |
+| frontend | 8081 | SPA (nginx) — also proxies `/api`, `/exports`, `/.well-known/mercure`, `/engine` |
 | mailpit | 8025 | Email catcher |
+
+Every port is published on `127.0.0.1` only. To expose the running stack for a remote demo
+(HTTPS, no deploy, no port forwarding), see [demo-tunnel-cloudflare.md](demo-tunnel-cloudflare.md).
 
 ## Commands
 
