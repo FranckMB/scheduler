@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession } from "./api";
+import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -45,5 +45,21 @@ export function useAdminJobs() {
     queryKey: ["admin-jobs"],
     queryFn: getAdminJobs,
     refetchInterval: 60_000,
+  });
+}
+
+export function useRunAdminJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (key: string) => {
+      const csrfToken = useAdminStore.getState().csrfToken;
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return runAdminJob(key, csrfToken);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-jobs"] }),
   });
 }

@@ -14,5 +14,6 @@ final readonly class AdminJobDefinition
         public string $command,
         public AdminJobSchedule $schedule,
         public array $arguments = [],
+        public bool $manualTriggerAllowed = false,
     ) {}
 }

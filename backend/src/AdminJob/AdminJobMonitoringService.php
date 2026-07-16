@@ -25,6 +25,7 @@ final readonly class AdminJobMonitoringService
      *     label: string,
      *     command: string,
      *     cadence: string,
+     *     manualTriggerAllowed: bool,
      *     nextRunAt: string,
      *     latestRun: array{id: string, status: string, source: string, startedAt: string, finishedAt: ?string, durationMs: ?int, exitCode: ?int}|null
      * }>}
@@ -57,6 +58,7 @@ final readonly class AdminJobMonitoringService
      *     label: string,
      *     command: string,
      *     cadence: string,
+     *     manualTriggerAllowed: bool,
      *     nextRunAt: string,
      *     latestRun: array{id: string, status: string, source: string, startedAt: string, finishedAt: ?string, durationMs: ?int, exitCode: ?int}|null
      * }
@@ -68,6 +70,7 @@ final readonly class AdminJobMonitoringService
             'label' => $definition->label,
             'command' => $definition->command,
             'cadence' => $definition->schedule->cadence,
+            'manualTriggerAllowed' => $definition->manualTriggerAllowed,
             'nextRunAt' => $definition->schedule->nextDueAt(DateTimeImmutable::createFromInterface($this->clock->now()), $this->latestScheduledFor($definition->key))->format(DateTimeInterface::ATOM),
             'latestRun' => null === $latest ? null : [
                 'id' => (string) $latest['id'],

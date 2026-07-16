@@ -107,6 +107,7 @@ export interface AdminJob {
   label: string;
   command: string;
   cadence: "every_10_minutes" | "daily" | "quarterly";
+  manualTriggerAllowed: boolean;
   nextRunAt: string;
   latestRun: {
     id: string;
@@ -121,6 +122,12 @@ export interface AdminJob {
 
 export interface AdminJobsResponse {
   items: AdminJob[];
+}
+
+export interface AdminJobRunResponse {
+  key: string;
+  status: "succeeded";
+  exitCode: 0;
 }
 
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
@@ -155,6 +162,10 @@ export function getAdminClubs(page: number, limit: number, query: string): Promi
 
 export function getAdminJobs(): Promise<AdminJobsResponse> {
   return adminApi.get("jobs").json();
+}
+
+export function runAdminJob(key: string, csrfToken: string): Promise<AdminJobRunResponse> {
+  return adminApi.post(`jobs/${encodeURIComponent(key)}/run`, { headers: { "X-CSRF-Token": csrfToken } }).json();
 }
 
 export function logoutAdmin(csrfToken: string): Promise<void> {

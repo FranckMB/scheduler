@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Entity\SuperAdmin;
 use App\Security\TotpService;
+use App\Tests\Double\RecordingAdminJobExecutor;
 use App\Tests\VerifiesRegistration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
@@ -53,6 +54,9 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertResponseStatusCodeSame(401);
 
         $this->client->request('GET', '/api/admin/jobs', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
     }
 
@@ -164,6 +168,41 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertSame('succeeded', $jobsByKey['period-reminders']['latestRun']['status']);
         self::assertSame(1000, $jobsByKey['period-reminders']['latestRun']['durationMs']);
         self::assertNull($jobsByKey['transition-reminders']['latestRun']);
+        self::assertFalse($jobsByKey['purge-seasons']['manualTriggerAllowed']);
+        self::assertTrue($jobsByKey['import-school-holidays']['manualTriggerAllowed']);
+        self::assertTrue($jobsByKey['import-public-holidays']['manualTriggerAllowed']);
+    }
+
+    public function testManualJobTriggerRequiresCsrfAndOnlyAllowsReferenceImports(): void
+    {
+        [$secret] = $this->createSuperAdmin('manual-jobs@example.test', 'VeryStrongPassword!');
+        $csrfToken = $this->authenticate('manual-jobs@example.test', 'VeryStrongPassword!', $secret);
+        $this->client->disableReboot();
+        $executor = self::getContainer()->get(RecordingAdminJobExecutor::class);
+        $executor->reset();
+        $executor->alreadyRunningForKey = 'import-public-holidays';
+
+        $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run');
+        self::assertResponseStatusCodeSame(403);
+
+        $this->client->request('POST', '/api/admin/jobs/purge-seasons/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        self::assertResponseStatusCodeSame(404);
+        self::assertSame([], $executor->calls);
+
+        $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        self::assertResponseIsSuccessful();
+        self::assertSame(['key' => 'import-school-holidays', 'status' => 'succeeded', 'exitCode' => 0], $this->responseBody());
+        self::assertSame([['key' => 'import-school-holidays', 'superAdminId' => $this->adminId]], $executor->calls);
+
+        $this->client->request('POST', '/api/admin/jobs/import-public-holidays/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        self::assertResponseStatusCodeSame(409);
+        self::assertSame('Operational job already running.', $this->responseBody()['error']);
+
+        $executor->alreadyRunningForKey = null;
+        $executor->exitCodes['import-public-holidays'] = Command::FAILURE;
+        $this->client->request('POST', '/api/admin/jobs/import-public-holidays/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        self::assertResponseStatusCodeSame(502);
+        self::assertSame(1, $this->responseBody()['exitCode']);
     }
 
     public function testPasswordAloneDoesNotAuthenticateAndTotpIsMandatory(): void
