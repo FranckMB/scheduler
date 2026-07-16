@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : SA0, SA1 et le premier incrément backend SA2 sont livrés. Les sondes de santé, l'écran de supervision React et les actions cross-tenant restent dans
+> **État courant (2026-07-16)** : SA0, SA1 et l'API backend SA2 sont livrés. L'écran de supervision React et les actions cross-tenant restent dans
 > [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
@@ -79,3 +79,19 @@ La « saison courante » est la saison couvrant la date du jour ; en son absence
 retourne la saison la plus récente. Toutes les lectures sont auditées par la garantie
 fail-closed SA0. `SuperAdminAccessTest` couvre le rejet d'un JWT club et la lecture
 cross-tenant par un superadmin authentifié.
+
+## Santé technique SA2
+
+`GET /api/admin/health` exécute des sondes read-only bornées sur la base admin, Redis,
+l'engine et Mercure. Il expose également le backlog et les échecs des transports
+Messenger, le nombre de retries depuis minuit UTC, et le dernier heartbeat du worker.
+
+Le worker écrit au plus un heartbeat toutes les 10 secondes dans le cache Redis, avec
+une expiration à 60 secondes. L'API le considère `up` jusqu'à 30 secondes ; une absence
+de heartbeat est `unknown`, un heartbeat trop ancien est `down`. Messenger passe
+`degraded` dès qu'un message est dans la failure queue ou que le backlog atteint 100.
+
+Chaque sonde réseau a un timeout court. Une dépendance indisponible ne fait jamais tomber
+l'endpoint : son composant passe `down`/`unknown` et le statut global devient `degraded`.
+Les erreurs, DSN et URL internes ne sont jamais incluses dans la réponse. La route reste
+protégée et auditée comme toutes les routes `/api/admin/**`.

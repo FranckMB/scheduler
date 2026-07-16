@@ -1,7 +1,10 @@
-Last verified @ feature/superadmin-sa2-api 2026-07-16
+Last verified @ feature/superadmin-sa2-health 2026-07-16
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **79 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **80 paths.**
 Changements récents :
+- **Santé technique superadmin SA2 (2026-07-16)** : `GET /api/admin/health`
+  sonde DB, Redis, engine, heartbeat worker et Mercure, puis expose backlog,
+  échecs et retries Messenger sans propager les pannes individuelles.
 - **Supervision superadmin SA2 API (2026-07-16)** : `GET /api/admin/overview`
   expose les agrégats parc/solveur et `GET /api/admin/clubs` la liste transverse
   paginée/recherchable avec saison, volumétrie et métriques sur 30 jours.

@@ -388,6 +388,162 @@
                 ]
             }
         },
+        "/api/admin/health": {
+            "get": {
+                "operationId": "getAdminHealth",
+                "tags": [
+                    "AdminMonitoring"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Bounded infrastructure probes; individual failures produce a degraded payload, never a probe exception",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "healthy",
+                                                "degraded"
+                                            ]
+                                        },
+                                        "checkedAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        },
+                                        "services": {
+                                            "type": "object",
+                                            "properties": {
+                                                "database": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "up",
+                                                                "down",
+                                                                "unknown"
+                                                            ]
+                                                        },
+                                                        "latencyMs": {
+                                                            "type": "integer"
+                                                        }
+                                                    }
+                                                },
+                                                "redis": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "up",
+                                                                "down",
+                                                                "unknown"
+                                                            ]
+                                                        },
+                                                        "latencyMs": {
+                                                            "type": "integer"
+                                                        }
+                                                    }
+                                                },
+                                                "engine": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "up",
+                                                                "down",
+                                                                "unknown"
+                                                            ]
+                                                        },
+                                                        "latencyMs": {
+                                                            "type": "integer"
+                                                        }
+                                                    }
+                                                },
+                                                "worker": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "up",
+                                                                "down",
+                                                                "unknown"
+                                                            ]
+                                                        },
+                                                        "lastHeartbeatAt": {
+                                                            "type": "string",
+                                                            "format": "date-time",
+                                                            "nullable": true
+                                                        },
+                                                        "ageSeconds": {
+                                                            "type": "integer",
+                                                            "nullable": true
+                                                        }
+                                                    }
+                                                },
+                                                "mercure": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "status": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "up",
+                                                                "down",
+                                                                "unknown"
+                                                            ]
+                                                        },
+                                                        "latencyMs": {
+                                                            "type": "integer"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "messenger": {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "up",
+                                                        "degraded",
+                                                        "unknown"
+                                                    ]
+                                                },
+                                                "backlog": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "failed": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "retriesToday": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "backlogWarningThreshold": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Probe DB, Redis, engine, worker heartbeat, Mercure and Messenger queues"
+            }
+        },
         "/api/admin/overview": {
             "get": {
                 "operationId": "getAdminOverview",

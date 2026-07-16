@@ -412,6 +412,39 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
         ];
 
         return [
+            '/api/admin/health' => new PathItem(get: new Operation(
+                operationId: 'getAdminHealth',
+                tags: ['AdminMonitoring'],
+                responses: [
+                    '200' => $this->jsonResponse('Bounded infrastructure probes; individual failures produce a degraded payload, never a probe exception', [
+                        'type' => 'object',
+                        'properties' => [
+                            'status' => ['type' => 'string', 'enum' => ['healthy', 'degraded']],
+                            'checkedAt' => ['type' => 'string', 'format' => 'date-time'],
+                            'services' => ['type' => 'object', 'properties' => [
+                                'database' => $this->healthProbeSchema(),
+                                'redis' => $this->healthProbeSchema(),
+                                'engine' => $this->healthProbeSchema(),
+                                'worker' => ['type' => 'object', 'properties' => [
+                                    'status' => ['type' => 'string', 'enum' => ['up', 'down', 'unknown']],
+                                    'lastHeartbeatAt' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
+                                    'ageSeconds' => ['type' => 'integer', 'nullable' => true],
+                                ]],
+                                'mercure' => $this->healthProbeSchema(),
+                            ]],
+                            'messenger' => ['type' => 'object', 'properties' => [
+                                'status' => ['type' => 'string', 'enum' => ['up', 'degraded', 'unknown']],
+                                'backlog' => ['type' => 'integer', 'nullable' => true],
+                                'failed' => ['type' => 'integer', 'nullable' => true],
+                                'retriesToday' => ['type' => 'integer', 'nullable' => true],
+                                'backlogWarningThreshold' => ['type' => 'integer'],
+                            ]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Probe DB, Redis, engine, worker heartbeat, Mercure and Messenger queues',
+            )),
             '/api/admin/overview' => new PathItem(get: new Operation(
                 operationId: 'getAdminOverview',
                 tags: ['AdminMonitoring'],
@@ -499,6 +532,18 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     ['name' => 'query', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'maxLength' => 100]],
                 ],
             )),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function healthProbeSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'status' => ['type' => 'string', 'enum' => ['up', 'down', 'unknown']],
+                'latencyMs' => ['type' => 'integer'],
+            ],
         ];
     }
 
