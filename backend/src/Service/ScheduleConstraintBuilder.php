@@ -267,12 +267,15 @@ final class ScheduleConstraintBuilder
         $this->currentAvailabilitiesByVenue = [];
         $this->currentSessionOverrides = [];
 
-        if (CalendarEntryPeriodType::CLOSURE === $periodType || CalendarEntryPeriodType::HOLIDAY === $periodType) {
-            $payload['constraints'] = array_merge(
-                $payload['constraints'],
-                $this->expandClosedVenues($dated, $teams),
-            );
-        }
+        // Unconditional: the match above throws on every other period type, so CLOSURE and
+        // HOLIDAY are the only ones that reach this line — guarding on "either of the two"
+        // is a tautology. A new period type gains an arm in that match and MUST decide there
+        // whether its dated venue closures need expanding (the engine only ever consumes
+        // `forbiddenVenueId`, never `config.type=venue_closed`).
+        $payload['constraints'] = array_merge(
+            $payload['constraints'],
+            $this->expandClosedVenues($dated, $teams),
+        );
 
         // Drop any SERIALIZED TEAM row targeting a team deactivated for the period — an
         // original TEAM constraint, OR a CLUB/tag constraint expanded per-team during
@@ -280,7 +283,7 @@ final class ScheduleConstraintBuilder
         // The team is absent from the payload roster, so a ghost teamId here could turn the
         // solve INFEASIBLE. Filtering the serialized payload (not the entity list) catches
         // the CLUB+targetTag expansion the entity-level scope check would miss.
-        if ([] !== $deactivatedTeamIds && \is_array($payload['constraints'])) {
+        if ([] !== $deactivatedTeamIds) {
             $payload['constraints'] = array_values(array_filter(
                 $payload['constraints'],
                 static fn (mixed $row): bool => !\is_array($row)

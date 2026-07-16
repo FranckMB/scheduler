@@ -11,6 +11,7 @@ use App\Enum\SchedulePlanType;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
+use Throwable;
 
 /**
  * ADR-0002 Lot A — the SINGLE point that creates SchedulePlan rows and links a
@@ -233,17 +234,6 @@ final class SchedulePlanProvisioner
         });
     }
 
-    private function currentStructureHash(string $clubId, string $seasonId): ?string
-    {
-        try {
-            $payload = $this->constraintBuilder->buildForClubSeason($clubId, $seasonId);
-
-            return hash('sha256', json_encode($payload, \JSON_THROW_ON_ERROR));
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
     /**
      * Sérialise tout ce qui touche au plan d'un scope (une période, ou la saison).
      * Verrou de TRANSACTION : relâché au commit, ré-entrant (le reprendre plus bas
@@ -280,6 +270,17 @@ final class SchedulePlanProvisioner
             . 'WHERE chosen_schedule_id = :sid',
             ['sid' => $scheduleId],
         ) > 0;
+    }
+
+    private function currentStructureHash(string $clubId, string $seasonId): ?string
+    {
+        try {
+            $payload = $this->constraintBuilder->buildForClubSeason($clubId, $seasonId);
+
+            return hash('sha256', json_encode($payload, \JSON_THROW_ON_ERROR));
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function ensureSeasonPlanId(string $seasonId): ?string
