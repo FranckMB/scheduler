@@ -42,7 +42,7 @@ async function collectionAll<T extends { id: string }>(path: string): Promise<T[
   return all;
 }
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED" | "VALIDATED" | "ARCHIVED";
+export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
 
 /** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
 export const STATUS_LABELS: Record<ScheduleStatus, string> = {
@@ -51,9 +51,7 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   GENERATING: "Génération…",
   COMPLETED: "Terminé",
   FAILED: "Échec",
-  VALIDATED: "Validé",
   // planning-versions: sibling version set aside at validation — hidden from the selector.
-  ARCHIVED: "Archivé",
 };
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
 export type LockLevel = "NONE" | "HARD";
@@ -78,6 +76,12 @@ export interface Schedule {
   hasStructurePhoto?: boolean;
   /** ★ : this version's structure is the season's currently loaded context (set server-side). */
   isLiveContext?: boolean;
+  /**
+   * ADR-0002 inv. 1: this version's plan POINTS at it — it is the one in force.
+   * That is the whole of "validated"; no status says it. Works for the season's
+   * calendar and a period's overlay alike (set server-side).
+   */
+  isChosen?: boolean;
 }
 
 /** Export scope: all venues (null) or a single one. */
@@ -185,10 +189,10 @@ export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
 /** Queue a (re)generation of the schedule (202). Locked slots survive; the rest reshuffles. */
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
-/** Validate a COMPLETED schedule → VALIDATED (finished, read-only). */
+/** Choose a COMPLETED version: its plan points at it (read-only, in force). */
 /**
  * Validate a COMPLETED version → it becomes THE plan (baseline). Validating a
- * non-baseline version while period overlays exist → 409 overlays_exist unless
+ * different version while period overlays exist → 409 overlays_exist unless
  * confirmDeleteOverlays is passed (same destructive idiom as reopen).
  */
 export async function validateSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {
@@ -205,7 +209,7 @@ export async function validateSchedule(id: string, opts?: { confirmDeleteOverlay
   }
 }
 
-/** Thrown when reopening the baseline would delete period overlays (409). */
+/** Thrown when reopening the season's chosen version would delete period overlays (409). */
 export class OverlaysExistError extends Error {
   readonly count: number;
   readonly overlays: { entryId: string; title: string; overlayScheduleId: string }[];
@@ -219,7 +223,8 @@ export class OverlaysExistError extends Error {
 }
 
 /**
- * Reopen a VALIDATED schedule → COMPLETED. Reopening the baseline with overlays
+ * Reopen the version the plan points at → the plan un-points it. Reopening the
+ * season's chosen version with overlays
  * → 409 {code:"overlays_exist"} unless confirmDeleteOverlays is passed.
  */
 export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?: boolean }): Promise<unknown> {
@@ -238,11 +243,11 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
   }
 }
 
-/** Rename a schedule (status echoed as required by the input DTO; blocked server-side when VALIDATED). */
+/** Rename a version (status echoed as required by the input DTO; refused server-side once its plan points at it). */
 export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
   api.put(`schedules/${id}`, { json: { name, status } }).json();
 
-/** Delete a work version (server refuses baseline / VALIDATED / in-flight with 409). */
+/** Delete a work version (server refuses the chosen version / in-flight with 409). */
 export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedules/${id}`).then(() => undefined);
 
 /**

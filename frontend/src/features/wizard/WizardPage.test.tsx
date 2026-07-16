@@ -6,7 +6,7 @@ import { renderWithProviders } from "@/test/utils";
 
 // Established club (a main plan exists) → free wizard navigation, not guided.
 vi.mock("@/features/auth/queries", () => ({
-  useMe: () => ({ data: { baselineScheduleId: "b1", club: { id: "c", name: "C", onboardingCompleted: true } } }),
+  useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "b1", hasFinishedVersion: true }, club: { id: "c", name: "C", onboardingCompleted: true } } }),
 }));
 
 import * as api from "./api";

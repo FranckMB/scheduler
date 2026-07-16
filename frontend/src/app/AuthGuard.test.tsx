@@ -16,7 +16,13 @@ vi.mock("@/shared/stores/toastStore", () => ({ toast: { info } }));
 
 // Onboarding lock is keyed on the baseline (main plan) existing, not the legacy
 // club.onboardingCompleted flag: no baseline → still onboarding → locked.
-const activeMember = (hasBaseline: boolean) => ({ membershipStatus: "active", baselineScheduleId: hasBaseline ? "b1" : null, club: { onboardingCompleted: hasBaseline } });
+// Onboarding is over once the club has generated at least once (inv. 8/16) —
+// keyed on the plan's finished versions, never on its pointer.
+const activeMember = (hasGenerated: boolean) => ({
+  membershipStatus: "active",
+  seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: hasGenerated ? "b1" : null, hasFinishedVersion: hasGenerated },
+  club: { onboardingCompleted: hasGenerated },
+});
 
 function renderAt(path: string) {
   return render(
@@ -54,7 +60,7 @@ describe("AuthGuard — onboarding lock", () => {
   });
 
   it("does NOT fire the cockpit hint for a pending (not-yet-active) member", () => {
-    meState.data = { membershipStatus: "pending", baselineScheduleId: null, club: { onboardingCompleted: false } };
+    meState.data = { membershipStatus: "pending", seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: null, hasFinishedVersion: false }, club: { onboardingCompleted: false } };
     renderAt("/");
     expect(screen.getByText("WAITING")).toBeInTheDocument();
     expect(info).not.toHaveBeenCalled();

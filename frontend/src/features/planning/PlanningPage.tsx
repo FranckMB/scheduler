@@ -92,7 +92,7 @@ function EmptyState({ title, description }: { title: string; description: string
 export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
-  const baselineScheduleId = me?.baselineScheduleId ?? null;
+  const chosenScheduleId = me?.seasonPlan?.chosenScheduleId ?? null;
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
@@ -101,12 +101,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // Keep a valid selection: default to the season base plan, else the latest
   // completed. A selection archived concurrently (sibling validation in another
   // tab) is invalid too — the selector has no option for it.
-  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId && "ARCHIVED" !== s.status) ? selectedScheduleId : null;
+  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
   useEffect(() => {
     if (null === validScheduleId && schedules.length > 0) {
-      setSelectedScheduleId(pickLandingScheduleId(schedules, baselineScheduleId));
+      setSelectedScheduleId(pickLandingScheduleId(schedules, chosenScheduleId));
     }
-  }, [validScheduleId, schedules, baselineScheduleId, setSelectedScheduleId]);
+  }, [validScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
 
   const { data: slots = [] } = useSlots(validScheduleId);
   const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
@@ -191,7 +191,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
-  const isReadOnly = null !== selectedSchedule && "VALIDATED" === selectedSchedule.status;
+  // Read-only = its plan points at it: this version IS the calendar in force.
+  const isReadOnly = true === selectedSchedule?.isChosen;
   // regenerateFromMutation.isPending: "Charger cette version" no longer creates a
   // PENDING schedule (nothing sets isGenerating), so its own restore must disable
   // the action here — else a second click double-runs the destructive restore.
@@ -275,14 +276,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   }
 
   // The season the user is WORKING IN: the explicit selection (X-Season-Id,
-  // seasonStore) first, else the calendar-current one — renaming must target
-  // the season whose planningName is displayed, never silently another one.
+  // seasonStore) first, else the calendar-current one. Only used for the title
+  // fallback and the read-only check — renaming targets me.seasonPlan, which the
+  // server already resolved for the SELECTED season, so it can never drift.
   const workingSeason =
     me?.seasons.find((sn) => sn.id === selectedSeasonId)
     ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
     ?? me?.seasons.find((sn) => sn.isCurrent)
     ?? null;
-  const planningTitle = me?.planningName ?? (workingSeason ? `Planning ${workingSeason.name}` : "Planning");
+  const planningTitle = me?.seasonPlan?.name ?? "Planning";
   const structureDiverged =
     null !== selectedSchedule && null === selectedSchedule.calendarEntryId
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -301,8 +303,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             onChange={(e) => setEditingPlanningName(e.target.value)}
             onKeyDown={(e) => {
               if ("Enter" === e.key) {
-                if (workingSeason) {
-                  renamePlanning.mutate({ seasonId: workingSeason.id, planningName: editingPlanningName.trim() });
+                if (me?.seasonPlan) {
+                  renamePlanning.mutate({ planId: me.seasonPlan.id, name: editingPlanningName.trim() });
                 }
                 setEditingPlanningName(null);
               } else if ("Escape" === e.key) {
@@ -314,16 +316,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           />
         ) : (
           <>
-            {/* planning-versions: THE plan's name lives here (Season.planningName), not in the version selector. */}
+            {/* ADR-0002 inv. 12: THE plan's name lives here, on the plan — not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
-            {null !== selectedSchedule && selectedSchedule.id === baselineScheduleId ? (
+            {true === selectedSchedule?.isChosen ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
                 principal
               </span>
             ) : null}
             {workingSeason && !workingSeason.isReadonly ? (
-              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.planningName ?? "")}>
+              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.seasonPlan?.name ?? "")}>
                 <Pencil className="size-4" />
               </Button>
             ) : null}
@@ -369,7 +371,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onReopen={() => reopen()}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
-              baselineScheduleId={baselineScheduleId}
+              chosenScheduleId={chosenScheduleId}
               embedded={embedded}
               rightSlot={
                 <>
@@ -457,7 +459,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {validateOpen ? (
         <ValidateDialog
           hasAlerts={diagnostics.length > 0}
-          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId && !["VALIDATED", "PENDING", "GENERATING"].includes(sc.status)).length}
+          siblingCount={visibleSeasonPlans(schedules).filter((sc) => sc.id !== validScheduleId && true !== sc.isChosen && !["PENDING", "GENERATING"].includes(sc.status)).length}
           busy={validateMutation.isPending}
           onCancel={() => setValidateOpen(false)}
           onConfirm={() => validate()}

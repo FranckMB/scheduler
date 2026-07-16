@@ -7,14 +7,14 @@ import { CockpitPage } from "./CockpitPage";
 import { addDays, monthWindow, todayISO } from "./lib/date";
 import { PUBLIC_HOLIDAY_HORIZON_DAYS } from "./RadarPanel";
 
-let meData: { socleValidatedAt: string | null; baselineScheduleId: string | null } | null = null;
+let meData: { seasonPlan: { id: string; name: string; chosenScheduleId: string | null; hasFinishedVersion: boolean } } | null = null;
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({ data: meData, isLoading: false }),
 }));
 
 vi.mock("@/features/planning/queries", () => ({
-  useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "VALIDATED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null }] }),
+  useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "COMPLETED", score: 9011, createdAt: "", updatedAt: "", calendarEntryId: null, isChosen: true }] }),
   useReopenSchedule: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -53,13 +53,13 @@ describe("CockpitPage state machine", () => {
   });
 
   it("state 1 — no main plan (baseline null) → redirects to the wizard", () => {
-    meData = { socleValidatedAt: null, baselineScheduleId: null };
+    meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: null, hasFinishedVersion: false } };
     renderCockpit();
     expect(screen.getByText("WIZARD SCREEN")).toBeInTheDocument();
   });
 
   it("state 2 — baseline exists but not validated → cockpit unlocked with a lock hint", () => {
-    meData = { socleValidatedAt: null, baselineScheduleId: "s1" };
+    meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: null, hasFinishedVersion: true } };
     renderCockpit();
     expect(screen.getByText("Planning principal")).toBeInTheDocument();
     expect(screen.getByText(/validez-le pour débloquer/i)).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("CockpitPage state machine", () => {
   });
 
   it("state 3 — validated → full cockpit, no lock hint", () => {
-    meData = { socleValidatedAt: "2026-01-15T10:00:00Z", baselineScheduleId: "s1" };
+    meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } };
     renderCockpit();
     expect(screen.getByText("Planning principal")).toBeInTheDocument();
     expect(screen.getByText("À traiter")).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("CockpitPage state machine", () => {
   });
 
   it("fetches public holidays on two explicit windows: visible month grid + radar horizon", () => {
-    meData = { socleValidatedAt: "2026-01-15T10:00:00Z", baselineScheduleId: "s1" };
+    meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } };
     renderCockpit();
 
     const now = new Date();

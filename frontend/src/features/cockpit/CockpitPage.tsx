@@ -6,7 +6,7 @@ import { useMe } from "@/features/auth/queries";
 import { useSchedules } from "@/features/planning/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { BaselineBanner } from "./BaselineBanner";
+import { SeasonPlanBanner } from "./SeasonPlanBanner";
 import { isAdaptableHoliday } from "./lib/holidays";
 import { MonthCalendar } from "./MonthCalendar";
 import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
@@ -40,15 +40,16 @@ export function CockpitPage() {
   if (isLoading) {
     return <FullPageSpinner />;
   }
-  // Onboarding (no main plan yet) → the wizard is home (AuthGuard also enforces
-  // this; kept here as a defensive redirect). Once a baseline exists the cockpit
-  // is the home screen, whether or not the socle is validated yet.
-  if (null === (me?.baselineScheduleId ?? null)) {
+  // Onboarding (the club has never generated) → the wizard is home (AuthGuard
+  // also enforces this; kept here as a defensive redirect). Once a version has
+  // been produced the cockpit is the home screen, whether or not the manager has
+  // settled on one yet.
+  if (!me?.seasonPlan?.hasFinishedVersion) {
     return <Navigate to="/wizard" replace />;
   }
-  // State 2 (baseline exists but not validated): the cockpit is reachable but
-  // matches + secondary plans stay locked until the main plan is validated.
-  const socleValidated = null !== me?.socleValidatedAt;
+  // State 2 (versions exist but the plan points at none): the cockpit is
+  // reachable, but matches + secondary plans stay locked until it does.
+  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
 
   const prev = () => setCursor((c) => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }));
   const next = () => setCursor((c) => (c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }));
@@ -63,7 +64,7 @@ export function CockpitPage() {
           </span>
         </div>
       ) : null}
-      <BaselineBanner schedules={schedules} baselineScheduleId={me?.baselineScheduleId ?? null} socleValidated={socleValidated} loading={schedulesLoading} />
+      <SeasonPlanBanner schedules={schedules} chosenScheduleId={me?.seasonPlan?.chosenScheduleId ?? null} socleValidated={socleValidated} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel

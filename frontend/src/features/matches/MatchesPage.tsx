@@ -86,8 +86,9 @@ export function MatchesPage() {
     );
   }
 
-  // Matches are locked until the season's main plan is validated (cockpit state 2).
-  if (null === (me?.socleValidatedAt ?? null)) {
+  // Matches are locked until the season's plan points at a version (cockpit
+  // state 2) — the same condition the server's SocleGuard enforces on writes.
+  if (null == me?.seasonPlan?.chosenScheduleId) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <Lock className="mx-auto mb-3 size-8 text-accent" />

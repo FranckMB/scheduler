@@ -12,7 +12,8 @@ import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
   schedules: Schedule[];
-  baselineScheduleId: string | null;
+  /** The version the season's plan points at, or null (espace de travail). */
+  chosenScheduleId: string | null;
   onClose: () => void;
 }
 
@@ -62,18 +63,18 @@ function CompactExport({ scheduleId, label }: { scheduleId: string; label: strin
  * versions of a plan. Each row consults (eye) or exports the planning directly.
  * The main plan is a fact (★) — no "set as main" here.
  */
-export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }: SeasonSchedulesModalProps) {
+export function SeasonSchedulesModal({ schedules, chosenScheduleId, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const rows = seasonPlannings(schedules, baselineScheduleId);
+  const rows = seasonPlannings(schedules, chosenScheduleId);
 
-  // Routing like the banner's "Ouvrir": a period overlay or a VALIDATED season
+  // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a
   // season plan still IN PROGRESS (COMPLETED-not-yet-validated) opens the
   // wizard's generation step to finish/validate it — an overlay is never sent
   // there (the wizard's generate step renders the season plan, not the overlay).
   const consult = (row: PlanningRow) => {
-    if (row.isOverlay || "VALIDATED" === row.status) {
+    if (row.isOverlay || row.isChosen) {
       setSelectedScheduleId(row.id);
       navigate("/planning");
       return;
@@ -89,7 +90,7 @@ export function SeasonSchedulesModal({ schedules, baselineScheduleId, onClose }:
           <li key={row.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                {row.isBaseline ? <Star className="size-3.5 fill-accent text-accent" /> : null}
+                {row.isChosen ? <Star className="size-3.5 fill-accent text-accent" /> : null}
                 {row.label}
               </p>
               <p className="text-xs text-muted-foreground">{STATUS_LABELS[row.status]}</p>

@@ -35,10 +35,10 @@ const schedules = [
   plan({ id: "o2", name: "Vacances Toussaint", calendarEntryId: "p1", createdAt: "2026-07-04T10:00:00+00:00" }),
 ];
 
-function open(list: Schedule[], baselineScheduleId: string | null = "v2") {
+function open(list: Schedule[], chosenScheduleId: string | null = "v2") {
   return render(
     <MemoryRouter>
-      <SeasonSchedulesModal schedules={list} baselineScheduleId={baselineScheduleId} onClose={vi.fn()} />
+      <SeasonSchedulesModal schedules={list} chosenScheduleId={chosenScheduleId} onClose={vi.fn()} />
     </MemoryRouter>,
   );
 }
@@ -70,8 +70,8 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(screen.getByText("Terminé")).toBeInTheDocument(); // v1's COMPLETED label, not FAILED/GENERATING
   });
 
-  it("eye on a validated planning opens the planning page", async () => {
-    open([plan({ id: "v1", status: "VALIDATED" })], "v1");
+  it("eye on the planning in force opens the planning page", async () => {
+    open([plan({ id: "v1", status: "COMPLETED", isChosen: true })], "v1");
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("v1");
     expect(navigate).toHaveBeenCalledWith("/planning");

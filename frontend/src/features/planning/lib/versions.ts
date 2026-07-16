@@ -10,21 +10,20 @@ interface VersionLike {
 }
 
 /**
- * planning-versions (specs/evolution/planning-versions.md): the selector lists
- * the WORK VERSIONS of one season plan, not named schedules. ARCHIVED versions
- * (siblings set aside at validation) are hidden everywhere.
+ * ADR-0002: the selector lists the WORK VERSIONS of one season plan, not named
+ * schedules — the plan's NAME lives on the plan. Nothing to hide any more:
+ * validating deletes the siblings outright instead of archiving them.
  */
 export function visibleSeasonPlans<T extends VersionLike>(schedules: T[]): T[] {
-  return schedules.filter((s) => null === s.calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return schedules.filter((s) => null === s.calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 /**
- * planning-versions (overlay versions): the visible work versions of ONE period's
- * overlay (same calendarEntryId), ARCHIVED hidden, chronological — the period's
- * own version selector, mirroring visibleSeasonPlans for a season plan.
+ * The visible work versions of ONE period's overlay (same calendarEntryId),
+ * chronological — the period's own version selector, mirroring visibleSeasonPlans.
  */
 export function visibleOverlayVersions<T extends VersionLike>(schedules: T[], calendarEntryId: string): T[] {
-  return schedules.filter((s) => s.calendarEntryId === calendarEntryId && "ARCHIVED" !== s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return schedules.filter((s) => s.calendarEntryId === calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 /**
@@ -49,10 +48,10 @@ export function liveContextScheduleId<T extends VersionLike & { id: string }>(sc
  * an empty planning or export an empty file. Returns null when nothing has
  * finished yet (a brand-new planning still solving): there is no plan to consult
  * or export, so the row is omitted rather than pointing at an in-flight version.
- * Input is a visible* set (sorted createdAt asc, ARCHIVED excluded).
+ * Input is a visible* set (sorted createdAt asc).
  */
 export function representativeVersion<T extends VersionLike>(versions: T[]): T | null {
-  const finished = versions.filter((s) => "VALIDATED" === s.status || "COMPLETED" === s.status);
+  const finished = versions.filter((s) => "COMPLETED" === s.status);
   return finished.at(-1) ?? null;
 }
 
@@ -64,12 +63,11 @@ function versionStamp(createdAt: string, index: number): string {
 }
 
 /**
- * Version label "V3 — 10 juil. 14:32": chronological index among ALL season
- * plans (createdAt asc), ARCHIVED included — an archived sibling keeps its
- * number slot, so the version the manager just validated as "V2" is still
- * labelled V2 after its siblings are archived. Numbers only shift on a hard
- * delete (workspace semantics; the date keeps the anchor). An overlay keeps
- * its period title (the caller falls back to schedule.name).
+ * Version label "V3 — 10 juil. 14:32": chronological index among the plan's
+ * season versions (createdAt asc). Numbers shift when a version is deleted —
+ * workspace semantics, and the date keeps the anchor. Validating collapses the
+ * plan to the single version it points at, which is then simply V1. An overlay
+ * keeps its period title (the caller falls back to schedule.name).
  */
 export function versionLabels(schedules: Schedule[]): Map<string, string> {
   const plans = schedules.filter((s) => null === s.calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -79,9 +77,8 @@ export function versionLabels(schedules: Schedule[]): Map<string, string> {
 }
 
 /**
- * V{n} labels for the overlay versions of ONE period (chronological, ARCHIVED
- * included so a validated version keeps its number after its siblings are set
- * aside — same stable-numbering rule as season versionLabels).
+ * V{n} labels for the overlay versions of ONE period (chronological) — same rule
+ * as season versionLabels.
  */
 export function overlayVersionLabels(schedules: Schedule[], calendarEntryId: string): Map<string, string> {
   const versions = schedules.filter((s) => s.calendarEntryId === calendarEntryId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));

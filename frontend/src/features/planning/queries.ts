@@ -162,14 +162,14 @@ export function useValidateSchedule() {
     mutationFn: ({ id, confirmDeleteOverlays }: { id: string; confirmDeleteOverlays?: boolean }) => planningApi.validateSchedule(id, { confirmDeleteOverlays }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      // Validating the baseline stamps Season.socleValidatedAt (surfaced on /me),
-      // which unlocks the cockpit — refresh it so the home screen opens at once.
+      // Validating moves the plan's pointer (surfaced on /me.seasonPlan), which
+      // unlocks matches + secondary plans — refresh it so the home screen follows.
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }
 
-/** Reopen a VALIDATED schedule → COMPLETED (editable again). Accepts the overlay-delete confirm flag. */
+/** Reopen the version the plan points at → editable again. Accepts the overlay-delete confirm flag. */
 export function useReopenSchedule() {
   const queryClient = useQueryClient();
   return useMutation({

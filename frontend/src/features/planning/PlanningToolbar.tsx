@@ -28,7 +28,7 @@ interface PlanningToolbarProps {
   onRegenerateFrom: () => void;
   isGenerating: boolean;
   actionBusy: boolean;
-  baselineScheduleId: string | null;
+  chosenScheduleId: string | null;
   /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
   rightSlot?: ReactNode;
   /** Wizard-embedded (generation step) vs standalone /planning consultation. The
@@ -40,7 +40,7 @@ interface PlanningToolbarProps {
 /**
  * planning-versions: the selector lists the WORK VERSIONS of the season plan
  * ("V3 — 10 juil. 14:32", newest last), never named schedules — the plan's
- * NAME lives in the page header (Season.planningName). Versions are not
+ * NAME lives in the page header (on the plan itself). Versions are not
  * renamable; a version can be deleted (workspace) behind a DeleteConfirm.
  *
  * The season's MAIN plan (baseline) is never chosen here: the first validated
@@ -60,13 +60,16 @@ export function PlanningToolbar({
   onRegenerateFrom,
   isGenerating,
   actionBusy,
-  baselineScheduleId,
+  chosenScheduleId,
   rightSlot,
   embedded = false,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
-  const isBaseline = null !== selected && selected.id === baselineScheduleId;
-  const isValidated = null !== selected && "VALIDATED" === selected.status;
+  // ADR-0002: "in force" is the plan's pointer and nothing else. isSeasonChosen
+  // asks it of the SEASON plan; isChosen asks it of this version's own plan (which
+  // for an overlay is its period's) — the two differ, so keep them apart.
+  const isSeasonChosen = null !== selected && selected.id === chosenScheduleId;
+  const isChosen = true === selected?.isChosen;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && null !== selected.calendarEntryId;
   // ★ = the version whose structure is the currently LOADED context. Season plans:
@@ -86,10 +89,10 @@ export function PlanningToolbar({
   const overlayLabels = isOverlay && null !== selected?.calendarEntryId ? overlayVersionLabels(schedules, selected.calendarEntryId) : null;
   const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
   // Deletable = a plain work version: never the baseline (anchors the season),
-  // never VALIDATED (read-only), never mid-solve, never an overlay.
-  const canDelete = null !== selected && !isBaseline && !isValidated && !isInFlight && !isOverlay;
+  // never the version in force (read-only), never mid-solve, never an overlay.
+  const canDelete = null !== selected && !isSeasonChosen && !isChosen && !isInFlight && !isOverlay;
   // "Load this version" (restore its structure + regenerate) is offered only on a
-  // finished, non-locked COMPLETED version (a VALIDATED one is read-only — reopen
+  // finished, non-locked COMPLETED version (the one in force is read-only — reopen
   // first; the backend refuses it anyway) that actually carries a structure photo:
   // a pre-D2 plan has a solver payload but no photo, so the restore would 409 —
   // don't offer an action that cannot succeed.
@@ -122,7 +125,7 @@ export function PlanningToolbar({
               <option key={schedule.id} value={schedule.id}>
                 {labelOf(schedule)}
                 {isStarred(schedule) ? " ★" : ""}
-                {"VALIDATED" === schedule.status ? " · validé" : ""}
+                {true === schedule.isChosen ? " · en vigueur" : ""}
                 {null !== schedule.calendarEntryId ? " · période" : ""}
               </option>
             ))}
@@ -136,7 +139,7 @@ export function PlanningToolbar({
         {embedded && selected ? (
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
-              {isValidated ? <Lock className="size-3" /> : null}
+              {isChosen ? <Lock className="size-3" /> : null}
               {STATUS_LABELS[selected.status]}
             </span>
             {null !== selected.score ? <span>score {selected.score}</span> : null}
@@ -145,13 +148,16 @@ export function PlanningToolbar({
             ) : null}
           </span>
         ) : null}
-        {isCompleted ? (
+        {isCompleted && !isChosen ? (
+          // Choosing a version the plan ALREADY points at is a no-op: the status
+          // used to hide this (VALIDATED was not COMPLETED); now only the pointer
+          // says "in force", so ask it directly.
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
             <CheckCircle2 className="size-4" />
             Valider
           </Button>
         ) : null}
-        {isValidated ? (
+        {isChosen ? (
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onReopen}>
             <LockOpen className="size-4" />
             Rouvrir
@@ -174,7 +180,7 @@ export function PlanningToolbar({
 
       {/* Row 2 — generation actions, with export + filter right-aligned. */}
       <div className="flex flex-wrap items-center gap-2">
-        {isValidated ? null : (
+        {isChosen ? null : (
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
           // not show a misleading "Génération…".

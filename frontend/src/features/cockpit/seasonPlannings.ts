@@ -5,22 +5,23 @@ export interface PlanningRow {
   id: string;
   label: string;
   status: Schedule["status"];
-  isBaseline: boolean;
+  /** Le plan de la saison pointe une version = ce planning est en vigueur. */
+  isChosen: boolean;
   isOverlay: boolean;
 }
 
-export function seasonPlannings(schedules: Schedule[], baselineScheduleId: string | null): PlanningRow[] {
+export function seasonPlannings(schedules: Schedule[], chosenScheduleId: string | null): PlanningRow[] {
   const rows: PlanningRow[] = [];
   const seasonMain = representativeVersion(visibleSeasonPlans(schedules));
   if (null !== seasonMain) {
-    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isBaseline: null !== baselineScheduleId, isOverlay: false });
+    rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isChosen: null !== chosenScheduleId, isOverlay: false });
   }
   const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
   const periods: PlanningRow[] = [];
   for (const entryId of periodIds) {
     const version = representativeVersion(visibleOverlayVersions(schedules, entryId));
     if (null !== version) {
-      periods.push({ id: version.id, label: version.name, status: version.status, isBaseline: false, isOverlay: true });
+      periods.push({ id: version.id, label: version.name, status: version.status, isChosen: true === version.isChosen, isOverlay: true });
     }
   }
   periods.sort((a, b) => a.label.localeCompare(b.label));

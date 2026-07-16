@@ -150,6 +150,16 @@ class ScheduleResource
     #[Groups(['read'])]
     public bool $isLiveContext = false;
 
+    /**
+     * ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of
+     * "validated" — the plan holds the version that counts, and there is no status
+     * saying so. True for the season's calendar in force and for a period's overlay
+     * in force alike. Set by ScheduleStateProvider (batched); false on the bare
+     * fromEntity path.
+     */
+    #[Groups(['read'])]
+    public bool $isChosen = false;
+
     public static function fromEntity(Schedule $entity): self
     {
         $dto = new self;

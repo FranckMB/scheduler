@@ -8,21 +8,22 @@ import { Button } from "@/shared/components/ui/button";
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 import { seasonPlanCounts } from "./seasonPlannings";
 
-interface BaselineBannerProps {
+interface SeasonPlanBannerProps {
   schedules: Schedule[];
-  baselineScheduleId: string | null;
-  /** Whether the season's socle is validated (state 3) or not yet (state 2). */
+  /** The version the season's plan points at — its calendar in force, or null. */
+  chosenScheduleId: string | null;
+  /** Whether the plan points at a version (state 3) or not yet (state 2). */
   socleValidated: boolean;
   /** Schedules query still in flight — don't flash "aucun planning principal". */
   loading?: boolean;
 }
 
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
-export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, loading = false }: BaselineBannerProps) {
+export function SeasonPlanBanner({ schedules, chosenScheduleId, socleValidated, loading = false }: SeasonPlanBannerProps) {
   const navigate = useNavigate();
   const [listOpen, setListOpen] = useState(false);
 
-  const baseline = schedules.find((s) => s.id === baselineScheduleId) ?? null;
+  const chosen = schedules.find((s) => s.id === chosenScheduleId) ?? null;
   // Distinct plannings = the season main plan (1) + one per period overlay
   // (versions are navigated inside the planning, not counted here).
   // Both counts from one derivation (finished period plannings only, consistent
@@ -45,10 +46,10 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
       <div>
         <p className="text-sm font-semibold">Planning principal</p>
         <p className="text-xs text-muted-foreground">
-          {baseline ? (
+          {chosen ? (
             <>
-              {STATUS_LABELS[baseline.status]}
-              {baseline.score !== null ? ` · score ${baseline.score}` : ""}
+              {STATUS_LABELS[chosen.status]}
+              {chosen.score !== null ? ` · score ${chosen.score}` : ""}
               {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
             </>
           ) : loading ? (
@@ -70,7 +71,7 @@ export function BaselineBanner({ schedules, baselineScheduleId, socleValidated, 
         </Button>
       </div>
 
-      {listOpen ? <SeasonSchedulesModal schedules={schedules} baselineScheduleId={baselineScheduleId} onClose={() => setListOpen(false)} /> : null}
+      {listOpen ? <SeasonSchedulesModal schedules={schedules} chosenScheduleId={chosenScheduleId} onClose={() => setListOpen(false)} /> : null}
     </div>
   );
 }

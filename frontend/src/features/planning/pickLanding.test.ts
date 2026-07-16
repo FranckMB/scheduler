@@ -13,13 +13,13 @@ describe("pickLandingScheduleId (UX-02)", () => {
     expect(pickLandingScheduleId(schedules, "base")).toBe("base");
   });
 
-  it("NEVER opens on an overlay baseline — falls back to a real season plan", () => {
-    // The bug: baselineScheduleId points to a period overlay (empty "★ · période").
+  it("NEVER opens on an overlay — falls back to a real season plan", () => {
+    // The bug: the pointer names a period overlay (empty "★ · période").
     const schedules = [overlay("ov-baseline"), seasonPlan("real-plan")];
     expect(pickLandingScheduleId(schedules, "ov-baseline")).toBe("real-plan");
   });
 
-  it("skips a mid-flight baseline and lands on the latest finished season plan", () => {
+  it("skips a mid-flight chosen version and lands on the latest finished season plan", () => {
     const schedules = [seasonPlan("regenerating", "GENERATING"), seasonPlan("ready", "COMPLETED", "2025-11-01T00:00:00Z")];
     expect(pickLandingScheduleId(schedules, "regenerating")).toBe("ready");
   });
