@@ -107,8 +107,15 @@ jobs:
           docker compose run --rm --no-deps engine pip freeze | grep -vE '^(-e |clubscheduler-engine)' > engine-deps.txt
           pipx run pip-audit --requirement engine-deps.txt
 
+  # Static analysis AND code style. CS-Fixer lives here rather than in the `lint`
+  # job because it needs the PHP container this job already pays for (that job has
+  # no PHP setup at all — it lints docker-compose + the Makefile in ~5 s). Same
+  # gate either way: both feed `blocking-tests`.
+  # Until 2026-07-17, CS-Fixer ran NOWHERE in CI — combined with the dormant
+  # pre-commit hook (roadmap P4-11), nothing guarded PHP code style, and main was
+  # merged red on it twice (PRs #241 and #244).
   phpstan:
-    name: PHPStan
+    name: PHPStan & CS-Fixer
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -126,6 +133,11 @@ jobs:
 
       - name: Run PHPStan
         run: docker compose exec -T php-fpm composer phpstan
+
+      # Same command as `make -C backend cs` — dry-run, so CI reports the diff
+      # instead of rewriting files. Fix locally with `make -C backend cs-fix`.
+      - name: Run PHP-CS-Fixer (dry-run)
+        run: docker compose exec -T php-fpm composer cs-fix -- --dry-run --diff
 
   blocking-tests:
     name: Blocking Tests
