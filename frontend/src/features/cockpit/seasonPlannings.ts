@@ -1,5 +1,5 @@
 import type { Schedule } from "@/features/planning/api";
-import { planRepresentative, visibleOverlayVersions, visibleSeasonPlans } from "@/features/planning/lib/versions";
+import { isSeasonPlanType, planRepresentative, visibleOverlayVersions, visibleSeasonPlans } from "@/features/planning/lib/versions";
 
 export interface PlanningRow {
   id: string;
@@ -17,10 +17,11 @@ export function seasonPlannings(schedules: Schedule[]): PlanningRow[] {
   if (null !== seasonMain) {
     rows.push({ id: seasonMain.id, label: "Planning principal", status: seasonMain.status, isChosen: true === seasonMain.isChosen, isOverlay: false });
   }
-  const periodIds = [...new Set(schedules.filter((s) => null !== s.calendarEntryId).map((s) => s.calendarEntryId as string))];
+  // ADR-0002 C4 : un planning secondaire = les versions d'un plan de période (schedulePlanId).
+  const overlayPlanIds = [...new Set(schedules.filter((s) => !isSeasonPlanType(s.planType)).map((s) => s.schedulePlanId as string))];
   const periods: PlanningRow[] = [];
-  for (const entryId of periodIds) {
-    const version = planRepresentative(visibleOverlayVersions(schedules, entryId));
+  for (const planId of overlayPlanIds) {
+    const version = planRepresentative(visibleOverlayVersions(schedules, planId));
     if (null !== version) {
       periods.push({ id: version.id, label: version.name, status: version.status, isChosen: true === version.isChosen, isOverlay: true });
     }

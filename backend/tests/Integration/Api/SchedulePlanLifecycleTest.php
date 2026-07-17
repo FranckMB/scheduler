@@ -156,15 +156,16 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $this->em->flush();
         // ADR-0002 lot C : le plan naît DU GESTE. En prod le POST /api/calendar_entries
         // le crée ; l'entrée étant fabriquée à la main, on rejoue le geste.
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
-        // La version d'overlay se raccroche au plan déjà né.
+        // La version d'overlay se raccroche au plan déjà né (depuis C4 : par schedulePlanId,
+        // que l'appelant POSE ; linkSchedule ne fait plus que numéroter).
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());
         $overlay->setSeasonId($season->getId());
         $overlay->setName('Overlay');
         $overlay->setStatus(ScheduleStatus::COMPLETED);
-        $overlay->setCalendarEntryId($entry->getId());
+        $overlay->setSchedulePlanId($planId);
         $this->em->persist($overlay);
         $this->em->flush();
         $this->provisioner->linkSchedule($overlay);
@@ -246,6 +247,9 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $schedule->setName('Version');
         $schedule->setStatus($status);
         $this->em->persist($schedule);
+        $this->em->flush();
+        // C4 : linkSchedule numérote — la version de saison doit d'abord porter son plan SEASON.
+        $schedule->setSchedulePlanId($this->provisioner->ensureSeasonPlanId($season->getId()));
         $this->em->flush();
         $this->provisioner->linkSchedule($schedule);
         $this->em->flush();

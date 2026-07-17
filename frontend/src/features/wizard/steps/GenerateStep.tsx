@@ -3,8 +3,9 @@ import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import type { ScheduleStatus } from "@/features/planning/api";
+import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useSchedules } from "@/features/planning/queries";
@@ -31,6 +32,8 @@ export function GenerateStep() {
   const { mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  // ADR-0002 C4 : une version se crée SOUS le plan de sa période — résolu depuis l'entrée.
+  const { planId: periodPlanId, ready: periodAnchorReady } = usePeriodAnchor(periodMode ? calendarEntryId : null);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
@@ -53,7 +56,7 @@ export function GenerateStep() {
   // planning-versions: validating archives the COMPLETED siblings — a season
   // A finished version is a finished version: choosing one no longer rewrites its
   // status, so COMPLETED alone answers "has this club generated?".
-  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => null === s.calendarEntryId && "COMPLETED" === s.status);
+  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => isSeasonPlanType(s.planType) && "COMPLETED" === s.status);
   const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
   const showPlanning = periodMode ? overlayDone : hasCompleted || (anyInFlight && null === scheduleId);
 
@@ -70,7 +73,7 @@ export function GenerateStep() {
   // §2bis warning: the FIRST overlay freezes the socle (editing the baseline
   // afterwards destroys the overlays after an explicit confirm). Gated on the
   // loaded list — an empty in-flight default would flash it for a non-first overlay.
-  const isFirstOverlay = periodMode && !schedulesLoading && !schedules.some((s) => null !== s.calendarEntryId);
+  const isFirstOverlay = periodMode && !schedulesLoading && !schedules.some((s) => !isSeasonPlanType(s.planType));
 
   useEffect(() => {
     if (null === scheduleId) {
@@ -109,6 +112,12 @@ export function GenerateStep() {
   const initial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   const start = async () => {
+    // Garde anti-course : en mode période, ne jamais lancer sans le plan résolu — sinon le POST
+    // omettrait schedulePlanId et créerait une version de SAISON au lieu de l'overlay. Le bouton
+    // est déjà désactivé tant que l'ancre n'est pas prête ; ceci ferme le chemin par sécurité.
+    if (periodMode && (null === periodPlanId || !periodAnchorReady)) {
+      return;
+    }
     setTimedOut(false);
     launch.reset();
     setScheduleId(null);
@@ -117,7 +126,7 @@ export function GenerateStep() {
         periodMode
           ? {
               name: periodEntry?.title ?? "Plan de période",
-              calendarEntryId: calendarEntryId ?? undefined,
+              schedulePlanId: periodPlanId ?? undefined,
               existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
             }
           : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
@@ -172,7 +181,7 @@ export function GenerateStep() {
           <BlockerList blockers={blockers} className="max-w-md text-left" />
           {/* Period mode: wait for the entry to load so an existing overlay is
               regenerated (not duplicated → backend 422). Also gated by blockers. */}
-          <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && !periodEntry)}>
+          <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
             <Rocket className="size-4" />
             {periodMode ? "Générer le planning de période" : "Lancer la génération"}
           </Button>

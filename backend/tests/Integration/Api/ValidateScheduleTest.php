@@ -318,12 +318,11 @@ final class ValidateScheduleTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $schedule->setCalendarEntryId($calendarEntryId);
         $this->em->persist($schedule);
         $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 la validation
         // lèverait sur une version sans plan (periodEntryIdOf).
-        $this->linkSeededSchedule($schedule);
+        $this->linkSeededSchedule($schedule, $calendarEntryId);
 
         return $schedule;
     }

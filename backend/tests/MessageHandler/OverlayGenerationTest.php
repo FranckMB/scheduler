@@ -65,7 +65,6 @@ final class OverlayGenerationTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::PENDING);
-        $schedule->setCalendarEntryId($entry->getId());
         // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule au POST) ;
         // buildForOverlay l'exige depuis le lot C2 — sans plan il ne sait pas quels réglages
         // appliquer et refuse de bâtir plutôt que d'en ignorer.
@@ -114,7 +113,6 @@ final class OverlayGenerationTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Overlay orphan');
         $schedule->setStatus(ScheduleStatus::PENDING);
-        $schedule->setCalendarEntryId($entry->getId());
         // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule au POST) ;
         // buildForOverlay l'exige depuis le lot C2 — sans plan il ne sait pas quels réglages
         // appliquer et refuse de bâtir plutôt que d'en ignorer.

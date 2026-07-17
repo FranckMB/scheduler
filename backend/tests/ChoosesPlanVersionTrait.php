@@ -29,10 +29,15 @@ trait ChoosesPlanVersionTrait
         $em = $container->get(EntityManagerInterface::class);
         $provisioner = $container->get(SchedulePlanProvisioner::class);
 
-        $season = $em->getRepository(Season::class)->find($schedule->getSeasonId());
-        if ($season instanceof Season) {
-            $provisioner->ensureSeasonPlan($season);
-            $em->flush();
+        // C4 : linkSchedule ne résout plus le plan, il NUMÉROTE — la version doit déjà porter
+        // son schedulePlanId. Si le seed ne l'a pas lié (cas courant : version de saison créée
+        // à la main), on l'attache au plan SEASON de sa saison ; un overlay a été lié en amont.
+        if (null === $schedule->getSchedulePlanId()) {
+            $planId = $provisioner->ensureSeasonPlanId($schedule->getSeasonId());
+            if (null !== $planId) {
+                $schedule->setSchedulePlanId($planId);
+                $em->flush();
+            }
         }
 
         $provisioner->linkSchedule($schedule);
@@ -74,29 +79,28 @@ trait ChoosesPlanVersionTrait
      * `schedulePlanId` null — et depuis le lot C4 tout site de décision « est-ce le
      * socle ? » LÈVE sur ce troisième état (une version sans plan ne doit pas exister).
      *
-     * - version de saison (`calendarEntryId` null) : ensureSeasonPlan puis linkSchedule ;
-     * - overlay (`calendarEntryId` set) : le plan de la période doit exister — on le
-     *   provisionne (idempotent, comme le geste de création de la période) puis linkSchedule.
+     * - saison (`$calendarEntryId` null) : plan SEASON (ensureSeasonPlanId) ;
+     * - overlay (`$calendarEntryId` fourni) : le plan de la période, provisionné (idempotent,
+     *   comme le geste de création de la période).
      *
-     * L'entrée/la saison doivent être persistées+flushées avant l'appel (linkSchedule lit
-     * la base en SQL brut).
+     * Depuis C4, le schedule ne porte plus `calendarEntryId` : on POSE `schedulePlanId` (ce
+     * que fait la prod au POST), puis `linkSchedule` NUMÉROTE. L'entrée/la saison doivent
+     * être persistées+flushées avant l'appel (résolution en SQL brut).
      */
-    private function linkSeededSchedule(Schedule $schedule): void
+    private function linkSeededSchedule(Schedule $schedule, ?string $calendarEntryId = null): void
     {
         $em = static::getContainer()->get(EntityManagerInterface::class);
         $provisioner = static::getContainer()->get(SchedulePlanProvisioner::class);
 
-        $entryId = $schedule->getCalendarEntryId();
-        if (null === $entryId) {
-            $season = $em->getRepository(Season::class)->find($schedule->getSeasonId());
-            if ($season instanceof Season) {
-                $provisioner->ensureSeasonPlan($season);
-                $em->flush();
-            }
-        } else {
-            $provisioner->provisionPeriodPlan($entryId);
+        $planId = null === $calendarEntryId
+            ? $provisioner->ensureSeasonPlanId($schedule->getSeasonId())
+            : $provisioner->provisionPeriodPlan($calendarEntryId);
+        $em->flush();
+        if (null !== $planId) {
+            $schedule->setSchedulePlanId($planId);
+            $em->flush();
+            $provisioner->linkSchedule($schedule);
         }
-        $provisioner->linkSchedule($schedule);
         $em->flush();
     }
 

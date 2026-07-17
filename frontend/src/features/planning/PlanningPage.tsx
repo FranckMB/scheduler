@@ -26,7 +26,7 @@ import { SlotDetail } from "./SlotDetail";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
-import { versionsDeletedByValidating } from "./lib/versions";
+import { isSeasonPlanType, versionsDeletedByValidating } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -195,7 +195,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const isReadOnly = true === selectedSchedule?.isChosen;
   const regenerateDisabled =
     null !== selectedSchedule
-    && null === selectedSchedule.calendarEntryId
+    && isSeasonPlanType(selectedSchedule.planType)
     && selectedSchedule.snapshotHash === me?.seasonPlan?.currentStructureHash;
   // regenerateFromMutation.isPending: "Charger cette version" no longer creates a
   // PENDING schedule (nothing sets isGenerating), so its own restore must disable
@@ -290,7 +290,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     ?? null;
   const planningTitle = me?.seasonPlan?.name ?? "Planning";
   const structureDiverged =
-    null !== selectedSchedule && null === selectedSchedule.calendarEntryId
+    null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
     && selectedSchedule.generatedTeamCount !== teams.length;
 
@@ -324,7 +324,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
             {/* « principal » qualifie LE planning de la saison (le plan SEASON), par
                 opposition aux plannings secondaires de période — pas la version choisie. */}
-            {null !== selectedSchedule && null === selectedSchedule.calendarEntryId ? (
+            {null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType) ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
                 principal
@@ -365,11 +365,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                   return;
                 }
                 const select = { onSuccess: (created: { id: string }) => setSelectedScheduleId(created.id) };
-                // An overlay "Régénérer" creates a NEW overlay version for its
-                // period; a season plan regenerates from the current structure.
-                const entryId = selectedSchedule?.calendarEntryId ?? null;
-                if (null !== entryId) {
-                  regenerateOverlayMutation.mutate(entryId, select);
+                // An overlay "Régénérer" creates a NEW version UNDER its period's plan
+                // (ADR-0002 C4); a season plan regenerates from the current structure.
+                const overlayPlanId = !isSeasonPlanType(selectedSchedule?.planType) ? selectedSchedule?.schedulePlanId ?? null : null;
+                if (null !== overlayPlanId) {
+                  regenerateOverlayMutation.mutate(overlayPlanId, select);
                 } else {
                   regenerateMutation.mutate(validScheduleId, select);
                 }

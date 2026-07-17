@@ -106,10 +106,106 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         );
     }
 
+    /**
+     * NR PR2 — LE CONTRAT DE CRÉATION : une version se crée SOUS un plan nommé
+     * (`schedulePlanId`), plus « pour une période ». Le plan la LIE et la TYPE (`planType`) ;
+     * un plan étranger/inconnu est refusé (422, validation tenant) ; sans plan ⇒ le plan
+     * SEASON (le socle). Et le champ redondant `calendarEntryId` a disparu de la sortie API.
+     */
+    public function testAVersionIsCreatedUnderANamedPlanWhichLinksAndTypesIt(): void
+    {
+        [$user, $club, $season] = $this->seed();
+        // inv. 13 : un overlay se bâtit sur un socle pointé.
+        $this->settleSeasonPlan($season);
+        $entryId = $this->postClosurePeriod($user);
+        $periodPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->periodPlanId($entryId);
+        self::assertIsString($periodPlanId, 'la période née du geste porte un plan');
+
+        // Sous le plan de la période → overlay lié au bon plan, sans calendarEntryId exposé.
+        $overlay = $this->postSchedule($user, ['name' => 'V période', 'status' => 'DRAFT', 'schedulePlanId' => $periodPlanId]);
+        self::assertSame($periodPlanId, $overlay['schedulePlanId'], 'la version se rattache au plan nommé');
+        self::assertArrayNotHasKey('calendarEntryId', $overlay, 'le doublon d’ancre a disparu de la sortie API (C4)');
+        // planType est dérivé + batché à la LECTURE (pas dans la réponse POST) — on le relit.
+        self::assertSame('CLOSURE', $this->getSchedule($user, (string) $overlay['id'])['planType'], 'son type vient du plan');
+
+        // Sans schedulePlanId → le socle (plan SEASON).
+        $seasonVersion = $this->postSchedule($user, ['name' => 'V saison', 'status' => 'DRAFT']);
+        self::assertSame('SEASON', $this->getSchedule($user, (string) $seasonVersion['id'])['planType'], 'sans plan nommé, la version naît sous le socle');
+
+        // Un plan inconnu/étranger est refusé (le back valide l’appartenance au club).
+        $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'x', 'status' => 'DRAFT', 'schedulePlanId' => '99999999-9999-4999-8999-999999999999',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422, 'un plan inconnu/étranger au club est refusé');
+    }
+
+    /**
+     * NR PR2 (isolation saison) — nommer un plan d'une AUTRE saison est refusé (422). Sans ce
+     * garde-fou, la sélection de saison par le corps du POST contournerait la garde archive :
+     * la requête passe `assertWritable` sur la saison active, puis s'estampillait de la saison
+     * (potentiellement archivée) du plan — une écriture dans une saison gelée. Avant C4, le
+     * find() season-filtré de l'entrée refusait déjà ce cas ; C4 (SQL brut) doit le refaire.
+     */
+    public function testCreatingAVersionUnderAPlanOfAnotherSeasonIsRefused(): void
+    {
+        [$user, $club, $season] = $this->seed();
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+
+        // Une AUTRE saison du même club (N-1) et son plan SEASON.
+        $this->scopeGucToClub($club->getId());
+        $otherYear = SeasonResolver::seasonYear(new DateTimeImmutable('today')) - 1;
+        $otherSeason = new Season;
+        $otherSeason->setClubId($club->getId());
+        $otherSeason->setName((string) $otherYear);
+        $otherSeason->setStartDate(new DateTimeImmutable($otherYear . '-08-01'));
+        $otherSeason->setEndDate(new DateTimeImmutable(($otherYear + 1) . '-07-15'));
+        $otherSeason->setStatus('archived');
+        $otherSeason->setTransitionData([]);
+        $this->em->persist($otherSeason);
+        $this->em->flush();
+        $otherPlanId = $provisioner->ensureSeasonPlanId($otherSeason->getId());
+        $this->em->flush();
+        self::assertIsString($otherPlanId);
+
+        // La saison active (résolue) est celle du seed (année courante) ; le plan est de N-1.
+        $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'name' => 'x', 'status' => 'DRAFT', 'schedulePlanId' => $otherPlanId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422, 'un plan d’une autre saison est refusé — pas de contournement de la garde archive');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     *
+     * @return array<string, mixed>
+     */
+    private function postSchedule(User $user, array $body): array
+    {
+        $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode($body, \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+
+        return $payload;
+    }
+
+    /**
+     * @return array<string, mixed> la version relue (planType dérivé + batché par le provider)
+     */
+    private function getSchedule(User $user, string $id): array
+    {
+        $this->client->request('GET', '/api/schedules/' . $id, [], [], $this->authHeaders($user));
+        self::assertResponseIsSuccessful();
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+
+        return $payload;
     }
 
     private function linkedSeasonVersion(Season $season): Schedule
@@ -137,19 +233,18 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
             ->setClubId($club->getId())
             ->setSeasonId($season->getId())
             ->setName('V overlay')
-            ->setStatus(ScheduleStatus::COMPLETED)
-            ->setCalendarEntryId($entryId);
+            ->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($overlay);
         $this->em->flush();
-        $this->linkSeededSchedule($overlay);
+        $this->linkSeededSchedule($overlay, $entryId);
 
         return [$overlay, $entryId];
     }
 
     private function unlinkedVersion(Season $season, ScheduleStatus $status): Schedule
     {
-        // Volontairement NON liée (schedulePlanId null) et sans calendarEntryId : l'état
-        // exact qui, sous l'ancienne logique, se faisait passer pour le socle.
+        // Volontairement NON liée (schedulePlanId null) : l'état exact qui, sous
+        // l'ancienne logique, se faisait passer pour le socle.
         $schedule = (new Schedule)
             ->setClubId($season->getClubId())
             ->setSeasonId($season->getId())

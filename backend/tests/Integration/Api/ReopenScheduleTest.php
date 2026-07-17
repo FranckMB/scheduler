@@ -18,6 +18,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -75,7 +76,7 @@ final class ReopenScheduleTest extends WebTestCase
         self::assertResponseIsSuccessful();
 
         $this->em->clear();
-        $plan = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->seasonPlanPayload($season->getId());
+        $plan = self::getContainer()->get(SchedulePlanProvisioner::class)->seasonPlanPayload($season->getId());
         self::assertTrue($plan['hasFinishedVersion'], 'reopen must NOT re-lock the cockpit');
         self::assertNull($plan['chosenScheduleId']);
     }
@@ -281,7 +282,10 @@ final class ReopenScheduleTest extends WebTestCase
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
         $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
-        $overlay->setCalendarEntryId($entry->getId());
+        $this->em->flush();
+        // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : le
+        // reopen et la cascade le retrouvent PAR son plan, né du geste (rejoué ici).
+        $overlay->setSchedulePlanId(self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()));
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($season->getClubId());

@@ -31,7 +31,7 @@ vi.mock("./api", () => {
   return {
   OverlaysExistError,
   reopenSchedule: vi.fn(),
-  listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }])),
+  listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
     Promise.resolve([
       { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
@@ -81,7 +81,7 @@ vi.mock("@/features/auth/queries", () => ({
   useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null }];
+const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];
 
 beforeEach(() => {
   meState.chosenScheduleId = null;
@@ -111,7 +111,7 @@ describe("PlanningPage (integration)", () => {
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
-    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null, isChosen: true }]);
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }]);
     renderWithProviders(<PlanningPage />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe("PlanningPage (integration)", () => {
   // season has period overlays, 409s; the UI escalates to a proportional confirm,
   // then re-sends with the flag.
   describe("reopen escalation (the plan in force, with overlays)", () => {
-    const validated: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", calendarEntryId: null, isChosen: true }];
+    const validated: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }];
 
     beforeEach(() => {
       vi.mocked(reopenSchedule).mockReset(); // per-test call count + queued once-values

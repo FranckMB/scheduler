@@ -14,6 +14,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -65,7 +66,10 @@ final class RegenerateFromVersionTest extends WebTestCase
         $this->em->clear();
         // Structure restored to V1 (only SM1) — and NO new version was created.
         self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['seasonId' => $this->season->getId()]));
-        $schedules = $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $this->season->getId(), 'calendarEntryId' => null]);
+        // Les versions de saison = celles rattachées au plan SEASON (plus de colonne
+        // calendarEntryId depuis C4 : « saison ? » se lit sur le plan pointé).
+        $seasonPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->ensureSeasonPlanId($this->season->getId());
+        $schedules = $this->em->getRepository(Schedule::class)->findBy(['seasonId' => $this->season->getId(), 'schedulePlanId' => $seasonPlanId]);
         self::assertCount(2, $schedules, 'no new version — only V1 and V2 remain');
         // The ★ moved to V1 (the loaded context).
         self::assertSame($v1->getId(), $this->em->getRepository(Season::class)->find($this->season->getId())?->getLiveContextScheduleId());
@@ -421,12 +425,12 @@ final class RegenerateFromVersionTest extends WebTestCase
     private function makeSchedule(ScheduleStatus $status, ?string $calendarEntryId): Schedule
     {
         $schedule = (new Schedule)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setName('V')->setStatus($status)->setCalendarEntryId($calendarEntryId);
+            ->setName('V')->setStatus($status);
         $this->em->persist($schedule);
         $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
         // du /regenerate-from lèverait sur une version sans plan (saison ou overlay).
-        $this->linkSeededSchedule($schedule);
+        $this->linkSeededSchedule($schedule, $calendarEntryId);
 
         return $schedule;
     }

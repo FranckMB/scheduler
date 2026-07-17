@@ -154,13 +154,12 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
             ->setClubId($club->getId())
             ->setSeasonId($season->getId())
             ->setName('Overlay')
-            ->setStatus($status)
-            ->setCalendarEntryId($entry->getId());
+            ->setStatus($status);
         $this->em->persist($schedule);
         $this->em->flush();
         // Prod links every overlay version to its period plan (born du geste) ; sans ça,
         // depuis C4 la purge (qui trouve les versions PAR le plan) ne les verrait pas.
-        $this->linkSeededSchedule($schedule);
+        $this->linkSeededSchedule($schedule, $entry->getId());
 
         return $schedule;
     }

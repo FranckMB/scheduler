@@ -13,7 +13,9 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,14 +26,17 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * Creating a period overlay via POST /api/schedules with calendarEntryId: the
- * server stamps the inverse link and guards the target entry (422).
+ * Creating a period overlay via POST /api/schedules with schedulePlanId (ADR-0002 C4 —
+ * the body names the PERIOD's plan, not the calendar entry): the server resolves the
+ * entry from the plan, stamps the inverse link, and guards the target (422 on an
+ * unknown/foreign plan). Entry types that carry no plan (event/cutoff) cannot be named.
  */
 #[Group('phase1')]
 #[Group('integration')]
 final class ScheduleOverlayCreationTest extends WebTestCase
 {
     use ChoosesPlanVersionTrait;
+    use ProvisionsPeriodPlanTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -46,12 +51,15 @@ final class ScheduleOverlayCreationTest extends WebTestCase
     {
         [$user, $club, $season] = $this->seed('OV1');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
+        // ADR-0002 C4 : POST /api/schedules nomme désormais le PLAN de la période
+        // (schedulePlanId), plus l'entrée calendrier. Le plan naît du geste (rejoué ici).
+        $planId = $this->planIdOf($entry);
 
-        $this->post($user, $club, ['name' => 'Vacances', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $this->post($user, $club, ['name' => 'Vacances', 'status' => 'DRAFT', 'schedulePlanId' => $planId]);
 
         self::assertResponseStatusCodeSame(201);
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame($entry->getId(), $data['calendarEntryId']);
+        self::assertSame($planId, $data['schedulePlanId']);
 
         // Read the entry back through the API (real read path) → inverse link set.
         $this->client->request('GET', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
@@ -65,7 +73,7 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         [$user, $club, $season] = $this->seed('OV2');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::HOLIDAY);
 
-        $this->post($user, $club, ['name' => 'Toussaint', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $this->post($user, $club, ['name' => 'Toussaint', 'status' => 'DRAFT', 'schedulePlanId' => $this->planIdOf($entry)]);
         self::assertResponseStatusCodeSame(201);
     }
 
@@ -75,12 +83,13 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         // second is allowed and becomes the ACTIVE overlay (no more 422).
         [$user, $club, $season] = $this->seed('OV3');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
+        $planId = $this->planIdOf($entry);
 
-        $this->post($user, $club, ['name' => 'V1', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $this->post($user, $club, ['name' => 'V1', 'status' => 'DRAFT', 'schedulePlanId' => $planId]);
         self::assertResponseStatusCodeSame(201);
         $v1 = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
 
-        $this->post($user, $club, ['name' => 'V2', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $this->post($user, $club, ['name' => 'V2', 'status' => 'DRAFT', 'schedulePlanId' => $planId]);
         self::assertResponseStatusCodeSame(201);
         $v2 = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
         self::assertNotSame($v1, $v2);
@@ -91,9 +100,14 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         self::assertSame($v2, $entryData['overlayScheduleId'], 'the newest version is the active overlay');
     }
 
-    public function testEventEntryRejected(): void
+    public function testEventEntryCarriesNoPlanSoCannotBeOverlaid(): void
     {
-        [$user, $club, $season] = $this->seed('OV4');
+        // ADR-0002 C4 : un overlay se crée en NOMMANT le plan d'une période (schedulePlanId).
+        // La garde « type overlayable » a migré du DTO vers la NAISSANCE du plan : seuls
+        // closure/holiday en portent un. Un ÉVÉNEMENT n'en a aucun — il n'y a donc rien à
+        // nommer, et c'est ainsi qu'il ne peut être overlayé (plus de rejet 422 au POST).
+        [, $club, $season] = $this->seed('OV4');
+        $this->scopeGucToClub($club->getId());
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($season->getId());
@@ -104,17 +118,22 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $this->em->persist($entry);
         $this->em->flush();
 
-        $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
-        self::assertResponseStatusCodeSame(422);
+        self::assertNull(
+            self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()),
+            'un événement ne porte aucun plan — aucun overlay ne peut le nommer',
+        );
     }
 
-    public function testCutoffPeriodRejected(): void
+    public function testCutoffPeriodCarriesNoPlanSoCannotBeOverlaid(): void
     {
-        [$user, $club, $season] = $this->seed('OV5');
+        // Idem : un point de coupure (cutoff) ne porte pas de plan — impossible à overlayer.
+        [, $club, $season] = $this->seed('OV5');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CUTOFF);
 
-        $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
-        self::assertResponseStatusCodeSame(422);
+        self::assertNull(
+            self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()),
+            'une période cutoff ne porte aucun plan — aucun overlay ne peut la nommer',
+        );
     }
 
     public function testForeignEntryRejected(): void
@@ -122,9 +141,10 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         [$userA, $clubA] = $this->seed('OV6');
         [, $clubB, $seasonB] = $this->seed('OV7');
         $entryB = $this->period($clubB, $seasonB, CalendarEntryPeriodType::CLOSURE);
+        $planB = $this->planIdOf($entryB); // provisionné dans le contexte du club B
 
-        // Club A tries to overlay club B's entry → invisible under RLS → 422.
-        $this->post($userA, $clubA, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entryB->getId()]);
+        // Club A tries to overlay club B's plan → invisible under RLS → 422.
+        $this->post($userA, $clubA, ['name' => 'X', 'status' => 'DRAFT', 'schedulePlanId' => $planB]);
         self::assertResponseStatusCodeSame(422);
     }
 
@@ -132,7 +152,7 @@ final class ScheduleOverlayCreationTest extends WebTestCase
     {
         [$user, $club, $season] = $this->seed('OV9');
         // Le plan redevient un espace de travail → plus de socle en vigueur.
-        self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)
+        self::getContainer()->get(SchedulePlanProvisioner::class)
             ->releaseSchedule((string) $this->chosenPlanVersion($season));
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
 
@@ -140,28 +160,29 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         // Avant la bascule, deux miroirs donnaient deux refus (422 sans baseline,
         // 409 sans socle) ; il n'y a plus qu'une condition, donc un seul code, et
         // c'est celui du module matchs (même garde, même message actionnable).
-        $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $this->post($user, $club, ['name' => 'X', 'status' => 'DRAFT', 'schedulePlanId' => $this->planIdOf($entry)]);
         self::assertResponseStatusCodeSame(409);
     }
 
-    public function testCalendarEntryIdImmutableOnPut(): void
+    public function testSchedulePlanIdImmutableOnPut(): void
     {
         [$user, $club, $season] = $this->seed('OV8');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
-        $this->post($user, $club, ['name' => 'O', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()]);
+        $planId = $this->planIdOf($entry);
+        $this->post($user, $club, ['name' => 'O', 'status' => 'DRAFT', 'schedulePlanId' => $planId]);
         $scheduleId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
 
         // PUT trying to detach the overlay marker must not change it.
         $this->client->request('PUT', "/api/schedules/{$scheduleId}", [], [], [
             ...$this->authHeaders($user, $club),
             'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode(['name' => 'Renamed', 'status' => 'DRAFT', 'calendarEntryId' => null], \JSON_THROW_ON_ERROR));
+        ], json_encode(['name' => 'Renamed', 'status' => 'DRAFT', 'schedulePlanId' => null], \JSON_THROW_ON_ERROR));
         self::assertResponseIsSuccessful();
         // GET back through the API: the overlay marker is unchanged.
         $this->client->request('GET', "/api/schedules/{$scheduleId}", [], [], $this->authHeaders($user, $club));
         self::assertResponseIsSuccessful();
         $reloaded = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame($entry->getId(), $reloaded['calendarEntryId'], 'overlay marker is immutable on PUT');
+        self::assertSame($planId, $reloaded['schedulePlanId'], 'overlay marker is immutable on PUT');
     }
 
     protected function setUp(): void

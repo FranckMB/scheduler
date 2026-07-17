@@ -397,16 +397,16 @@ export function useLaunchGeneration() {
   return useMutation({
     mutationFn: async ({
       name,
-      calendarEntryId,
+      schedulePlanId,
       existingScheduleId,
     }: {
       name: string;
-      calendarEntryId?: string;
+      schedulePlanId?: string;
       existingScheduleId?: string;
     }) => {
       // Period mode reuses the entry's existing overlay schedule (regenerate);
-      // otherwise create a fresh schedule (base plan, or first overlay).
-      const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(name, calendarEntryId)).id;
+      // otherwise create a fresh version under its plan (base plan, or first overlay).
+      const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(name, schedulePlanId)).id;
       await wizardApi.generateSchedule(scheduleId);
       return scheduleId;
     },

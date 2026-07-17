@@ -330,11 +330,13 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
         $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
-        $overlay->setCalendarEntryId($entry->getId());
         // ADR-0002 lot C : une période a toujours son plan (né du geste). Rejoué ici,
         // l'entrée étant fabriquée à la main plutôt que par le POST.
         $this->em->flush();
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : la
+        // cascade de suppression le retrouve PAR son plan.
+        $overlay->setSchedulePlanId(self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()));
+        $this->em->flush();
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($club->getId());
@@ -379,12 +381,12 @@ final class CalendarEntryApiTest extends WebTestCase
         $this->em->flush();
         // ADR-0002 lot C : le plan naît du geste. Rejoué ici — sans lui, l'overlay ne
         // se rattacherait à aucun plan et ne pourrait pas être pointé.
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());
         $overlay->setSeasonId($season->getId());
-        $overlay->setCalendarEntryId($entry->getId());
+        $overlay->setSchedulePlanId($planId);
         $overlay->setName('Overlay en vigueur');
         $overlay->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($overlay);

@@ -255,8 +255,8 @@ export function useRegenerateFromVersion() {
 export function useRegenerateOverlay() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (calendarEntryId: string) => {
-      const created = await planningApi.createOverlayVersion(calendarEntryId);
+    mutationFn: async (schedulePlanId: string) => {
+      const created = await planningApi.createOverlayVersion(schedulePlanId);
       await planningApi.generateSchedule(created.id);
       return created;
     },

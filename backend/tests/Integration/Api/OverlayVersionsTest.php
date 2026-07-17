@@ -89,7 +89,7 @@ final class OverlayVersionsTest extends WebTestCase
             'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user),
             'HTTP_X-Club-Id' => $club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode(['name' => 'V2', 'status' => 'DRAFT', 'calendarEntryId' => $entry->getId()], \JSON_THROW_ON_ERROR));
+        ], json_encode(['name' => 'V2', 'status' => 'DRAFT', 'schedulePlanId' => self::getContainer()->get(SchedulePlanProvisioner::class)->periodPlanId($entry->getId())], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(201);
         $v2 = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR)['id'];
         self::assertNotSame($v1->getId(), $v2);
@@ -153,13 +153,12 @@ final class OverlayVersionsTest extends WebTestCase
             ->setClubId($club->getId())
             ->setSeasonId($season->getId())
             ->setName('Overlay ' . $status->value)
-            ->setStatus($status)
-            ->setCalendarEntryId($entry->getId());
+            ->setStatus($status);
         $this->em->persist($schedule);
         $this->em->flush();
         // Prod links every overlay version to the plan né du geste ; sans ça, depuis C4
         // la validation (periodEntryIdOf) lèverait sur une version sans plan.
-        $this->linkSeededSchedule($schedule);
+        $this->linkSeededSchedule($schedule, $entry->getId());
 
         return $schedule;
     }

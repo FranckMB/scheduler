@@ -10,15 +10,19 @@ const plan = (over: Partial<Schedule>): Schedule => ({
   score: null,
   createdAt: "2026-07-01T10:00:00+00:00",
   updatedAt: "2026-07-01T10:00:00+00:00",
-  calendarEntryId: null,
+  planType: "SEASON",
+  schedulePlanId: "season-plan",
   ...over,
 });
+
+// ADR-0002 C4 : un overlay = planType non-SEASON + le plan de sa période (schedulePlanId).
+const overlayOf = (planId: string): Partial<Schedule> => ({ planType: "CLOSURE", schedulePlanId: planId });
 
 describe("visibleSeasonPlans", () => {
   it("keeps season versions, hides overlays", () => {
     const list = [
       plan({ id: "a" }),
-      plan({ id: "ov", calendarEntryId: "ce1" }),
+      plan({ id: "ov", ...overlayOf("ce1") }),
     ];
     expect(visibleSeasonPlans(list).map((s) => s.id)).toEqual(["a"]);
   });
@@ -42,9 +46,9 @@ describe("visibleOverlayVersions", () => {
   it("keeps only that period's overlay versions, chronological", () => {
     const list = [
       plan({ id: "season" }),
-      plan({ id: "ov1", calendarEntryId: "ce1", createdAt: "2026-07-08T09:00:00+00:00" }),
-      plan({ id: "ov2", calendarEntryId: "ce1", createdAt: "2026-07-10T09:00:00+00:00" }),
-      plan({ id: "ovOther", calendarEntryId: "ce2" }),
+      plan({ id: "ov1", ...overlayOf("ce1"), createdAt: "2026-07-08T09:00:00+00:00" }),
+      plan({ id: "ov2", ...overlayOf("ce1"), createdAt: "2026-07-10T09:00:00+00:00" }),
+      plan({ id: "ovOther", ...overlayOf("ce2") }),
     ];
     expect(visibleOverlayVersions(list, "ce1").map((s) => s.id)).toEqual(["ov1", "ov2"]);
   });
@@ -53,9 +57,9 @@ describe("visibleOverlayVersions", () => {
 describe("overlayVersionLabels", () => {
   it("numbers a period's overlay versions V{n}", () => {
     const list = [
-      plan({ id: "ov2", calendarEntryId: "ce1", createdAt: "2026-07-10T14:32:00+00:00" }),
-      plan({ id: "ov1", calendarEntryId: "ce1", createdAt: "2026-07-08T09:00:00+00:00" }),
-      plan({ id: "other", calendarEntryId: "ce2", createdAt: "2026-07-09T09:00:00+00:00" }),
+      plan({ id: "ov2", ...overlayOf("ce1"), createdAt: "2026-07-10T14:32:00+00:00" }),
+      plan({ id: "ov1", ...overlayOf("ce1"), createdAt: "2026-07-08T09:00:00+00:00" }),
+      plan({ id: "other", ...overlayOf("ce2"), createdAt: "2026-07-09T09:00:00+00:00" }),
     ];
     const labels = overlayVersionLabels(list, "ce1");
     expect(labels.get("ov1")).toMatch(/^V1 — 8 juil\./);
@@ -86,8 +90,8 @@ describe("liveContextScheduleId — the ★ (latest generated, = live context)",
   it("scopes to the selected overlay's own versions", () => {
     const list = [
       plan({ id: "s1", createdAt: "2026-07-05T10:00:00+00:00" }),
-      plan({ id: "o1", calendarEntryId: "p1", createdAt: "2026-07-01T10:00:00+00:00" }),
-      plan({ id: "o2", calendarEntryId: "p1", createdAt: "2026-07-02T10:00:00+00:00" }),
+      plan({ id: "o1", ...overlayOf("p1"), createdAt: "2026-07-01T10:00:00+00:00" }),
+      plan({ id: "o2", ...overlayOf("p1"), createdAt: "2026-07-02T10:00:00+00:00" }),
     ];
     expect(liveContextScheduleId(list, "p1")).toBe("o2");
     expect(liveContextScheduleId(list, null)).toBe("s1");

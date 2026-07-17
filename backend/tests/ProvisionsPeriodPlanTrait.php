@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests;
 
 use App\Entity\CalendarEntry;
+use App\Entity\Season;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Assert;
@@ -34,6 +35,20 @@ trait ProvisionsPeriodPlanTrait
 
         $planId = static::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
         Assert::assertIsString($planId, 'la période doit porter un plan (type closure/holiday attendu — inv. 9)');
+
+        return $planId;
+    }
+
+    /**
+     * C4 : l'ancre d'une version de BASE (le socle) est le plan SEASON de sa saison. Un test
+     * qui fabrique une version de base à la main doit la lier à ce plan (la prod le fait au POST).
+     */
+    private function seasonPlanIdOf(Season $season): string
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $planId = static::getContainer()->get(SchedulePlanProvisioner::class)->ensureSeasonPlanId($season->getId());
+        $em->flush();
+        Assert::assertIsString($planId, 'la saison doit porter un plan SEASON');
 
         return $planId;
     }

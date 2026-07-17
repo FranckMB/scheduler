@@ -69,10 +69,6 @@ class ScheduleResource
     #[Groups(['read'])]
     public ScheduleStatus $status;
 
-    /** Non-null → this is a period overlay (palier B), not a season plan. */
-    #[Groups(['read'])]
-    public ?string $calendarEntryId = null;
-
     /**
      * ADR-0002 C4: the type of THIS version's plan — SEASON | CLOSURE | HOLIDAY. The
      * SOLE truth of "is this the socle?" (SEASON) vs a period overlay, replacing the
@@ -179,7 +175,6 @@ class ScheduleResource
         $dto->updatedAt = $entity->getUpdatedAt();
         $dto->name = $entity->getName();
         $dto->status = $entity->getStatus();
-        $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->versionNumber = $entity->getVersionNumber();
         $dto->score = $entity->getScore();
