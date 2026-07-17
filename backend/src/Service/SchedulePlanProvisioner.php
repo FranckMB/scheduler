@@ -23,14 +23,13 @@ use Throwable;
  *
  * - ensureSeasonPlan(): the SEASON plan exists as soon as the season does (an
  *   empty "espace de travail" with no version yet).
- * - provisionPeriodPlan(): RÉCONCILIE le plan d'une période avec son entrée calendrier, à
- *   CHAQUE écriture sur celle-ci — naissance au geste "ajuster une période de vacances
- *   / un souci du calendrier" (= la création de la CalendarEntry), synchronisation de
- *   la fenêtre, ou suppression si la période est rétrogradée (inv. 9). Appelé depuis
- *   CalendarEntryStateProcessor, seul site de src/ qui crée une entrée, et ATOMIQUE
- *   avec elle. Les périodes se configurent AVANT toute génération : le plan doit donc
- *   précéder les réglages qui s'y accrochent (inv. 5) — le créer à la première version,
- *   comme le lot A, était simplement trop tard.
+ * - provisionPeriodPlan(): le plan CLOSURE/HOLIDAY naît au geste — "ajuster une période
+ *   de vacances / un souci du calendrier", c'est-à-dire la création de la CalendarEntry.
+ *   Appelé depuis CalendarEntryStateProcessor (seul site de src/ qui crée une entrée) et
+ *   ATOMIQUE avec elle. Les périodes se configurent AVANT toute génération : le plan doit
+ *   donc précéder les réglages qui s'y accrochent (inv. 5) — le créer à la première
+ *   version, comme le lot A, était simplement trop tard. Naissance seule : l'identité
+ *   d'une période qui porte un plan est gelée (422), il n'y a donc rien à synchroniser.
  * - linkSchedule(): stamps schedulePlanId + versionNumber on a freshly-created
  *   schedule. It only ever LOOKS UP a period plan (findPeriodPlanId), never
  *   creates one: a second creation site would let a missing gesture-time plan pass
@@ -311,29 +310,20 @@ final class SchedulePlanProvisioner
     /**
      * ADR-0002 inv. 5 + décision fondateur 2026-07-17 — LE PLAN NAÎT DU GESTE.
      *
-     * RÉCONCILIATEUR, pas un simple créateur : l'état du plan suit l'état de son
-     * événement calendrier, à chaque écriture sur celui-ci. Trois issues, dérivées
-     * du SEUL type de la période :
+     * Naissance SEULE : créer le plan de la période s'il n'existe pas, sinon rendre le
+     * sien. Ni synchronisation, ni suppression — l'identité d'une période qui porte un
+     * plan est GELÉE en amont (422, CalendarEntryStateProcessor), donc il n'y a jamais
+     * rien à re-synchroniser ni à détruire ici. Supprimer la période reste le seul
+     * chemin destructeur (deleteEntryAndCascade, derrière confirmation).
      *
-     *  - closure/holiday **sans** plan → naissance (le geste « ajuster cette période ») ;
-     *  - closure/holiday **avec** plan → synchronisation du type et de la FENÊTRE ;
-     *  - tout autre type (rétrogradation en cutoff/mutualisation, conversion en
-     *    event qui annule le periodType) → **suppression** du plan : inv. 9, ces
-     *    entrées ne portent pas de plan. Sans cette branche, un `cutoff` garderait un
-     *    plan HOLIDAY vivant que seule la suppression de l'entrée nettoierait.
-     *
-     * Le NOM n'est délibérément PAS synchronisé — même décision que syncSeasonPlan :
-     * il appartient au plan (inv. 12) et n'est écrit que par son renommage ; un second
-     * écrivain le rendrait non durable. Il n'est posé qu'à la naissance.
-     *
-     * Rend l'id du plan, ou null quand l'entrée n'en porte pas (par conception, ou
-     * parce qu'elle vient d'en perdre un).
+     * Rend null quand l'entrée ne porte pas de plan par conception — inv. 9 :
+     * cutoff/mutualisation restent des rappels calendrier.
      *
      * Sérialisé par période avec le même verrou consultatif que linkSchedule : un POST
      * double-soumis ne peut pas minter deux plans (check-then-insert). L'appelant doit
-     * avoir FLUSHÉ l'entrée — la ligne est relue en SQL brut. S'imbrique sans risque
-     * dans la transaction de l'appelant (le verrou tient jusqu'au commit le plus
-     * externe), ce dont dépend l'atomicité création-entrée + création-plan.
+     * avoir FLUSHÉ l'entrée — la ligne est relue en SQL brut. S'imbrique sans risque dans
+     * la transaction de l'appelant (le verrou tient jusqu'au commit le plus externe), ce
+     * dont dépend l'atomicité entrée + plan.
      */
     public function provisionPeriodPlan(string $calendarEntryId): ?string
     {
@@ -342,6 +332,25 @@ final class SchedulePlanProvisioner
 
             return $this->ensurePeriodPlanId($calendarEntryId);
         });
+    }
+
+    /**
+     * Marque le plan d'une période comme configuré, au 1er réglage d'équipes écrit — le
+     * wizard s'en sert pour ne seeder son défaut « Fanion seul » qu'une fois, et jamais
+     * après un retour « tout actif » (0 override épars). Idempotent (`= false` dans le
+     * WHERE), et sans effet si la période ne porte pas de plan.
+     *
+     * SQL brut, comme toute résolution de plan ici : `season_filter` épingle les lectures
+     * ORM à la saison ACTIVE de la requête, or l'appelant reçoit le calendarEntryId dans
+     * un corps de requête, sans garantie qu'il appartienne à cette saison. RLS scope le club.
+     */
+    public function markPeriodTeamSelectionInitialized(string $calendarEntryId): void
+    {
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
+            . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
+            ['eid' => $calendarEntryId],
+        );
     }
 
     /** Cette période porte-t-elle un plan ? Garde du 422 d'identité (voir plus haut). */

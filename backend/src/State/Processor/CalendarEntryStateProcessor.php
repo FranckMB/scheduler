@@ -103,8 +103,13 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
             $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
             $endChanged = null !== $input->endDate && $this->parseDate($input->endDate)->format('Y-m-d') !== $entity->getEndDate()->format('Y-m-d');
-            if ($kindChanged || $periodTypeChanged || $startChanged || $endChanged) {
-                throw new UnprocessableEntityHttpException('This period has a generated overlay plan. Delete the overlay plan before changing the period kind, type or dates.');
+            // schoolHolidayId fait partie de l'identité : il dit QUELLES vacances la
+            // période adapte, et le cockpit apparie ses cartes dessus (RadarPanel,
+            // DayDialog). Le remapper laisserait la carte Toussaint proposer « Adapter »
+            // sur le plan bâti pour février.
+            $holidayChanged = null !== $input->schoolHolidayId && $input->schoolHolidayId !== $entity->getSchoolHolidayId();
+            if ($kindChanged || $periodTypeChanged || $startChanged || $endChanged || $holidayChanged) {
+                throw new UnprocessableEntityHttpException('Cette période porte un planning : son type, sa fenêtre et les vacances qu’elle adapte sont figés. Supprimez la période (son planning et ses versions partent avec) puis recréez-la.');
             }
         }
 
@@ -183,9 +188,8 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
             $output = parent::processPost($input, $clubId, $seasonId);
             // Le flush du parent rend la ligne visible à la relecture SQL brute du
-            // provisioner — même connexion, même transaction. Un type non générant
-            // (inv. 9) rend null : pas de plan, pas d'erreur.
-            $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+            // provisioner — même connexion, même transaction.
+            $this->provisionIfPlanBearing($output);
 
             return $output;
         });
@@ -207,8 +211,18 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
+            // Verrou de plan-scope AVANT l'UPDATE de l'entrée : tout autre écrivain du
+            // scope (deleteEntryAndCascade, linkSchedule) prend le verrou consultatif PUIS
+            // touche les lignes. Laisser le flush du parent verrouiller d'abord la ligne
+            // calendar_entry inverserait l'ordre, et un PUT concurrent d'un DELETE de la
+            // même période formerait un cycle ABBA (Postgres en tuerait un en 40P01 → 500).
+            $entryId = $uriVariables['id'] ?? null;
+            if (\is_string($entryId)) {
+                $this->schedulePlanProvisioner->lockPlanScope($entryId);
+            }
+
             $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+            $this->provisionIfPlanBearing($output);
 
             return $output;
         });
@@ -217,6 +231,19 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): CalendarEntryResource
     {
         return CalendarEntryResource::fromEntity($entity);
+    }
+
+    /**
+     * N'entre dans le provisioner que pour ce qui peut porter un plan (inv. 9) : un
+     * event ou un cutoff y paierait une transaction imbriquée, un verrou consultatif et
+     * deux SELECT pour s'entendre répondre « pas de plan ». Le provisioner reste
+     * défensif de son côté — c'est lui qui fait autorité sur le mapping type → plan.
+     */
+    private function provisionIfPlanBearing(CalendarEntryResource $output): void
+    {
+        if (\in_array($output->periodType, ['closure', 'holiday'], true)) {
+            $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+        }
     }
 
     /** @param array<string, mixed> $uriVariables */

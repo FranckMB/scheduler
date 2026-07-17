@@ -15182,7 +15182,7 @@
                         ]
                     },
                     "teamSelectionInitialized": {
-                        "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                        "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
                     }
@@ -15259,7 +15259,7 @@
                         ]
                     },
                     "teamSelectionInitialized": {
-                        "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                        "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
                     }
@@ -15326,7 +15326,7 @@
                                 ]
                             },
                             "teamSelectionInitialized": {
-                                "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                                "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                                 "default": false,
                                 "type": "boolean"
                             }

@@ -8,32 +8,42 @@ use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\TeamPeriodOverrideResource;
 use App\Dto\TeamPeriodOverrideInput;
 use App\Entity\TeamPeriodOverride;
+use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SeasonAccessGuard;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProcessor<TeamPeriodOverride, TeamPeriodOverrideInput, TeamPeriodOverrideResource>
  */
 class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+    }
+
     protected function getEntityClass(): string
     {
         return TeamPeriodOverride::class;
     }
 
     /**
-     * Le 1er override d'une période marque son PLAN comme configuré, pour que le seed
-     * Fanion-only du wizard ne se rejoue jamais après un retour « tout actif » (0
-     * override épars) — signal durable, contrairement à un garde côté client.
+     * Le 1er override d'une période marque son PLAN comme configuré (garde de seed du
+     * wizard). Délégué à SchedulePlanProvisioner : le code en fait le SEUL point qui
+     * écrit des lignes `schedule_plan`, et son docblock porte le pourquoi du SQL brut.
      *
      * ATOMIQUE avec l'override, et écrit APRÈS lui : le flag ne doit pas pouvoir rester
-     * vrai sans qu'aucun override n'existe (le wizard cesserait alors de seeder une
-     * période pourtant vierge). En createEntityFromInput, l'UPDATE brut s'auto-commettait
-     * avant même le persist (round 2 du code-review).
-     *
-     * SQL BRUT plutôt que l'ORM, pour la raison que documente SchedulePlanProvisioner :
-     * `season_filter` épingle toute lecture ORM à la saison ACTIVE de la requête, or
-     * `calendarEntryId` arrive dans le corps sans être validé contre elle — un findOneBy
-     * filtré rendrait null pour une période d'une autre saison et l'échec serait avalé en
-     * silence. RLS continue de scoper le club. Le `= false` rend l'écriture idempotente.
+     * vrai sans qu'aucun override n'existe — le wizard cesserait alors de seeder une
+     * période pourtant vierge.
      *
      * @param TeamPeriodOverrideInput $input
      */
@@ -42,11 +52,7 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
             $output = parent::processPost($input, $clubId, $seasonId);
             if (null !== $input->calendarEntryId) {
-                $this->entityManager->getConnection()->executeStatement(
-                    'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
-                    . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
-                    ['eid' => $input->calendarEntryId],
-                );
+                $this->schedulePlanProvisioner->markPeriodTeamSelectionInitialized($input->calendarEntryId);
             }
 
             return $output;

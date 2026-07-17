@@ -128,10 +128,6 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
-     * ADR-0002 lot C — le plan de période naît DU GESTE (provisionPeriodPlan), plus
-     * de la première version. linkSchedule ne fait plus que s'y raccrocher.
-     */
-    /**
      * NR lot C — linkSchedule ne CRÉE JAMAIS un plan de période : il n'existe qu'un
      * seul site de naissance (le geste). Un second créateur laisserait passer
      * inaperçu un plan manquant à la création de la période, et les réglages saisis
