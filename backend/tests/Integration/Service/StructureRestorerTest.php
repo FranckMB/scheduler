@@ -19,6 +19,7 @@ use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Service\StructureRestorer;
 use App\Service\StructureSnapshotter;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,8 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 #[Group('integration')]
 final class StructureRestorerTest extends KernelTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -167,7 +170,7 @@ final class StructureRestorerTest extends KernelTestCase
         $this->em->persist($permanent);
         $this->em->flush();
         $override = (new ConstraintPeriodOverride)->setClubId($club->getId())->setSeasonId($season->getId())
-            ->setCalendarEntryId($entry->getId())->setConstraintId($permanent->getId())->setIsActive(false);
+            ->setSchedulePlanId($this->planIdOf($entry))->setConstraintId($permanent->getId())->setIsActive(false);
         $this->em->persist($override);
         $this->em->flush();
         $overrideId = $override->getId();

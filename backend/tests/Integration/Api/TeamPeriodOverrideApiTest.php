@@ -31,7 +31,8 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
 {
     use TenantGucTrait;
 
-    private const PERIOD = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    /** Ancre opaque : ces cas testent le cloisonnement par plan, pas le plan lui-même. */
+    private const PLAN = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
     private const TEAM = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
     private KernelBrowser $client;
@@ -46,15 +47,15 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
 
     public function testCreateStampsTenantAndListScopesToPeriod(): void
     {
-        $created = $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => 1]);
+        $created = $this->post(['schedulePlanId' => self::PLAN, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => 1]);
         self::assertResponseStatusCodeSame(201);
         self::assertFalse($created['isActive']);
         self::assertSame(1, $created['sessionsPerWeek']);
 
         // Another period's override must not appear when listing this period.
-        $this->post(['calendarEntryId' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => null]);
+        $this->post(['schedulePlanId' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => null]);
 
-        $this->client->request('GET', '/api/team_period_overrides?calendarEntryId=' . self::PERIOD, [], [], $this->headers());
+        $this->client->request('GET', '/api/team_period_overrides?schedulePlanId=' . self::PLAN, [], [], $this->headers());
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
         $members = $body['member'] ?? [];
         self::assertCount(1, $members, 'the collection is scoped to the requested period');
@@ -63,9 +64,9 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
 
     public function testUpdateRoundTripsActivation(): void
     {
-        $created = $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
+        $created = $this->post(['schedulePlanId' => self::PLAN, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
 
-        $this->client->request('PUT', '/api/team_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 3], \JSON_THROW_ON_ERROR));
+        $this->client->request('PUT', '/api/team_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode(['schedulePlanId' => self::PLAN, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 3], \JSON_THROW_ON_ERROR));
         self::assertResponseIsSuccessful();
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertTrue($body['isActive']);
@@ -74,11 +75,11 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
 
     public function testDuplicateOverrideIsRejectedWithValidationNotServerError(): void
     {
-        $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
+        $this->post(['schedulePlanId' => self::PLAN, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
         self::assertResponseStatusCodeSame(201);
 
         // A second POST for the same (period, team) → clean 422, not a 500 from the DB unique index.
-        $this->post(['calendarEntryId' => self::PERIOD, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 2]);
+        $this->post(['schedulePlanId' => self::PLAN, 'teamId' => self::TEAM, 'isActive' => true, 'sessionsPerWeek' => 2]);
         self::assertResponseStatusCodeSame(422);
     }
 
@@ -99,7 +100,7 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         self::assertIsString($planId);
         self::assertFalse($this->planById($planId)->isTeamSelectionInitialized(), 'a fresh plan is not yet configured');
 
-        $this->post(['calendarEntryId' => $entry->getId(), 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
+        $this->post(['schedulePlanId' => $planId, 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
         self::assertResponseStatusCodeSame(201);
 
         $this->client->request('GET', '/api/schedule_plans/' . $planId, [], [], $this->headers());

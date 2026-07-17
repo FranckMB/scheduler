@@ -253,9 +253,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // entry to read overlayScheduleId). Guard club ownership inline so a
         // cross-club delete deletes nothing before the parent throws 403.
         $id = $uriVariables['id'] ?? null;
+        // Capturé AVANT deletePeriodPlan : depuis le lot C2 les réglages de la période sont
+        // ancrés au PLAN (inv. 5), or c'est le plan qu'on détruit juste en dessous — après
+        // quoi plus rien ne relie ses réglages à cette période, et ils orphelineraient.
+        $schedulePlanId = null;
         if (\is_string($id) && '' !== $id) {
             $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($id);
             if ($entry instanceof CalendarEntry && (null === $clubId || $entry->getClubId() === $clubId)) {
+                $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
                 // Verrou EN TÊTE : deleteOverlayForEntry balaie les versions juste
                 // en dessous. Le prendre après (dans deletePeriodPlan) ne sérialise
                 // rien — une création d'overlay concurrente s'intercale, et sa
@@ -288,12 +293,15 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['calendarEntryId' => $id]) as $slot) {
                 $this->entityManager->remove($slot);
             }
-            foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
-                $this->entityManager->remove($override);
-            }
-            // …and the period's constraint toggles (which permanent constraints it disabled).
-            foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $id]) as $override) {
-                $this->entityManager->remove($override);
+            // Les deux jumeaux sont ancrés au PLAN depuis C2 — d'où l'id capturé plus haut.
+            if (null !== $schedulePlanId) {
+                foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+                    $this->entityManager->remove($override);
+                }
+                // …and the period's constraint toggles (which permanent constraints it disabled).
+                foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+                    $this->entityManager->remove($override);
+                }
             }
             // A period's own reservations (dated pins) are keyed on the entry too.
             foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['calendarEntryId' => $id]) as $reservation) {

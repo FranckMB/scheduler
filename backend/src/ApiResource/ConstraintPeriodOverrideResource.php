@@ -31,7 +31,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Put,
     new Delete,
 ], input: ConstraintPeriodOverrideInput::class, paginationEnabled: false, provider: ConstraintPeriodOverrideStateProvider::class, processor: ConstraintPeriodOverrideStateProcessor::class)]
-#[ApiFilter(SearchFilter::class, properties: ['calendarEntryId' => 'exact', 'constraintId' => 'exact'])]
+#[ApiFilter(SearchFilter::class, properties: ['schedulePlanId' => 'exact', 'constraintId' => 'exact'])]
 class ConstraintPeriodOverrideResource
 {
     #[Groups(['read'])]
@@ -47,7 +47,7 @@ class ConstraintPeriodOverrideResource
     public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
-    public string $calendarEntryId = '';
+    public string $schedulePlanId = '';
 
     #[Groups(['read'])]
     public string $constraintId = '';
@@ -62,7 +62,7 @@ class ConstraintPeriodOverrideResource
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();
         $dto->updatedAt = $entity->getUpdatedAt();
-        $dto->calendarEntryId = $entity->getCalendarEntryId();
+        $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->constraintId = $entity->getConstraintId();
         $dto->isActive = $entity->isActive();
 

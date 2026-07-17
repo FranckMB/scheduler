@@ -53,11 +53,14 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
-  const { data: overrides = [], isLoading } = useTeamPeriodOverrides(calendarEntryId);
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
-  const create = useCreateTeamPeriodOverride(calendarEntryId);
-  const update = useUpdateTeamPeriodOverride(calendarEntryId);
-  const del = useDeleteTeamPeriodOverride(calendarEntryId);
+  // ADR-0002 inv. 5 (lot C2) : les réglages pendent au PLAN. Le composant reçoit le
+  // déclencheur (la période), il en résout l'ancre — null tant que la requête charge.
+  const schedulePlanId = plan?.id ?? null;
+  const { data: overrides = [], isLoading } = useTeamPeriodOverrides(schedulePlanId);
+  const create = useCreateTeamPeriodOverride(schedulePlanId);
+  const update = useUpdateTeamPeriodOverride(schedulePlanId);
+  const del = useDeleteTeamPeriodOverride(schedulePlanId);
   const [busy, setBusy] = useState(false);
 
   const groups = groupTeamsByTier(teams, tiers);
@@ -76,7 +79,10 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     if (backToSeasonal) {
       return existing ? del.mutateAsync(existing.id) : Promise.resolve();
     }
-    const body = { calendarEntryId, teamId: t.id, isActive: next.isActive, sessionsPerWeek: next.sessions };
+    if (null === schedulePlanId) {
+      return Promise.resolve(); // plan pas encore chargé : pas d'ancre, pas d'écriture
+    }
+    const body = { schedulePlanId, teamId: t.id, isActive: next.isActive, sessionsPerWeek: next.sessions };
     return existing ? update.mutateAsync({ id: existing.id, body }) : create.mutateAsync(body);
   };
   // Fire-and-forget for single edits (checkbox/session). Swallow the rejection: the
@@ -117,7 +123,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
     setBusy(true);
-    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
+    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ schedulePlanId: plan.id, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
   }, [isLoading, planLoading, plan, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
@@ -337,6 +343,8 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
  */
 export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
+  // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
+  const schedulePlanId = useSchedulePlanForEntry(calendarEntryId).data?.id ?? null;
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
@@ -345,15 +353,15 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useWizardTeamTags();
   const { data: tagAssignments = [], isLoading: tagAssignmentsLoading, isError: tagAssignmentsError } = useWizardTeamTagAssignments();
   // Off an overlay period, null disables both queries (no wasted fetch).
-  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? schedulePlanId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
   // and dropped from the payload server-side — the checklist must mirror that. On a fetch
   // error we can't tell which teams are paused, so a TEAM constraint's applicability is
   // UNKNOWN → its toggle is disabled (non-TEAM scopes are unaffected and stay usable).
-  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
-  const create = useCreatePeriodConstraintOverride(calendarEntryId);
-  const update = useUpdatePeriodConstraintOverride(calendarEntryId);
-  const del = useDeletePeriodConstraintOverride(calendarEntryId);
+  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? schedulePlanId : null);
+  const create = useCreatePeriodConstraintOverride(schedulePlanId);
+  const update = useUpdatePeriodConstraintOverride(schedulePlanId);
+  const del = useDeletePeriodConstraintOverride(schedulePlanId);
   // Optimistic intended-active state per constraint while its write is in flight (the
   // sparse row only lands after the refetch). Also serializes toggles: each of create/update/
   // del is a SINGLE shared observer, so firing the same hook for a second constraint before
@@ -419,8 +427,11 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const toggle = (c: Constraint, desired: boolean) => {
     // overridesError: without the override list we can't tell create-vs-update, so a toggle
     // would POST an existing row → 422. Render read-only until it reloads (P4-1 query-error UX).
-    if (mutating || notApplicable(c) || overridesError || teamStateUnknown(c)) {
-      return; // a write is settling, the constraint can't ship / is unknown, or overrides are unavailable
+    if (mutating || notApplicable(c) || overridesError || teamStateUnknown(c) || null === schedulePlanId) {
+      // a write is settling, the constraint can't ship / is unknown, overrides are
+      // unavailable — ou le plan n'est pas chargé : sans ancre (inv. 5) il n'y a nulle
+      // part où écrire le réglage.
+      return;
     }
     const settle = () =>
       setInflight((m) => {
@@ -439,10 +450,10 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
       return;
     }
     if (undefined !== existing) {
-      update.mutate({ id: existing.id, body: { calendarEntryId, constraintId: c.id, isActive: desired } }, { onSettled: settle });
+      update.mutate({ id: existing.id, body: { schedulePlanId, constraintId: c.id, isActive: desired } }, { onSettled: settle });
       return;
     }
-    create.mutate({ calendarEntryId, constraintId: c.id, isActive: desired }, { onSettled: settle });
+    create.mutate({ schedulePlanId, constraintId: c.id, isActive: desired }, { onSettled: settle });
   };
 
   if (!isOverlay) {

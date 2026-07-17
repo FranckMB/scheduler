@@ -29,6 +29,7 @@ use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
 use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -47,6 +48,8 @@ use Symfony\Component\Mercure\HubInterface;
 #[Group('integration')]
 final class OverlayGenerationTest extends KernelTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -62,6 +65,10 @@ final class OverlayGenerationTest extends KernelTestCase
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::PENDING);
         $schedule->setCalendarEntryId($entry->getId());
+        // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule au POST) ;
+        // buildForOverlay l'exige depuis le lot C2 — sans plan il ne sait pas quels réglages
+        // appliquer et refuse de bâtir plutôt que d'en ignorer.
+        $schedule->setSchedulePlanId($this->planIdOf($entry));
         $em->persist($schedule);
         $em->flush();
         $scheduleId = $schedule->getId();
@@ -107,6 +114,10 @@ final class OverlayGenerationTest extends KernelTestCase
         $schedule->setName('Overlay orphan');
         $schedule->setStatus(ScheduleStatus::PENDING);
         $schedule->setCalendarEntryId($entry->getId());
+        // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule au POST) ;
+        // buildForOverlay l'exige depuis le lot C2 — sans plan il ne sait pas quels réglages
+        // appliquer et refuse de bâtir plutôt que d'en ignorer.
+        $schedule->setSchedulePlanId($this->planIdOf($entry));
         $em->persist($schedule);
         $em->flush();
         $scheduleId = $schedule->getId();

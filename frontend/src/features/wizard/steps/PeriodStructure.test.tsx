@@ -12,7 +12,7 @@ const deleteSlot = vi.fn();
 const createConstraintOverride = vi.fn();
 const updateConstraintOverride = vi.fn();
 const deleteConstraintOverride = vi.fn();
-const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; calendarEntryId: string }> } = { data: [] };
+const overridesState: { data: Array<{ id: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null; schedulePlanId: string }> } = { data: [] };
 // Le VRAI type, pas une copie étroite : une seconde description du même objet finit
 // toujours par diverger — celle d'avant ignorait family/config/isActive, que les tests
 // envoient pourtant. Le helper porte les défauts, chaque test ne dit que ce qui compte.
@@ -27,7 +27,7 @@ const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">)
   isActive: true,
   ...over,
 });
-const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; calendarEntryId: string }> } = { data: [] };
+const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; schedulePlanId: string }> } = { data: [] };
 const tagsState: { data: Array<{ id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }> } = { data: [] };
 const tagAssignmentsState: { data: Array<{ id: string; teamId: string; tagId: string; seasonId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
@@ -37,7 +37,12 @@ const constraintOverridesErrorState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
 const entryState: { data: { periodType: string } | undefined } = { data: { periodType: "closure" } };
 // ADR-0002 lot C: le garde de seed vit sur le PLAN, pas sur l'événement calendrier.
-const planState: { data: { teamSelectionInitialized: boolean } | null | undefined } = { data: { teamSelectionInitialized: false } };
+// Les ancres REÇUES par les hooks de lecture. Sans les capturer, aucun test ne peut voir
+// qu'un composant lit par le déclencheur au lieu du plan : les deux sont des `string`, tsc
+// est muet, et l'API répondrait 200 avec une liste vide — panne silencieuse (lot C2).
+const teamOverridesAnchor: { value: string | null } = { value: null };
+const constraintOverridesAnchor: { value: string | null } = { value: null };
+const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
@@ -45,17 +50,26 @@ vi.mock("../queries", () => ({
     { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
   ] }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
-  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value }),
+  useTeamPeriodOverrides: (anchor: string | null) => {
+    teamOverridesAnchor.value = anchor;
+
+    return { data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value };
+  },
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: false, isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
+  // Les CRÉNEAUX restent ancrés au déclencheur : leur re-keyage est le lot C3.
   usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
-  usePeriodConstraintOverrides: () => ({ data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value }),
+  usePeriodConstraintOverrides: (anchor: string | null) => {
+    constraintOverridesAnchor.value = anchor;
+
+    return { data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value };
+  },
   useWizardTeamTags: () => ({ data: tagsState.data, isLoading: false, isError: false }),
   useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: false, isError: false }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
@@ -85,7 +99,7 @@ afterEach(() => {
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
   entryState.data = { periodType: "closure" };
-    planState.data = { teamSelectionInitialized: false };
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
@@ -101,12 +115,12 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
     // Unique id: the module-level "already seeded" set persists across tests.
     render(<PeriodTeams calendarEntryId="fresh-seed" />);
     // U13 (tier 2) is deactivated by default; SM1 (Fanion) is not touched.
-    expect(createOverride).toHaveBeenCalledWith({ calendarEntryId: "fresh-seed", teamId: "t2", isActive: false });
+    expect(createOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", teamId: "t2", isActive: false });
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
   it("does NOT seed a period already configured server-side (teamSelectionInitialized)", () => {
-    planState.data = { teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
+    planState.data = { id: "plan-1", teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
     render(<PeriodTeams calendarEntryId="already-init" />);
     expect(createOverride).not.toHaveBeenCalled();
   });
@@ -120,7 +134,7 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
   });
 
   it("« Tout le club » activates every team", async () => {
-    overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
+    overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
     render(<PeriodTeams calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("button", { name: "Tout le club" }));
     // The deactivated U13 override is removed → back to seasonal (active).
@@ -130,7 +144,7 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
 
 describe("PeriodTeams — session guard", () => {
   it("ignores an emptied sessions field instead of persisting 0", async () => {
-    overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // suppress the seed
+    overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }]; // suppress the seed
     render(<PeriodTeams calendarEntryId="e1" />);
     const input = screen.getByLabelText("Séances de SM1 cette période");
     await userEvent.clear(input); // → Number("") === 0
@@ -156,6 +170,24 @@ describe("PeriodVenues — borrowed period slots", () => {
   });
 });
 
+describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", () => {
+  // CE test est celui qui manquait : les deux composants lisaient par le DÉCLENCHEUR
+  // pendant qu'ils écrivaient par le PLAN. Les deux ids sont des `string` → tsc muet,
+  // et l'API répond 200 avec une liste vide → checklist silencieusement fausse, cases
+  // qui reviennent au rechargement, 422 au re-clic. Aucun test ne pouvait le voir : les
+  // mocks jetaient leur argument.
+  it("PeriodTeams lit ses réglages par le PLAN, jamais par la période", () => {
+    render(<PeriodTeams calendarEntryId="e1" />);
+    expect(teamOverridesAnchor.value).toBe("plan-1");
+  });
+
+  it("PeriodConstraints lit ses deux jeux de réglages par le PLAN", () => {
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(constraintOverridesAnchor.value).toBe("plan-1");
+    expect(teamOverridesAnchor.value).toBe("plan-1");
+  });
+});
+
 describe("PeriodConstraints — inherited constraints toggle", () => {
   it("closure: lists the club's permanent constraints, all kept by default", () => {
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
@@ -169,12 +201,12 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
-    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "k1", isActive: false }, expect.anything());
+    expect(createConstraintOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", constraintId: "k1", isActive: false }, expect.anything());
   });
 
   it("toggling a disabled constraint back on deletes its override", async () => {
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
-    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: false, calendarEntryId: "e1" }];
+    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: false, schedulePlanId: "plan-1" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     // Rendered unchecked (disabled) → clicking re-activates by removing the row.
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
@@ -209,7 +241,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("reprise (holiday): default follows the team selection", () => {
     entryState.data = { periodType: "holiday" };
-    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
+    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }]; // t2 en pause
     constraintsState.data = [
       constraint({ id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null }),
       constraint({ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" }),
@@ -261,7 +293,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("a TEAM constraint of a paused team is non-applicable (disabled, struck, never toggled)", async () => {
-    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
+    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }]; // t2 en pause
     constraintsState.data = [constraint({ id: "kt2", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" })];
     render(<PeriodConstraints calendarEntryId="e1" />); // closure by default
     const checkbox = screen.getByRole("checkbox", { name: "U13 rule appliquée cette période" });
@@ -277,17 +309,17 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     constraintsState.data = [constraint({ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Gym rule appliquée cette période" }));
-    expect(createConstraintOverride).toHaveBeenCalledWith({ calendarEntryId: "e1", constraintId: "kf", isActive: true }, expect.anything());
+    expect(createConstraintOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", constraintId: "kf", isActive: true }, expect.anything());
   });
 
   it("re-toggling a redundant isActive=true override updates instead of duplicating (P4-12d, no 422)", async () => {
     // closure default = kept; a stale isActive=true row → box checked. Unchecking must PUT, not POST.
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
-    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: true, calendarEntryId: "e1" }];
+    constraintOverridesState.data = [{ id: "ov1", constraintId: "k1", isActive: true, schedulePlanId: "plan-1" }];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).toBeChecked();
     await userEvent.click(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" }));
-    expect(updateConstraintOverride).toHaveBeenCalledWith({ id: "ov1", body: { calendarEntryId: "e1", constraintId: "k1", isActive: false } }, expect.anything());
+    expect(updateConstraintOverride).toHaveBeenCalledWith({ id: "ov1", body: { schedulePlanId: "plan-1", constraintId: "k1", isActive: false } }, expect.anything());
     expect(createConstraintOverride).not.toHaveBeenCalled();
   });
 
@@ -295,7 +327,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     entryState.data = { periodType: "holiday" };
     tagsState.data = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
     tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-sen", seasonId: "s1" }];
-    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
+    overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
     constraintsState.data = [constraint({ id: "cg", name: "Groupe SENIOR · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "SENIOR" }, isActive: true })];
 
     render(<PeriodConstraints calendarEntryId="e1" />);

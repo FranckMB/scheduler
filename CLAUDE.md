@@ -103,7 +103,7 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 ## 10. Gotchas (top)
 
 1. Backend, engine and frontend tooling run in Docker; the host only needs Docker, Docker Compose and Make.
-2. PHPUnit = `vendor/bin/phpunit` (PHPUnit 11) everywhere (CI, `Makefile`, `composer test`). `make phpunit` adds `--group phase1`. The suite needs the test DB — run `make db-init-test` first (CI brings it up via `docker compose up -d --wait`).
+2. PHPUnit = `vendor/bin/phpunit` (PHPUnit 11) everywhere (CI, `Makefile`, `composer test`). ⚠️ **`make phpunit` ne lance QUE `--group phase1`** (le gate bloquant, ~492 tests) et **`make test` que la testsuite `Unit`** — or le job CI `unit-tests` lance **`phpunit tests/`, le dossier entier (~718 tests)**. Les testsuites déclarées ne couvrent pas `Api`, `Command`, `Double`, `EventListener`, `MessageHandler`, `OpenApi`, `Validator` : **valider en local avec `make phpunit` seul laisse ces 7 dossiers hors de vue** (lot C2 : 2 échecs y ont dormi jusqu'à la CI). **Avant de pousser, `make -C backend tests-complete`** — miroir exact de la CI. La suite needs the test DB — `make db-init-test` first (CI brings it up via `docker compose up -d --wait`).
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
 4. Frontend is rebuilt + **active** — indexed by the graph (only its build artifacts `dist`/`node_modules`/`storybook-static` are ignored). Tenant is resolved server-side from the JWT: the frontend sends **no** `X-Club-Id` header.
 

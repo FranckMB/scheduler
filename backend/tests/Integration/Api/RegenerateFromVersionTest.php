@@ -108,7 +108,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         $sm2 = $this->persistTeam('SM2');
         $override = (new \App\Entity\TeamPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setCalendarEntryId('33333333-3333-4333-8333-333333333333')
+            ->setSchedulePlanId('33333333-3333-4333-8333-333333333333')
             ->setTeamId($sm2->getId())->setIsActive(false);
         $this->em->persist($override);
         $this->em->flush();

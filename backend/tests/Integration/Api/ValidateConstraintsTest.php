@@ -15,6 +15,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -28,6 +29,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ValidateConstraintsTest extends WebTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -205,6 +208,11 @@ final class ValidateConstraintsTest extends WebTestCase
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
         $this->em->persist($entry);
         $this->em->flush();
+        // Le geste : en prod le POST crée le plan avec la période. Les réglages y sont
+        // ancrés (lot C2), donc sans plan le contrôleur n'a rien à hériter.
+        if (\in_array($type, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
+            $this->planIdOf($entry);
+        }
 
         return $entry;
     }

@@ -20,6 +20,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Service\ScheduleConstraintBuilder;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +39,8 @@ use Symfony\Contracts\Cache\CacheInterface;
 #[Group('integration')]
 final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -399,7 +402,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $o = new \App\Entity\TeamPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
-        $o->setCalendarEntryId($entry->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
         $o->setTeamId($team->getId());
         $o->setIsActive($isActive);
         $o->setSessionsPerWeek($sessions);
@@ -497,7 +500,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $o = new \App\Entity\ConstraintPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
-        $o->setCalendarEntryId($entry->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
         $o->setConstraintId($constraint->getId());
         $o->setIsActive($isActive);
         $this->em->persist($o);
@@ -556,6 +559,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::DRAFT);
         $schedule->setCalendarEntryId($entry?->getId());
+        // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule, au
+        // POST). buildForOverlay l'exige depuis le lot C2 : sans le plan, il ne sait pas
+        // quels réglages appliquer et refuse de bâtir plutôt que d'en ignorer.
+        if (null !== $entry) {
+            $schedule->setSchedulePlanId($this->planIdOf($entry));
+        }
         $this->em->persist($schedule);
 
         return $schedule;

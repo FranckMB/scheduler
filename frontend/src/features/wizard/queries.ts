@@ -138,76 +138,76 @@ export function useDeletePeriodSlot(calendarEntryId: string) {
   });
 }
 
-export function useTeamPeriodOverrides(calendarEntryId: string | null) {
+export function useTeamPeriodOverrides(schedulePlanId: string | null) {
   return useQuery({
-    queryKey: ["wizard", "team_period_overrides", calendarEntryId],
-    queryFn: () => wizardApi.listTeamPeriodOverrides(calendarEntryId as string),
-    enabled: null !== calendarEntryId,
+    queryKey: ["wizard", "team_period_overrides", schedulePlanId],
+    queryFn: () => wizardApi.listTeamPeriodOverrides(schedulePlanId as string),
+    enabled: null !== schedulePlanId,
     staleTime: 30_000,
   });
 }
 
-export function useCreateTeamPeriodOverride(calendarEntryId: string) {
+export function useCreateTeamPeriodOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: wizardApi.TeamPeriodOverridePayload) => wizardApi.createTeamPeriodOverride(body),
     // Return the invalidation promise so mutateAsync awaits the refetch — batch
     // seed/ramp keep `busy` until the overrides list is fresh (no click on stale state).
-    // No calendar-entry refetch: the first override flips teamSelectionInitialized
-    // server-side, but in-session re-seed is already guarded by seededPeriods + a
-    // non-empty overrides list, and reload re-fetches the entry fresh — so mirroring
-    // the flip into cache on every create only buys N redundant refetches.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+    // No plan refetch: the first override flips teamSelectionInitialized server-side,
+    // but in-session re-seed is already guarded by seededPeriods + a non-empty overrides
+    // list, and reload re-fetches the plan fresh — so mirroring the flip into cache on
+    // every create only buys N redundant refetches.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", schedulePlanId] }),
   });
 }
 
-export function useUpdateTeamPeriodOverride(calendarEntryId: string) {
+export function useUpdateTeamPeriodOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: wizardApi.TeamPeriodOverridePayload }) => wizardApi.updateTeamPeriodOverride(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", schedulePlanId] }),
   });
 }
 
-export function useDeleteTeamPeriodOverride(calendarEntryId: string) {
+export function useDeleteTeamPeriodOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteTeamPeriodOverride(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "team_period_overrides", schedulePlanId] }),
   });
 }
 
-export function usePeriodConstraintOverrides(calendarEntryId: string | null) {
+export function usePeriodConstraintOverrides(schedulePlanId: string | null) {
   return useQuery({
-    queryKey: ["wizard", "constraint_period_overrides", calendarEntryId],
-    queryFn: () => wizardApi.listConstraintPeriodOverrides(calendarEntryId as string),
-    enabled: null !== calendarEntryId,
+    queryKey: ["wizard", "constraint_period_overrides", schedulePlanId],
+    queryFn: () => wizardApi.listConstraintPeriodOverrides(schedulePlanId as string),
+    enabled: null !== schedulePlanId,
     staleTime: 30_000,
   });
 }
 
-export function useCreatePeriodConstraintOverride(calendarEntryId: string) {
+export function useCreatePeriodConstraintOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: wizardApi.ConstraintPeriodOverridePayload) => wizardApi.createConstraintPeriodOverride(body),
     // Return the invalidation promise so mutateAsync awaits the refetch (accurate busy state).
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", schedulePlanId] }),
   });
 }
 
-export function useUpdatePeriodConstraintOverride(calendarEntryId: string) {
+export function useUpdatePeriodConstraintOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: wizardApi.ConstraintPeriodOverridePayload }) => wizardApi.updateConstraintPeriodOverride(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", schedulePlanId] }),
   });
 }
 
-export function useDeletePeriodConstraintOverride(calendarEntryId: string) {
+export function useDeletePeriodConstraintOverride(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteConstraintPeriodOverride(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraint_period_overrides", schedulePlanId] }),
   });
 }
 
