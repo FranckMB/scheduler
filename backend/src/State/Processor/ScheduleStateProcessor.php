@@ -9,8 +9,7 @@ use App\Dto\ScheduleInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
-use App\Enum\CalendarEntryKind;
-use App\Enum\CalendarEntryPeriodType;
+use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Service\OverlayManager;
 use App\Service\SeasonAccessGuard;
@@ -50,9 +49,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * A schedule carrying calendarEntryId is a period OVERLAY (palier B). Validate
-     * the target entry (422) before creation, then stamp the inverse link
-     * (CalendarEntry.overlayScheduleId) server-side — never trusting the client.
+     * ADR-0002 C4 : POST crée une version SOUS un plan nommé (`schedulePlanId`) — un overlay
+     * de période — ou, si omis, sous le plan SEASON (le socle). On valide que le plan
+     * appartient au club, on en dérive la saison, et pour un overlay on applique les gardes
+     * de période (une génération en cours bloque ; le socle doit être pointé, inv. 13) avant
+     * de poser le pointeur inverse (`CalendarEntry.overlayScheduleId`, encore sur l'entrée — lot D).
      *
      * @param ScheduleInput $input
      *
@@ -60,71 +61,74 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
-        $entry = null;
-        if (null !== $input->calendarEntryId) {
-            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($input->calendarEntryId);
-            // Explicit club check (do not rely on RLS alone — the EM identity map
-            // can surface a cross-club entry loaded earlier in the same request).
-            if (!$entry instanceof CalendarEntry || (null !== $clubId && $entry->getClubId() !== $clubId)) {
-                throw new UnprocessableEntityHttpException('Unknown calendar entry.');
-            }
-            if (CalendarEntryKind::PERIOD !== $entry->getKind()) {
-                throw new UnprocessableEntityHttpException('Only a period entry can carry an overlay.');
-            }
-            if (!\in_array($entry->getPeriodType(), [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
-                throw new UnprocessableEntityHttpException('Overlay generation is only supported for closure and holiday periods.');
-            }
-            // planning-versions: a period may carry SEVERAL overlay versions
-            // (V1, V2…) like a season plan; the new one becomes the active overlay
-            // (pointer set below). Only refuse while a sibling version of THIS
-            // period is still solving — a running solve must never be overwritten
-            // (mirror of the season in-flight guard).
-            // ADR-0002 C4 : les versions de la période = celles de SON PLAN (schedulePlanId),
-            // plus le doublon schedule.calendarEntryId. La période est closure/holiday (gardé
-            // ci-dessus) donc porte un plan (né du geste, C1) ; par prudence, pas de plan → 0.
-            $periodPlanId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
-            $inFlight = null === $periodPlanId ? 0 : $this->entityManager->getRepository(Schedule::class)->count([
-                'clubId' => $entry->getClubId(),
-                'seasonId' => $entry->getSeasonId(),
-                'schedulePlanId' => $periodPlanId,
-                'status' => [ScheduleStatus::PENDING, ScheduleStatus::GENERATING],
-            ]);
-            if ($inFlight > 0) {
-                throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
-            }
-            // ADR-0002 inv. 13 : un plan secondaire se bâtit SUR le calendrier de
-            // base — le plan SEASON doit avoir une version choisie.
-            $this->socleGuard->assertSeasonPlanChosen($entry->getSeasonId());
-            // Bind the overlay to the ENTRY's season (not the active one) so the
-            // build reads the right season's structure + dated constraints.
-            $seasonId = $entry->getSeasonId();
-        }
-
-        // Stamp tenant/season server-side (parent::processPost's job, inlined so
-        // the persist can join ONE transaction with the plan link below).
-        /** @var Schedule $schedule */
-        $schedule = $this->createEntityFromInput($input);
+        // La version s'écrit dans la saison ACTIVE de la requête — celle dont le parent vient
+        // de vérifier qu'elle est éditable (assertWritable, garde archive). On la résout AVANT
+        // de valider le plan, pour exiger qu'il lui appartienne (voir plus bas).
         $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
-        // A schedule with no resolvable season is invalid — fail with a controlled
-        // 422 rather than an uninitialized-property TypeError once linkSchedule
-        // (or the flush) dereferences the never-set seasonId.
         if (null === $resolvedSeasonId) {
             throw new UnprocessableEntityHttpException('No season could be resolved for this schedule.');
         }
+
+        $entry = null;
+        $planId = $input->schedulePlanId;
+        if (null !== $planId) {
+            $plan = $this->schedulePlanProvisioner->fetchPlanContext($planId);
+            // Club ET saison : le plan doit être du club ET de la saison active. Nommer un plan
+            // d'une AUTRE saison (archivée, N-1) contournerait la garde archive — le POST passe
+            // assertWritable sur la saison active, puis s'estampillait de la saison du plan. Avant
+            // C4, le find() season-filtré de l'entrée refusait déjà ce cas (422) ; fetchPlanContext
+            // est en SQL brut (non filtré), on rétablit donc la garde explicitement. Check club
+            // explicite aussi (l'identity map peut surfacer une ligne d'un autre club).
+            if (null === $plan
+                || (null !== $clubId && $plan['clubId'] !== $clubId)
+                || $plan['seasonId'] !== $resolvedSeasonId) {
+                throw new UnprocessableEntityHttpException('Unknown schedule plan.');
+            }
+            if (SchedulePlanType::SEASON !== $plan['type']) {
+                // Overlay (plan CLOSURE/HOLIDAY). Une sœur en cours de solve bloque : on ne
+                // réécrit jamais un solve en vol (miroir de la garde saison).
+                $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
+                    'clubId' => $plan['clubId'],
+                    'seasonId' => $resolvedSeasonId,
+                    'schedulePlanId' => $planId,
+                    'status' => [ScheduleStatus::PENDING, ScheduleStatus::GENERATING],
+                ]);
+                if ($inFlight > 0) {
+                    throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
+                }
+                // inv. 13 : un plan secondaire se bâtit SUR le calendrier de base pointé.
+                $this->socleGuard->assertSeasonPlanChosen($resolvedSeasonId);
+                // Le pointeur inverse vit encore sur l'entrée (lot D) — on la résout DEPUIS le
+                // plan. Le plan étant de la saison active, l'entrée l'est aussi : le find()
+                // season-filtré la trouve (sinon elle serait invisible et le pointeur pas posé).
+                $entryId = $plan['calendarEntryId'];
+                $entry = null !== $entryId ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId) : null;
+            }
+        }
+
+        /** @var Schedule $schedule */
+        $schedule = $this->createEntityFromInput($input);
         if (null !== $clubId) {
             $schedule->setClubId($clubId);
         }
         $schedule->setSeasonId($resolvedSeasonId);
 
-        // Atomic (like RegenerateController): the row, its plan link and the
+        // ADR-0002 C4 : le plan est explicite (overlay/période) ou, par défaut, le plan
+        // SEASON de la saison (le socle). La version le porte AVANT linkSchedule, qui ne
+        // fait plus que la numéroter.
+        $resolvedPlanId = $planId ?? $this->schedulePlanProvisioner->ensureSeasonPlanId($resolvedSeasonId);
+        if (null === $resolvedPlanId) {
+            throw new UnprocessableEntityHttpException('No schedule plan could be resolved for this schedule.');
+        }
+        $schedule->setSchedulePlanId($resolvedPlanId);
+
+        // Atomic (like RegenerateController): the row, its version number and the
         // overlay pointer commit together. A linkSchedule failure must never
-        // leave a committed-but-unlinked schedule occupying the period slot.
+        // leave a committed-but-unnumbered schedule occupying the period slot.
         $this->entityManager->wrapInTransaction(function () use ($schedule, $entry): void {
             $this->entityManager->persist($schedule);
 
-            // ADR-0002: link the new version to its SchedulePlan. Le plan de période
-            // existe déjà — il naît du geste « ajuster » (lot C), plus de cette
-            // première version : linkSchedule ne fait que le CHERCHER.
+            // ADR-0002 C4 : numérote la version dans son plan (déjà posé ci-dessus).
             $this->schedulePlanProvisioner->linkSchedule($schedule);
 
             if ($entry instanceof CalendarEntry) {
@@ -214,8 +218,6 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         if (null !== $input->solverSeed) {
             $entity->setSolverSeed($input->solverSeed);
         }
-        // Overlay marker (palier B) — POST only; never mutated on PUT.
-        $entity->setCalendarEntryId($input->calendarEntryId);
 
         return $entity;
     }

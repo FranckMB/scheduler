@@ -31,14 +31,14 @@ use Throwable;
  *   donc précéder les réglages qui s'y accrochent (inv. 5) — le créer à la première
  *   version, comme le lot A, était simplement trop tard. Naissance seule : l'identité
  *   d'une période qui porte un plan est gelée (422), il n'y a donc rien à synchroniser.
- * - linkSchedule(): stamps schedulePlanId + versionNumber on a freshly-created
- *   schedule. It only ever LOOKS UP a period plan (findPeriodPlanId), never
- *   creates one: a second creation site would let a missing gesture-time plan pass
- *   unnoticed. Idempotent-safe: a schedule already linked keeps its version.
+ * - linkSchedule(): ADR-0002 C4 — NUMÉROTE une version dans son plan. Le plan est POSÉ par
+ *   l'appelant (`schedulePlanId`) : le POST le nomme (ScheduleStateProcessor), le regenerate
+ *   reprend celui de la source. linkSchedule ne résout donc plus rien, il pose `versionNumber`
+ *   sous verrou. Idempotent : une version déjà numérotée garde son numéro.
  *
- * ⚠️ Corollaire : le self-heal de choose() ne peut PLUS réparer un plan de période
- * manquant (il passe par linkSchedule, qui ne fait que chercher). C'est pourquoi la
- * naissance est atomique avec l'entrée — une période sans plan ne doit pas exister.
+ * ⚠️ Une VERSION SANS PLAN n'existe pas (ruling 2026-07-17) : choose() ne self-heal plus (il
+ * ne pourrait plus retrouver la période — `calendarEntryId` a disparu du schedule) ; un
+ * `schedulePlanId` null y répond false, l'anomalie est purgée, jamais réparée.
  *
  * Existence/version lookups run as RAW SQL on purpose: the request-scoped
  * ORM season_filter pins every ORM read to the active season, but the
@@ -112,48 +112,32 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * Link a freshly-created schedule to its plan + version. A schedule already
-     * linked is left untouched. No-op when no anchor can be resolved
-     * (transition-safe: schedulePlanId stays null).
-     *
-     * Serialized per plan-scope (season or period) with a Postgres advisory lock
-     * — same idiom as SeasonTransitionService — so concurrent/double-submitted
-     * creations neither collide on the version number (uniq_schedule_plan_version)
-     * nor duplicate a period's plan (check-then-insert). Nests safely inside a
-     * caller's transaction (RegenerateController): the lock is held to the
-     * outermost commit.
+     * ADR-0002 C4 : NUMÉROTE une version fraîchement créée dans SON plan. Le plan est
+     * DÉJÀ posé par l'appelant (`schedulePlanId`) — au POST (le client nomme le plan) ou
+     * au regenerate (même plan que la source). linkSchedule ne le résout donc plus : il
+     * pose seulement `versionNumber`, sous verrou, pour que deux créations concurrentes
+     * ne collisionnent pas sur `uniq_schedule_plan_version`. No-op si non lié (anomalie)
+     * ou déjà numéroté (idempotent). S'imbrique dans la transaction de l'appelant.
      */
     public function linkSchedule(Schedule $schedule): void
     {
-        if (null !== $schedule->getSchedulePlanId()) {
+        $planId = $schedule->getSchedulePlanId();
+        if (null === $planId || null !== $schedule->getVersionNumber()) {
             return;
         }
 
-        $this->entityManager->wrapInTransaction(function () use ($schedule): void {
-            $this->lockPlanScope($schedule->getCalendarEntryId() ?? self::seasonScopeKey($schedule->getSeasonId()));
-
-            // Period plans are LOOKED UP, never created here: they are born with the
-            // manager's gesture (provisionPeriodPlan). A null means the entry carries
-            // no plan — either a non-generating type (inv. 9: cutoff/mutualisation) or
-            // an entry created outside CalendarEntryStateProcessor (tests). Either way
-            // the schedule stays unlinked rather than silently minting a second plan.
-            $planId = null === $schedule->getCalendarEntryId()
-                ? $this->ensureSeasonPlanId($schedule->getSeasonId())
-                : $this->periodPlanId($schedule->getCalendarEntryId());
-            if (null === $planId) {
-                return;
-            }
-
-            // The plan may have just been persisted and not yet exist in the DB —
-            // flush first, else the counter UPDATE below matches zero rows.
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $planId): void {
+            // Même portée que la validation/réouverture (planScopeOf) : sinon le verrou
+            // ne coïncide pas. Le plan peut venir d'être persisté (plan SEASON) et pas
+            // encore en base — flush AVANT nextVersionNumber, sinon l'UPDATE matche 0 lignes.
+            $this->lockPlanScope($this->planScopeOf($schedule));
             $this->entityManager->flush();
 
             $versionNumber = $this->nextVersionNumber($planId);
             if (null === $versionNumber) {
-                return; // le plan a disparu (reset concurrent) — on laisse non lié
+                return; // le plan a disparu (reset concurrent) — version non numérotée
             }
 
-            $schedule->setSchedulePlanId($planId);
             $schedule->setVersionNumber($versionNumber);
             $this->entityManager->flush();
         });
@@ -169,17 +153,12 @@ final class SchedulePlanProvisioner
     {
         $planId = $schedule->getSchedulePlanId();
         if (null === $planId) {
-            // Self-heal rather than no-op: silently skipping would leave the plan
-            // unpointed while the caller believes it validated (secondary plans
-            // would stay locked with no visible cause). Every creation path links,
-            // so this only catches rows that predate the link (or bypassed it).
-            $this->linkSchedule($schedule);
-            $planId = $schedule->getSchedulePlanId();
-        }
-        if (null === $planId) {
-            // Aucun ancrage résoluble. Le rapporter plutôt que faire semblant :
-            // l'appelant supprime les versions sœurs juste après, un no-op silencieux
-            // les détruirait pour rien ET laisserait le plan non pointé en répondant 200.
+            // ADR-0002 C4 (ruling 2026-07-17) : une version sans plan N'EXISTE PAS — toute
+            // création la lie (POST/regenerate). Un null ici est une anomalie : on le
+            // RAPPORTE (l'appelant supprime les sœurs juste après ; un no-op silencieux les
+            // détruirait pour rien ET laisserait le plan non pointé en répondant 200). Plus
+            // de self-heal : il ne pourrait de toute façon plus retrouver la période
+            // (calendarEntryId a disparu du schedule).
             return false;
         }
 
@@ -445,6 +424,60 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * ADR-0002 C4 : le contexte d'un plan pour VALIDER une création (POST /api/schedules
+     * nomme le plan). Rend club/saison/type/déclencheur, ou null si le plan n'existe pas.
+     * SQL brut : filter-free (la saison du plan n'est pas forcément l'active) ; RLS scope le
+     * club (un plan d'un autre club rend null), et l'appelant re-check le club en défense.
+     *
+     * @return array{clubId: string, seasonId: string, type: SchedulePlanType, calendarEntryId: string|null}|null
+     */
+    public function fetchPlanContext(string $planId): ?array
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT club_id, season_id, type, calendar_entry_id FROM schedule_plan WHERE id = :pid',
+            ['pid' => $planId],
+        );
+        if (false === $row) {
+            return null;
+        }
+
+        return [
+            'clubId' => (string) $row['club_id'],
+            'seasonId' => (string) $row['season_id'],
+            'type' => SchedulePlanType::from((string) $row['type']),
+            'calendarEntryId' => null === $row['calendar_entry_id'] ? null : (string) $row['calendar_entry_id'],
+        ];
+    }
+
+    /**
+     * L'id du plan SEASON d'une saison, créé s'il manque (find-or-create). Public : le
+     * processor le résout quand la création n'a pas nommé de plan (⇒ le socle). À POST, le
+     * plan existe déjà (né avec la saison) ; l'"ensure" ne couvre qu'une donnée ancienne.
+     *
+     * Find-or-create SÉRIALISÉ sur la portée saison (même verrou consultatif que
+     * linkSchedule/validate). Avant C4 cette résolution vivait DANS le verrou de linkSchedule ;
+     * PR2 l'a sortie au processor. Sans le verrou ici, deux POST socle concurrents sur une
+     * saison SANS plan (donnée antérieure au backfill) le créeraient tous deux et violeraient
+     * uniq_schedule_plan_season_base (→ 500). Sous verrou, le 2e voit le plan committé du 1er.
+     */
+    public function ensureSeasonPlanId(string $seasonId): ?string
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($seasonId): ?string {
+            $this->lockPlanScope(self::seasonScopeKey($seasonId));
+
+            $existing = $this->existingSeasonPlan($seasonId);
+            if ($existing instanceof SchedulePlan) {
+                return $existing->getId();
+            }
+
+            // Season owns no season_id column, so it is not season-filtered.
+            $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
+
+            return $season instanceof Season ? $this->createSeasonPlan($season)->getId() : null;
+        });
+    }
+
+    /**
      * @throws LogicException le schedule n'a pas de plan / son plan a disparu
      *
      * @return array{type: SchedulePlanType, calendarEntryId: string|null}
@@ -489,19 +522,6 @@ final class SchedulePlanProvisioner
         } catch (Throwable) {
             return null;
         }
-    }
-
-    private function ensureSeasonPlanId(string $seasonId): ?string
-    {
-        $existing = $this->existingSeasonPlan($seasonId);
-        if ($existing instanceof SchedulePlan) {
-            return $existing->getId();
-        }
-
-        // Season owns no season_id column, so it is not season-filtered.
-        $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
-
-        return $season instanceof Season ? $this->createSeasonPlan($season)->getId() : null;
     }
 
     /**

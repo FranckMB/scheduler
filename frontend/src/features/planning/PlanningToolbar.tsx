@@ -6,7 +6,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { cn } from "@/shared/lib/utils";
 
 import { STATUS_LABELS, type Schedule } from "./api";
-import { liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
+import { isSeasonPlanType, liveContextScheduleId, overlayVersionLabels, versionLabels, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import type { ViewMode } from "./store";
 
 const VIEWS: { key: ViewMode; label: string }[] = [
@@ -72,22 +72,22 @@ export function PlanningToolbar({
   // comparaison contre le pointeur de /api/me remettrait deux vérités en présence.
   const isChosen = true === selected?.isChosen;
   const isCompleted = null !== selected && "COMPLETED" === selected.status;
-  const isOverlay = null !== selected && null !== selected.calendarEntryId;
+  const isOverlay = null !== selected && !isSeasonPlanType(selected.planType);
   // ★ = the version whose structure is the currently LOADED context. Season plans:
   // the server pointer (seasonLiveContextId, with a latest-visible fallback for a
   // NULL/stale pointer). Overlays: the latest version of the period (derived).
   // Exactly ONE ★: in overlay context only the period's overlay is starred (never
   // a season plan too), else only the season live-context plan.
   const seasonLiveId = liveContextScheduleId(schedules, null);
-  const overlayLiveId = isOverlay && null !== selected?.calendarEntryId ? liveContextScheduleId(schedules, selected.calendarEntryId) : null;
+  const overlayLiveId = isOverlay && null !== selected?.schedulePlanId ? liveContextScheduleId(schedules, selected.schedulePlanId) : null;
   const isStarred = (schedule: Schedule): boolean =>
-    isOverlay ? null !== schedule.calendarEntryId && schedule.id === overlayLiveId : null === schedule.calendarEntryId && schedule.id === seasonLiveId;
+    isOverlay ? !isSeasonPlanType(schedule.planType) && schedule.id === overlayLiveId : isSeasonPlanType(schedule.planType) && schedule.id === seasonLiveId;
   const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const labels = versionLabels(schedules);
   // When an overlay is selected, its period's versions get their own V{n} labels.
-  const overlayLabels = isOverlay && null !== selected?.calendarEntryId ? overlayVersionLabels(schedules, selected.calendarEntryId) : null;
+  const overlayLabels = isOverlay && null !== selected?.schedulePlanId ? overlayVersionLabels(schedules, selected.schedulePlanId) : null;
   const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
   // Deletable = a plain work version: never the one in force (read-only), never
   // mid-solve, never an overlay — et jamais la DERNIÈRE version terminée de la
@@ -95,7 +95,7 @@ export function PlanningToolbar({
   // rejeté). Miroir de ScheduleStateProcessor::isLastFinishedSeasonVersion.
   const isLastFinishedSeasonVersion =
     null !== selected
-    && null === selected.calendarEntryId
+    && isSeasonPlanType(selected.planType)
     && "COMPLETED" === selected.status
     && visibleSeasonPlans(schedules).filter((s) => "COMPLETED" === s.status).length <= 1;
   const canDelete = null !== selected && !isChosen && !isInFlight && !isOverlay && !isLastFinishedSeasonVersion;
@@ -104,7 +104,7 @@ export function PlanningToolbar({
   // décompte de suppression que la requête ne fera jamais, c'est promettre à vide.
   const hasInFlightSibling =
     null !== selected
-    && schedules.some((s) => s.id !== selected.id && s.calendarEntryId === selected.calendarEntryId && ("PENDING" === s.status || "GENERATING" === s.status));
+    && schedules.some((s) => s.id !== selected.id && s.schedulePlanId === selected.schedulePlanId && ("PENDING" === s.status || "GENERATING" === s.status));
   // "Load this version" (restore its structure + regenerate) is offered only on a
   // finished COMPLETED version that is NOT in force — the chosen one is read-only
   // and the backend refuses the restore (reopen first). The status used to carry
@@ -116,7 +116,7 @@ export function PlanningToolbar({
   // snapshot already matches the current club structure — keep the button
   // visible but greyed with a reason, so the state reads as deliberate. The
   // page computes the actual comparison (snapshot hash vs current structure hash).
-  const isLiveContext = null !== selected && null === selected.calendarEntryId && selected.id === seasonLiveId;
+  const isLiveContext = null !== selected && isSeasonPlanType(selected.planType) && selected.id === seasonLiveId;
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -136,12 +136,12 @@ export function PlanningToolbar({
                 whose structure is live), NOT the one being viewed: it stays put when you
                 consult an older version, and "Charger cette version" moves it. No
                 "principal" here: the main plan is a fact carried by the title badge. */}
-            {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.calendarEntryId ? visibleOverlayVersions(schedules, selected.calendarEntryId) : [])].map((schedule) => (
+            {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.schedulePlanId ? visibleOverlayVersions(schedules, selected.schedulePlanId) : [])].map((schedule) => (
               <option key={schedule.id} value={schedule.id}>
                 {labelOf(schedule)}
                 {isStarred(schedule) ? " ★" : ""}
                 {true === schedule.isChosen ? " · en vigueur" : ""}
-                {null !== schedule.calendarEntryId ? " · période" : ""}
+                {!isSeasonPlanType(schedule.planType) ? " · période" : ""}
               </option>
             ))}
           </select>
@@ -158,7 +158,7 @@ export function PlanningToolbar({
               {STATUS_LABELS[selected.status]}
             </span>
             {null !== selected.score ? <span>score {selected.score}</span> : null}
-            {null !== selected.calendarEntryId ? (
+            {!isSeasonPlanType(selected.planType) ? (
               <span className="rounded-full border border-accent/50 px-2 py-0.5 font-medium text-accent">Période</span>
             ) : null}
           </span>

@@ -171,7 +171,7 @@ table de correspondance pour relire du code ou des specs antérieurs.
 | `Season.socleValidatedAt` (gate cockpit, sticky) | dérivé : plan SEASON a ≥ 1 version terminée |
 | Réglages sur `calendarEntryId` (overrides, créneaux, seed flag) | re-keyés sur `planId` — **livré (C2/C3)** ; les contraintes datées du FAIT restent au calendrier (inv. 5 corrigé) |
 | « V3 » dérivé de l'ordre de création | `Schedule.versionNumber` stocké (côté serveur ; les libellés du front dérivent encore de l'ordre de création — voir Questions ouvertes) |
-| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) — **lecture livrée (C4-PR1)** ; le champ `Schedule.calendarEntryId` disparaît en PR2 |
+| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) — **livré (C4 PR1 lecture, PR2 write-path)** ; `Schedule.calendarEntryId` **supprimé** (colonne droppée, PR2) |
 
 ## Conséquences
 
@@ -362,10 +362,17 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   un **3e état qui LÈVE** (ruling fondateur 2026-07-17 : *une version sans plan n'existe pas* ;
   si elle existe, on la **purge**, jamais on ne la traite en socle — sinon on générerait la
   saison avec les contraintes d'une période, en silence). NR : `ScheduleSocleFromPlanTest`
-  (chemin de prod, vérifié en cassant le code — P4-21). **Restent** : le write-path
-  (`linkSchedule`, `ScheduleStateProcessor::setCalendarEntryId`), la bascule du **front**
-  (`planType`, `createVersion(planId)`) et le **drop de la colonne** en **PR2** ; le `NOT NULL`
-  + purge des orphelins au **lot D** (PR3).
+  (chemin de prod, vérifié en cassant le code — P4-21).
+  **PR2 livré (2026-07-17)** : `Schedule.calendarEntryId` **supprimé** (colonne + champ de
+  sortie API + entité). Le **contrat de création** passe de « pour cette période » à « SOUS ce
+  plan » — `ScheduleInput.schedulePlanId` (omis ⇒ plan SEASON), le back valide que le plan est
+  du club ; `linkSchedule` **ne résout plus le plan, il NUMÉROTE** (le plan est posé par le POST
+  ou par le regenerate) ; le self-heal de `choose()` **disparaît** (dette B1 soldée : une version
+  sans plan ne se répare pas, elle n'existe pas). Le **front** dérive `isOverlay` de `planType`
+  et regroupe les versions par `schedulePlanId` (planning + cockpit + wizard) ; la création
+  overlay envoie le `planId` (résolu via `usePeriodAnchor`, déjà en main depuis C2/C3). **Restent**
+  au **lot D** (PR3) : `NOT NULL` sur `schedule_plan_id`/`version_number`, purge des orphelins,
+  drop `CalendarEntry.overlayScheduleId`.
 - **Lot D** — nettoyage résiduel : la bascule a déjà supprimé baseline / socle / nom legacy
   et les statuts `VALIDATED`/`ARCHIVED`. Restent : `CalendarEntry.overlayScheduleId` (pointeur
   inverse, encore utile tant que le lot C n'a pas re-keyé les périodes) et les colonnes

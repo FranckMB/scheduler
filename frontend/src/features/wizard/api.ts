@@ -325,9 +325,10 @@ export async function validateConstraints(calendarEntryId?: string): Promise<Val
   }
 }
 
-/** Create a base plan (name only) or a period overlay (calendarEntryId set). */
-export const createSchedule = (name: string, calendarEntryId?: string): Promise<{ id: string }> =>
-  api.post("schedules", { json: { name, status: "DRAFT", ...(calendarEntryId ? { calendarEntryId } : {}) } }).json();
+/** ADR-0002 C4 : crée une version SOUS un plan. Omis → le plan SEASON (socle) ;
+ *  fourni → le plan d'une période (overlay). */
+export const createSchedule = (name: string, schedulePlanId?: string): Promise<{ id: string }> =>
+  api.post("schedules", { json: { name, status: "DRAFT", ...(schedulePlanId ? { schedulePlanId } : {}) } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";

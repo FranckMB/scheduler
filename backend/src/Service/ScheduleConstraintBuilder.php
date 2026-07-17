@@ -12,6 +12,7 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
+use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
 use App\Entity\Team;
@@ -26,6 +27,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
+use App\Enum\SchedulePlanType;
 use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -513,9 +515,12 @@ final class ScheduleConstraintBuilder
         return $em->getRepository(ScheduleSlotTemplate::class)->createQueryBuilder('s')
             ->andWhere('s.clubId = :clubId')
             ->andWhere('s.seasonId = :seasonId')
-            ->andWhere('s.scheduleId IN (SELECT sch.id FROM ' . Schedule::class . ' sch WHERE sch.clubId = :clubId AND sch.seasonId = :seasonId AND sch.calendarEntryId IS NULL)')
+            // ADR-0002 C4 : « base » = la version d'un plan SEASON (plus de sch.calendarEntryId).
+            // Le socle a un unique plan SEASON par saison (inv. 3).
+            ->andWhere('s.scheduleId IN (SELECT sch.id FROM ' . Schedule::class . ' sch WHERE sch.clubId = :clubId AND sch.seasonId = :seasonId AND sch.schedulePlanId IN (SELECT p.id FROM ' . SchedulePlan::class . ' p WHERE p.seasonId = :seasonId AND p.type = :seasonType))')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
+            ->setParameter('seasonType', SchedulePlanType::SEASON)
             ->orderBy('s.id', 'ASC')
             ->getQuery()
             ->getResult();

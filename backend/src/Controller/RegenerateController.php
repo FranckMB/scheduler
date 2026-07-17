@@ -110,10 +110,12 @@ final class RegenerateController extends AbstractController implements SeasonSco
             ->setClubId($source->getClubId())
             ->setSeasonId($source->getSeasonId())
             ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
-            ->setStatus(ScheduleStatus::PENDING);
+            ->setStatus(ScheduleStatus::PENDING)
+            // ADR-0002 C4 : la nouvelle version rejoint LE MÊME plan que la source
+            // (régénérer = une V+1 du même plan) ; linkSchedule ne fait que la numéroter.
+            ->setSchedulePlanId($source->getSchedulePlanId());
         $this->entityManager->wrapInTransaction(function () use ($newSchedule): void {
             $this->entityManager->persist($newSchedule);
-            // ADR-0002 Lot A: the new version joins the season's SchedulePlan.
             $this->schedulePlanProvisioner->linkSchedule($newSchedule);
             $this->entityManager->flush();
         });

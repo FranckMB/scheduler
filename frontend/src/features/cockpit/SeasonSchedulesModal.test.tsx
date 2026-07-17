@@ -25,14 +25,14 @@ beforeEach(() => {
   run.mockClear();
 });
 
-const plan = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", calendarEntryId: null, ...over });
+const plan = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
 
 // A season with TWO versions of the main plan + one period overlay (2 versions).
 const schedules = [
   plan({ id: "v1", createdAt: "2026-07-01T10:00:00+00:00" }),
   plan({ id: "v2", createdAt: "2026-07-02T10:00:00+00:00" }),
-  plan({ id: "o1", name: "Vacances Toussaint", calendarEntryId: "p1", createdAt: "2026-07-03T10:00:00+00:00" }),
-  plan({ id: "o2", name: "Vacances Toussaint", calendarEntryId: "p1", createdAt: "2026-07-04T10:00:00+00:00" }),
+  plan({ id: "o1", name: "Vacances Toussaint", planType: "CLOSURE", schedulePlanId: "p1", createdAt: "2026-07-03T10:00:00+00:00" }),
+  plan({ id: "o2", name: "Vacances Toussaint", planType: "CLOSURE", schedulePlanId: "p1", createdAt: "2026-07-04T10:00:00+00:00" }),
 ];
 
 function open(list: Schedule[]) {
@@ -50,7 +50,7 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
 
   it("counts only FINISHED periods as overlays (matches the modal, unlike a raw Set)", () => {
     // One finished period (p1) + one period (p2) still mid-first-generation → 1 overlay.
-    const withInFlight = [...schedules, plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", calendarEntryId: "p2", createdAt: "2026-07-05T10:00:00+00:00" })];
+    const withInFlight = [...schedules, plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", planType: "CLOSURE", schedulePlanId: "p2", createdAt: "2026-07-05T10:00:00+00:00" })];
     expect(seasonPlanCounts(withInFlight)).toEqual({ total: 2, overlays: 1 });
   });
 
@@ -87,7 +87,7 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("eye on a finished PERIOD overlay opens it on the planning page (never the wizard)", async () => {
     // A COMPLETED overlay is a finished period plan → consult it, not the wizard
     // (whose generate step renders the season plan, not the overlay).
-    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", calendarEntryId: "p1" })]);
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", planType: "CLOSURE", schedulePlanId: "p1" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
     expect(navigate).toHaveBeenCalledWith("/planning");

@@ -280,7 +280,15 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $schedule->setSeasonId($seasonId);
         $schedule->setName('Version');
         $schedule->setStatus(ScheduleStatus::DRAFT);
-        $schedule->setCalendarEntryId($calendarEntryId);
+        // Depuis C4 le schedule ne porte plus calendarEntryId : la version pend au PLAN, et
+        // c'est l'appelant qui POSE schedulePlanId (linkSchedule ne fait plus que numéroter).
+        // On reproduit la prod : plan SEASON si version de saison, sinon le plan de la période
+        // (ou null si elle n'en porte pas — linkSchedule doit alors laisser la version non liée).
+        $schedule->setSchedulePlanId(
+            null === $calendarEntryId
+                ? $this->provisioner->ensureSeasonPlanId($seasonId)
+                : $this->provisioner->periodPlanId($calendarEntryId),
+        );
         $this->em->persist($schedule);
         $this->em->flush();
 

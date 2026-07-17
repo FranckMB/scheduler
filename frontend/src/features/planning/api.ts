@@ -55,6 +55,10 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
 export type LockLevel = "NONE" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
+/** ADR-0002: a plan's type — SEASON is the socle, CLOSURE/HOLIDAY are period overlays. */
+export type SchedulePlanType = "SEASON" | "CLOSURE" | "HOLIDAY";
+// isSeasonPlanType vit dans ./lib/versions (module PUR, jamais mocké) : le définir ici,
+// où plusieurs tests posent un vi.mock("./api") manuel, le rendait indéfini sous le mock.
 
 export interface Schedule {
   id: string;
@@ -63,8 +67,16 @@ export interface Schedule {
   score: number | null;
   createdAt: string;
   updatedAt: string;
-  /** Non-null → this schedule is a period overlay (palier B), not a season plan. */
-  calendarEntryId: string | null;
+  /**
+   * ADR-0002 C4: the type of THIS version's plan. "SEASON" = the socle (base plan);
+   * "CLOSURE"/"HOLIDAY" = a period overlay. Replaces the removed `calendarEntryId` for
+   * the "is this an overlay?" question. null only for an anomalous unlinked version.
+   */
+  planType: SchedulePlanType | null;
+  /** ADR-0002: the SchedulePlan this version belongs to — versions of one plan share it
+   *  (season versions share the season plan; a period's versions share its plan). Groups the
+   *  version selector, replacing the removed `calendarEntryId`. */
+  schedulePlanId: string | null;
   /** PDF/PNG export lifecycle (async worker): null | pending | generating | completed | failed. */
   pdfExportStatus?: string | null;
   pdfExportUrl?: string | null;
@@ -260,20 +272,21 @@ export const regenerateFromVersion = (id: string): Promise<{ id: string }> => ap
  *  from the current structure, carrying the version's HARD-locked slots. */
 export const regenerate = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate`).json();
 
-/** planning-versions (overlay versions): create a new overlay version (DRAFT) for
- *  a period — the caller then generates it. A period may hold several versions. */
-export const createOverlayVersion = (calendarEntryId: string): Promise<{ id: string }> =>
-  api.post("schedules", { json: { calendarEntryId, name: "Version de période", status: "DRAFT" } }).json();
+/** planning-versions (overlay versions): create a new overlay version (DRAFT) UNDER a
+ *  period's plan (ADR-0002 C4: a version names its plan) — the caller then generates it.
+ *  A period's plan may hold several versions. */
+export const createOverlayVersion = (schedulePlanId: string): Promise<{ id: string }> =>
+  api.post("schedules", { json: { schedulePlanId, name: "Version de période", status: "DRAFT" } }).json();
 
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
-// arrive ABSENT (undefined), not null. calendarEntryId → every
-// `null === calendarEntryId` overlay check silently fails (UX-02 journey
+// arrive ABSENT (undefined), not null. planType/schedulePlanId → every
+// `"SEASON" === planType` / grouping-by-plan check silently fails (UX-02 journey
 // regression); score → a null-score plan (DRAFT/in-flight) renders the literal
-// "score undefined". Normalise BOTH at the boundary so the type is honest and
+// "score undefined". Normalise them at the boundary so the type is honest and
 // every consumer sees a real null.
 export const listSchedules = (): Promise<Schedule[]> =>
   collectionAll<Schedule>("schedules").then((rows) =>
-    rows.map((s) => ({ ...s, calendarEntryId: s.calendarEntryId ?? null, score: s.score ?? null })),
+    rows.map((s) => ({ ...s, planType: s.planType ?? null, schedulePlanId: s.schedulePlanId ?? null, score: s.score ?? null })),
   );
 export const getSchedule = (id: string): Promise<Schedule> => api.get(`schedules/${id}`).json<Schedule>();
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });

@@ -217,7 +217,6 @@ final class PeriodPlanBirthTest extends WebTestCase
         $version = new Schedule;
         $version->setClubId($club->getId());
         $version->setSeasonId($season->getId());
-        $version->setCalendarEntryId($entryId);
         $version->setSchedulePlanId($planId);
         $version->setName('V1');
         $version->setStatus(ScheduleStatus::PENDING);

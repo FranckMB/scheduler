@@ -6,7 +6,7 @@ import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", calendarEntryId: null, generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
+const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", planType: "SEASON", schedulePlanId: "season-plan", generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
 
 function renderToolbar(
   schedules: Schedule | Schedule[],

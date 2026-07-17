@@ -21,7 +21,11 @@ class ScheduleInput
     #[Groups(['write'])]
     public ?int $solverSeed = null;
 
-    /** Set at POST to create this schedule as a period overlay (palier B); ignored on PUT. */
+    /**
+     * ADR-0002 C4 : POST crée une version SOUS un plan nommé. Fourni → ce plan (overlay de
+     * période) ; omis → le plan SEASON de la saison (le socle). Ignoré sur PUT. Le back valide
+     * que le plan appartient au club.
+     */
     #[Groups(['write'])]
-    public ?string $calendarEntryId = null;
+    public ?string $schedulePlanId = null;
 }
