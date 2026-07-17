@@ -109,7 +109,7 @@ final class PeriodPlanBirthTest extends WebTestCase
 
     /**
      * Un plan par période — garanti par uniq_schedule_plan_calendar_entry ET par
-     * l'idempotence de provisionPeriodPlan. Un PUT (qui re-provisionne) ne doit pas
+     * l'idempotence de syncPeriodPlan. Un PUT (qui re-provisionne) ne doit pas
      * en faire naître un second : deux plans = deux jeux de réglages divergents.
      */
     public function testTheGestureReplayedDoesNotDuplicateThePlan(): void
@@ -123,6 +123,66 @@ final class PeriodPlanBirthTest extends WebTestCase
         $this->em->clear();
         $plans = $this->em->getRepository(SchedulePlan::class)->findBy(['calendarEntryId' => $entryId]);
         self::assertCount(1, $plans, 'Le geste rejoué ne duplique pas le plan.');
+    }
+
+    /**
+     * NR — inv. 9 tenu DANS LE TEMPS, pas seulement à la naissance. Rétrograder une
+     * période génératrice supprime son plan : sans ça, un `cutoff` garderait un plan
+     * HOLIDAY vivant, le wizard le verrait non-configuré et seederait des overrides
+     * Fanion sur une période qui ne doit rien porter.
+     */
+    public function testDemotingAGeneratingPeriodDeletesItsPlan(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances finalement coupées');
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $entryId));
+
+        $this->putPeriod($user, $entryId, ['periodType' => 'cutoff', 'title' => 'Coupure']);
+
+        self::assertNull(
+            $this->planOf($club->getId(), $entryId),
+            'Une période rétrogradée hors closure/holiday ne porte plus de plan (inv. 9).',
+        );
+    }
+
+    /**
+     * NR — la fenêtre du plan suit celle de sa période. Le plan naissant désormais AVANT
+     * toute génération, ses dates seraient figées à la création sans cette
+     * synchronisation ; sous le lot A le cas n'existait pas (le plan naissait à la
+     * génération, avec les dates du moment).
+     */
+    public function testEditingThePeriodDatesResyncsThePlanWindow(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances à recaler');
+
+        $this->putPeriod($user, $entryId, [
+            'periodType' => 'holiday',
+            'title' => 'Vacances à recaler',
+            'startDate' => '2027-02-15',
+            'endDate' => '2027-02-22',
+        ]);
+
+        $plan = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame('2027-02-15', $plan->getStartDate()->format('Y-m-d'), 'la fenêtre du plan suit la période');
+        self::assertSame('2027-02-22', $plan->getEndDate()->format('Y-m-d'));
+    }
+
+    /**
+     * NR — le NOM ne se synchronise PAS (inv. 12 : il appartient au plan, seul son
+     * renommage l'écrit). Un second écrivain le rendrait non durable.
+     */
+    public function testRenamingThePeriodDoesNotOverwriteThePlanName(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Nom de naissance');
+
+        $this->putPeriod($user, $entryId, ['periodType' => 'holiday', 'title' => 'Titre changé']);
+
+        $plan = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame('Nom de naissance', $plan->getName(), 'le nom du plan ne suit pas le titre de la période (inv. 12)');
     }
 
     protected function setUp(): void
@@ -161,11 +221,12 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         $this->client->request('PUT', '/api/calendar_entries/' . $entryId, [], [], $this->authHeaders($user) + [
             'CONTENT_TYPE' => 'application/json',
-        ], json_encode([
+        ], json_encode($changes + [
+            // Union `+` : la GAUCHE gagne — $changes surcharge donc bien ces défauts.
             'kind' => 'period',
             'startDate' => '2026-10-19',
             'endDate' => '2026-11-02',
-        ] + $changes, \JSON_THROW_ON_ERROR));
+        ], \JSON_THROW_ON_ERROR));
         self::assertResponseIsSuccessful();
     }
 

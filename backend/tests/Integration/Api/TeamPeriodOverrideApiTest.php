@@ -95,7 +95,7 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         $this->em->flush();
         // En prod le geste (POST /api/calendar_entries) crée le plan ; l'entrée est
         // fabriquée à la main ici, on rejoue donc le geste explicitement.
-        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->syncPeriodPlan($entry->getId());
         self::assertIsString($planId);
         self::assertFalse($this->planById($planId)->isTeamSelectionInitialized(), 'a fresh plan is not yet configured');
 

@@ -7,7 +7,6 @@ namespace App\State\Processor;
 use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\TeamPeriodOverrideResource;
 use App\Dto\TeamPeriodOverrideInput;
-use App\Entity\SchedulePlan;
 use App\Entity\TeamPeriodOverride;
 
 /**
@@ -50,12 +49,20 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
         // not off the calendar event). The override is still keyed by calendarEntryId
         // until C2, so the plan is resolved through it; C2 will make that a direct
         // planId read. The plan exists by now — it is born with the entry (lot C).
+        //
+        // SQL BRUT, pas l'ORM, pour la raison que documente SchedulePlanProvisioner :
+        // `season_filter` épingle toute lecture ORM à la saison ACTIVE de la requête,
+        // or `calendarEntryId` arrive dans le corps sans être validé contre elle. Un
+        // findOneBy filtré rendrait null pour une période d'une autre saison, et le
+        // `instanceof` avalerait l'échec en silence : le flag ne serait jamais posé, et
+        // le wizard re-seederait le Fanion-only par-dessus les choix du gestionnaire.
+        // RLS continue de scoper le club.
         if (null !== $input->calendarEntryId) {
-            $plan = $this->entityManager->getRepository(SchedulePlan::class)
-                ->findOneBy(['calendarEntryId' => $input->calendarEntryId]);
-            if ($plan instanceof SchedulePlan && !$plan->isTeamSelectionInitialized()) {
-                $plan->setTeamSelectionInitialized(true);
-            }
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
+                . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
+                ['eid' => $input->calendarEntryId],
+            );
         }
 
         return $entity;

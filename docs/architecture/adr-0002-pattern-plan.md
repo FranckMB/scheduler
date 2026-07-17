@@ -222,7 +222,9 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
 - **Lot A — Fondations (livré 2026-07-12)** : entité `SchedulePlan` + `Schedule.schedulePlanId`
   / `Schedule.versionNumber` (nullable pendant la transition), migration RLS `FORCE` + backfill
   des données existantes, **provisioning automatique** à la création (saison → plan SEASON ;
-  schedule → lien plan + numéro de version) via `SchedulePlanProvisioner`, API **lecture**
+  schedule → lien plan + numéro de version) via `SchedulePlanProvisioner` — *le plan de
+  période, lui, naissait alors de la première version ; le **lot C** l'a avancé au geste
+  (voir la note ci-dessous), et `linkSchedule` ne fait plus que le chercher*, API **lecture**
   (`/api/schedule_plans`, `Schedule` expose `schedulePlanId`/`versionNumber`). **Strictement
   additif** : rien de l'ancien monde n'est retiré — `baselineScheduleId`, `overlayScheduleId`,
   les statuts `VALIDATED/ARCHIVED` et `planningName` **font toujours foi**. `chosenScheduleId`
@@ -305,7 +307,30 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   statut ne pouvait pas répondre « cette version-ci est en vigueur » pour un overlay, dont le
   pointeur vit sur le plan de sa période et n'est pas visible depuis `/api/me`.
 
-- **Lot C** — réglages de période & génération pilotés par plan.
+- **Lot C** — réglages de période & génération pilotés par plan. **C1 livré (2026-07-17)** :
+  **LE PLAN NAÎT DU GESTE** — *décision fondateur, à lire comme un invariant de plein droit* :
+  **un plan naît en réponse à un événement du calendrier**. Le plan SEASON naît avec la saison
+  (inv. 3) ; le plan CLOSURE/HOLIDAY naît au geste « ajuster une période de vacances / un souci
+  du calendrier » — c'est-à-dire à la **création de la `CalendarEntry`** — et c'est la **seule**
+  façon de créer les deux autres types. Le lot A le faisait apparaître à la **première version** :
+  trop tard, puisque les réglages de la période (inv. 5) se saisissent **avant** toute génération
+  et doivent s'accrocher à un plan existant. Trois conséquences structurelles :
+  - **`linkSchedule` ne crée plus jamais un plan de période, il le cherche.** Un second site de
+    naissance laisserait passer inaperçu un plan manquant — et masquerait le vrai défaut.
+  - **La naissance est atomique avec celle de l'entrée** (une transaction englobe les deux dans
+    `CalendarEntryStateProcessor`). C'est la contrepartie obligatoire du point précédent : le
+    self-heal de `choose()` ne peut plus réparer une période sans plan, donc une période sans
+    plan ne doit pas pouvoir exister. En cas d'échec, on préfère ne pas créer la période.
+  - **Toute écriture sur l'entrée réconcilie son plan** (`syncPeriodPlan`) : naissance,
+    synchronisation de la **fenêtre** (le plan naissant plus tôt, ses dates deviendraient sinon
+    obsolètes dès une correction — symétrique de `syncSeasonPlan` pour la saison), ou
+    **suppression** si la période est rétrogradée hors closure/holiday (inv. 9). Le **nom**, lui,
+    n'est jamais synchronisé : il appartient au plan (inv. 12), un second écrivain le rendrait
+    non durable.
+
+  Le flag de seed `teamSelectionInitialized` a suivi les réglages sur le plan (inv. 5).
+  **Reste C2/C3** (re-keyage `calendarEntryId` → `planId`) **et C4** (génération sur `plan.type`,
+  suppression de `Schedule.calendarEntryId`).
 - **Lot D** — nettoyage résiduel : la bascule a déjà supprimé baseline / socle / nom legacy
   et les statuts `VALIDATED`/`ARCHIVED`. Restent : `CalendarEntry.overlayScheduleId` (pointeur
   inverse, encore utile tant que le lot C n'a pas re-keyé les périodes) et les colonnes

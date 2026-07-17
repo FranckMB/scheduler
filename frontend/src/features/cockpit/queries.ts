@@ -36,8 +36,11 @@ export function useCalendarEntry(id: string | null) {
  * génération. Porte les réglages de la période (inv. 5), dont le garde de seed
  * `teamSelectionInitialized`.
  *
- * Sous le préfixe "calendar-entries" pour hériter de l'invalidation partagée : le
- * flag bascule côté serveur au 1er override, sans mutation directe sur le plan.
+ * Le flag `teamSelectionInitialized` bascule côté SERVEUR au 1er override, sans
+ * mutation directe sur le plan : aucune invalidation ne le rafraîchit (les mutations
+ * d'override n'invalident que ["wizard", "team_period_overrides", …]). Ce qui protège
+ * le seed d'un double déclenchement, c'est le garde `periodSeedWasClaimed` — pas cette
+ * clé. Ne pas retirer ce garde en croyant qu'un refetch prend le relais.
  */
 export function useSchedulePlanForEntry(calendarEntryId: string | null) {
   return useQuery({

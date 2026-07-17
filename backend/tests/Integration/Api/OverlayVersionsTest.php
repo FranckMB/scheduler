@@ -185,9 +185,9 @@ final class OverlayVersionsTest extends WebTestCase
         $this->em->persist($entry);
         // ADR-0002 lot C: une période a TOUJOURS son plan — en prod le geste (POST
         // /api/calendar_entries) le crée. L'entrée est fabriquée à la main ici, on
-        // rejoue donc le geste (flush d'abord: provisionPeriodPlan relit la ligne).
+        // rejoue donc le geste (flush d'abord: syncPeriodPlan relit la ligne).
         $this->em->flush();
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::getContainer()->get(SchedulePlanProvisioner::class)->syncPeriodPlan($entry->getId());
 
         return $entry;
     }

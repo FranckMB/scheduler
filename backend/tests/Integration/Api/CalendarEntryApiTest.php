@@ -326,7 +326,7 @@ final class CalendarEntryApiTest extends WebTestCase
         // ADR-0002 lot C : une période a toujours son plan (né du geste). Rejoué ici,
         // l'entrée étant fabriquée à la main plutôt que par le POST.
         $this->em->flush();
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::getContainer()->get(SchedulePlanProvisioner::class)->syncPeriodPlan($entry->getId());
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($club->getId());
@@ -371,7 +371,7 @@ final class CalendarEntryApiTest extends WebTestCase
         $this->em->flush();
         // ADR-0002 lot C : le plan naît du geste. Rejoué ici — sans lui, l'overlay ne
         // se rattacherait à aucun plan et ne pourrait pas être pointé.
-        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::getContainer()->get(SchedulePlanProvisioner::class)->syncPeriodPlan($entry->getId());
 
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());

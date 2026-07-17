@@ -147,37 +147,51 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
 
     /**
      * ADR-0002 lot C — LE PLAN NAÎT DU GESTE. Creating a CLOSURE/HOLIDAY entry IS
-     * the gesture "ajuster cette période", so its plan is provisioned here, not at
-     * the first generation: the period's settings (inv. 5) are entered BEFORE any
-     * version exists and must have a plan to hang off.
+     * the gesture "ajuster cette période", so its plan is born here, not at the first
+     * generation: the period's settings (inv. 5) are entered BEFORE any version exists
+     * and must have a plan to hang off.
+     *
+     * ATOMIQUE, et c'est structurel : le plan est la SEULE porte (linkSchedule ne fait
+     * plus que chercher, et choose() ne peut donc plus réparer). Sans transaction
+     * englobante, un échec du provisioning après le flush du parent — wrapInTransaction
+     * FERME l'EntityManager et relance — laisserait une période commitée sans plan, que
+     * plus aucun chemin ne rattraperait : sa génération produirait une version non liée,
+     * et sa validation un 409 définitif. Une période sans plan ne doit pas pouvoir
+     * exister ; on préfère ne pas créer la période du tout.
      *
      * @param CalendarEntryInput $input
      */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
-        $output = parent::processPost($input, $clubId, $seasonId);
-        // parent::processPost has flushed — provisionPeriodPlan reads the row back
-        // as raw SQL. A non-generating type (inv. 9) returns null: no plan, no error.
-        $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+        return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
+            $output = parent::processPost($input, $clubId, $seasonId);
+            // Le flush du parent rend la ligne visible à la relecture SQL brute du
+            // provisioner — même connexion, même transaction. Un type non générant
+            // (inv. 9) rend null : pas de plan, pas d'erreur.
+            $this->schedulePlanProvisioner->syncPeriodPlan($output->id);
 
-        return $output;
+            return $output;
+        });
     }
 
     /**
-     * A PUT can promote a non-generating entry (cutoff/mutualisation) to
-     * closure/holiday — that promotion IS the gesture too, so it must mint the plan
-     * exactly like a POST. provisionPeriodPlan is idempotent and returns null for a
-     * type that carries no plan, so the unconditional call is safe on every edit.
+     * Toute écriture sur l'entrée RÉCONCILIE son plan (naissance / synchronisation de
+     * la fenêtre / suppression) : le plan est la réponse à un événement, il doit suivre
+     * l'événement. Promouvoir un cutoff en holiday crée le plan — c'est le geste ; le
+     * rétrograder le supprime (inv. 9) ; corriger les dates recale sa fenêtre. Atomique
+     * pour la même raison que le POST.
      *
      * @param array<string, mixed> $uriVariables
      * @param CalendarEntryInput   $input
      */
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
-        $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-        $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+        return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
+            $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
+            $this->schedulePlanProvisioner->syncPeriodPlan($output->id);
 
-        return $output;
+            return $output;
+        });
     }
 
     protected function mapEntityToOutput(object $entity): CalendarEntryResource

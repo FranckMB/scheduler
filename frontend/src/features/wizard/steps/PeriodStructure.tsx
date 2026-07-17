@@ -96,10 +96,17 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // between firing the seed and the plan query reflecting the flag. ADR-0002 lot C:
   // the flag lives on the plan — the RESPONSE — not on the calendar event.
   useEffect(() => {
-    // `false !== plan?.teamSelectionInitialized` bails on undefined AND on null too:
-    // a fetch error leaves it undefined, and a period with no plan (inv. 9) returns
-    // null — we must NOT seed an unknown period (it could be an already-configured one
-    // whose GET blipped). Only seed when the plan loaded AND is explicitly uninitialised.
+    // `false !== plan?.teamSelectionInitialized` bails on undefined AND on null:
+    // seed ONLY when the plan loaded and says explicitly "jamais configuré".
+    //
+    // Les deux cas de sortie sont voulus, et aucun n'est le cas nominal. `undefined` =
+    // fetch en erreur : ne pas seeder une période inconnue (elle pourrait être déjà
+    // configurée, son GET ayant simplement raté) — seeder à tort désactiverait des
+    // équipes que le gestionnaire vient d'activer. `null` = aucun plan : inatteignable
+    // pour une closure/holiday depuis que le geste est atomique (l'entrée et son plan
+    // naissent ensemble, ou pas du tout), et le mode période ne s'ouvre que sur ces deux
+    // types. Un null ici est donc une anomalie, pas un état neuf : ne rien faire est le
+    // choix conservateur (le gestionnaire garde la main via « Fanion seul »).
     if (isLoading || planLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
       return;
     }

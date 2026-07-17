@@ -118,8 +118,9 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         $this->entityManager->wrapInTransaction(function () use ($schedule, $entry): void {
             $this->entityManager->persist($schedule);
 
-            // ADR-0002 Lot A: link the new version to its SchedulePlan (the
-            // CLOSURE/HOLIDAY plan is created lazily on a period's first version).
+            // ADR-0002: link the new version to its SchedulePlan. Le plan de période
+            // existe déjà — il naît du geste « ajuster » (lot C), plus de cette
+            // première version : linkSchedule ne fait que le CHERCHER.
             $this->schedulePlanProvisioner->linkSchedule($schedule);
 
             if ($entry instanceof CalendarEntry) {

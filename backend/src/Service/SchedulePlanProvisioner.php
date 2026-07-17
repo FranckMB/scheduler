@@ -23,17 +23,22 @@ use Throwable;
  *
  * - ensureSeasonPlan(): the SEASON plan exists as soon as the season does (an
  *   empty "espace de travail" with no version yet).
- * - provisionPeriodPlan(): the CLOSURE/HOLIDAY plan exists as soon as the manager
- *   makes the gesture — "ajuster une période de vacances / un souci du calendrier"
- *   — which IS the creation of the CalendarEntry. Called from
- *   CalendarEntryStateProcessor, the only site in src/ that creates an entry.
- *   Periods are configured BEFORE any generation, so the plan must predate the
- *   settings that hang off it (inv. 5); provisioning it at the first version — as
- *   lot A did — was simply too late.
+ * - syncPeriodPlan(): RÉCONCILIE le plan d'une période avec son entrée calendrier, à
+ *   CHAQUE écriture sur celle-ci — naissance au geste "ajuster une période de vacances
+ *   / un souci du calendrier" (= la création de la CalendarEntry), synchronisation de
+ *   la fenêtre, ou suppression si la période est rétrogradée (inv. 9). Appelé depuis
+ *   CalendarEntryStateProcessor, seul site de src/ qui crée une entrée, et ATOMIQUE
+ *   avec elle. Les périodes se configurent AVANT toute génération : le plan doit donc
+ *   précéder les réglages qui s'y accrochent (inv. 5) — le créer à la première version,
+ *   comme le lot A, était simplement trop tard.
  * - linkSchedule(): stamps schedulePlanId + versionNumber on a freshly-created
  *   schedule. It only ever LOOKS UP a period plan (findPeriodPlanId), never
  *   creates one: a second creation site would let a missing gesture-time plan pass
  *   unnoticed. Idempotent-safe: a schedule already linked keeps its version.
+ *
+ * ⚠️ Corollaire : le self-heal de choose() ne peut PLUS réparer un plan de période
+ * manquant (il passe par linkSchedule, qui ne fait que chercher). C'est pourquoi la
+ * naissance est atomique avec l'entrée — une période sans plan ne doit pas exister.
  *
  * Existence/version lookups run as RAW SQL on purpose: the request-scoped
  * ORM season_filter pins every ORM read to the active season, but the
@@ -51,6 +56,16 @@ final class SchedulePlanProvisioner
         private readonly EntityManagerInterface $entityManager,
         private readonly ScheduleConstraintBuilder $constraintBuilder,
     ) {}
+
+    /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
+    private static function periodPlanType(?string $periodType): ?SchedulePlanType
+    {
+        return match ($periodType) {
+            'closure' => SchedulePlanType::CLOSURE,
+            'holiday' => SchedulePlanType::HOLIDAY,
+            default => null,
+        };
+    }
 
     /**
      * The season's SEASON plan, created if absent. NOTE: an already-existing plan
@@ -105,7 +120,7 @@ final class SchedulePlanProvisioner
             $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
             // Period plans are LOOKED UP, never created here: they are born with the
-            // manager's gesture (provisionPeriodPlan). A null means the entry carries
+            // manager's gesture (syncPeriodPlan). A null means the entry carries
             // no plan — either a non-generating type (inv. 9: cutoff/mutualisation) or
             // an entry created outside CalendarEntryStateProcessor (tests). Either way
             // the schedule stays unlinked rather than silently minting a second plan.
@@ -291,26 +306,78 @@ final class SchedulePlanProvisioner
     /**
      * ADR-0002 inv. 5 + décision fondateur 2026-07-17 — LE PLAN NAÎT DU GESTE.
      *
-     * Creating a CLOSURE/HOLIDAY CalendarEntry ("ajuster cette période") IS the
-     * creation of its plan. Returns the plan id, or null when the entry carries no
-     * plan by design — inv. 9: cutoff/mutualisation stay calendar reminders, and
-     * ensurePeriodPlanId maps only 'closure'/'holiday' to a type.
+     * RÉCONCILIATEUR, pas un simple créateur : l'état du plan suit l'état de son
+     * événement calendrier, à chaque écriture sur celui-ci. Trois issues, dérivées
+     * du SEUL type de la période :
      *
-     * Serialized per period with the same advisory lock as linkSchedule, so a
-     * double-submitted POST cannot mint two plans for one entry (check-then-insert).
-     * The caller must have FLUSHED the entry: the row is read back as raw SQL.
+     *  - closure/holiday **sans** plan → naissance (le geste « ajuster cette période ») ;
+     *  - closure/holiday **avec** plan → synchronisation du type et de la FENÊTRE ;
+     *  - tout autre type (rétrogradation en cutoff/mutualisation, conversion en
+     *    event qui annule le periodType) → **suppression** du plan : inv. 9, ces
+     *    entrées ne portent pas de plan. Sans cette branche, un `cutoff` garderait un
+     *    plan HOLIDAY vivant que seule la suppression de l'entrée nettoierait.
+     *
+     * Le NOM n'est délibérément PAS synchronisé — même décision que syncSeasonPlan :
+     * il appartient au plan (inv. 12) et n'est écrit que par son renommage ; un second
+     * écrivain le rendrait non durable. Il n'est posé qu'à la naissance.
+     *
+     * Rend l'id du plan, ou null quand l'entrée n'en porte pas (par conception, ou
+     * parce qu'elle vient d'en perdre un).
+     *
+     * Sérialisé par période avec le même verrou consultatif que linkSchedule : un POST
+     * double-soumis ne peut pas minter deux plans (check-then-insert). L'appelant doit
+     * avoir FLUSHÉ l'entrée — la ligne est relue en SQL brut. S'imbrique sans risque
+     * dans la transaction de l'appelant (le verrou tient jusqu'au commit le plus
+     * externe), ce dont dépend l'atomicité création-entrée + création-plan.
      */
-    public function provisionPeriodPlan(string $calendarEntryId): ?string
+    public function syncPeriodPlan(string $calendarEntryId): ?string
     {
         return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): ?string {
             $this->lockPlanScope($calendarEntryId);
 
-            $planId = $this->ensurePeriodPlanId($calendarEntryId);
-            if (null !== $planId) {
-                $this->entityManager->flush();
+            // Filter-free: season_filter would hide a period whose season is not the
+            // request's active one (même raison que ensurePeriodPlanId).
+            $row = $this->entityManager->getConnection()->fetchAssociative(
+                'SELECT period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
+                ['id' => $calendarEntryId],
+            );
+            if (false === $row) {
+                return null; // entrée disparue entre l'écriture et ici
             }
 
-            return $planId;
+            $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
+            if (null === $type) {
+                // Inv. 9 — cette entrée ne porte pas de plan. Si elle en avait un (elle
+                // vient d'être rétrogradée), il part avec ses versions.
+                $this->entityManager->getConnection()->executeStatement(
+                    'DELETE FROM schedule_plan WHERE calendar_entry_id = :eid',
+                    ['eid' => $calendarEntryId],
+                );
+
+                return null;
+            }
+
+            $existingId = $this->findPeriodPlanId($calendarEntryId);
+            if (null === $existingId) {
+                return $this->ensurePeriodPlanId($calendarEntryId);
+            }
+
+            // La fenêtre du plan suit celle de sa période. Sans ça, corriger les dates
+            // d'une période avant toute génération laisserait le plan sur les dates
+            // d'origine — impossible sous le lot A, où il naissait à la génération.
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE schedule_plan SET type = :type, start_date = :start, end_date = :end, '
+                . 'updated_at = now(), version = version + 1 WHERE id = :pid',
+                [
+                    'type' => $type->value,
+                    'start' => new DateTimeImmutable((string) $row['start_date']),
+                    'end' => new DateTimeImmutable((string) $row['end_date']),
+                    'pid' => $existingId,
+                ],
+                ['start' => Types::DATETIMETZ_IMMUTABLE, 'end' => Types::DATETIMETZ_IMMUTABLE],
+            );
+
+            return $existingId;
         });
     }
 
@@ -398,11 +465,7 @@ final class SchedulePlanProvisioner
             return null;
         }
 
-        $type = match ($row['period_type']) {
-            'closure' => SchedulePlanType::CLOSURE,
-            'holiday' => SchedulePlanType::HOLIDAY,
-            default => null,
-        };
+        $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
         if (null === $type) {
             return null;
         }
