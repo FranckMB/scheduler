@@ -194,7 +194,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $seasonalVenue = $this->venue($club, $season, '10000000-0000-4000-8000-000000000011', 'Gym socle');
         $cityVenue = $this->venue($club, $season, '20000000-0000-4000-8000-000000000022', 'Gym mairie');
         $this->venueSlot($club, $season, $seasonalVenue->getId(), null); // seasonal
-        $this->venueSlot($club, $season, $cityVenue->getId(), $entry->getId()); // period-only
+        $this->venueSlot($club, $season, $cityVenue->getId(), $this->planIdOf($entry)); // prêté à CE plan
         $schedule = $this->overlaySchedule($club, $season, $entry);
         $this->em->flush();
 
@@ -423,7 +423,8 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         return $venue;
     }
 
-    private function venueSlot(Club $club, Season $season, string $venueId, ?string $calendarEntryId): void
+    /** $schedulePlanId : null = créneau saisonnier (base) ; set = prêté à ce plan (lot C3). */
+    private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId): void
     {
         $slot = new \App\Entity\VenueTrainingSlot;
         $slot->setClubId($club->getId());
@@ -433,7 +434,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $slot->setStartTime(new DateTimeImmutable('18:00'));
         $slot->setDurationMinutes(90);
         $slot->setCapacity(1);
-        $slot->setCalendarEntryId($calendarEntryId);
+        $slot->setSchedulePlanId($schedulePlanId);
         $this->em->persist($slot);
     }
 

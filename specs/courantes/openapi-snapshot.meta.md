@@ -1,7 +1,16 @@
-Last verified @ feat/adr0002-lot-c2-jumeaux 2026-07-17
+Last verified @ feat/adr0002-lot-c3-calques 2026-07-17
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **82 paths.**
 Changements récents :
+- **ADR-0002 lot C3 — les calques s'ancrent au PLAN (2026-07-17, RUPTURE)** : aucun path
+  touché (82). `VenueTrainingSlot` et `Reservation` remplacent **`calendarEntryId` par
+  **`schedulePlanId`** (lecture, écriture, filtre `?schedulePlanId=`). L'ancre reste
+  **nullable** et sa nullité garde son sens : **NULL = la structure PARTAGÉE** (créneau
+  saisonnier, réservation de base — inv. 6), non-NULL = propre à ce plan.
+  ⚠️ **`Constraint` ne change PAS** : les contraintes **datées** restent sur la
+  `CalendarEntry`. Elles décrivent le FAIT (« Barros fermé »), et le radar de conflits les
+  lit par l'entrée pour déclencher le geste « ajuster » — les ancrer au plan les rendrait
+  illisibles tant qu'aucun plan n'existe (décision fondateur, l'invariant 5 corrigé).
 - **ADR-0002 lot C2 — les deux jumeaux s'ancrent au PLAN (2026-07-17, RUPTURE)** : aucun
   path touché (82). `TeamPeriodOverride` et `ConstraintPeriodOverride` remplacent
   **`calendarEntryId` par `schedulePlanId`** — en lecture, en écriture et en filtre de

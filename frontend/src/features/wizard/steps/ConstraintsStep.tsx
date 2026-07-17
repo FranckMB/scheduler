@@ -16,6 +16,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useSchedulePlanForEntry } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -62,6 +63,9 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
 
 export function ConstraintsStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
+  // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
+  const schedulePlanId = useSchedulePlanForEntry(periodEntryId).data?.id ?? null;
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
@@ -398,7 +402,7 @@ export function ConstraintsStep() {
       </div>
 
       {"reserve" === mode ? (
-        <ReservationPanel teams={teams} tiers={tiers} venues={venues} calendarEntryId={periodEntryId} />
+        <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
       ) : (
         <>
           {/* Per-family add form */}

@@ -113,28 +113,28 @@ export function useDeleteSlot() {
 
 // --- Period-editable structure (F1): slots + team overrides scoped to a period ---
 
-export function usePeriodSlots(calendarEntryId: string | null) {
+export function usePeriodSlots(schedulePlanId: string | null) {
   return useQuery({
-    queryKey: ["wizard", "period_slots", calendarEntryId],
-    queryFn: () => wizardApi.listPeriodSlots(calendarEntryId as string),
-    enabled: null !== calendarEntryId,
+    queryKey: ["wizard", "period_slots", schedulePlanId],
+    queryFn: () => wizardApi.listPeriodSlots(schedulePlanId as string),
+    enabled: null !== schedulePlanId,
     staleTime: 30_000,
   });
 }
 
-export function useCreatePeriodSlot(calendarEntryId: string) {
+export function useCreatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Omit<SlotPayload, "calendarEntryId">) => wizardApi.createSlot({ ...body, calendarEntryId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+    mutationFn: (body: Omit<SlotPayload, "schedulePlanId">) => wizardApi.createSlot({ ...body, schedulePlanId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
   });
 }
 
-export function useDeletePeriodSlot(calendarEntryId: string) {
+export function useDeletePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteSlot(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
   });
 }
 
@@ -297,10 +297,10 @@ export function useWizardConstraints(calendarEntryId?: string | null) {
 }
 
 /** Server-backed reservations (team→slot HARD pins), scoped base vs period overlay. */
-export function useReservations(calendarEntryId?: string | null) {
+export function useReservations(schedulePlanId?: string | null) {
   return useQuery({
-    queryKey: ["wizard", "reservations", calendarEntryId ?? "base"],
-    queryFn: () => wizardApi.listReservations(calendarEntryId ? { calendarEntryId } : undefined),
+    queryKey: ["wizard", "reservations", schedulePlanId ?? "base"],
+    queryFn: () => wizardApi.listReservations(schedulePlanId ? { schedulePlanId } : undefined),
     staleTime: 30_000,
   });
 }

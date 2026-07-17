@@ -91,7 +91,7 @@ class ReservationStateProcessor extends AbstractStateProcessor
         if (null !== $input->durationMinutes) {
             $entity->setDurationMinutes($input->durationMinutes);
         }
-        $entity->setCalendarEntryId($input->calendarEntryId);
+        $entity->setSchedulePlanId($input->schedulePlanId);
 
         return $entity;
     }

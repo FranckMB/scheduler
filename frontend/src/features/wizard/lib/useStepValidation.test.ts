@@ -43,7 +43,7 @@ const slot = (venueId: string, dayOfWeek: number, startTime: string, capacity: n
 
 const reservation = (id: string, teamId: string, venueId: string, dayOfWeek: number, startTime: string): Reservation => ({
   id,
-  calendarEntryId: null,
+  schedulePlanId: null, // réservation de BASE (structure partagée, inv. 6)
   teamId,
   venueId,
   dayOfWeek,

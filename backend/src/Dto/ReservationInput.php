@@ -35,5 +35,5 @@ class ReservationInput
 
     /** NULL = base plan; set = a period overlay. */
     #[Groups(['write'])]
-    public ?string $calendarEntryId = null;
+    public ?string $schedulePlanId = null;
 }

@@ -125,7 +125,7 @@ final class StructureRestorer
 
         // A dated Reservation whose team or venue is gone.
         $this->deleteDangling(
-            'SELECT r.id FROM App\Entity\Reservation r WHERE r.clubId = :c AND r.seasonId = :s AND r.calendarEntryId IS NOT NULL AND ('
+            'SELECT r.id FROM App\Entity\Reservation r WHERE r.clubId = :c AND r.seasonId = :s AND r.schedulePlanId IS NOT NULL AND ('
             . 'NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = r.teamId) OR NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = r.venueId))',
             $tenant,
             'DELETE App\Entity\Reservation r WHERE r.id IN (:ids)',
@@ -146,7 +146,7 @@ final class StructureRestorer
             'DELETE App\Entity\ConstraintPeriodOverride o WHERE o.id IN (:ids)',
         );
         $this->deleteDangling(
-            'SELECT vts.id FROM App\Entity\VenueTrainingSlot vts WHERE vts.clubId = :c AND vts.seasonId = :s AND vts.calendarEntryId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = vts.venueId)',
+            'SELECT vts.id FROM App\Entity\VenueTrainingSlot vts WHERE vts.clubId = :c AND vts.seasonId = :s AND vts.schedulePlanId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = vts.venueId)',
             $tenant,
             'DELETE App\Entity\VenueTrainingSlot vts WHERE vts.id IN (:ids)',
         );
@@ -287,7 +287,7 @@ final class StructureRestorer
         $this->deleteFamily(Reservation::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Constraint::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Team::class, $clubId, $seasonId);
-        // permanentOnly: a period's own slots (calendarEntryId set) belong to the
+        // permanentOnly: a period's own slots (schedulePlanId set) belong to the
         // calendar, not the base structure — a base-version restore must not wipe them.
         $this->deleteFamily(VenueTrainingSlot::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Venue::class, $clubId, $seasonId);
@@ -306,8 +306,16 @@ final class StructureRestorer
             $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
         }
         if ($permanentOnly) {
-            // Dated rows belong to the calendar (overlays / period closures) — kept.
-            $qb->andWhere('e.calendarEntryId IS NULL');
+            // Ne toucher QUE la structure partagée : les lignes de période appartiennent au
+            // calendrier (overlays / fermetures) et survivent. L'ancre diffère selon
+            // l'entité depuis les lots C2-C3 (ADR-0002 inv. 5, correction du 2026-07-17) :
+            // créneaux et réservations = des RÉPONSES → ancrés au PLAN ; contraintes datées
+            // = le FAIT → restées sur la CalendarEntry. La deviner ici la ferait diverger en
+            // silence — on la nomme.
+            $anchor = \in_array($entityClass, [Reservation::class, VenueTrainingSlot::class], true)
+                ? 'schedulePlanId'
+                : 'calendarEntryId';
+            $qb->andWhere(\sprintf('e.%s IS NULL', $anchor));
         }
         $qb->getQuery()->execute();
     }

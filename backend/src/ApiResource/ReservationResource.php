@@ -37,7 +37,7 @@ class ReservationResource
     public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
-    public ?string $calendarEntryId = null;
+    public ?string $schedulePlanId = null;
 
     #[Groups(['read'])]
     public string $teamId = '';
@@ -61,7 +61,7 @@ class ReservationResource
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();
         $dto->updatedAt = $entity->getUpdatedAt();
-        $dto->calendarEntryId = $entity->getCalendarEntryId();
+        $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->teamId = $entity->getTeamId();
         $dto->venueId = $entity->getVenueId();
         $dto->dayOfWeek = $entity->getDayOfWeek();

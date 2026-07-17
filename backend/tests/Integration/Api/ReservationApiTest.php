@@ -38,7 +38,7 @@ final class ReservationApiTest extends WebTestCase
         $id = $this->post(null);
         self::assertResponseStatusCodeSame(201);
 
-        // Base listing (no calendarEntryId) returns the base reservation.
+        // Base listing (no schedulePlanId) returns the base reservation.
         $this->get(null);
         self::assertResponseIsSuccessful();
         self::assertCount(1, $this->members());
@@ -92,7 +92,7 @@ final class ReservationApiTest extends WebTestCase
         $this->get('33333333-3333-4333-8333-333333333333');
         self::assertCount(1, $this->members());
 
-        // Not visible on the base plan (calendarEntryId IS NULL).
+        // Not visible on the base plan (schedulePlanId IS NULL).
         $this->get(null);
         self::assertCount(0, $this->members());
     }
@@ -153,7 +153,8 @@ final class ReservationApiTest extends WebTestCase
         ];
     }
 
-    private function post(?string $calendarEntryId): string
+    /** $schedulePlanId : null = réservation de BASE ; set = propre à ce plan (lot C3). */
+    private function post(?string $schedulePlanId): string
     {
         $this->client->request('POST', '/api/reservations', [], [], $this->headers(), json_encode([
             'teamId' => '11111111-1111-4111-8111-111111111111',
@@ -161,15 +162,15 @@ final class ReservationApiTest extends WebTestCase
             'dayOfWeek' => 2,
             'startTime' => '20:30',
             'durationMinutes' => 120,
-            'calendarEntryId' => $calendarEntryId,
+            'schedulePlanId' => $schedulePlanId,
         ], \JSON_THROW_ON_ERROR));
 
         return (string) (json_decode((string) $this->client->getResponse()->getContent(), true)['id'] ?? '');
     }
 
-    private function get(?string $calendarEntryId): void
+    private function get(?string $schedulePlanId): void
     {
-        $query = null !== $calendarEntryId ? '?calendarEntryId=' . $calendarEntryId : '';
+        $query = null !== $schedulePlanId ? '?schedulePlanId=' . $schedulePlanId : '';
         $this->client->request('GET', '/api/reservations' . $query, [], [], $this->headers());
     }
 

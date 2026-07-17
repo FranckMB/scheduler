@@ -85,10 +85,13 @@ final class GenerationComplexityGuard
             $this->teamRepository->count($scope),
             $this->venueRepository->count($scope),
             $this->coachRepository->count($scope),
-            // Base plan uses SEASONAL slots only — period slots (calendarEntryId set)
+            // Base plan uses SEASONAL slots only — period slots (schedulePlanId set)
             // must not inflate the base availability_slots cap.
-            $this->venueTrainingSlotRepository->count($scope + ['calendarEntryId' => null]),
+            $this->venueTrainingSlotRepository->count($scope + ['schedulePlanId' => null]),
             // Permanent constraints only — the exact set the base-plan payload carries.
+            // ⚠️ Ancre DIFFÉRENTE de la ligne au-dessus, et c'est voulu : les contraintes
+            // DATÉES restent sur la CalendarEntry (le FAIT), le radar de conflits les lit
+            // par l'entrée — cf. ADR-0002 inv. 5, correction du 2026-07-17.
             $this->constraintRepository->count($scope + ['calendarEntryId' => null]),
         );
     }

@@ -15,11 +15,11 @@ import { SlotReservationModal } from "./SlotReservationModal";
  * a slot to pin one or two teams on it (a HARD lock honored at generation). The
  * rank-sorted summary of all reservations lives in the Récap step, not here (kept
  * épuré). Server-backed via the Reservation entity; base plan vs period overlay by
- * `calendarEntryId`.
+ * `schedulePlanId` (ADR-0002 inv. 5 : la réservation est une RÉPONSE, elle pend au plan).
  */
-export function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; calendarEntryId: string | null }) {
+export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; schedulePlanId: string | null }) {
   const { data: slots = [] } = useVenueSlots();
-  const { data: reservations = [] } = useReservations(calendarEntryId);
+  const { data: reservations = [] } = useReservations(schedulePlanId);
   const [venueId, setVenueId] = useState("");
   const [activeSlot, setActiveSlot] = useState<VenueTrainingSlot | null>(null);
 
@@ -77,7 +77,7 @@ export function ReservationPanel({ teams, tiers, venues, calendarEntryId }: { te
           tiers={tiers}
           reservations={reservations}
           venueCanSplit={venueCanSplit}
-          calendarEntryId={calendarEntryId}
+          schedulePlanId={schedulePlanId}
           onClose={() => setActiveSlot(null)}
         />
       ) : null}

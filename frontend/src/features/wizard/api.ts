@@ -92,8 +92,8 @@ export interface VenueTrainingSlot {
   startTime: string;
   durationMinutes: number;
   capacity: number;
-  /** null = seasonal slot; set = a slot scoped to that period (additive). */
-  calendarEntryId?: string | null;
+  /** null = créneau saisonnier (structure PARTAGÉE, inv. 6) ; set = prêté à CE plan (additif). */
+  schedulePlanId?: string | null;
 }
 
 export interface VenuePayload {
@@ -109,14 +109,14 @@ export interface SlotPayload {
   startTime: string;
   durationMinutes: number;
   capacity: number;
-  /** Period-editable structure: set to scope the slot to a period (gym lent for the window). */
-  calendarEntryId?: string | null;
+  /** Period-editable structure: set to scope the slot to a PLAN (gym lent for the window). */
+  schedulePlanId?: string | null;
 }
 
 export const listVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
 export const listVenueSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
 /** Period-editable structure: the slots scoped to ONE period (the borrowed gyms). */
-export const listPeriodSlots = (calendarEntryId: string): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots", { calendarEntryId });
+export const listPeriodSlots = (schedulePlanId: string): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots", { schedulePlanId });
 export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("venues", { json: { source: "manual", ...body } }).json();
 export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
@@ -171,7 +171,7 @@ export const deleteConstraintPeriodOverride = (id: string): Promise<void> => api
 /** A persistent team→slot HARD pin (base plan or a period overlay). Server-backed. */
 export interface Reservation {
   id: string;
-  calendarEntryId: string | null;
+  schedulePlanId: string | null;
   teamId: string;
   venueId: string;
   dayOfWeek: number;
@@ -185,7 +185,7 @@ export interface ReservationPayload {
   dayOfWeek: number;
   startTime: string;
   durationMinutes: number;
-  calendarEntryId?: string | null;
+  schedulePlanId?: string | null;
 }
 
 export const listReservations = (params?: Record<string, string>): Promise<Reservation[]> => collectionAll<Reservation>("reservations", params);

@@ -19,7 +19,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: ReservationRepository::class)]
 #[ORM\Table(name: 'reservation')]
 #[ORM\Index(name: 'idx_reservation_club_season', columns: ['club_id', 'season_id'])]
-#[ORM\Index(name: 'idx_reservation_calendar_entry', columns: ['calendar_entry_id'])]
+#[ORM\Index(name: 'idx_reservation_schedule_plan', columns: ['schedule_plan_id'])]
 #[ORM\Index(name: 'idx_reservation_team', columns: ['team_id'])]
 #[ORM\HasLifecycleCallbacks]
 class Reservation implements TenantOwnedInterface
@@ -44,9 +44,13 @@ class Reservation implements TenantOwnedInterface
     #[ORM\Column(type: 'guid')]
     private string $seasonId;
 
-    /** NULL = base plan; set = a period overlay (same layering as constraints). */
+    /**
+     * ADR-0002 inv. 5 (lot C3) — la réservation s'accroche au PLAN : « je pose cette équipe
+     * DANS CE PLANNING » est une réponse. null = la réservation de base (structure PARTAGÉE,
+     * inv. 6), qui alimente la génération du socle.
+     */
     #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $calendarEntryId = null;
+    private ?string $schedulePlanId = null;
 
     #[ORM\Column(type: 'guid')]
     private string $teamId;
@@ -128,14 +132,14 @@ class Reservation implements TenantOwnedInterface
         return $this;
     }
 
-    public function getCalendarEntryId(): ?string
+    public function getSchedulePlanId(): ?string
     {
-        return $this->calendarEntryId;
+        return $this->schedulePlanId;
     }
 
-    public function setCalendarEntryId(?string $calendarEntryId): self
+    public function setSchedulePlanId(?string $schedulePlanId): self
     {
-        $this->calendarEntryId = $calendarEntryId;
+        $this->schedulePlanId = $schedulePlanId;
 
         return $this;
     }

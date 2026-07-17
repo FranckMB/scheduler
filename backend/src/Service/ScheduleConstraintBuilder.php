@@ -116,7 +116,7 @@ final class ScheduleConstraintBuilder
         // slots (a gym lent for a window) must never leak into the base generation.
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
-            $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null]);
+            $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null]);
             foreach ($rows as $row) {
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
             }
@@ -142,8 +142,8 @@ final class ScheduleConstraintBuilder
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $solverSeed,
             constraints: $constraints,
-            // Base-plan reservations (calendarEntryId IS NULL) — durable HARD pins.
-            reservations: $em->getRepository(Reservation::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null], ['id' => 'ASC']),
+            // Base-plan reservations (schedulePlanId IS NULL) — durable HARD pins.
+            reservations: $em->getRepository(Reservation::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -242,8 +242,8 @@ final class ScheduleConstraintBuilder
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
             $slots = array_merge(
-                $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'calendarEntryId' => null]),
-                $this->venueTrainingSlotRepository->findBy(['calendarEntryId' => $entry->getId()]),
+                $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null]),
+                $this->venueTrainingSlotRepository->findBy(['schedulePlanId' => $schedulePlanId]),
             );
             foreach ($slots as $row) {
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
@@ -272,7 +272,7 @@ final class ScheduleConstraintBuilder
             constraints: $constraints,
             // Overlay reservations: this period's own pins (base ones don't leak in,
             // mirroring how HOLIDAY overlays use only dated constraints).
-            reservations: $em->getRepository(Reservation::class)->findBy(['calendarEntryId' => $entry->getId()], ['id' => 'ASC']),
+            reservations: $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
