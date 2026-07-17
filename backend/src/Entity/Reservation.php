@@ -12,7 +12,7 @@ use Doctrine\ORM\Mapping as ORM;
  * A manager pinning a team onto a precise availability slot (day + time + venue),
  * enforced as a HARD lock at solve time. Unlike ScheduleSlotTemplate (which ALSO
  * stores solve RESULTS keyed to an ephemeral schedule), a Reservation is durable
- * pre-generation intent, layered like constraints: `calendarEntryId` NULL = base
+ * pre-generation intent, layered: `schedulePlanId` NULL = base
  * plan, set = a period overlay. The generation pipeline reads these into the
  * engine's `slotTemplates` payload.
  */

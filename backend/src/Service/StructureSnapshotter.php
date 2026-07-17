@@ -122,19 +122,11 @@ final class StructureSnapshotter
             TeamTagAssignment::class => ['seasonId' => $seasonId],
             default => ['clubId' => $clubId, 'seasonId' => $seasonId],
         };
-        // Only the PERMANENT structure — les lignes de période n'y entrent pas. Depuis les
-        // lots C2-C3, l'ancre diffère selon l'entité, et c'est voulu (ADR-0002 inv. 5,
-        // correction du 2026-07-17) :
-        //  - créneaux prêtés et réservations = des RÉPONSES → ancrés au PLAN ;
-        //  - contraintes DATÉES = le FAIT (« Barros fermé ») → restées sur la CalendarEntry,
-        //    le radar de conflits les lit par elle.
-        // Dans les deux cas, NULL = la structure partagée (inv. 6) : c'est elle qu'on
-        // photographie.
-        if (Reservation::class === $entityClass || VenueTrainingSlot::class === $entityClass) {
-            $criteria['schedulePlanId'] = null;
-        }
-        if (Constraint::class === $entityClass) {
-            $criteria['calendarEntryId'] = null;
+        // Only the PERMANENT structure — les lignes de période n'y entrent pas. L'ancre
+        // diffère selon l'entité (voir StructureAnchor, qui porte le pourquoi) ; dans tous
+        // les cas NULL = la structure partagée (inv. 6), et c'est elle qu'on photographie.
+        if (\in_array($entityClass, [Constraint::class, Reservation::class, VenueTrainingSlot::class], true)) {
+            $criteria[StructureAnchor::of($entityClass)] = null;
         }
 
         return $this->entityManager->getRepository($entityClass)->findBy($criteria);

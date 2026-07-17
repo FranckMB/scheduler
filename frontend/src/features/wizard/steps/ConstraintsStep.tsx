@@ -65,7 +65,16 @@ export function ConstraintsStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
   // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
+  //
+  // ⚠️ `null` est une ancre LÉGITIME : elle veut dire « réservation de base » (structure
+  // partagée, inv. 6). Un `?? null` nu confondrait donc « mode socle » avec « mode période,
+  // plan pas encore chargé » — et poserait la réservation sur LE SOCLE DU CLUB au lieu de
+  // la période, sans la moindre erreur (le serveur ne peut pas la refuser : null est
+  // valide). D'où `anchorReady` : hors mode période, null est la bonne réponse ; en mode
+  // période, tant que le plan n'est pas résolu, on ne sait pas où écrire — donc on n'écrit
+  // pas.
   const schedulePlanId = useSchedulePlanForEntry(periodEntryId).data?.id ?? null;
+  const anchorReady = null === periodEntryId || null !== schedulePlanId;
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
@@ -402,7 +411,13 @@ export function ConstraintsStep() {
       </div>
 
       {"reserve" === mode ? (
-        <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
+        anchorReady ? (
+          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
+        ) : (
+          // Mode période, plan pas encore résolu : on ne sait pas OÙ écrire. Attendre
+          // plutôt que risquer une réservation posée sur le socle (voir anchorReady).
+          <EmptyHint>Chargement du planning de la période…</EmptyHint>
+        )
       ) : (
         <>
           {/* Per-family add form */}

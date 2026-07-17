@@ -227,10 +227,13 @@ const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: venues = [] } = useWizardVenues();
   const { data: seasonalSlots = [] } = useVenueSlots();
-  const { data: periodSlots = [] } = usePeriodSlots(calendarEntryId);
+  // Le créneau PRÊTÉ pend au PLAN (inv. 5, lot C3) ; les CONFLITS, eux, se lisent par
+  // l'entrée — le radar parle du FAIT (« Barros fermé »), pas de la réponse.
+  const schedulePlanId = useSchedulePlanForEntry(calendarEntryId).data?.id ?? null;
+  const { data: periodSlots = [] } = usePeriodSlots(schedulePlanId);
   const { data: conflicts } = useEntryConflicts(calendarEntryId);
-  const createSlot = useCreatePeriodSlot(calendarEntryId);
-  const deleteSlot = useDeletePeriodSlot(calendarEntryId);
+  const createSlot = useCreatePeriodSlot(schedulePlanId);
+  const deleteSlot = useDeletePeriodSlot(schedulePlanId);
   const closed = new Set(conflicts?.venueIds ?? []);
   const slotsByVenue = countSlotsByVenue(seasonalSlots);
   const venueName = new Map(venues.map((v) => [v.id, v.name]));

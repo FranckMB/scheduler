@@ -312,10 +312,7 @@ final class StructureRestorer
             // créneaux et réservations = des RÉPONSES → ancrés au PLAN ; contraintes datées
             // = le FAIT → restées sur la CalendarEntry. La deviner ici la ferait diverger en
             // silence — on la nomme.
-            $anchor = \in_array($entityClass, [Reservation::class, VenueTrainingSlot::class], true)
-                ? 'schedulePlanId'
-                : 'calendarEntryId';
-            $qb->andWhere(\sprintf('e.%s IS NULL', $anchor));
+            $qb->andWhere(\sprintf('e.%s IS NULL', StructureAnchor::of($entityClass)));
         }
         $qb->getQuery()->execute();
     }

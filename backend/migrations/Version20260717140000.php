@@ -61,7 +61,7 @@ final class Version20260717140000 extends AbstractMigration
         }
 
         // L'index de la réservation suit l'ancre (le créneau n'en avait pas sur l'entrée).
-        $this->addSql('DROP INDEX IF EXISTS idx_reservation_calendar_entry');
+        // Pas de DROP de l'ancien : le DROP COLUMN ci-dessus a déjà emporté son index.
         $this->addSql('CREATE INDEX idx_reservation_schedule_plan ON reservation (schedule_plan_id)');
     }
 

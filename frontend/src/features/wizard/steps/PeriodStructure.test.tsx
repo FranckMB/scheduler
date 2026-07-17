@@ -41,6 +41,7 @@ const entryState: { data: { periodType: string } | undefined } = { data: { perio
 // qu'un composant lit par le déclencheur au lieu du plan : les deux sont des `string`, tsc
 // est muet, et l'API répondrait 200 avec une liste vide — panne silencieuse (lot C2).
 const teamOverridesAnchor: { value: string | null } = { value: null };
+const periodSlotsAnchor: { value: string | null } = { value: null };
 const constraintOverridesAnchor: { value: string | null } = { value: null };
 const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
 
@@ -60,8 +61,11 @@ vi.mock("../queries", () => ({
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: false, isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
-  // Les CRÉNEAUX restent ancrés au déclencheur : leur re-keyage est le lot C3.
-  usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
+  usePeriodSlots: (anchor: string | null) => {
+    periodSlotsAnchor.value = anchor;
+
+    return { data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }] };
+  },
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
@@ -185,6 +189,15 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(constraintOverridesAnchor.value).toBe("plan-1");
     expect(teamOverridesAnchor.value).toBe("plan-1");
+  });
+
+  // Le NR de C2 ne couvrait QUE PeriodTeams et PeriodConstraints — PeriodVenues est
+  // resté hors de vue, et le lot C3 l'a laissé lire par le déclencheur : le gymnase
+  // prêté était confirmé à l'écran (l'UI relisait avec le MÊME mauvais id, donc
+  // cohérente avec elle-même) mais n'atteignait jamais le solveur. D'où ce test.
+  it("PeriodVenues lit ses créneaux prêtés par le PLAN", () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(periodSlotsAnchor.value).toBe("plan-1");
   });
 });
 

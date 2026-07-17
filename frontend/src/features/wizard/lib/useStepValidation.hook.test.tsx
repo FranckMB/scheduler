@@ -9,6 +9,10 @@ let venues: ReturnType<typeof q>;
 let slots: ReturnType<typeof q>;
 let coaches: ReturnType<typeof q>;
 
+// Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
+vi.mock("@/features/cockpit/queries", () => ({
+  useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
+}));
 vi.mock("../queries", () => ({
   useWizardTeams: () => teams,
   useWizardVenues: () => venues,
