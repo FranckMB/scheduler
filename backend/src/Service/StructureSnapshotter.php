@@ -125,7 +125,7 @@ final class StructureSnapshotter
         // Only the PERMANENT structure — les lignes de période n'y entrent pas. L'ancre
         // diffère selon l'entité (voir StructureAnchor, qui porte le pourquoi) ; dans tous
         // les cas NULL = la structure partagée (inv. 6), et c'est elle qu'on photographie.
-        if (\in_array($entityClass, [Constraint::class, Reservation::class, VenueTrainingSlot::class], true)) {
+        if (StructureAnchor::isPeriodScoped($entityClass)) {
             $criteria[StructureAnchor::of($entityClass)] = null;
         }
 

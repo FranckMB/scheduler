@@ -10,6 +10,7 @@ import { useWizardStore } from "../store";
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
+  usePeriodAnchor: () => ({ planId: "plan-1", ready: true, isLoading: false }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),

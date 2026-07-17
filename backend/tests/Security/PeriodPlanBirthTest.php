@@ -12,6 +12,9 @@ use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Service\SeasonResolver;
@@ -314,24 +317,43 @@ final class PeriodPlanBirthTest extends WebTestCase
 
     /**
      * NR lot C3 — les contraintes DATÉES, elles, NE bougent PAS : elles restent sur la
-     * CalendarEntry.
+     * CalendarEntry, et le RADAR doit pouvoir les lire AVANT tout plan.
      *
      * Décision fondateur (2026-07-17), qui a levé une contradiction de l'ADR : une
-     * contrainte datée décrit le FAIT (« Barros fermé »), pas la réponse. Le radar de
-     * conflits la lit PAR L'ENTRÉE pour annoncer « cette fermeture gêne 3 séances » — c’est
-     * ce qui DÉCLENCHE le geste « ajuster ». L’ancrer au plan la rendrait illisible tant
-     * qu’aucun plan n’existe… or le plan naît de ce geste : le radar ne pourrait plus
-     * jamais le provoquer.
+     * contrainte datée décrit le FAIT (« Barros fermé »), pas la réponse. Le radar la lit
+     * PAR L'ENTRÉE pour annoncer « cette fermeture gêne 3 séances » — c'est ce qui
+     * DÉCLENCHE le geste « ajuster ». L'ancrer au plan la rendrait illisible tant qu'aucun
+     * plan n'existe… or le plan naît de ce geste : le radar ne pourrait plus jamais le
+     * provoquer.
+     *
+     * On teste le COMPORTEMENT (la contrainte se relit par son entrée), pas la forme de la
+     * classe : un method_exists ne dirait rien de ce qui compte.
      */
-    public function testDatedConstraintsStayOnTheCalendarEntry(): void
+    public function testDatedConstraintsStayReadableByTheirCalendarEntry(): void
     {
-        self::assertTrue(
-            method_exists(Constraint::class, 'getCalendarEntryId'),
-            'la contrainte datée reste ancrée au FAIT — sans quoi le radar ne peut plus déclencher le geste « ajuster »',
-        );
-        self::assertFalse(
-            method_exists(Constraint::class, 'getSchedulePlanId'),
-            'ne PAS re-keyer les contraintes datées sur le plan (ADR-0002 inv. 5, correction du 2026-07-17)',
+        [$user, $club, $season] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'closure', 'Barros fermé');
+
+        $this->scopeGucToClub($club->getId());
+        $dated = new Constraint;
+        $dated->setClubId($club->getId());
+        $dated->setSeasonId($season->getId());
+        $dated->setName('Barros fermé');
+        $dated->setScope(ConstraintScope::FACILITY);
+        $dated->setFamily(ConstraintFamily::FACILITY);
+        $dated->setRuleType(ConstraintRuleType::HARD);
+        $dated->setConfig([]);
+        $dated->setCalendarEntryId($entryId); // le FAIT, pas la réponse
+        $this->em->persist($dated);
+        $this->em->flush();
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+
+        // Le radar part du déclencheur, et il doit trouver — c'est ce qui déclenche le geste.
+        self::assertCount(
+            1,
+            $this->em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entryId]),
+            'la contrainte datée se relit par SON entrée : sans ça le radar ne peut plus annoncer l’impact d’une fermeture',
         );
     }
 

@@ -16,7 +16,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
-import { useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -66,15 +66,9 @@ export function ConstraintsStep() {
   // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
   // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
   //
-  // ⚠️ `null` est une ancre LÉGITIME : elle veut dire « réservation de base » (structure
-  // partagée, inv. 6). Un `?? null` nu confondrait donc « mode socle » avec « mode période,
-  // plan pas encore chargé » — et poserait la réservation sur LE SOCLE DU CLUB au lieu de
-  // la période, sans la moindre erreur (le serveur ne peut pas la refuser : null est
-  // valide). D'où `anchorReady` : hors mode période, null est la bonne réponse ; en mode
-  // période, tant que le plan n'est pas résolu, on ne sait pas où écrire — donc on n'écrit
-  // pas.
-  const schedulePlanId = useSchedulePlanForEntry(periodEntryId).data?.id ?? null;
-  const anchorReady = null === periodEntryId || null !== schedulePlanId;
+  // `usePeriodAnchor` porte le pourquoi : `null` est une ancre LÉGITIME (= base), donc un
+  // `?? null` nu poserait la réservation sur le socle pendant le chargement du plan.
+  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(periodEntryId);
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();

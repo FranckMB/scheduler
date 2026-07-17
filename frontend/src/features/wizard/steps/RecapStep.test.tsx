@@ -9,6 +9,7 @@ const h = { reservations: [] as Array<Record<string, unknown>> };
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
+  usePeriodAnchor: () => ({ planId: "plan-1", ready: true, isLoading: false }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({

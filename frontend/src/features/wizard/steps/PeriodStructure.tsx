@@ -1,7 +1,7 @@
 import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { useCalendarEntry, useEntryConflicts, useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -229,7 +229,7 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: seasonalSlots = [] } = useVenueSlots();
   // Le créneau PRÊTÉ pend au PLAN (inv. 5, lot C3) ; les CONFLITS, eux, se lisent par
   // l'entrée — le radar parle du FAIT (« Barros fermé »), pas de la réponse.
-  const schedulePlanId = useSchedulePlanForEntry(calendarEntryId).data?.id ?? null;
+  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
   const { data: periodSlots = [] } = usePeriodSlots(schedulePlanId);
   const { data: conflicts } = useEntryConflicts(calendarEntryId);
   const createSlot = useCreatePeriodSlot(schedulePlanId);
@@ -245,7 +245,11 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if ("" === venueId) {
+    // Sans ancre certaine, on n'écrit pas : `null` est une ancre LÉGITIME (= base), donc
+    // le serveur accepterait — et le gymnase prêté deviendrait un créneau PERMANENT du
+    // club, nourrissant toutes les générations de la saison. C'est la garde que mes
+    // composants frères ont et que celui-ci n'avait pas (round 2 du code-review).
+    if ("" === venueId || !anchorReady) {
       return;
     }
     createSlot.mutate(
@@ -292,7 +296,9 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-muted-foreground">Aucun créneau ajouté pour cette période.</p>
+          <p className="text-xs text-muted-foreground">
+            {anchorReady ? "Aucun créneau ajouté pour cette période." : "Chargement des créneaux de la période…"}
+          </p>
         )}
 
         <form onSubmit={submit} className="flex flex-wrap items-end gap-2 rounded-md border border-border p-2">
@@ -313,7 +319,7 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
           </select>
           <input type="time" className={fieldClass} aria-label="Heure de début" value={start} onChange={(e) => setStart(e.target.value)} />
           <input type="number" min={15} step={15} className={cn(fieldClass, "w-20")} aria-label="Durée (min)" value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
-          <Button type="submit" size="sm" disabled={createSlot.isPending || "" === venueId}>
+          <Button type="submit" size="sm" disabled={createSlot.isPending || "" === venueId || !anchorReady}>
             <CalendarPlus className="size-4" />
             Ajouter
           </Button>
@@ -347,7 +353,7 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
 export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
   // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
-  const schedulePlanId = useSchedulePlanForEntry(calendarEntryId).data?.id ?? null;
+  const { planId: schedulePlanId } = usePeriodAnchor(calendarEntryId);
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;

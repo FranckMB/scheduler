@@ -27,7 +27,9 @@ use LogicException;
  *   section « Rôle de CalendarEntry »).
  *
  * Dans les deux cas, **NULL = la structure PARTAGÉE** (inv. 6) : c'est ce qu'on
- * photographie, ce qu'on transmet à la saison suivante, et ce que le socle génère.
+ * photographie et ce que le socle génère. (Ce n'est PAS un critère de transition de
+ * saison : `SeasonTransitionService` copie les créneaux de base mais pas les
+ * réservations — un choix qui lui appartient, sans lien avec l'ancre.)
  *
  * Pourquoi une classe plutôt qu'un ternaire recopié : le mapping était dupliqué dans
  * StructureSnapshotter et StructureRestorer, et ce dernier le DEVINAIT — son `else`
@@ -37,6 +39,18 @@ use LogicException;
  */
 final class StructureAnchor
 {
+    /**
+     * Cette entité porte-t-elle une notion d'appartenance à une période ? Les appelants
+     * doivent le demander ICI plutôt que de recopier la liste : deux copies divergent, et
+     * une entité oubliée serait photographiée AVEC ses lignes de période.
+     *
+     * @param class-string $entityClass
+     */
+    public static function isPeriodScoped(string $entityClass): bool
+    {
+        return \in_array($entityClass, [Constraint::class, Reservation::class, VenueTrainingSlot::class], true);
+    }
+
     /**
      * Le champ qui porte l'appartenance à une période, pour cette entité.
      *
