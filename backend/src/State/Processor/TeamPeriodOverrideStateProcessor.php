@@ -7,17 +7,56 @@ namespace App\State\Processor;
 use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\TeamPeriodOverrideResource;
 use App\Dto\TeamPeriodOverrideInput;
-use App\Entity\CalendarEntry;
 use App\Entity\TeamPeriodOverride;
+use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SeasonAccessGuard;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProcessor<TeamPeriodOverride, TeamPeriodOverrideInput, TeamPeriodOverrideResource>
  */
 class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+    }
+
     protected function getEntityClass(): string
     {
         return TeamPeriodOverride::class;
+    }
+
+    /**
+     * Le 1er override d'une période marque son PLAN comme configuré (garde de seed du
+     * wizard). Délégué à SchedulePlanProvisioner : le code en fait le SEUL point qui
+     * écrit des lignes `schedule_plan`, et son docblock porte le pourquoi du SQL brut.
+     *
+     * ATOMIQUE avec l'override, et écrit APRÈS lui : le flag ne doit pas pouvoir rester
+     * vrai sans qu'aucun override n'existe — le wizard cesserait alors de seeder une
+     * période pourtant vierge.
+     *
+     * @param TeamPeriodOverrideInput $input
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
+            $output = parent::processPost($input, $clubId, $seasonId);
+            if (null !== $input->calendarEntryId) {
+                $this->schedulePlanProvisioner->markPeriodTeamSelectionInitialized($input->calendarEntryId);
+            }
+
+            return $output;
+        });
     }
 
     /**
@@ -41,16 +80,6 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
         }
         $entity->setIsActive($input->isActive);
         $entity->setSessionsPerWeek($input->sessionsPerWeek);
-
-        // Mark the period configured on its first override write, so the wizard's
-        // Fanion-only seed runs once and never re-fires after an all-active reset
-        // (survives reload, unlike a client-side guard). Flushed with the override.
-        if (null !== $input->calendarEntryId) {
-            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($input->calendarEntryId);
-            if ($entry instanceof CalendarEntry && !$entry->isTeamSelectionInitialized()) {
-                $entry->setTeamSelectionInitialized(true);
-            }
-        }
 
         return $entity;
     }

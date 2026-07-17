@@ -17,9 +17,31 @@ export interface CalendarEntry {
   status: CalendarEntryStatus;
   overlayScheduleId: string | null;
   createdBy: string | null;
-  /** Period-editable structure: has this period's team selection been configured once (seed guard)? */
-  teamSelectionInitialized?: boolean;
 }
+
+export type SchedulePlanType = "SEASON" | "CLOSURE" | "HOLIDAY";
+
+/**
+ * ADR-0002: le plan = LA RÉPONSE à un événement du calendrier. Un plan CLOSURE/HOLIDAY
+ * naît avec le geste « ajuster cette période » (= la création du CalendarEntry), donc
+ * il existe dès qu'une période existe — pas besoin d'attendre une génération.
+ */
+export interface SchedulePlan {
+  id: string;
+  type: SchedulePlanType;
+  name: string;
+  calendarEntryId: string | null;
+  chosenScheduleId: string | null;
+  /** Period-editable structure: has this plan's team selection been configured once (seed guard)? */
+  teamSelectionInitialized: boolean;
+}
+
+/** Le plan d'une période. null si l'entrée n'en porte pas (cutoff/mutualisation — inv. 9). */
+export const getSchedulePlanForEntry = async (calendarEntryId: string): Promise<SchedulePlan | null> => {
+  const items = await collectionAll<SchedulePlan>("schedule_plans", { calendarEntryId });
+
+  return items[0] ?? null;
+};
 
 export interface SchoolHoliday {
   id: string;

@@ -31,6 +31,27 @@ export function useCalendarEntry(id: string | null) {
 }
 
 /**
+ * Le plan d'une période (ADR-0002 lot C). Il naît avec le geste « ajuster cette
+ * période », donc il est là dès que l'entrée existe — inutile d'attendre une
+ * génération. Porte les réglages de la période (inv. 5), dont le garde de seed
+ * `teamSelectionInitialized`.
+ *
+ * Le flag `teamSelectionInitialized` bascule côté SERVEUR au 1er override, sans
+ * mutation directe sur le plan : aucune invalidation ne le rafraîchit (les mutations
+ * d'override n'invalident que ["wizard", "team_period_overrides", …]). Ce qui protège
+ * le seed d'un double déclenchement, c'est le garde `periodSeedWasClaimed` — pas cette
+ * clé. Ne pas retirer ce garde en croyant qu'un refetch prend le relais.
+ */
+export function useSchedulePlanForEntry(calendarEntryId: string | null) {
+  return useQuery({
+    queryKey: ["calendar-entries", "plan", calendarEntryId],
+    queryFn: () => cockpitApi.getSchedulePlanForEntry(calendarEntryId as string),
+    enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * School holidays. Without a window → the season default (radar, season-wide).
  * With a [from, to] → that window (the calendar's visible month, so summer and
  * any month outside the season are shown when browsed).

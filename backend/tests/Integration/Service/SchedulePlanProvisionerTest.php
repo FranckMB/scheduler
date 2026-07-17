@@ -127,11 +127,37 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         self::assertSame(2, $v2->getVersionNumber());
     }
 
-    public function testOverlayScheduleLazilyCreatesItsPeriodPlan(): void
+    /**
+     * NR lot C — linkSchedule ne CRÉE JAMAIS un plan de période : il n'existe qu'un
+     * seul site de naissance (le geste). Un second créateur laisserait passer
+     * inaperçu un plan manquant à la création de la période, et les réglages saisis
+     * avant la 1re génération n'auraient rien à quoi s'accrocher (inv. 5).
+     */
+    public function testLinkScheduleNeverCreatesAPeriodPlan(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId()); // pas de geste rejoué
+
+        $overlay = $this->makeSchedule($clubId, $season->getId(), $entry->getId());
+        $this->provisioner->linkSchedule($overlay);
+        $this->em->flush();
+
+        self::assertNull(
+            $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]),
+            'linkSchedule ne doit pas fabriquer le plan a posteriori.',
+        );
+        self::assertNull($overlay->getSchedulePlanId(), 'sans plan, la version reste non liée plutôt que rattachée à un plan inventé.');
+    }
+
+    public function testOverlayScheduleLinksToThePlanBornWithTheGesture(): void
     {
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
         $entry = $this->makeClosureEntry($clubId, $season->getId());
+        // En prod, CalendarEntryStateProcessor le fait au POST ; l'entrée est fabriquée
+        // à la main ici, on rejoue donc le geste.
+        $this->provisioner->provisionPeriodPlan($entry->getId());
 
         $overlay = $this->makeSchedule($clubId, $season->getId(), $entry->getId());
         $this->provisioner->linkSchedule($overlay);
@@ -157,6 +183,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
         $entry = $this->makeClosureEntry($clubId, $season->getId());
+        $this->provisioner->provisionPeriodPlan($entry->getId()); // le geste
 
         // Pin the ORM season_filter to a DIFFERENT (fake) season.
         $filters = $this->em->getFilters();

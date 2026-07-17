@@ -13,6 +13,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -182,6 +183,11 @@ final class OverlayVersionsTest extends WebTestCase
         $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
         $this->em->persist($entry);
+        // ADR-0002 lot C: une période a TOUJOURS son plan — en prod le geste (POST
+        // /api/calendar_entries) le crée. L'entrée est fabriquée à la main ici, on
+        // rejoue donc le geste (flush d'abord: provisionPeriodPlan relit la ligne).
+        $this->em->flush();
+        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
         return $entry;
     }

@@ -1,7 +1,20 @@
-Last verified @ feat/plan-pointer-cutover 2026-07-16
+Last verified @ feat/adr0002-lot-c1-plan-au-geste 2026-07-17
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **80 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **82 paths.**
 Changements récents :
+- **ADR-0002 lot C1 — LE PLAN NAÎT DU GESTE (2026-07-17)** : **aucun path touché**
+  (82 avant, 82 après). `teamSelectionInitialized` quitte **`CalendarEntry`** pour
+  **`SchedulePlan`** : le garde de seed est une propriété de la RÉPONSE (le plan), pas
+  du FAIT (l'événement calendrier) — inv. 5, les réglages de période s'accrochent au
+  plan. Corollaire côté serveur : un plan CLOSURE/HOLIDAY naît désormais à la création
+  de sa `CalendarEntry` (le geste « ajuster »), plus à la première génération, donc
+  `GET /api/schedule_plans?calendarEntryId=…` répond dès qu'une période existe.
+- **Rattrapage au passage** : cette régénération fait aussi entrer
+  **`currentStructureHash`** sur `GET /api/me` — champ livré par la **PR #243**
+  (« disable regenerate when structure is unchanged »), qui avait modifié le contrat
+  sans régénérer le snapshot. Il n'appartient pas au lot C1 ; il est simplement rendu
+  au contrat ici. *(Le compte annoncé plus haut était resté à 80 alors que le snapshot
+  en portait déjà 82 : corrigé.)*
 - **ADR-0002 — LA BASCULE (2026-07-16, RUPTURE)** : le plan SEASON et sa version pointée
   sont LE calendrier de la saison, et le legacy meurt dans le même commit.
   - `GET /api/me` : `baselineScheduleId` / `socleValidatedAt` / `planningName`

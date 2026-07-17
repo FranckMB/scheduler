@@ -18,11 +18,26 @@ use Throwable;
  * Schedule to its plan/version. Reused at every season- and schedule-creation
  * site so the new model stays in sync additively (nothing legacy is touched).
  *
+ * A plan is born FROM A CALENDAR EVENT (ADR-0002, lot C — décision fondateur
+ * 2026-07-17). There are exactly two birth sites, and no other:
+ *
  * - ensureSeasonPlan(): the SEASON plan exists as soon as the season does (an
  *   empty "espace de travail" with no version yet).
+ * - provisionPeriodPlan(): le plan CLOSURE/HOLIDAY naît au geste — "ajuster une période
+ *   de vacances / un souci du calendrier", c'est-à-dire la création de la CalendarEntry.
+ *   Appelé depuis CalendarEntryStateProcessor (seul site de src/ qui crée une entrée) et
+ *   ATOMIQUE avec elle. Les périodes se configurent AVANT toute génération : le plan doit
+ *   donc précéder les réglages qui s'y accrochent (inv. 5) — le créer à la première
+ *   version, comme le lot A, était simplement trop tard. Naissance seule : l'identité
+ *   d'une période qui porte un plan est gelée (422), il n'y a donc rien à synchroniser.
  * - linkSchedule(): stamps schedulePlanId + versionNumber on a freshly-created
- *   schedule, creating the CLOSURE/HOLIDAY plan lazily at the period's first
- *   version. Idempotent-safe: a schedule already linked keeps its version.
+ *   schedule. It only ever LOOKS UP a period plan (findPeriodPlanId), never
+ *   creates one: a second creation site would let a missing gesture-time plan pass
+ *   unnoticed. Idempotent-safe: a schedule already linked keeps its version.
+ *
+ * ⚠️ Corollaire : le self-heal de choose() ne peut PLUS réparer un plan de période
+ * manquant (il passe par linkSchedule, qui ne fait que chercher). C'est pourquoi la
+ * naissance est atomique avec l'entrée — une période sans plan ne doit pas exister.
  *
  * Existence/version lookups run as RAW SQL on purpose: the request-scoped
  * ORM season_filter pins every ORM read to the active season, but the
@@ -40,6 +55,16 @@ final class SchedulePlanProvisioner
         private readonly EntityManagerInterface $entityManager,
         private readonly ScheduleConstraintBuilder $constraintBuilder,
     ) {}
+
+    /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
+    private static function periodPlanType(?string $periodType): ?SchedulePlanType
+    {
+        return match ($periodType) {
+            'closure' => SchedulePlanType::CLOSURE,
+            'holiday' => SchedulePlanType::HOLIDAY,
+            default => null,
+        };
+    }
 
     /**
      * The season's SEASON plan, created if absent. NOTE: an already-existing plan
@@ -93,9 +118,14 @@ final class SchedulePlanProvisioner
         $this->entityManager->wrapInTransaction(function () use ($schedule): void {
             $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
+            // Period plans are LOOKED UP, never created here: they are born with the
+            // manager's gesture (provisionPeriodPlan). A null means the entry carries
+            // no plan — either a non-generating type (inv. 9: cutoff/mutualisation) or
+            // an entry created outside CalendarEntryStateProcessor (tests). Either way
+            // the schedule stays unlinked rather than silently minting a second plan.
             $planId = null === $schedule->getCalendarEntryId()
                 ? $this->ensureSeasonPlanId($schedule->getSeasonId())
-                : $this->ensurePeriodPlanId($schedule->getCalendarEntryId());
+                : $this->findPeriodPlanId($schedule->getCalendarEntryId());
             if (null === $planId) {
                 return;
             }
@@ -139,12 +169,17 @@ final class SchedulePlanProvisioner
             return false;
         }
 
-        $this->entityManager->getConnection()->executeStatement(
+        // Le nombre de lignes touchées est la VÉRITÉ : un schedulePlanId non-null peut
+        // pendre dans le vide (plan supprimé sous ses pieds). Le self-heal ci-dessus ne
+        // rattrape que le cas null, jamais celui-là. Rendre true sur zéro ligne ferait
+        // croire à l'appelant que la validation a eu lieu — or il supprime les versions
+        // sœurs juste après : on les détruirait pour un pointeur jamais posé.
+        $updated = $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
             ['sid' => $schedule->getId(), 'pid' => $planId],
         );
 
-        return true;
+        return $updated > 0;
     }
 
     /**
@@ -272,6 +307,58 @@ final class SchedulePlanProvisioner
         ) > 0;
     }
 
+    /**
+     * ADR-0002 inv. 5 + décision fondateur 2026-07-17 — LE PLAN NAÎT DU GESTE.
+     *
+     * Naissance SEULE : créer le plan de la période s'il n'existe pas, sinon rendre le
+     * sien. Ni synchronisation, ni suppression — l'identité d'une période qui porte un
+     * plan est GELÉE en amont (422, CalendarEntryStateProcessor), donc il n'y a jamais
+     * rien à re-synchroniser ni à détruire ici. Supprimer la période reste le seul
+     * chemin destructeur (deleteEntryAndCascade, derrière confirmation).
+     *
+     * Rend null quand l'entrée ne porte pas de plan par conception — inv. 9 :
+     * cutoff/mutualisation restent des rappels calendrier.
+     *
+     * Sérialisé par période avec le même verrou consultatif que linkSchedule : un POST
+     * double-soumis ne peut pas minter deux plans (check-then-insert). L'appelant doit
+     * avoir FLUSHÉ l'entrée — la ligne est relue en SQL brut. S'imbrique sans risque dans
+     * la transaction de l'appelant (le verrou tient jusqu'au commit le plus externe), ce
+     * dont dépend l'atomicité entrée + plan.
+     */
+    public function provisionPeriodPlan(string $calendarEntryId): ?string
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): ?string {
+            $this->lockPlanScope($calendarEntryId);
+
+            return $this->ensurePeriodPlanId($calendarEntryId);
+        });
+    }
+
+    /**
+     * Marque le plan d'une période comme configuré, au 1er réglage d'équipes écrit — le
+     * wizard s'en sert pour ne seeder son défaut « Fanion seul » qu'une fois, et jamais
+     * après un retour « tout actif » (0 override épars). Idempotent (`= false` dans le
+     * WHERE), et sans effet si la période ne porte pas de plan.
+     *
+     * SQL brut, comme toute résolution de plan ici : `season_filter` épingle les lectures
+     * ORM à la saison ACTIVE de la requête, or l'appelant reçoit le calendarEntryId dans
+     * un corps de requête, sans garantie qu'il appartienne à cette saison. RLS scope le club.
+     */
+    public function markPeriodTeamSelectionInitialized(string $calendarEntryId): void
+    {
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
+            . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
+            ['eid' => $calendarEntryId],
+        );
+    }
+
+    /** Cette période porte-t-elle un plan ? Garde du 422 d'identité (voir plus haut). */
+    public function periodPlanExists(string $calendarEntryId): bool
+    {
+        return null !== $this->findPeriodPlanId($calendarEntryId);
+    }
+
     private function currentStructureHash(string $clubId, string $seasonId): ?string
     {
         try {
@@ -356,11 +443,7 @@ final class SchedulePlanProvisioner
             return null;
         }
 
-        $type = match ($row['period_type']) {
-            'closure' => SchedulePlanType::CLOSURE,
-            'holiday' => SchedulePlanType::HOLIDAY,
-            default => null,
-        };
+        $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
         if (null === $type) {
             return null;
         }

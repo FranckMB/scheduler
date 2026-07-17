@@ -923,6 +923,12 @@
                                                 },
                                                 "hasFinishedVersion": {
                                                     "type": "boolean"
+                                                },
+                                                "currentStructureHash": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 }
                                             }
                                         },
@@ -11304,11 +11310,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "teamSelectionInitialized": {
-                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                        "default": false,
-                        "type": "boolean"
                     }
                 }
             },
@@ -11466,11 +11467,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "teamSelectionInitialized": {
-                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                        "default": false,
-                        "type": "boolean"
                     }
                 }
             },
@@ -11545,11 +11541,6 @@
                                     "string",
                                     "null"
                                 ]
-                            },
-                            "teamSelectionInitialized": {
-                                "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                                "default": false,
-                                "type": "boolean"
                             }
                         }
                     }
@@ -15189,6 +15180,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15261,6 +15257,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15323,6 +15324,11 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "teamSelectionInitialized": {
+                                "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
+                                "default": false,
+                                "type": "boolean"
                             }
                         }
                     }

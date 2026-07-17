@@ -72,6 +72,15 @@ class SchedulePlanResource
     #[Groups(['read'])]
     public ?string $chosenScheduleId = null;
 
+    // Publié dans /api/docs (cf. ⚠️ en tête) : le docblock reste factuel, le pourquoi
+    // (garde de seed du wizard, inv. 5) vit dans l'ADR.
+    /**
+     * La sélection d'équipes de ce plan a-t-elle déjà été configurée au moins une fois ?
+     * Toujours faux sur un plan SEASON, qui n'a pas cette étape.
+     */
+    #[Groups(['read'])]
+    public bool $teamSelectionInitialized = false;
+
     public static function fromEntity(SchedulePlan $entity): self
     {
         $dto = new self;
@@ -86,6 +95,7 @@ class SchedulePlanResource
         $dto->endDate = $entity->getEndDate();
         $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->chosenScheduleId = $entity->getChosenScheduleId();
+        $dto->teamSelectionInitialized = $entity->isTeamSelectionInitialized();
 
         return $dto;
     }

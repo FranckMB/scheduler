@@ -154,8 +154,11 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $entry->setEndDate(new DateTimeImmutable('2025-10-26'));
         $this->em->persist($entry);
         $this->em->flush();
+        // ADR-0002 lot C : le plan naît DU GESTE. En prod le POST /api/calendar_entries
+        // le crée ; l'entrée étant fabriquée à la main, on rejoue le geste.
+        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
-        // Une version d'overlay → le plan de période naît (création paresseuse).
+        // La version d'overlay se raccroche au plan déjà né.
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());
         $overlay->setSeasonId($season->getId());
