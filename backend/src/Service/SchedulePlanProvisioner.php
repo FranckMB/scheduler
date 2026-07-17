@@ -125,7 +125,7 @@ final class SchedulePlanProvisioner
             // the schedule stays unlinked rather than silently minting a second plan.
             $planId = null === $schedule->getCalendarEntryId()
                 ? $this->ensureSeasonPlanId($schedule->getSeasonId())
-                : $this->findPeriodPlanId($schedule->getCalendarEntryId());
+                : $this->periodPlanId($schedule->getCalendarEntryId());
             if (null === $planId) {
                 return;
             }
@@ -363,13 +363,18 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * Le plan d'une période, ou null si elle n'en porte pas (inv. 9). Public depuis le lot
-     * C2 : les réglages étant ancrés au plan, les appelants qui partent du déclencheur
-     * calendrier (validation, cascade de suppression) doivent le résoudre.
+     * Le plan d'une période, ou null si elle n'en porte pas (inv. 9). Public : les réglages
+     * y étant ancrés (lot C2), les appelants qui partent du déclencheur calendrier
+     * (validation, cascade de suppression) doivent le résoudre.
      */
     public function periodPlanId(string $calendarEntryId): ?string
     {
-        return $this->findPeriodPlanId($calendarEntryId);
+        $id = $this->entityManager->getConnection()->fetchOne(
+            'SELECT id FROM schedule_plan WHERE calendar_entry_id = :eid',
+            ['eid' => $calendarEntryId],
+        );
+
+        return false === $id ? null : (string) $id;
     }
 
     private function currentStructureHash(string $clubId, string $seasonId): ?string
@@ -441,7 +446,7 @@ final class SchedulePlanProvisioner
 
     private function ensurePeriodPlanId(string $calendarEntryId): ?string
     {
-        $existingId = $this->findPeriodPlanId($calendarEntryId);
+        $existingId = $this->periodPlanId($calendarEntryId);
         if (null !== $existingId) {
             return $existingId;
         }
@@ -479,16 +484,6 @@ final class SchedulePlanProvisioner
         $id = $this->entityManager->getConnection()->fetchOne(
             'SELECT id FROM schedule_plan WHERE season_id = :sid AND type = \'SEASON\'',
             ['sid' => $seasonId],
-        );
-
-        return false === $id ? null : (string) $id;
-    }
-
-    private function findPeriodPlanId(string $calendarEntryId): ?string
-    {
-        $id = $this->entityManager->getConnection()->fetchOne(
-            'SELECT id FROM schedule_plan WHERE calendar_entry_id = :eid',
-            ['eid' => $calendarEntryId],
         );
 
         return false === $id ? null : (string) $id;

@@ -37,6 +37,11 @@ const constraintOverridesErrorState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
 const entryState: { data: { periodType: string } | undefined } = { data: { periodType: "closure" } };
 // ADR-0002 lot C: le garde de seed vit sur le PLAN, pas sur l'événement calendrier.
+// Les ancres REÇUES par les hooks de lecture. Sans les capturer, aucun test ne peut voir
+// qu'un composant lit par le déclencheur au lieu du plan : les deux sont des `string`, tsc
+// est muet, et l'API répondrait 200 avec une liste vide — panne silencieuse (lot C2).
+const teamOverridesAnchor: { value: string | null } = { value: null };
+const constraintOverridesAnchor: { value: string | null } = { value: null };
 const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
 
 vi.mock("../queries", () => ({
@@ -45,17 +50,26 @@ vi.mock("../queries", () => ({
     { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
   ] }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
-  useTeamPeriodOverrides: () => ({ data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value }),
+  useTeamPeriodOverrides: (anchor: string | null) => {
+    teamOverridesAnchor.value = anchor;
+
+    return { data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value };
+  },
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: false, isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
-  usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }] }),
+  // Les CRÉNEAUX restent ancrés au déclencheur : leur re-keyage est le lot C3.
+  usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
   useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
-  usePeriodConstraintOverrides: () => ({ data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value }),
+  usePeriodConstraintOverrides: (anchor: string | null) => {
+    constraintOverridesAnchor.value = anchor;
+
+    return { data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value };
+  },
   useWizardTeamTags: () => ({ data: tagsState.data, isLoading: false, isError: false }),
   useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: false, isError: false }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
@@ -153,6 +167,24 @@ describe("PeriodVenues — borrowed period slots", () => {
     conflictState.venueIds = ["v1"];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByText(/INTERDIT cette période/)).toBeInTheDocument();
+  });
+});
+
+describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", () => {
+  // CE test est celui qui manquait : les deux composants lisaient par le DÉCLENCHEUR
+  // pendant qu'ils écrivaient par le PLAN. Les deux ids sont des `string` → tsc muet,
+  // et l'API répond 200 avec une liste vide → checklist silencieusement fausse, cases
+  // qui reviennent au rechargement, 422 au re-clic. Aucun test ne pouvait le voir : les
+  // mocks jetaient leur argument.
+  it("PeriodTeams lit ses réglages par le PLAN, jamais par la période", () => {
+    render(<PeriodTeams calendarEntryId="e1" />);
+    expect(teamOverridesAnchor.value).toBe("plan-1");
+  });
+
+  it("PeriodConstraints lit ses deux jeux de réglages par le PLAN", () => {
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(constraintOverridesAnchor.value).toBe("plan-1");
+    expect(teamOverridesAnchor.value).toBe("plan-1");
   });
 });
 

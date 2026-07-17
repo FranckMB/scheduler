@@ -19,6 +19,7 @@ use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Service\StructureRestorer;
 use App\Service\StructureSnapshotter;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,8 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 #[Group('integration')]
 final class StructureRestorerTest extends KernelTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -186,20 +189,6 @@ final class StructureRestorerTest extends KernelTestCase
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->snapshotter = self::getContainer()->get(StructureSnapshotter::class);
         $this->restorer = self::getContainer()->get(StructureRestorer::class);
-    }
-
-    /**
-     * L'ancre des réglages de période = son PLAN (ADR-0002 inv. 5, lot C2). En prod il naît
-     * du geste (POST /api/calendar_entries) ; l'entrée est fabriquée à la main ici, on
-     * rejoue donc le geste. Flush d'abord : le provisioner relit la ligne en SQL brut.
-     */
-    private function planIdOf(CalendarEntry $entry): string
-    {
-        $this->em->flush();
-        $planId = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
-        self::assertIsString($planId);
-
-        return $planId;
     }
 
     /** @return array{0: Club, 1: Season} */

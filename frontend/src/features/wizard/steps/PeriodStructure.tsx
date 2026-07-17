@@ -353,12 +353,12 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useWizardTeamTags();
   const { data: tagAssignments = [], isLoading: tagAssignmentsLoading, isError: tagAssignmentsError } = useWizardTeamTagAssignments();
   // Off an overlay period, null disables both queries (no wasted fetch).
-  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? calendarEntryId : null);
+  const { data: overrides = [], isLoading: overridesLoading, isError: overridesError } = usePeriodConstraintOverrides(isOverlay ? schedulePlanId : null);
   // Needed for BOTH period types: a TEAM constraint of a deactivated team is non-applicable
   // and dropped from the payload server-side — the checklist must mirror that. On a fetch
   // error we can't tell which teams are paused, so a TEAM constraint's applicability is
   // UNKNOWN → its toggle is disabled (non-TEAM scopes are unaffected and stay usable).
-  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? calendarEntryId : null);
+  const { data: teamOverrides = [], isLoading: teamOverridesLoading, isError: teamOverridesError } = useTeamPeriodOverrides(isOverlay ? schedulePlanId : null);
   const create = useCreatePeriodConstraintOverride(schedulePlanId);
   const update = useUpdatePeriodConstraintOverride(schedulePlanId);
   const del = useDeletePeriodConstraintOverride(schedulePlanId);

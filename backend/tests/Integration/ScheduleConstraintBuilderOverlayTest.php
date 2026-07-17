@@ -20,6 +20,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Service\ScheduleConstraintBuilder;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +39,8 @@ use Symfony\Contracts\Cache\CacheInterface;
 #[Group('integration')]
 final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 {
+    use ProvisionsPeriodPlanTrait;
+
     use TenantGucTrait;
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -392,20 +395,6 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->persist($entry);
 
         return $entry;
-    }
-
-    /**
-     * L'ancre des réglages de période = son PLAN (ADR-0002 inv. 5, lot C2). En prod le plan
-     * naît du geste (POST /api/calendar_entries) ; ces entrées étant fabriquées à la main,
-     * on rejoue le geste. Flush d'abord : le provisioner relit la ligne en SQL brut.
-     */
-    private function planIdOf(CalendarEntry $entry): string
-    {
-        $this->em->flush();
-        $planId = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
-        self::assertIsString($planId, 'la période doit porter un plan');
-
-        return $planId;
     }
 
     private function teamOverride(Club $club, Season $season, CalendarEntry $entry, Team $team, bool $isActive, ?int $sessions): void
