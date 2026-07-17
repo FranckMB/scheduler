@@ -140,10 +140,8 @@ final class RegenerateTest extends WebTestCase
             ->setSeasonId($this->season->getId())
             ->setName('V source')
             ->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
-        // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
-        // du /regenerate lèverait sur une version sans plan.
+        // lot D : pas de persist/flush ici — linkSeededSchedule pose le plan AVANT de persister
+        // (schedule_plan_id est NOT NULL) puis numérote.
         $this->linkSeededSchedule($schedule);
 
         return $schedule;

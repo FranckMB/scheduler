@@ -312,14 +312,8 @@ final class CalendarEntryApiTest extends WebTestCase
 
         // A period entry with a generated overlay (schedule + one slot).
         $this->scopeGucToClub($club->getId());
-        $overlay = new Schedule;
-        $overlay->setClubId($club->getId());
-        $overlay->setSeasonId($season->getId());
-        $overlay->setName('Overlay');
-        $overlay->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($overlay);
-        $this->em->flush();
-
+        // L'entrée d'abord : le plan de la période naît d'elle (ADR-0002 lot C, rejoué ici
+        // car l'entrée est fabriquée à la main plutôt que par le POST).
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($season->getId());
@@ -328,14 +322,23 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setTitle('Gym fermé');
         $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
-        $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
-        // ADR-0002 lot C : une période a toujours son plan (né du geste). Rejoué ici,
-        // l'entrée étant fabriquée à la main plutôt que par le POST.
         $this->em->flush();
+
         // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : la
-        // cascade de suppression le retrouve PAR son plan.
-        $overlay->setSchedulePlanId(self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()));
+        // cascade de suppression le retrouve PAR son plan. lot D : le plan est posé AVANT
+        // le flush (schedule_plan_id NOT NULL).
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setSchedulePlanId($planId);
+        $overlay->setName('Overlay');
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry->setOverlayScheduleId($overlay->getId());
         $this->em->flush();
 
         $slot = new ScheduleSlotTemplate;
@@ -381,7 +384,8 @@ final class CalendarEntryApiTest extends WebTestCase
         $this->em->flush();
         // ADR-0002 lot C : le plan naît du geste. Rejoué ici — sans lui, l'overlay ne
         // se rattacherait à aucun plan et ne pourrait pas être pointé.
-        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        $planId = $provisioner->provisionPeriodPlan($entry->getId());
 
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());
@@ -390,7 +394,11 @@ final class CalendarEntryApiTest extends WebTestCase
         $overlay->setName('Overlay en vigueur');
         $overlay->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($overlay);
-        $this->em->flush();
+        // lot D : numéroter SOUS le plan de la période (linkSchedule lit le plan déjà posé,
+        // sans flush préalable — il fait l'INSERT unique avec version ≥ 1) AVANT de pointer.
+        // choosePlanVersion ne re-lie alors plus (version ≠ 0) : il pointe le plan de la
+        // période sur cet overlay — c'est ce pointeur qui le met « en vigueur ».
+        $provisioner->linkSchedule($overlay);
         $this->choosePlanVersion($overlay);
         $entry->setOverlayScheduleId($overlay->getId());
         $this->em->flush();
@@ -412,14 +420,7 @@ final class CalendarEntryApiTest extends WebTestCase
 
         // Period entry carrying a generated overlay.
         $this->scopeGucToClub($club->getId());
-        $overlay = new Schedule;
-        $overlay->setClubId($club->getId());
-        $overlay->setSeasonId($season->getId());
-        $overlay->setName('Overlay');
-        $overlay->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($overlay);
-        $this->em->flush();
-
+        // L'entrée d'abord : le plan de la période naît d'elle (rejoué à la main).
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($season->getId());
@@ -428,10 +429,24 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setTitle('Gym fermé');
         $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
-        $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
         $this->em->flush();
         $id = $entry->getId();
+
+        // L'overlay pend au PLAN de la période. lot D : le plan est posé AVANT le flush
+        // (schedule_plan_id NOT NULL).
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($id);
+        $overlay = new Schedule;
+        $overlay->setClubId($club->getId());
+        $overlay->setSeasonId($season->getId());
+        $overlay->setSchedulePlanId($planId);
+        $overlay->setName('Overlay');
+        $overlay->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($overlay);
+        $this->em->flush();
+
+        $entry->setOverlayScheduleId($overlay->getId());
+        $this->em->flush();
 
         $base = ['title' => 'Gym fermé', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10'];
 

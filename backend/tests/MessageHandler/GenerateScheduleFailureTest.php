@@ -169,13 +169,13 @@ final class GenerateScheduleFailureTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('BCK01 schedule');
         $schedule->setStatus(ScheduleStatus::PENDING);
-        $em->persist($schedule);
-        $em->flush();
         // Prod links every version at creation (POST → linkSchedule) ; sans plan, le site
         // « socle ? » du handler lèverait dès le build (periodEntryIdOf) et transformerait ce
         // COMPLETED en FAILED. C4 : linkSchedule numérote — la version porte d'abord son plan.
+        // Lot D : schedule_plan_id est NOT NULL — le plan est posé AVANT le persist/flush.
         $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
         $schedule->setSchedulePlanId($provisioner->ensureSeasonPlanId($season->getId()));
+        $em->persist($schedule);
         $em->flush();
         $provisioner->linkSchedule($schedule);
         $em->flush();

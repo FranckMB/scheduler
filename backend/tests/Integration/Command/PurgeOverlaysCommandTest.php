@@ -120,7 +120,9 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         $upcomingOverlay = $this->overlay($club, $season, $upcomingEntry, ScheduleStatus::COMPLETED);
         $upcomingEntry->setOverlayScheduleId($upcomingOverlay->getId());
         $seasonPlan = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Plan')->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($seasonPlan);
+        // lot D : un plan SEASON aussi porte schedule_plan_id (NOT NULL) — linkSeededSchedule(null)
+        // résout le plan SEASON de la saison, le pose AVANT de persister, numérote et flush.
+        $this->linkSeededSchedule($seasonPlan);
         $this->em->flush();
 
         return [
@@ -155,10 +157,10 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
             ->setSeasonId($season->getId())
             ->setName('Overlay')
             ->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // Prod links every overlay version to its period plan (born du geste) ; sans ça,
         // depuis C4 la purge (qui trouve les versions PAR le plan) ne les verrait pas.
+        // lot D : linkSeededSchedule pose le plan AVANT de persister (schedule_plan_id NOT NULL),
+        // puis persiste, numérote et flush — donc pas de persist/flush anticipé ici.
         $this->linkSeededSchedule($schedule, $entry->getId());
 
         return $schedule;

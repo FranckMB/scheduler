@@ -12,6 +12,7 @@ use App\Enum\ScheduleStatus;
 use App\EventListener\ScheduleGenerationFailureListener;
 use App\Message\GenerateScheduleMessage;
 use App\Service\TenantConnectionContext;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -33,6 +34,7 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 #[Group('integration')]
 final class ScheduleGenerationFailureListenerTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     public function testPermanentFailureMarksScheduleFailed(): void
@@ -134,7 +136,9 @@ final class ScheduleGenerationFailureListenerTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('pending');
         $schedule->setStatus(ScheduleStatus::PENDING);
-        $em->persist($schedule);
+        // lot D : schedule_plan_id est NOT NULL — la version doit porter son plan SEASON
+        // (résolu + posé AVANT persist) avant tout flush. Le helper persiste puis numérote.
+        $this->linkSeededSchedule($schedule);
         $em->flush();
         $clubId = $club->getId();
         $scheduleId = $schedule->getId();

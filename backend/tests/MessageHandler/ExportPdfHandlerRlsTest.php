@@ -12,6 +12,7 @@ use App\Message\ExportPdfMessage;
 use App\MessageHandler\ExportPdfHandler;
 use App\Service\PdfGenerator;
 use App\Service\TenantConnectionContext;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,7 @@ use Symfony\Component\Mercure\Update;
 #[Group('integration')]
 final class ExportPdfHandlerRlsTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     public function testHandlerScopesItsOwnGuc(): void
@@ -69,7 +71,9 @@ final class ExportPdfHandlerRlsTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('RLS export');
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $em->persist($schedule);
+        // lot D : la version doit porter son plan SEASON avant le flush (schedule_plan_id NOT NULL).
+        // linkSeededSchedule résout le plan, le pose, persiste et numérote — comme la prod au POST.
+        $this->linkSeededSchedule($schedule);
         $em->flush();
         $em->clear();
 

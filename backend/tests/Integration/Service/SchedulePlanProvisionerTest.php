@@ -128,26 +128,21 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
-     * NR lot C — linkSchedule ne CRÉE JAMAIS un plan de période : il n'existe qu'un
-     * seul site de naissance (le geste). Un second créateur laisserait passer
-     * inaperçu un plan manquant à la création de la période, et les réglages saisis
-     * avant la 1re génération n'auraient rien à quoi s'accrocher (inv. 5).
+     * NR lot C — linkSchedule ne CRÉE JAMAIS un plan de période : il n'existe qu'un seul site
+     * de naissance (le geste). lot D : une version sans plan est INREPRÉSENTABLE ; une période
+     * sans geste n'a donc simplement AUCUN plan auquel rattacher une version — on le prouve par
+     * l'absence de plan (et non plus par une version « non liée », qui ne peut plus exister).
      */
-    public function testLinkScheduleNeverCreatesAPeriodPlan(): void
+    public function testAPeriodWithoutTheGestureHasNoPlanToLinkTo(): void
     {
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
         $entry = $this->makeClosureEntry($clubId, $season->getId()); // pas de geste rejoué
 
-        $overlay = $this->makeSchedule($clubId, $season->getId(), $entry->getId());
-        $this->provisioner->linkSchedule($overlay);
-        $this->em->flush();
-
         self::assertNull(
-            $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]),
-            'linkSchedule ne doit pas fabriquer le plan a posteriori.',
+            $this->provisioner->periodPlanId($entry->getId()),
+            'sans le geste, la période n\'a pas de plan : linkSchedule n\'en fabrique jamais un a posteriori, et aucune version ne peut s\'y rattacher.',
         );
-        self::assertNull($overlay->getSchedulePlanId(), 'sans plan, la version reste non liée plutôt que rattachée à un plan inventé.');
     }
 
     public function testOverlayScheduleLinksToThePlanBornWithTheGesture(): void
@@ -275,20 +270,21 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
 
     private function makeSchedule(string $clubId, string $seasonId, ?string $calendarEntryId): Schedule
     {
+        // Depuis C4 le schedule ne porte plus calendarEntryId : la version pend au PLAN, et
+        // c'est l'appelant qui POSE schedulePlanId (linkSchedule ne fait plus que numéroter).
+        // lot D : le plan est obligatoire (non-nullable) — plan SEASON si version de saison,
+        // sinon le plan de la période (qui DOIT exister : sans lui, aucune version n'est créable).
+        $planId = null === $calendarEntryId
+            ? $this->provisioner->ensureSeasonPlanId($seasonId)
+            : $this->provisioner->periodPlanId($calendarEntryId);
+        self::assertIsString($planId, 'seed: la version doit avoir un plan (lot D)');
+
         $schedule = new Schedule;
         $schedule->setClubId($clubId);
         $schedule->setSeasonId($seasonId);
         $schedule->setName('Version');
         $schedule->setStatus(ScheduleStatus::DRAFT);
-        // Depuis C4 le schedule ne porte plus calendarEntryId : la version pend au PLAN, et
-        // c'est l'appelant qui POSE schedulePlanId (linkSchedule ne fait plus que numéroter).
-        // On reproduit la prod : plan SEASON si version de saison, sinon le plan de la période
-        // (ou null si elle n'en porte pas — linkSchedule doit alors laisser la version non liée).
-        $schedule->setSchedulePlanId(
-            null === $calendarEntryId
-                ? $this->provisioner->ensureSeasonPlanId($seasonId)
-                : $this->provisioner->periodPlanId($calendarEntryId),
-        );
+        $schedule->setSchedulePlanId($planId); // AVANT persist (schedule_plan_id NOT NULL)
         $this->em->persist($schedule);
         $this->em->flush();
 

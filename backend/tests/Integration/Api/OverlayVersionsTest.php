@@ -154,10 +154,9 @@ final class OverlayVersionsTest extends WebTestCase
             ->setSeasonId($season->getId())
             ->setName('Overlay ' . $status->value)
             ->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
-        // Prod links every overlay version to the plan né du geste ; sans ça, depuis C4
-        // la validation (periodEntryIdOf) lèverait sur une version sans plan.
+        // lot D : schedule_plan_id NOT NULL — la version ne doit pas être persistée avant
+        // d'avoir son plan. linkSeededSchedule pose le plan (né du geste) PUIS persiste.
+        // Prod lie de même chaque overlay ; sans plan, la validation (periodEntryIdOf) lèverait.
         $this->linkSeededSchedule($schedule, $entry->getId());
 
         return $schedule;
@@ -170,8 +169,7 @@ final class OverlayVersionsTest extends WebTestCase
             ->setSeasonId($season->getId())
             ->setName('Plan saison')
             ->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
+        // lot D : linkSeededSchedule pose le plan SEASON puis persiste (pas de persist/flush avant).
         $this->linkSeededSchedule($schedule);
 
         return $schedule;
@@ -227,8 +225,7 @@ final class OverlayVersionsTest extends WebTestCase
         // Le socle : la version que le plan SEASON pointe. Les plans secondaires
         // (overlays de période) ne sont autorisés qu'au-dessus d'un socle pointé (inv. 13).
         $baseline = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Baseline')->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($baseline);
-        $this->em->flush();
+        // lot D : choosePlanVersion lie (plan AVANT persist) puis pointe — pas de persist/flush avant.
         $this->choosePlanVersion($baseline);
 
         return [$user, $club, $season, $baseline];

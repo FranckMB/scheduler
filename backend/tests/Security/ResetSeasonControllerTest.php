@@ -91,8 +91,8 @@ final class ResetSeasonControllerTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Socle');
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $em->persist($schedule);
-        $em->flush();
+        // lot D : la version ne doit PAS être persistée/flushée avant le choose —
+        // choosePlanVersion la lie (plan AVANT persist), la numérote puis la pointe.
         $this->choosePlanVersion($schedule);
         // Un nom choisi par le gestionnaire, pour prouver qu'il survit au reset.
         $em->getConnection()->executeStatement(

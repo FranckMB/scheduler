@@ -22,31 +22,28 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 trait ChoosesPlanVersionTrait
 {
-    /** Le plan de la version pointe cette version = « validée ». */
+    /**
+     * Le plan de la version pointe cette version = « validée ».
+     *
+     * ⚠️ lot D : `schedule_plan_id`/`version_number` sont NOT NULL et non-nullables en PHP.
+     * La version NE DOIT PAS avoir été persistée/flushée avant l'appel (sinon l'INSERT part
+     * sans plan). Le seed la crée en mémoire ; ici on la lie (plan AVANT persist) puis on pointe.
+     */
     private function choosePlanVersion(Schedule $schedule): void
     {
         $container = static::getContainer();
         $em = $container->get(EntityManagerInterface::class);
         $provisioner = $container->get(SchedulePlanProvisioner::class);
 
-        // C4 : linkSchedule ne résout plus le plan, il NUMÉROTE — la version doit déjà porter
-        // son schedulePlanId. Si le seed ne l'a pas lié (cas courant : version de saison créée
-        // à la main), on l'attache au plan SEASON de sa saison ; un overlay a été lié en amont.
-        if (null === $schedule->getSchedulePlanId()) {
-            $planId = $provisioner->ensureSeasonPlanId($schedule->getSeasonId());
-            if (null !== $planId) {
-                $schedule->setSchedulePlanId($planId);
-                $em->flush();
-            }
+        // versionNumber 0 = pas encore liée (une version liée est ≥ 1) — on ne peut pas lire
+        // getSchedulePlanId() sur une version fraîche (non-nullable non initialisé).
+        if (0 === $schedule->getVersionNumber()) {
+            $this->linkSeededSchedule($schedule);
         }
 
-        $provisioner->linkSchedule($schedule);
-        // choose() rend false quand la version n'est rattachée à aucun plan (saison
-        // absente, par ex. une seed qui invente un seasonId). Le laisser passer
-        // rendrait un test « vert » sur un pointeur jamais posé.
         \PHPUnit\Framework\Assert::assertTrue(
             $provisioner->choose($schedule),
-            'seed: la version n\'a pu être rattachée à aucun plan — la saison existe-t-elle ?',
+            'seed: la version n\'a pu être pointée — son plan existe-t-il ?',
         );
         $em->flush();
     }
@@ -58,34 +55,23 @@ trait ChoosesPlanVersionTrait
      */
     private function settleSeasonPlan(Season $season): Schedule
     {
-        $em = static::getContainer()->get(EntityManagerInterface::class);
-
         $schedule = (new Schedule)
             ->setClubId($season->getClubId())
             ->setSeasonId($season->getId())
             ->setName('Planning')
             ->setStatus(ScheduleStatus::COMPLETED);
-        $em->persist($schedule);
-        $em->flush();
-
+        // Pas de persist/flush ici : choosePlanVersion lie (plan AVANT persist) puis pointe.
         $this->choosePlanVersion($schedule);
 
         return $schedule;
     }
 
     /**
-     * Rattache une version seedée à son plan, comme la PRODUCTION le fait à la création
-     * (POST /api/schedules → linkSchedule). Sans ça, une version seedée « à la main » a
-     * `schedulePlanId` null — et depuis le lot C4 tout site de décision « est-ce le
-     * socle ? » LÈVE sur ce troisième état (une version sans plan ne doit pas exister).
-     *
-     * - saison (`$calendarEntryId` null) : plan SEASON (ensureSeasonPlanId) ;
-     * - overlay (`$calendarEntryId` fourni) : le plan de la période, provisionné (idempotent,
-     *   comme le geste de création de la période).
-     *
-     * Depuis C4, le schedule ne porte plus `calendarEntryId` : on POSE `schedulePlanId` (ce
-     * que fait la prod au POST), puis `linkSchedule` NUMÉROTE. L'entrée/la saison doivent
-     * être persistées+flushées avant l'appel (résolution en SQL brut).
+     * Lie une version seedée à son plan comme la PRODUCTION au POST : résout le plan (SEASON
+     * si `$calendarEntryId` null, sinon celui de la période), le POSE, persiste, puis
+     * `linkSchedule` NUMÉROTE. lot D : la version ne doit PAS avoir été persistée/flushée avant
+     * (schedule_plan_id NOT NULL) — on résout le plan AVANT de la persister car ensureSeasonPlanId
+     * a sa propre transaction (elle flush le pending). L'entrée/la saison doivent être en base.
      */
     private function linkSeededSchedule(Schedule $schedule, ?string $calendarEntryId = null): void
     {
@@ -95,13 +81,11 @@ trait ChoosesPlanVersionTrait
         $planId = null === $calendarEntryId
             ? $provisioner->ensureSeasonPlanId($schedule->getSeasonId())
             : $provisioner->provisionPeriodPlan($calendarEntryId);
-        $em->flush();
-        if (null !== $planId) {
-            $schedule->setSchedulePlanId($planId);
-            $em->flush();
-            $provisioner->linkSchedule($schedule);
-        }
-        $em->flush();
+        \PHPUnit\Framework\Assert::assertIsString($planId, 'seed: la saison/période doit porter un plan');
+
+        $schedule->setSchedulePlanId($planId);
+        $em->persist($schedule);
+        $provisioner->linkSchedule($schedule);
     }
 
     /**

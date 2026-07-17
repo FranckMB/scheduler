@@ -121,23 +121,31 @@ final class SchedulePlanProvisioner
      */
     public function linkSchedule(Schedule $schedule): void
     {
-        $planId = $schedule->getSchedulePlanId();
-        if (null === $planId || null !== $schedule->getVersionNumber()) {
+        // Idempotence : une version déjà numérotée (≥ 1) est laissée telle quelle. Le plan
+        // est non-nullable (lot D) — une version sans plan n'existe pas, donc pas de garde null.
+        if (0 !== $schedule->getVersionNumber()) {
             return;
         }
+        $planId = $schedule->getSchedulePlanId();
 
         $this->entityManager->wrapInTransaction(function () use ($schedule, $planId): void {
             // Même portée que la validation/réouverture (planScopeOf) : sinon le verrou
-            // ne coïncide pas. Le plan peut venir d'être persisté (plan SEASON) et pas
-            // encore en base — flush AVANT nextVersionNumber, sinon l'UPDATE matche 0 lignes.
+            // ne coïncide pas. PAS de flush avant nextVersionNumber (lot D) : le plan est
+            // TOUJOURS déjà committé ici (ensureSeasonPlanId a sa propre transaction, le plan
+            // de période naît en C1, un plan explicite est lu depuis la base) ; flusher
+            // maintenant INSÉRERAIT la version avec version_number = 0. nextVersionNumber lit le
+            // MAX des versions COMMITTÉES (la nouvelle, non flushée, n'y est pas → numéro correct).
             $this->lockPlanScope($this->planScopeOf($schedule));
-            $this->entityManager->flush();
 
             $versionNumber = $this->nextVersionNumber($planId);
             if (null === $versionNumber) {
-                return; // le plan a disparu (reset concurrent) — version non numérotée
+                // Le plan a disparu entre sa résolution et ici (reset concurrent). LEVER : une
+                // version non numérotée ne doit pas persister (version_number est NOT NULL, et
+                // la sentinelle 0 n'est pas une vraie version). Le rollback annule la création.
+                throw new LogicException(\sprintf('Le plan %s a disparu pendant la création de la version %s.', $planId, $schedule->getId()));
             }
 
+            // Unique flush : la version est insérée avec schedule_plan_id ET version_number ≥ 1.
             $schedule->setVersionNumber($versionNumber);
             $this->entityManager->flush();
         });
@@ -151,16 +159,10 @@ final class SchedulePlanProvisioner
      */
     public function choose(Schedule $schedule): bool
     {
+        // ADR-0002 lot D : une version a TOUJOURS un plan (schedulePlanId non-nullable) — plus
+        // de garde null, plus de self-heal. Le pointeur peut néanmoins pendre dans le vide (plan
+        // supprimé sous ses pieds) : c'est le nombre de lignes touchées qui fait foi (ci-dessous).
         $planId = $schedule->getSchedulePlanId();
-        if (null === $planId) {
-            // ADR-0002 C4 (ruling 2026-07-17) : une version sans plan N'EXISTE PAS — toute
-            // création la lie (POST/regenerate). Un null ici est une anomalie : on le
-            // RAPPORTE (l'appelant supprime les sœurs juste après ; un no-op silencieux les
-            // détruirait pour rien ET laisserait le plan non pointé en répondant 200). Plus
-            // de self-heal : il ne pourrait de toute façon plus retrouver la période
-            // (calendarEntryId a disparu du schedule).
-            return false;
-        }
 
         // Le nombre de lignes touchées est la VÉRITÉ : un schedulePlanId non-null peut
         // pendre dans le vide (plan supprimé sous ses pieds). Le self-heal ci-dessus ne
@@ -408,17 +410,14 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * La portée du verrou consultatif d'un schedule LIÉ : la période de son plan, sinon
-     * la saison. Doit coïncider avec la clé de linkSchedule (qui, pour un schedule PAS
-     * encore lié, reste `schedule.calendarEntryId ?? season:{id}`) — plan.calendarEntryId
-     * porte LA MÊME valeur (redondance C4), les deux se sérialisent donc l'un contre
-     * l'autre. NON levant : un schedule anormal sans plan retombe sur la portée saison
-     * plutôt que de 500 le chemin validate/reopen (qui le self-heal).
+     * La portée du verrou consultatif d'un schedule : la période de son plan (SEASON → la
+     * saison). Coïncide avec la clé prise par linkSchedule/validate/reopen. Le plan est
+     * non-nullable (lot D) ; si sa ligne a disparu (reset concurrent), on retombe sur la
+     * portée saison plutôt que de 500 un chemin de verrou.
      */
     public function planScopeOf(Schedule $schedule): string
     {
-        $planId = $schedule->getSchedulePlanId();
-        $entryId = null === $planId ? null : ($this->fetchPlanRow($planId)['calendarEntryId'] ?? null);
+        $entryId = $this->fetchPlanRow($schedule->getSchedulePlanId())['calendarEntryId'] ?? null;
 
         return $entryId ?? self::seasonScopeKey($schedule->getSeasonId());
     }
@@ -478,19 +477,18 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * @throws LogicException le schedule n'a pas de plan / son plan a disparu
+     * @throws LogicException le plan du schedule a disparu (reset concurrent)
      *
      * @return array{type: SchedulePlanType, calendarEntryId: string|null}
      */
     private function requirePlanRow(Schedule $schedule): array
     {
+        // Le plan est non-nullable (lot D) : « sans plan » est inreprésentable. Reste le cas
+        // où la ligne du plan a disparu sous les pieds (reset concurrent) → on lève.
         $planId = $schedule->getSchedulePlanId();
-        if (null === $planId) {
-            throw new LogicException(\sprintf('Schedule %s carries no plan — a version without a plan must not exist (ADR-0002). Refusing to derive the socle from a null plan.', $schedule->getId()));
-        }
         $row = $this->fetchPlanRow($planId);
         if (null === $row) {
-            throw new LogicException(\sprintf('Schedule %s points at plan %s which no longer exists — refusing to derive the socle.', $schedule->getId(), $planId));
+            throw new LogicException(\sprintf('Schedule %s points at plan %s which no longer exists.', $schedule->getId(), $planId));
         }
 
         return $row;
@@ -629,8 +627,9 @@ final class SchedulePlanProvisioner
      * SQL brut : atomique, et il esquive le season_filter (la saison du plan n'est
      * pas forcément l'active). RLS scope toujours par club.
      *
-     * @return int|null null si le plan n'existe pas/plus (course avec un reset de
-     *                  saison) — le schedule reste alors simplement non lié
+     * @return int|null null si le plan a disparu (course avec un reset de saison) — l'appelant
+     *                  (linkSchedule) LÈVE alors : la version n'est pas numérotée et ne doit pas
+     *                  persister (version_number est NOT NULL depuis le lot D)
      */
     private function nextVersionNumber(string $schedulePlanId): ?int
     {
@@ -642,9 +641,8 @@ final class SchedulePlanProvisioner
             ['pid' => $schedulePlanId],
         );
 
-        // Zéro ligne : le plan a disparu entre la résolution et ici. Ne pas lever —
-        // ça fermerait l'EntityManager et transformerait une création qui marchait en
-        // 500. Le lien reste null (nullable pendant la transition).
+        // Zéro ligne : le plan a disparu entre la résolution et ici (reset concurrent) → null.
+        // linkSchedule lève sur ce null (lot D : une version non numérotée ne persiste pas).
         return false === $next ? null : (int) $next;
     }
 

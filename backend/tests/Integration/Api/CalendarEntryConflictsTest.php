@@ -183,11 +183,11 @@ final class CalendarEntryConflictsTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Baseline');
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($schedule);
-        $this->em->flush();
 
         // The conflict radar reads the season's calendar = the version the plan
         // points at. Without the pointer it has nothing to compare periods against.
+        // choosePlanVersion links the plan and persists the schedule itself, so it
+        // must receive a schedule that has NOT yet been persisted/flushed.
         $this->choosePlanVersion($schedule);
 
         return $schedule;

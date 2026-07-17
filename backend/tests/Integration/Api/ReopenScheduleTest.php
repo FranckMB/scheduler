@@ -250,7 +250,11 @@ final class ReopenScheduleTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
+        // lot D : une version naît liée à un plan (schedule_plan_id NOT NULL). On la lie au
+        // plan SEASON (le socle) comme la prod au POST — plan AVANT persist, puis numérotée.
+        // Les tests qui la POINTENT enchaînent choosePlanVersion (idempotent : version déjà
+        // ≥ 1, il ne relie pas et se contente de pointer).
+        $this->linkSeededSchedule($schedule);
         $this->em->flush();
 
         return $schedule;
@@ -269,8 +273,10 @@ final class ReopenScheduleTest extends WebTestCase
         $overlay->setSeasonId($season->getId());
         $overlay->setName('Overlay ' . $title);
         $overlay->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($overlay);
-        $this->em->flush();
+        // lot D : l'overlay ne peut être persisté sans son plan (schedule_plan_id NOT NULL),
+        // or ce plan est celui de la PÉRIODE — il faut d'abord créer l'entrée. On garde donc
+        // l'overlay en mémoire (son id vient du constructeur) et on le persiste plus bas, une
+        // fois son plan de période résolu et posé.
 
         $entry = new CalendarEntry;
         $entry->setClubId($season->getClubId());
@@ -286,6 +292,10 @@ final class ReopenScheduleTest extends WebTestCase
         // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : le
         // reopen et la cascade le retrouvent PAR son plan, né du geste (rejoué ici).
         $overlay->setSchedulePlanId(self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId()));
+        // Plan posé (AVANT persist, car provisionPeriodPlan a sa propre transaction) : on peut
+        // enfin persister l'overlay. version_number reste 0 (valide, NOT NULL passe) — aucun
+        // test n'exige un numéro ici, l'overlay est retrouvé PAR son plan de période.
+        $this->em->persist($overlay);
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($season->getClubId());

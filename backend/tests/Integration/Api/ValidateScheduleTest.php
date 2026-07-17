@@ -11,6 +11,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -85,7 +86,14 @@ final class ValidateScheduleTest extends WebTestCase
         [$user, , $season] = $this->seed('VAL7');
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         $failed = $this->createSchedule($season, ScheduleStatus::FAILED);
-        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, '44444444-4444-4444-8444-444444444444');
+        // Une VRAIE période (et son plan né du geste) : un overlay se rattache à un plan réel.
+        $entry = (new CalendarEntry)
+            ->setClubId($season->getClubId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
+            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
         $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
 
         $this->client->loginUser($user);
@@ -126,7 +134,7 @@ final class ValidateScheduleTest extends WebTestCase
         $this->choosePlanVersion($v1);
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
-            ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Vacances')
             ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
         $this->em->persist($entry);
         $this->em->flush();
@@ -166,7 +174,7 @@ final class ValidateScheduleTest extends WebTestCase
         [$user, , $season] = $this->seed('VAL10');
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
-            ->setKind(CalendarEntryKind::PERIOD)->setTitle('Vacances')
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Vacances')
             ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
         $this->em->persist($entry);
         $this->em->flush();
@@ -318,10 +326,9 @@ final class ValidateScheduleTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 la validation
-        // lèverait sur une version sans plan (periodEntryIdOf).
+        // lèverait sur une version sans plan (periodEntryIdOf). linkSeededSchedule
+        // persiste et numérote lui-même — la Schedule ne doit PAS être flushée avant.
         $this->linkSeededSchedule($schedule, $calendarEntryId);
 
         return $schedule;

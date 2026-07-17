@@ -138,10 +138,11 @@ final class GenerateScheduleComplexityCapTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
         // du /generate lèverait AVANT d'atteindre la garde de complexité.
+        // linkSeededSchedule resolves the plan, sets schedulePlanId, persists and numbers
+        // the schedule itself — it MUST receive a not-yet-persisted Schedule (schedule_plan_id
+        // is NOT NULL since ADR-0002 lot D, so it cannot be flushed before its plan is set).
         $this->linkSeededSchedule($schedule);
 
         return $schedule;
