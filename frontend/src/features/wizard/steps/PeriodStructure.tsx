@@ -53,10 +53,10 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
+  // Le PLAN entier est nécessaire ici (le garde de seed lit teamSelectionInitialized) ;
+  // `usePeriodAnchor` fournit l'ancre ET son état — ne pas re-dériver un `?? null` nu.
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
-  // ADR-0002 inv. 5 (lot C2) : les réglages pendent au PLAN. Le composant reçoit le
-  // déclencheur (la période), il en résout l'ancre — null tant que la requête charge.
-  const schedulePlanId = plan?.id ?? null;
+  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
   const { data: overrides = [], isLoading } = useTeamPeriodOverrides(schedulePlanId);
   const create = useCreateTeamPeriodOverride(schedulePlanId);
   const update = useUpdateTeamPeriodOverride(schedulePlanId);
@@ -139,14 +139,18 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // Ramp presets: activate every team up to (and including) a tier group index —
   // awaited as a batch, controls disabled meanwhile.
   const rampTo = async (upToIndex: number) => {
-    if (busy) {
-      return;
+    if (busy || !anchorReady) {
+      return; // sans ancre, on n'écrit pas (et on ne prétend pas l'avoir fait)
     }
     setBusy(true);
     try {
       const results = await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
       // Only confirm when every write landed — failures are toasted by the global net.
-      if (!results.some((r) => "rejected" === r.status)) {
+      // `anchorReady` fait partie de la condition : sans ancre, upsertAsync bail en
+      // Promise.resolve() pour chaque équipe → zéro rejet → on confirmait « Sélection
+      // appliquée » alors qu'AUCUNE ligne n'était écrite, et l'overlay partait ensuite avec
+      // tout le club actif. Un succès qui ment est pire qu'une erreur.
+      if (anchorReady && !results.some((r) => "rejected" === r.status)) {
         toast.success("Sélection appliquée");
       }
     } finally {
@@ -353,6 +357,8 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
 export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
   // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
+  // Ce composant ne vit qu'en mode période (calendarEntryId requis), donc `ready` équivaut
+  // ici à `null !== planId` — on garde la forme nulle, qui narrow le type pour l'écriture.
   const { planId: schedulePlanId } = usePeriodAnchor(calendarEntryId);
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;

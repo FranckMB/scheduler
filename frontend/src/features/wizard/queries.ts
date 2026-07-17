@@ -296,11 +296,20 @@ export function useWizardConstraints(calendarEntryId?: string | null) {
   });
 }
 
-/** Server-backed reservations (team→slot HARD pins), scoped base vs period overlay. */
-export function useReservations(schedulePlanId?: string | null) {
+/**
+ * Server-backed reservations (team→slot HARD pins), scoped base vs period overlay.
+ *
+ * `enabled` n'est PAS déductible de `schedulePlanId` : `null` y est AMBIGU — c'est l'ancre
+ * légitime du socle, et aussi ce que vaut un plan pas encore résolu. Sans ce drapeau, la
+ * fenêtre de chargement d'une période sert les réservations DU SOCLE en les faisant passer
+ * pour celles de la période (récap faux, avertissements faux). L'appelant tranche avec le
+ * `ready` de `usePeriodAnchor` — lui seul sait s'il est en mode période.
+ */
+export function useReservations(schedulePlanId?: string | null, enabled = true) {
   return useQuery({
     queryKey: ["wizard", "reservations", schedulePlanId ?? "base"],
     queryFn: () => wizardApi.listReservations(schedulePlanId ? { schedulePlanId } : undefined),
+    enabled,
     staleTime: 30_000,
   });
 }

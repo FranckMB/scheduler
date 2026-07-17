@@ -93,7 +93,9 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // Reservations are server-backed now (base vs period overlay), not the client store.
   // Elles pendent au PLAN (inv. 5, lot C3) : le composant tient le déclencheur, il en
   // résout l'ancre.
-  const { data: reservations = [] } = useReservations(usePeriodAnchor(periodEntryId).planId);
+  // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
+  const periodAnchor = usePeriodAnchor(periodEntryId);
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.

@@ -99,10 +99,16 @@ vi.mock("@/features/cockpit/queries", () => ({
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+import { toast } from "@/shared/stores/toastStore";
+
 import { PeriodConstraints, PeriodTeams, PeriodVenues } from "./PeriodStructure";
 import { resetPeriodSeed } from "./periodSeed";
 
 afterEach(() => {
+  // Les vi.fn() ACCUMULENT leurs appels d'un test à l'autre : sans ça, un
+  // `not.toHaveBeenCalled` voit l'appel d'un test précédent et échoue à tort (ou pire,
+  // un `toHaveBeenCalled` passe grâce à lui).
+  vi.clearAllMocks();
   resetPeriodSeed();
   overridesState.data = [];
   constraintsState.data = [];
@@ -239,6 +245,20 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     expect(createSlot).not.toHaveBeenCalled();
 
     // 3. et une fois le plan résolu, l'écriture part — avec l'ancre du PLAN.
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("PeriodTeams ne confirme PAS « Sélection appliquée » quand rien n'a été écrit", async () => {
+    const user = userEvent.setup();
+    planState.data = undefined; // plan pas encore résolu → aucune écriture possible
+    render(<PeriodTeams calendarEntryId="e1" />);
+
+    await user.click(screen.getByRole("button", { name: "Fanion seul" }));
+    // Le piège : sans ancre, chaque upsert bail en Promise.resolve() → zéro rejet → le
+    // toast se déclenchait. Un succès qui ment est pire qu'une erreur : le gestionnaire
+    // croit sa sélection posée, et l'overlay part avec tout le club actif.
+    expect(toast.success).not.toHaveBeenCalledWith("Sélection appliquée");
+    expect(createOverride).not.toHaveBeenCalled();
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
   });
 
