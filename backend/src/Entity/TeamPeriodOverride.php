@@ -16,8 +16,8 @@ use Doctrine\ORM\Mapping as ORM;
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'team_period_override')]
-#[ORM\UniqueConstraint(name: 'uniq_team_period_override', columns: ['calendar_entry_id', 'team_id'])]
-#[ORM\Index(name: 'idx_team_period_override_entry', columns: ['calendar_entry_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_team_period_override', columns: ['schedule_plan_id', 'team_id'])]
+#[ORM\Index(name: 'idx_team_period_override_plan', columns: ['schedule_plan_id'])]
 class TeamPeriodOverride implements TenantOwnedInterface
 {
     #[ORM\Id]
@@ -39,8 +39,15 @@ class TeamPeriodOverride implements TenantOwnedInterface
     #[ORM\Column(type: 'guid')]
     private string $seasonId;
 
+    /**
+     * ADR-0002 inv. 5 — les réglages de période s'accrochent au PLAN, pas au déclencheur
+     * calendrier. Aujourd'hui un plan par période (uniq_schedule_plan_calendar_entry), donc
+     * l'ancre revient au même ; c'est le découpage hebdomadaire (types-de-planning E1) qui
+     * la rend nécessaire : 2 semaines ⇒ 2 plans ⇒ 2 jeux de réglages sur le MÊME déclencheur,
+     * que `calendarEntryId` ne saurait pas distinguer.
+     */
     #[ORM\Column(type: 'guid')]
-    private string $calendarEntryId;
+    private string $schedulePlanId;
 
     #[ORM\Column(type: 'guid')]
     private string $teamId;
@@ -112,14 +119,14 @@ class TeamPeriodOverride implements TenantOwnedInterface
         return $this;
     }
 
-    public function getCalendarEntryId(): string
+    public function getSchedulePlanId(): string
     {
-        return $this->calendarEntryId;
+        return $this->schedulePlanId;
     }
 
-    public function setCalendarEntryId(string $calendarEntryId): self
+    public function setSchedulePlanId(string $schedulePlanId): self
     {
-        $this->calendarEntryId = $calendarEntryId;
+        $this->schedulePlanId = $schedulePlanId;
 
         return $this;
     }

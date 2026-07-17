@@ -190,12 +190,23 @@ final class ScheduleConstraintBuilder
         $seasonId = $schedule->getSeasonId();
         $periodType = $entry->getPeriodType();
 
+        // ADR-0002 inv. 5 (lot C2) — les réglages de la période pendent au PLAN. Sans lui,
+        // on ne sait pas QUELS réglages appliquer. Échouer bruyamment plutôt que bâtir avec
+        // zéro override : ce silence-là génèrerait un planning avec TOUTES les équipes
+        // actives, en ignorant la sélection du gestionnaire — un plan faux vaut moins qu'une
+        // génération FAILED avec un diagnostic. Inatteignable en pratique : le plan naît du
+        // geste (C1) et linkSchedule rattache la version.
+        $schedulePlanId = $schedule->getSchedulePlanId();
+        if (null === $schedulePlanId) {
+            throw new LogicException('Overlay build requires the schedule to be linked to its period plan.');
+        }
+
         $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
 
         // Period-editable structure: sparse per-team overrides for THIS period. Loaded
         // BEFORE the constraint match — the reprise default follows the team selection
         // (a constraint targeting a deactivated team is dropped by default).
-        $teamOverrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $entry->getId()]);
+        $teamOverrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]);
         $deactivatedTeamIds = [];
         $this->currentSessionOverrides = [];
         foreach ($teamOverrides as $teamOverride) {
@@ -211,14 +222,14 @@ final class ScheduleConstraintBuilder
             // Fermeture: inherit ALL permanent constraints (kept by default), minus those
             // the manager explicitly disabled for the window (sparse diff — base untouched).
             CalendarEntryPeriodType::CLOSURE => array_merge(
-                $this->inheritedPermanents($clubId, $seasonId, $entry->getId(), static fn (): bool => true, $em),
+                $this->inheritedPermanents($clubId, $seasonId, $schedulePlanId, static fn (): bool => true, $em),
                 $dated,
             ),
             // Reprise: inherit the socle's permanent constraints with a SMART default that
             // follows the team selection (CLUB/COACH/TEAM kept, FACILITY dropped) — an explicit
             // override deviates ; the post-filter below drops a paused team's TEAM constraint.
             CalendarEntryPeriodType::HOLIDAY => array_merge(
-                $this->inheritedPermanents($clubId, $seasonId, $entry->getId(), static fn (Constraint $c): bool => ConstraintScope::FACILITY !== $c->getScope(), $em),
+                $this->inheritedPermanents($clubId, $seasonId, $schedulePlanId, static fn (Constraint $c): bool => ConstraintScope::FACILITY !== $c->getScope(), $em),
                 $dated,
             ),
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
@@ -417,10 +428,10 @@ final class ScheduleConstraintBuilder
      *
      * @return array<Constraint>
      */
-    private function inheritedPermanents(string $clubId, string $seasonId, string $entryId, callable $keepByDefault, EntityManagerInterface $em): array
+    private function inheritedPermanents(string $clubId, string $seasonId, string $schedulePlanId, callable $keepByDefault, EntityManagerInterface $em): array
     {
         $overrides = [];
-        foreach ($em->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $entryId]) as $override) {
+        foreach ($em->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
             $overrides[$override->getConstraintId()] = $override->isActive();
         }
 

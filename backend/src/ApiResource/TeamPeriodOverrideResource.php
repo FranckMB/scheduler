@@ -31,7 +31,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Put,
     new Delete,
 ], input: TeamPeriodOverrideInput::class, paginationEnabled: false, provider: TeamPeriodOverrideStateProvider::class, processor: TeamPeriodOverrideStateProcessor::class)]
-#[ApiFilter(SearchFilter::class, properties: ['calendarEntryId' => 'exact', 'teamId' => 'exact'])]
+#[ApiFilter(SearchFilter::class, properties: ['schedulePlanId' => 'exact', 'teamId' => 'exact'])]
 class TeamPeriodOverrideResource
 {
     #[Groups(['read'])]
@@ -47,7 +47,7 @@ class TeamPeriodOverrideResource
     public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
-    public string $calendarEntryId = '';
+    public string $schedulePlanId = '';
 
     #[Groups(['read'])]
     public string $teamId = '';
@@ -65,7 +65,7 @@ class TeamPeriodOverrideResource
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();
         $dto->updatedAt = $entity->getUpdatedAt();
-        $dto->calendarEntryId = $entity->getCalendarEntryId();
+        $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->teamId = $entity->getTeamId();
         $dto->isActive = $entity->isActive();
         $dto->sessionsPerWeek = $entity->getSessionsPerWeek();

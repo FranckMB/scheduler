@@ -13162,7 +13162,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "default": "",
                         "type": "string"
                     },
@@ -13180,11 +13180,11 @@
                 "type": "object",
                 "description": "Period-editable structure: a sparse per-(period, constraint) toggle \u2014 the permanent\nconstraint is disabled for the period. No row = the constraint applies as usual. The\noverlay build reads these; the base plan is never touched.",
                 "required": [
-                    "calendarEntryId",
+                    "schedulePlanId",
                     "constraintId"
                 ],
                 "properties": {
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "format": "uuid",
                         "externalDocs": {
                             "url": "https://schema.org/identifier"
@@ -13231,7 +13231,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "default": "",
                         "type": "string"
                     },
@@ -13269,7 +13269,7 @@
                                 "type": "string",
                                 "format": "date-time"
                             },
-                            "calendarEntryId": {
+                            "schedulePlanId": {
                                 "default": "",
                                 "type": "string"
                             },
@@ -17024,7 +17024,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "default": "",
                         "type": "string"
                     },
@@ -17048,11 +17048,11 @@
                 "type": "object",
                 "description": "Period-editable structure: a sparse per-(period, team) override \u2014 the team is\noff for the period, or trains a different number of sessions. No row = seasonal\ndefaults. The overlay build reads these; the base plan is never touched.",
                 "required": [
-                    "calendarEntryId",
+                    "schedulePlanId",
                     "teamId"
                 ],
                 "properties": {
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "format": "uuid",
                         "externalDocs": {
                             "url": "https://schema.org/identifier"
@@ -17107,7 +17107,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "default": "",
                         "type": "string"
                     },
@@ -17151,7 +17151,7 @@
                                 "type": "string",
                                 "format": "date-time"
                             },
-                            "calendarEntryId": {
+                            "schedulePlanId": {
                                 "default": "",
                                 "type": "string"
                             },

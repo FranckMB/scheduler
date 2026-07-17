@@ -78,7 +78,7 @@ final class CascadeDeleteApiTest extends WebTestCase
         // with the constraint when the team's cascade bulk-deletes it (else it orphans).
         $overrideId = $this->persist((new ConstraintPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setCalendarEntryId('33333333-3333-4333-8333-333333333333')->setConstraintId($constraintId)->setIsActive(false));
+            ->setSchedulePlanId('33333333-3333-4333-8333-333333333333')->setConstraintId($constraintId)->setIsActive(false));
         // PAS de Fixture ici : depuis la garde du périmètre engagé, un SEUL match — même
         // UNPLACED — rend l'équipe indélébile (409). Ce test porte sur la cascade d'une
         // équipe ordinaire ; le cas « elle joue » est couvert par EngagedTeamGuardTest.

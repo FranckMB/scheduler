@@ -124,23 +124,27 @@ export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api
 export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
 
-/** Period-editable structure: a sparse per-(period, team) override — off for the period, or a different session count. */
+/**
+ * Period-editable structure: a sparse per-(plan, team) override — off for the period, or a
+ * different session count. Ancré au PLAN (ADR-0002 inv. 5), pas au déclencheur calendrier :
+ * c'est ce qui permettra à 2 semaines de vacances (2 plans) de porter 2 jeux de réglages.
+ */
 export interface TeamPeriodOverride {
   id: string;
-  calendarEntryId: string;
+  schedulePlanId: string;
   teamId: string;
   isActive: boolean;
   sessionsPerWeek: number | null;
 }
 
 export interface TeamPeriodOverridePayload {
-  calendarEntryId: string;
+  schedulePlanId: string;
   teamId: string;
   isActive: boolean;
   sessionsPerWeek?: number | null;
 }
 
-export const listTeamPeriodOverrides = (calendarEntryId: string): Promise<TeamPeriodOverride[]> => collectionAll<TeamPeriodOverride>("team_period_overrides", { calendarEntryId });
+export const listTeamPeriodOverrides = (schedulePlanId: string): Promise<TeamPeriodOverride[]> => collectionAll<TeamPeriodOverride>("team_period_overrides", { schedulePlanId });
 export const createTeamPeriodOverride = (body: TeamPeriodOverridePayload): Promise<TeamPeriodOverride> => api.post("team_period_overrides", { json: body }).json();
 export const updateTeamPeriodOverride = (id: string, body: TeamPeriodOverridePayload): Promise<TeamPeriodOverride> => api.put(`team_period_overrides/${id}`, { json: body }).json();
 export const deleteTeamPeriodOverride = (id: string): Promise<void> => api.delete(`team_period_overrides/${id}`).then(() => undefined);
@@ -148,18 +152,18 @@ export const deleteTeamPeriodOverride = (id: string): Promise<void> => api.delet
 /** Period-editable structure: a sparse per-(period, constraint) toggle — isActive=false disables the permanent constraint for the period. No row = applies as usual. */
 export interface ConstraintPeriodOverride {
   id: string;
-  calendarEntryId: string;
+  schedulePlanId: string;
   constraintId: string;
   isActive: boolean;
 }
 
 export interface ConstraintPeriodOverridePayload {
-  calendarEntryId: string;
+  schedulePlanId: string;
   constraintId: string;
   isActive: boolean;
 }
 
-export const listConstraintPeriodOverrides = (calendarEntryId: string): Promise<ConstraintPeriodOverride[]> => collectionAll<ConstraintPeriodOverride>("constraint_period_overrides", { calendarEntryId });
+export const listConstraintPeriodOverrides = (schedulePlanId: string): Promise<ConstraintPeriodOverride[]> => collectionAll<ConstraintPeriodOverride>("constraint_period_overrides", { schedulePlanId });
 export const createConstraintPeriodOverride = (body: ConstraintPeriodOverridePayload): Promise<ConstraintPeriodOverride> => api.post("constraint_period_overrides", { json: body }).json();
 export const updateConstraintPeriodOverride = (id: string, body: ConstraintPeriodOverridePayload): Promise<ConstraintPeriodOverride> => api.put(`constraint_period_overrides/${id}`, { json: body }).json();
 export const deleteConstraintPeriodOverride = (id: string): Promise<void> => api.delete(`constraint_period_overrides/${id}`).then(() => undefined);

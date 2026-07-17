@@ -45,9 +45,9 @@ class TeamPeriodOverrideStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // Overrides are always consulted per period; a teamId narrows further.
-            $calendarEntryId = $request->query->get('calendarEntryId');
-            if (null !== $calendarEntryId && '' !== $calendarEntryId) {
-                $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
+            $schedulePlanId = $request->query->get('schedulePlanId');
+            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+                $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             }
 
             $teamId = $request->query->get('teamId');

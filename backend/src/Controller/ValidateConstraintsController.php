@@ -39,6 +39,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Repository\TeamRepository $teamRepository,
         private readonly \Doctrine\ORM\EntityManagerInterface $entityManager,
+        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -136,13 +137,22 @@ final class ValidateConstraintsController extends AbstractController
             return $dated;
         }
 
+        // Les réglages de la période pendent au PLAN (inv. 5, lot C2) : on part du
+        // déclencheur, on résout son plan. Une période génératrice en a toujours un
+        // (il naît du geste, lot C1) ; un null ne peut venir que d'une donnée antérieure
+        // au lot — sans réglage à appliquer, le récap reste juste.
+        $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntry->getId());
+        if (null === $schedulePlanId) {
+            return $dated;
+        }
+
         $periodOverrides = [];
-        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['calendarEntryId' => $calendarEntry->getId()]) as $override) {
+        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
             $periodOverrides[$override->getConstraintId()] = $override->isActive();
         }
 
         $deactivatedTeamIds = [];
-        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['calendarEntryId' => $calendarEntry->getId()]) as $override) {
+        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
             if (!$override->isActive()) {
                 $deactivatedTeamIds[$override->getTeamId()] = true;
             }

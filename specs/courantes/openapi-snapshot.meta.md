@@ -1,7 +1,14 @@
-Last verified @ feat/adr0002-lot-c1-plan-au-geste 2026-07-17
+Last verified @ feat/adr0002-lot-c2-jumeaux 2026-07-17
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **82 paths.**
 Changements récents :
+- **ADR-0002 lot C2 — les deux jumeaux s'ancrent au PLAN (2026-07-17, RUPTURE)** : aucun
+  path touché (82). `TeamPeriodOverride` et `ConstraintPeriodOverride` remplacent
+  **`calendarEntryId` par `schedulePlanId`** — en lecture, en écriture et en filtre de
+  collection (`?schedulePlanId=`). Inv. 5 : les réglages de période s'accrochent au Plan,
+  pas au déclencheur calendrier. Sans effet fonctionnel aujourd'hui (un plan par période),
+  c'est le découpage hebdomadaire (types-de-planning E1) que cela débloque : 2 semaines ⇒
+  2 plans ⇒ 2 jeux de réglages sur le même déclencheur.
 - **ADR-0002 lot C1 — LE PLAN NAÎT DU GESTE (2026-07-17)** : **aucun path touché**
   (82 avant, 82 après). `teamSelectionInitialized` quitte **`CalendarEntry`** pour
   **`SchedulePlan`** : le garde de seed est une propriété de la RÉPONSE (le plan), pas

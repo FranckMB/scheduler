@@ -394,12 +394,26 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         return $entry;
     }
 
+    /**
+     * L'ancre des réglages de période = son PLAN (ADR-0002 inv. 5, lot C2). En prod le plan
+     * naît du geste (POST /api/calendar_entries) ; ces entrées étant fabriquées à la main,
+     * on rejoue le geste. Flush d'abord : le provisioner relit la ligne en SQL brut.
+     */
+    private function planIdOf(CalendarEntry $entry): string
+    {
+        $this->em->flush();
+        $planId = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::assertIsString($planId, 'la période doit porter un plan');
+
+        return $planId;
+    }
+
     private function teamOverride(Club $club, Season $season, CalendarEntry $entry, Team $team, bool $isActive, ?int $sessions): void
     {
         $o = new \App\Entity\TeamPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
-        $o->setCalendarEntryId($entry->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
         $o->setTeamId($team->getId());
         $o->setIsActive($isActive);
         $o->setSessionsPerWeek($sessions);
@@ -497,7 +511,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $o = new \App\Entity\ConstraintPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
-        $o->setCalendarEntryId($entry->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
         $o->setConstraintId($constraint->getId());
         $o->setIsActive($isActive);
         $this->em->persist($o);
@@ -556,6 +570,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::DRAFT);
         $schedule->setCalendarEntryId($entry?->getId());
+        // Une version d'overlay est TOUJOURS liée à son plan en prod (linkSchedule, au
+        // POST). buildForOverlay l'exige depuis le lot C2 : sans le plan, il ne sait pas
+        // quels réglages appliquer et refuse de bâtir plutôt que d'en ignorer.
+        if (null !== $entry) {
+            $schedule->setSchedulePlanId($this->planIdOf($entry));
+        }
         $this->em->persist($schedule);
 
         return $schedule;

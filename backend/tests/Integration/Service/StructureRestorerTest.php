@@ -167,7 +167,7 @@ final class StructureRestorerTest extends KernelTestCase
         $this->em->persist($permanent);
         $this->em->flush();
         $override = (new ConstraintPeriodOverride)->setClubId($club->getId())->setSeasonId($season->getId())
-            ->setCalendarEntryId($entry->getId())->setConstraintId($permanent->getId())->setIsActive(false);
+            ->setSchedulePlanId($this->planIdOf($entry))->setConstraintId($permanent->getId())->setIsActive(false);
         $this->em->persist($override);
         $this->em->flush();
         $overrideId = $override->getId();
@@ -186,6 +186,20 @@ final class StructureRestorerTest extends KernelTestCase
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->snapshotter = self::getContainer()->get(StructureSnapshotter::class);
         $this->restorer = self::getContainer()->get(StructureRestorer::class);
+    }
+
+    /**
+     * L'ancre des réglages de période = son PLAN (ADR-0002 inv. 5, lot C2). En prod il naît
+     * du geste (POST /api/calendar_entries) ; l'entrée est fabriquée à la main ici, on
+     * rejoue donc le geste. Flush d'abord : le provisioner relit la ligne en SQL brut.
+     */
+    private function planIdOf(CalendarEntry $entry): string
+    {
+        $this->em->flush();
+        $planId = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::assertIsString($planId);
+
+        return $planId;
     }
 
     /** @return array{0: Club, 1: Season} */

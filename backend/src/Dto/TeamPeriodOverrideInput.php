@@ -12,7 +12,7 @@ class TeamPeriodOverrideInput
     #[Assert\NotBlank]
     #[Assert\Uuid]
     #[Groups(['write'])]
-    public ?string $calendarEntryId = null;
+    public ?string $schedulePlanId = null;
 
     #[Assert\NotBlank]
     #[Assert\Uuid]

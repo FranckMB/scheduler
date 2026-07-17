@@ -33,8 +33,12 @@ build: $(ROOT_ENV) ## Build the production frontend image
 dev: $(ROOT_ENV) ## Start Dockerized Vite with hot reload
 	$(FIG) --profile dev up --build frontend-dev
 
+# `tsc -b`, PAS `tsc --noEmit` : le tsconfig racine est un fichier SOLUTION
+# ("files": [] + references), et --noEmit n'y voit alors AUCUN fichier — il sortait 0
+# sans rien vérifier, pendant que la CI (qui fait bien `tsc -b`) tombait sur les erreurs.
+# --force : sans lui, le tsbuildinfo peut court-circuiter la vérification.
 lint: install ## Run ESLint + TypeScript checks in Docker
-	$(FIG) --profile tools run --rm --no-deps frontend-tooling sh -lc 'npm run lint && npx tsc --noEmit'
+	$(FIG) --profile tools run --rm --no-deps frontend-tooling sh -lc 'npm run lint && npx tsc -b --force'
 
 test: ## Run frontend checks and tests in Docker
 	$(MAKE) lint

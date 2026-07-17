@@ -235,10 +235,59 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertSame($planId, $survivor->getId());
     }
 
+    /**
+     * NR lot C2 — inv. 5 : LES RÉGLAGES PENDENT AU PLAN. Deux plans d'une même saison ne
+     * voient jamais les réglages l'un de l'autre.
+     *
+     * Aujourd'hui la relation période↔plan est 1:1 (uniq_schedule_plan_calendar_entry), donc
+     * ce test passerait aussi avec l'ancienne ancre — ce n'est PAS une redondance : il fixe
+     * le contrat que le découpage hebdomadaire (types-de-planning E1) exigera, quand deux
+     * plans partageront le MÊME déclencheur et que `calendarEntryId` ne saura plus les
+     * distinguer. Il garde aussi le cloisonnement contre une régression du filtre.
+     */
+    public function testPeriodSettingsHangOffThePlanNotTheCalendarEntry(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $planA = $this->planOf($club->getId(), $this->postPeriod($user, 'holiday', 'Toussaint'));
+        $planB = $this->planOf($club->getId(), $this->postPeriod($user, 'closure', 'Gymnase en travaux'));
+        self::assertInstanceOf(SchedulePlan::class, $planA);
+        self::assertInstanceOf(SchedulePlan::class, $planB);
+
+        // teamId opaque : le sujet est le cloisonnement par plan, pas l'équipe (l'API ne
+        // valide pas son existence — même parti pris que TeamPeriodOverrideApiTest).
+        $teamId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+        $this->client->request('POST', '/api/team_period_overrides', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'schedulePlanId' => $planA->getId(),
+            'teamId' => $teamId,
+            'isActive' => false,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        // Le réglage revient par SON plan…
+        self::assertCount(1, $this->overridesOf($user, $planA->getId()), 'le réglage se relit par le plan qui le porte');
+        // …et reste invisible à l'autre.
+        self::assertCount(0, $this->overridesOf($user, $planB->getId()), 'un plan ne voit jamais les réglages d’un autre');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /** @return array<int, mixed> */
+    private function overridesOf(User $user, string $schedulePlanId): array
+    {
+        $this->client->request('GET', '/api/team_period_overrides?schedulePlanId=' . $schedulePlanId, [], [], $this->authHeaders($user));
+        self::assertResponseIsSuccessful();
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        $items = $payload['member'] ?? $payload['hydra:member'] ?? $payload;
+        self::assertIsArray($items);
+
+        return array_values($items);
     }
 
     private function postPeriod(User $user, string $periodType, string $title): string

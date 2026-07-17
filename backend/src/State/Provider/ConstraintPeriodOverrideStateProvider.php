@@ -45,9 +45,9 @@ class ConstraintPeriodOverrideStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // Overrides are always consulted per period; a constraintId narrows further.
-            $calendarEntryId = $request->query->get('calendarEntryId');
-            if (null !== $calendarEntryId && '' !== $calendarEntryId) {
-                $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
+            $schedulePlanId = $request->query->get('schedulePlanId');
+            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+                $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             }
 
             $constraintId = $request->query->get('constraintId');
