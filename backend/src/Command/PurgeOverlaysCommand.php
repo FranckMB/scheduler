@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -42,6 +43,7 @@ final class PurgeOverlaysCommand extends Command
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {
         parent::__construct();
     }
@@ -105,7 +107,10 @@ final class PurgeOverlaysCommand extends Command
             if ($dryRun) {
                 // Dry-run only counts (the real path derives the total from the
                 // deletion itself, avoiding a second round-trip over the same rows).
-                $count = $this->entityManager->getRepository(Schedule::class)->count(['calendarEntryId' => $entry->getId()]);
+                // ADR-0002 C4 : les versions d'une période = celles de son plan
+                // (schedulePlanId), plus le doublon schedule.calendarEntryId.
+                $planId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+                $count = null === $planId ? 0 : $this->entityManager->getRepository(Schedule::class)->count(['schedulePlanId' => $planId]);
                 if ($count > 0) {
                     $io->writeln($this->line('<comment>would</comment>', $count, $entry, $clubId));
                     $purged += $count;

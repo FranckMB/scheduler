@@ -62,7 +62,7 @@ final class ReopenScheduleController extends AbstractController implements Seaso
         // aussitôt, puis annonçait 200 alors que son UPDATE ne touchait plus rien : le
         // gestionnaire croyait son planning rouvert et se faisait refuser chaque édition.
         return $this->entityManager->wrapInTransaction(function () use ($schedule): JsonResponse {
-            $this->schedulePlanProvisioner->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
+            $this->schedulePlanProvisioner->lockPlanScope($this->schedulePlanProvisioner->planScopeOf($schedule));
 
             // ADR-0002 inv. 1/2 : « validé » = le plan pointe cette version. Rouvrir =
             // dépointer. Une version que le plan ne pointe pas n'a rien à rouvrir.

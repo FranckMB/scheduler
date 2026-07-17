@@ -12,6 +12,7 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +30,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[Group('integration')]
 final class PurgeOverlaysCommandTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -155,6 +157,10 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
             ->setStatus($status)
             ->setCalendarEntryId($entry->getId());
         $this->em->persist($schedule);
+        $this->em->flush();
+        // Prod links every overlay version to its period plan (born du geste) ; sans ça,
+        // depuis C4 la purge (qui trouve les versions PAR le plan) ne les verrait pas.
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

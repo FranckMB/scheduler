@@ -16,6 +16,7 @@ use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
@@ -170,6 +171,14 @@ final class GenerateScheduleFailureTest extends KernelTestCase
         $schedule->setStatus(ScheduleStatus::PENDING);
         $em->persist($schedule);
         $em->flush();
+        // Prod links every version at creation (POST → linkSchedule) ; sans plan, le site
+        // « socle ? » du handler (anchorSeasonToCompletedPlan, C4) lèverait APRÈS un solve
+        // réussi et transformerait ce COMPLETED en FAILED.
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        $provisioner->ensureSeasonPlan($season);
+        $em->flush();
+        $provisioner->linkSchedule($schedule);
+        $em->flush();
         $em->clear();
 
         // Worker context: no GUC when the handler starts.
@@ -197,6 +206,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $container->get(ClubGenerationLock::class),
             $container->get(TenantConnectionContext::class),
             $container->get(StructureSnapshotter::class),
+            $container->get(SchedulePlanProvisioner::class),
             null,
             null,
             $container->get(SolverMetricsRecorder::class),

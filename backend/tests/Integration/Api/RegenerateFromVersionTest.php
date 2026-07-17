@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -298,7 +301,21 @@ final class RegenerateFromVersionTest extends WebTestCase
 
     public function testRegenerateFromAnOverlayIsRefused(): void
     {
-        $overlay = $this->makeSchedule(ScheduleStatus::COMPLETED, '44444444-4444-4444-8444-444444444444');
+        // ADR-0002 C4 : « overlay ? » = plan.type !== SEASON. Il faut donc une VRAIE
+        // période (et son plan né du geste), plus un calendarEntryId bidon : sans plan,
+        // une version n'est ni socle ni overlay — elle n'existe pas.
+        $entry = new CalendarEntry;
+        $entry->setClubId($this->club->getId());
+        $entry->setSeasonId($this->season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gymnase fermé');
+        $entry->setStartDate(new DateTimeImmutable('2026-03-02'));
+        $entry->setEndDate(new DateTimeImmutable('2026-03-08'));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        $overlay = $this->makeSchedule(ScheduleStatus::COMPLETED, $entry->getId());
         $this->em->flush();
 
         $this->client->request('POST', "/api/schedules/{$overlay->getId()}/regenerate-from", [], [], $this->headers());
@@ -406,6 +423,10 @@ final class RegenerateFromVersionTest extends WebTestCase
         $schedule = (new Schedule)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setName('V')->setStatus($status)->setCalendarEntryId($calendarEntryId);
         $this->em->persist($schedule);
+        $this->em->flush();
+        // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
+        // du /regenerate-from lèverait sur une version sans plan (saison ou overlay).
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

@@ -11,6 +11,7 @@ use App\Enum\SchedulePlanType;
 use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
+use LogicException;
 use Throwable;
 
 /**
@@ -55,6 +56,19 @@ final class SchedulePlanProvisioner
         private readonly EntityManagerInterface $entityManager,
         private readonly ScheduleConstraintBuilder $constraintBuilder,
     ) {}
+
+    /**
+     * La clé de portée du verrou consultatif pour le plan SEASON d'une saison. SOURCE
+     * UNIQUE : linkSchedule (schedule pas encore lié), planScopeOf et la validation/réouverture
+     * doivent la calculer à l'IDENTIQUE — sinon le verrou cesse de coïncider et deux créations
+     * ou validations concurrentes ne se sérialisent plus (uniq_schedule_plan_version, ou pire :
+     * suppression des sœurs sous une validation parallèle). Un littéral en triple invitait la
+     * divergence silencieuse.
+     */
+    public static function seasonScopeKey(string $seasonId): string
+    {
+        return 'season:' . $seasonId;
+    }
 
     /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
     private static function periodPlanType(?string $periodType): ?SchedulePlanType
@@ -116,7 +130,7 @@ final class SchedulePlanProvisioner
         }
 
         $this->entityManager->wrapInTransaction(function () use ($schedule): void {
-            $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
+            $this->lockPlanScope($schedule->getCalendarEntryId() ?? self::seasonScopeKey($schedule->getSeasonId()));
 
             // Period plans are LOOKED UP, never created here: they are born with the
             // manager's gesture (provisionPeriodPlan). A null means the entry carries
@@ -375,6 +389,95 @@ final class SchedulePlanProvisioner
         );
 
         return false === $id ? null : (string) $id;
+    }
+
+    /**
+     * ADR-0002 C4 — LA SEULE VÉRITÉ du « est-ce le socle ? » : plan.type === SEASON.
+     * Remplace le doublon d'ancre nullable `null === schedule.calendarEntryId`.
+     *
+     * @throws LogicException une version SANS plan ne doit pas exister (ruling fondateur
+     *                        2026-07-17). On LÈVE plutôt que de laisser un schedule non lié se faire passer
+     *                        pour le socle — ce serait générer la saison avec les contraintes d'une période,
+     *                        sans erreur ni signal (le piège d'ancre nullable de C2/C3, pour la 3e fois).
+     */
+    public function isSeasonSchedule(Schedule $schedule): bool
+    {
+        return SchedulePlanType::SEASON === $this->requirePlanRow($schedule)['type'];
+    }
+
+    /**
+     * Un plan est-il de type SEASON ? Variante NON levante de isSeasonSchedule, pour les
+     * chemins qui TOLÈRENT l'anomalie plutôt que de la bloquer — typiquement la
+     * SUPPRESSION : un schedule sans plan (donc `false` ici) doit pouvoir être purgé, pas
+     * lever un 500 (ruling 2026-07-17 : purger la donnée). Un plan absent → false.
+     */
+    public function planIsSeason(?string $planId): bool
+    {
+        return null !== $planId && SchedulePlanType::SEASON === ($this->fetchPlanRow($planId)['type'] ?? null);
+    }
+
+    /**
+     * L'entrée-période à laquelle le plan du schedule est rattaché — null pour le plan
+     * SEASON (qui pilote un build socle, pas un overlay). Remplace schedule.calendarEntryId
+     * comme SOURCE de navigation (C4). Même contrat fail-loud que isSeasonSchedule().
+     *
+     * @throws LogicException quand le schedule ne porte aucun plan
+     */
+    public function periodEntryIdOf(Schedule $schedule): ?string
+    {
+        return $this->requirePlanRow($schedule)['calendarEntryId'];
+    }
+
+    /**
+     * La portée du verrou consultatif d'un schedule LIÉ : la période de son plan, sinon
+     * la saison. Doit coïncider avec la clé de linkSchedule (qui, pour un schedule PAS
+     * encore lié, reste `schedule.calendarEntryId ?? season:{id}`) — plan.calendarEntryId
+     * porte LA MÊME valeur (redondance C4), les deux se sérialisent donc l'un contre
+     * l'autre. NON levant : un schedule anormal sans plan retombe sur la portée saison
+     * plutôt que de 500 le chemin validate/reopen (qui le self-heal).
+     */
+    public function planScopeOf(Schedule $schedule): string
+    {
+        $planId = $schedule->getSchedulePlanId();
+        $entryId = null === $planId ? null : ($this->fetchPlanRow($planId)['calendarEntryId'] ?? null);
+
+        return $entryId ?? self::seasonScopeKey($schedule->getSeasonId());
+    }
+
+    /**
+     * @throws LogicException le schedule n'a pas de plan / son plan a disparu
+     *
+     * @return array{type: SchedulePlanType, calendarEntryId: string|null}
+     */
+    private function requirePlanRow(Schedule $schedule): array
+    {
+        $planId = $schedule->getSchedulePlanId();
+        if (null === $planId) {
+            throw new LogicException(\sprintf('Schedule %s carries no plan — a version without a plan must not exist (ADR-0002). Refusing to derive the socle from a null plan.', $schedule->getId()));
+        }
+        $row = $this->fetchPlanRow($planId);
+        if (null === $row) {
+            throw new LogicException(\sprintf('Schedule %s points at plan %s which no longer exists — refusing to derive the socle.', $schedule->getId(), $planId));
+        }
+
+        return $row;
+    }
+
+    /** @return array{type: SchedulePlanType, calendarEntryId: string|null}|null */
+    private function fetchPlanRow(string $planId): ?array
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT type, calendar_entry_id FROM schedule_plan WHERE id = :pid',
+            ['pid' => $planId],
+        );
+        if (false === $row) {
+            return null;
+        }
+
+        return [
+            'type' => SchedulePlanType::from((string) $row['type']),
+            'calendarEntryId' => null === $row['calendar_entry_id'] ? null : (string) $row['calendar_entry_id'],
+        ];
     }
 
     private function currentStructureHash(string $clubId, string $seasonId): ?string

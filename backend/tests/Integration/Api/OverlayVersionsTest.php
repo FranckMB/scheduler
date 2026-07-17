@@ -156,6 +156,10 @@ final class OverlayVersionsTest extends WebTestCase
             ->setStatus($status)
             ->setCalendarEntryId($entry->getId());
         $this->em->persist($schedule);
+        $this->em->flush();
+        // Prod links every overlay version to the plan né du geste ; sans ça, depuis C4
+        // la validation (periodEntryIdOf) lèverait sur une version sans plan.
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }
@@ -168,6 +172,8 @@ final class OverlayVersionsTest extends WebTestCase
             ->setName('Plan saison')
             ->setStatus($status);
         $this->em->persist($schedule);
+        $this->em->flush();
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

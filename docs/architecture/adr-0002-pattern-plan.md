@@ -169,9 +169,9 @@ table de correspondance pour relire du code ou des specs antérieurs.
 | `Schedule.status VALIDATED` + `ARCHIVED` (validation archive les frères) | supprimés — valider = pointer + **supprimer** les autres versions |
 | `Season.liveContextScheduleId` | ★ conservée (version dont la photo est chargée) — hors du Plan |
 | `Season.socleValidatedAt` (gate cockpit, sticky) | dérivé : plan SEASON a ≥ 1 version terminée |
-| Réglages sur `calendarEntryId` (overrides, créneaux, datées, seed flag) | re-keyés sur `planId` — **pas encore fait, lot C** |
+| Réglages sur `calendarEntryId` (overrides, créneaux, seed flag) | re-keyés sur `planId` — **livré (C2/C3)** ; les contraintes datées du FAIT restent au calendrier (inv. 5 corrigé) |
 | « V3 » dérivé de l'ordre de création | `Schedule.versionNumber` stocké (côté serveur ; les libellés du front dérivent encore de l'ordre de création — voir Questions ouvertes) |
-| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) — **pas encore fait, lot C** |
+| `GenerateScheduleHandler` branche sur `calendarEntryId` | branche sur `plan.type` (payload engine **inchangé** — zéro engine) — **lecture livrée (C4-PR1)** ; le champ `Schedule.calendarEntryId` disparaît en PR2 |
 
 ## Conséquences
 
@@ -349,13 +349,35 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     le seul chemin destructeur, et il est voulu.
 
   Le flag de seed `teamSelectionInitialized` a suivi les réglages sur le plan (inv. 5).
-  **Reste C2/C3** (re-keyage `calendarEntryId` → `planId`) **et C4** (génération sur `plan.type`,
-  suppression de `Schedule.calendarEntryId`).
+  **C2/C3 livrés** (re-keyage `calendarEntryId` → `planId` des réglages et calques ; les
+  contraintes datées du FAIT restent au calendrier).
+- **Lot C4** — LE SOCLE SE LIT DU PLAN, `Schedule.calendarEntryId` disparaît. Le champ était
+  redondant avec `plan.calendarEntryId` (doublon d'ancre nullable — la classe de bug de C2/C3).
+  Découpé en **3 PR**. **PR1 livré (2026-07-17)** : `plan.type === SEASON` remplace
+  `null === Schedule.calendarEntryId` sur **tous les lecteurs backend** — décision « socle ? »
+  (`GenerateScheduleHandler`, `Generate`/`Regenerate`/`RegenerateFromVersion`/`ValidateScheduleController`,
+  `ScheduleStateProcessor`) ET navigation entrée↔versions (`OverlayManager`, `PurgeOverlaysCommand`),
+  via les helpers `SchedulePlanProvisioner::{isSeasonSchedule,periodEntryIdOf,planIsSeason,planScopeOf}` ;
+  un champ **`planType`** dérivé + batché apparaît sur `ScheduleResource`. L'absence de plan est
+  un **3e état qui LÈVE** (ruling fondateur 2026-07-17 : *une version sans plan n'existe pas* ;
+  si elle existe, on la **purge**, jamais on ne la traite en socle — sinon on générerait la
+  saison avec les contraintes d'une période, en silence). NR : `ScheduleSocleFromPlanTest`
+  (chemin de prod, vérifié en cassant le code — P4-21). **Restent** : le write-path
+  (`linkSchedule`, `ScheduleStateProcessor::setCalendarEntryId`), la bascule du **front**
+  (`planType`, `createVersion(planId)`) et le **drop de la colonne** en **PR2** ; le `NOT NULL`
+  + purge des orphelins au **lot D** (PR3).
 - **Lot D** — nettoyage résiduel : la bascule a déjà supprimé baseline / socle / nom legacy
   et les statuts `VALIDATED`/`ARCHIVED`. Restent : `CalendarEntry.overlayScheduleId` (pointeur
   inverse, encore utile tant que le lot C n'a pas re-keyé les périodes) et les colonnes
   `schedule_plan_id`/`version_number` à rendre `NOT NULL`. La ★ (`liveContextScheduleId`)
   **reste par décision** (inv. 17) — c'est l'auto-pointeur qui est mort, pas la ★.
+  - **Dette C4-PR1 à solder ici (code-review)** : depuis que `OverlayManager::deleteOverlayForEntry`
+    et le `--dry-run` de `PurgeOverlaysCommand` collectent les versions d'une période PAR son plan
+    (`schedulePlanId`), un overlay **legacy non lié** (`schedulePlanId` null, non pointé) n'est plus
+    ramassé — il ne peut plus exister depuis le backfill du lot A et la naissance liée (C1), mais un
+    orphelin résiduel (reset concurrent, note B1) survivrait à la purge de sa période. La purge des
+    orphelins du lot D l'emporte de toute façon ; à faire ici, **avant** le `NOT NULL`, pour que
+    `deleteOverlayForEntry` et son aperçu redeviennent exhaustifs sans lecteur `calendarEntryId`.
 
 ### Note de nommage (résolution de collision)
 

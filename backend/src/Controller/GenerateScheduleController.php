@@ -59,9 +59,10 @@ final class GenerateScheduleController extends AbstractController implements Sea
         }
 
         // A secondary plan (period overlay) can only be generated once the season's
-        // main plan is validated. Generating the main plan itself (no overlay) is
-        // always allowed — that is how the socle gets created in the first place.
-        if (null !== $schedule->getCalendarEntryId()) {
+        // main plan is validated. Generating the main plan itself is always allowed
+        // — that is how the socle gets created in the first place. ADR-0002 C4 :
+        // « socle ? » = plan.type === SEASON (isSeasonSchedule), plus calendarEntryId.
+        if (!$this->schedulePlanProvisioner->isSeasonSchedule($schedule)) {
             $this->socleGuard->assertSeasonPlanChosen($schedule->getSeasonId());
         }
 

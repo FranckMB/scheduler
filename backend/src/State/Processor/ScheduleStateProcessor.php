@@ -79,10 +79,14 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             // (pointer set below). Only refuse while a sibling version of THIS
             // period is still solving — a running solve must never be overwritten
             // (mirror of the season in-flight guard).
-            $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
+            // ADR-0002 C4 : les versions de la période = celles de SON PLAN (schedulePlanId),
+            // plus le doublon schedule.calendarEntryId. La période est closure/holiday (gardé
+            // ci-dessus) donc porte un plan (né du geste, C1) ; par prudence, pas de plan → 0.
+            $periodPlanId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+            $inFlight = null === $periodPlanId ? 0 : $this->entityManager->getRepository(Schedule::class)->count([
                 'clubId' => $entry->getClubId(),
                 'seasonId' => $entry->getSeasonId(),
-                'calendarEntryId' => $entry->getId(),
+                'schedulePlanId' => $periodPlanId,
                 'status' => [ScheduleStatus::PENDING, ScheduleStatus::GENERATING],
             ]);
             if ($inFlight > 0) {
@@ -255,14 +259,19 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      */
     private function isLastFinishedSeasonVersion(Schedule $schedule): bool
     {
-        if (null !== $schedule->getCalendarEntryId() || ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
+        // ADR-0002 C4 : « version de saison ? » = plan.type === SEASON. Garde de
+        // SUPPRESSION → variante NON levante (planIsSeason) : un schedule sans plan est une
+        // anomalie qui doit rester SUPPRIMABLE (purge, ruling 2026-07-17), jamais un 500.
+        $planId = $schedule->getSchedulePlanId();
+        if (ScheduleStatus::COMPLETED !== $schedule->getStatus() || !$this->schedulePlanProvisioner->planIsSeason($planId)) {
             return false;
         }
 
+        // Les autres versions terminées du MÊME plan (= le plan SEASON, puisque planIsSeason).
         $others = $this->entityManager->getRepository(Schedule::class)->count([
             'clubId' => $schedule->getClubId(),
             'seasonId' => $schedule->getSeasonId(),
-            'calendarEntryId' => null,
+            'schedulePlanId' => $planId,
             'status' => ScheduleStatus::COMPLETED,
         ]);
 

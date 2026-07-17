@@ -141,6 +141,10 @@ final class RegenerateTest extends WebTestCase
             ->setName('V source')
             ->setStatus($status);
         $this->em->persist($schedule);
+        $this->em->flush();
+        // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
+        // du /regenerate lèverait sur une version sans plan.
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }
