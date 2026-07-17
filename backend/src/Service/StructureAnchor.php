@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\VenueTrainingSlot;
+use LogicException;
 
 /**
  * ADR-0002 — QUELLE ANCRE porte « cette ligne appartient-elle à une période ? ».
@@ -38,12 +40,21 @@ final class StructureAnchor
     /**
      * Le champ qui porte l'appartenance à une période, pour cette entité.
      *
+     * `match` EXHAUSTIF, sans branche par défaut : une entité inconnue lève, elle ne se voit
+     * pas attribuer une ancre au hasard. C'est le point du refactor — un `else` qui retombe
+     * sur `calendarEntryId` ne casse RIEN sur une colonne nullable : il fait passer les
+     * lignes de période pour des lignes de base, le socle hérite de réglages qui ne lui
+     * appartiennent pas, et le planning reste plausible. Mieux vaut exploser à l'ajout d'une
+     * entité que diverger en silence.
+     *
      * @param class-string $entityClass
      */
     public static function of(string $entityClass): string
     {
-        return \in_array($entityClass, [Reservation::class, VenueTrainingSlot::class], true)
-            ? 'schedulePlanId'
-            : 'calendarEntryId';
+        return match ($entityClass) {
+            Reservation::class, VenueTrainingSlot::class => 'schedulePlanId',
+            Constraint::class => 'calendarEntryId',
+            default => throw new LogicException(\sprintf('Aucune ancre de période connue pour %s — déclarez-la ici (schedulePlanId si la ligne est une RÉPONSE, calendarEntryId si elle décrit le FAIT).', $entityClass)),
+        };
     }
 }
