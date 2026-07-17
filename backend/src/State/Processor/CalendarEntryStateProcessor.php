@@ -82,14 +82,23 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // the overlay semantically wrong (or crash the next regeneration in
         // buildForOverlay). Title/status/isDisruptive edits stay allowed.
         //
-        // La garde porte sur « ce plan a-t-il des VERSIONS ? », pas sur
-        // `overlayScheduleId` : ce pointeur ne nomme que la version ACTIVE, et
-        // OverlayManager le remet à null dès que la seule sœur survivante n'est pas
-        // COMPLETED. Une période gardant une version PENDING passait donc la garde, et
-        // sa rétrogradation faisait supprimer le plan sous les pieds de cette version
-        // (lot C, round 2 du code-review). `overlayScheduleId` est conservé comme
-        // court-circuit : vrai ⇒ il y a forcément une version, on évite la requête.
-        if (null !== $entity->getOverlayScheduleId() || $this->schedulePlanProvisioner->periodPlanHasVersions($entity->getId())) {
+        // La garde porte sur « cette période a-t-elle un PLAN ? ». Deux raisons :
+        //
+        // 1. `overlayScheduleId` seul ne suffit pas : il ne nomme que la version ACTIVE,
+        //    et OverlayManager le remet à null dès que la seule sœur survivante n'est pas
+        //    COMPLETED — une période gardant une version PENDING passait donc la garde.
+        // 2. Depuis le lot C, une closure/holiday a TOUJOURS un plan (né du geste, cf.
+        //    processPost). Geler leur identité revient donc à dire : le type et la fenêtre
+        //    d'une période se choisissent à sa création, et se corrigent en la supprimant
+        //    puis en la recréant — ce que l'UI impose déjà (elle n'expose aucun PUT ; ce
+        //    verbe n'est atteignable qu'en direct sur l'API).
+        //
+        // Ce choix rend inatteignables, PAR CONSTRUCTION, deux défauts que les rounds 1
+        // et 2 du code-review avaient trouvés : la rétrogradation qui détruit un plan, et
+        // la fenêtre du plan qui se périme quand on corrige les dates de sa période. Une
+        // machinerie de synchronisation les réparait ; ne pas les laisser exister est plus
+        // sûr. Un cutoff/mutualisation (sans plan) reste librement promouvable.
+        if (null !== $entity->getOverlayScheduleId() || $this->schedulePlanProvisioner->periodPlanExists($entity->getId())) {
             $kindChanged = null !== $input->kind && $this->parseKind($input->kind) !== $entity->getKind();
             $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
             $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
@@ -176,18 +185,21 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             // Le flush du parent rend la ligne visible à la relecture SQL brute du
             // provisioner — même connexion, même transaction. Un type non générant
             // (inv. 9) rend null : pas de plan, pas d'erreur.
-            $this->schedulePlanProvisioner->syncPeriodPlan($output->id);
+            $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
 
             return $output;
         });
     }
 
     /**
-     * Toute écriture sur l'entrée RÉCONCILIE son plan (naissance / synchronisation de
-     * la fenêtre / suppression) : le plan est la réponse à un événement, il doit suivre
-     * l'événement. Promouvoir un cutoff en holiday crée le plan — c'est le geste ; le
-     * rétrograder le supprime (inv. 9) ; corriger les dates recale sa fenêtre. Atomique
-     * pour la même raison que le POST.
+     * Un PUT ne peut PROMOUVOIR qu'une période sans plan (cutoff/mutualisation →
+     * closure/holiday) : la garde d'identité ci-dessus refuse tout changement dès qu'un
+     * plan existe. Cette promotion est le geste « ajuster », elle crée donc le plan —
+     * sans quoi la période promue resterait inconfigurable à vie, plus rien ne créant un
+     * plan a posteriori. Atomique pour la même raison que le POST.
+     *
+     * Aucune synchronisation, aucune suppression : provisionPeriodPlan ne fait que
+     * naître-si-absent. Le reste est rendu impossible en amont plutôt que réparé après.
      *
      * @param array<string, mixed> $uriVariables
      * @param CalendarEntryInput   $input
@@ -195,19 +207,8 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
-            // Verrou de plan-scope AVANT l'UPDATE de l'entrée : tout autre écrivain du
-            // scope (linkSchedule, choose, deletePeriodPlan) prend le verrou consultatif
-            // PUIS touche les lignes. Laisser le flush du parent verrouiller la ligne
-            // calendar_entry d'abord inverserait l'ordre — deux transactions concurrentes
-            // se tiendraient chacune la ressource que l'autre attend (ABBA). Ré-entrant :
-            // syncPeriodPlan le reprend plus bas, sans effet.
-            $entryId = $uriVariables['id'] ?? null;
-            if (\is_string($entryId)) {
-                $this->schedulePlanProvisioner->lockPlanScope($entryId);
-            }
-
             $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            $this->schedulePlanProvisioner->syncPeriodPlan($output->id);
+            $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
 
             return $output;
         });

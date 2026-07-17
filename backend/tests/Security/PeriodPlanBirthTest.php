@@ -111,7 +111,7 @@ final class PeriodPlanBirthTest extends WebTestCase
 
     /**
      * Un plan par période — garanti par uniq_schedule_plan_calendar_entry ET par
-     * l'idempotence de syncPeriodPlan. Un PUT (qui re-provisionne) ne doit pas
+     * l'idempotence de provisionPeriodPlan. Un PUT (qui re-provisionne) ne doit pas
      * en faire naître un second : deux plans = deux jeux de réglages divergents.
      */
     public function testTheGestureReplayedDoesNotDuplicateThePlan(): void
@@ -128,47 +128,49 @@ final class PeriodPlanBirthTest extends WebTestCase
     }
 
     /**
-     * NR — inv. 9 tenu DANS LE TEMPS, pas seulement à la naissance. Rétrograder une
-     * période génératrice supprime son plan : sans ça, un `cutoff` garderait un plan
-     * HOLIDAY vivant, le wizard le verrait non-configuré et seederait des overrides
-     * Fanion sur une période qui ne doit rien porter.
+     * NR — une période qui porte un plan a une IDENTITÉ GELÉE : rétrograder est refusé
+     * (422), jamais silencieusement destructeur.
+     *
+     * Le geste n'existe pas dans l'UI (le front n'expose que POST et DELETE sur les
+     * périodes) ; cette garde protège le chemin API direct. Elle rend inatteignables les
+     * deux défauts des rounds 1-2 : le plan détruit sous ses versions, et sa fenêtre
+     * périmée. Corriger un type ou des dates = supprimer la période et la recréer, ce que
+     * l'UI impose déjà.
      */
-    public function testDemotingAGeneratingPeriodDeletesItsPlan(): void
+    public function testDemotingAPeriodThatHasAPlanIsRefused(): void
     {
         [$user, $club] = $this->createClubWithSeason();
-        $entryId = $this->postPeriod($user, 'holiday', 'Vacances finalement coupées');
-        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $entryId));
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+        $plan = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
 
-        $this->putPeriod($user, $entryId, ['periodType' => 'cutoff', 'title' => 'Coupure']);
+        $this->putPeriodExpecting(422, $user, $entryId, ['periodType' => 'cutoff', 'title' => 'Vacances']);
 
-        self::assertNull(
-            $this->planOf($club->getId(), $entryId),
-            'Une période rétrogradée hors closure/holiday ne porte plus de plan (inv. 9).',
-        );
+        $survivor = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $survivor, 'le plan survit au refus');
+        self::assertSame($plan->getId(), $survivor->getId());
     }
 
     /**
-     * NR — la fenêtre du plan suit celle de sa période. Le plan naissant désormais AVANT
-     * toute génération, ses dates seraient figées à la création sans cette
-     * synchronisation ; sous le lot A le cas n'existait pas (le plan naissait à la
-     * génération, avec les dates du moment).
+     * NR — corollaire : la fenêtre d'une période qui porte un plan est gelée elle aussi.
+     * C'est ce qui rend impossible le « plan aux dates périmées » du round 1, sans aucune
+     * machinerie de synchronisation.
      */
-    public function testEditingThePeriodDatesResyncsThePlanWindow(): void
+    public function testEditingTheDatesOfAPeriodThatHasAPlanIsRefused(): void
     {
         [$user, $club] = $this->createClubWithSeason();
-        $entryId = $this->postPeriod($user, 'holiday', 'Vacances à recaler');
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
 
-        $this->putPeriod($user, $entryId, [
+        $this->putPeriodExpecting(422, $user, $entryId, [
             'periodType' => 'holiday',
-            'title' => 'Vacances à recaler',
+            'title' => 'Vacances',
             'startDate' => '2027-02-15',
             'endDate' => '2027-02-22',
         ]);
 
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        self::assertSame('2027-02-15', $plan->getStartDate()->format('Y-m-d'), 'la fenêtre du plan suit la période');
-        self::assertSame('2027-02-22', $plan->getEndDate()->format('Y-m-d'));
+        self::assertSame('2026-10-19', $plan->getStartDate()->format('Y-m-d'), 'la fenêtre du plan ne peut pas diverger : elle est gelée avec celle de sa période');
     }
 
     /**
@@ -259,23 +261,34 @@ final class PeriodPlanBirthTest extends WebTestCase
         return $payload['id'];
     }
 
+    private function putPeriod(User $user, string $entryId, array $changes): void
+    {
+        $this->putPeriodExpecting(null, $user, $entryId, $changes);
+    }
+
     /**
-     * PUT = remplacement complet : kind/startDate/endDate sont NotBlank, on renvoie
-     * donc l'enveloppe entière et `$changes` n'en surcharge que la partie utile.
+     * PUT = remplacement complet : kind/startDate/endDate sont NotBlank, on renvoie donc
+     * l'enveloppe entière et `$changes` n'en surcharge que la partie utile (union `+` :
+     * la GAUCHE gagne).
      *
      * @param array<string, mixed> $changes
      */
-    private function putPeriod(User $user, string $entryId, array $changes): void
+    private function putPeriodExpecting(?int $status, User $user, string $entryId, array $changes): void
     {
         $this->client->request('PUT', '/api/calendar_entries/' . $entryId, [], [], $this->authHeaders($user) + [
             'CONTENT_TYPE' => 'application/json',
         ], json_encode($changes + [
-            // Union `+` : la GAUCHE gagne — $changes surcharge donc bien ces défauts.
             'kind' => 'period',
             'startDate' => '2026-10-19',
             'endDate' => '2026-11-02',
         ], \JSON_THROW_ON_ERROR));
-        self::assertResponseIsSuccessful();
+
+        if (null === $status) {
+            self::assertResponseIsSuccessful();
+
+            return;
+        }
+        self::assertResponseStatusCodeSame($status);
     }
 
     private function planOf(string $clubId, string $calendarEntryId): ?SchedulePlan

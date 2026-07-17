@@ -156,7 +156,7 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $this->em->flush();
         // ADR-0002 lot C : le plan naît DU GESTE. En prod le POST /api/calendar_entries
         // le crée ; l'entrée étant fabriquée à la main, on rejoue le geste.
-        self::getContainer()->get(SchedulePlanProvisioner::class)->syncPeriodPlan($entry->getId());
+        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
         // La version d'overlay se raccroche au plan déjà né.
         $overlay = new Schedule;

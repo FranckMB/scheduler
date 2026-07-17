@@ -128,7 +128,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
-     * ADR-0002 lot C — le plan de période naît DU GESTE (syncPeriodPlan), plus
+     * ADR-0002 lot C — le plan de période naît DU GESTE (provisionPeriodPlan), plus
      * de la première version. linkSchedule ne fait plus que s'y raccrocher.
      */
     /**
@@ -161,7 +161,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $entry = $this->makeClosureEntry($clubId, $season->getId());
         // En prod, CalendarEntryStateProcessor le fait au POST ; l'entrée est fabriquée
         // à la main ici, on rejoue donc le geste.
-        $this->provisioner->syncPeriodPlan($entry->getId());
+        $this->provisioner->provisionPeriodPlan($entry->getId());
 
         $overlay = $this->makeSchedule($clubId, $season->getId(), $entry->getId());
         $this->provisioner->linkSchedule($overlay);
@@ -187,7 +187,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
         $entry = $this->makeClosureEntry($clubId, $season->getId());
-        $this->provisioner->syncPeriodPlan($entry->getId()); // le geste
+        $this->provisioner->provisionPeriodPlan($entry->getId()); // le geste
 
         // Pin the ORM season_filter to a DIFFERENT (fake) season.
         $filters = $this->em->getFilters();

@@ -23,7 +23,7 @@ use Throwable;
  *
  * - ensureSeasonPlan(): the SEASON plan exists as soon as the season does (an
  *   empty "espace de travail" with no version yet).
- * - syncPeriodPlan(): RÉCONCILIE le plan d'une période avec son entrée calendrier, à
+ * - provisionPeriodPlan(): RÉCONCILIE le plan d'une période avec son entrée calendrier, à
  *   CHAQUE écriture sur celle-ci — naissance au geste "ajuster une période de vacances
  *   / un souci du calendrier" (= la création de la CalendarEntry), synchronisation de
  *   la fenêtre, ou suppression si la période est rétrogradée (inv. 9). Appelé depuis
@@ -120,7 +120,7 @@ final class SchedulePlanProvisioner
             $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
             // Period plans are LOOKED UP, never created here: they are born with the
-            // manager's gesture (syncPeriodPlan). A null means the entry carries
+            // manager's gesture (provisionPeriodPlan). A null means the entry carries
             // no plan — either a non-generating type (inv. 9: cutoff/mutualisation) or
             // an entry created outside CalendarEntryStateProcessor (tests). Either way
             // the schedule stays unlinked rather than silently minting a second plan.
@@ -335,92 +335,19 @@ final class SchedulePlanProvisioner
      * dans la transaction de l'appelant (le verrou tient jusqu'au commit le plus
      * externe), ce dont dépend l'atomicité création-entrée + création-plan.
      */
-    public function syncPeriodPlan(string $calendarEntryId): ?string
+    public function provisionPeriodPlan(string $calendarEntryId): ?string
     {
-        // Lecture AVANT le verrou : l'immense majorité des écritures calendrier (events,
-        // cutoff, mutualisation) n'ont aucun plan à réconcilier — prendre un verrou
-        // consultatif et lancer un DELETE no-op sur chacune serait payer le prix fort
-        // pour rien. SQL brut : season_filter cacherait une période dont la saison n'est
-        // pas l'active de la requête.
-        $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
-            ['id' => $calendarEntryId],
-        );
-        if (false === $row) {
-            return null; // entrée disparue entre l'écriture et ici
-        }
-
-        $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
-        if (null === $type && null === $this->findPeriodPlanId($calendarEntryId)) {
-            return null; // ni plan attendu, ni plan à retirer
-        }
-
-        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId, $type, $row): ?string {
+        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): ?string {
             $this->lockPlanScope($calendarEntryId);
 
-            if (null === $type) {
-                // Inv. 9 — l'entrée ne porte plus de plan (rétrogradée en cutoff /
-                // mutualisation, ou convertie en event).
-                //
-                // Le NOT EXISTS est un GARDE-FOU, pas une optimisation : ce DELETE ne
-                // doit JAMAIS emporter un plan qui porte des versions. Le gestionnaire
-                // est arrêté en amont par le 422 de CalendarEntryStateProcessor ; si un
-                // chemin le contournait, mieux vaut laisser un plan orphelin — visible et
-                // réparable — que détruire un planning généré en laissant ses versions
-                // pointer une ligne morte, que choose() validerait alors dans le vide.
-                $this->entityManager->getConnection()->executeStatement(
-                    'DELETE FROM schedule_plan p WHERE p.calendar_entry_id = :eid '
-                    . 'AND NOT EXISTS (SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id)',
-                    ['eid' => $calendarEntryId],
-                );
-
-                return null;
-            }
-
-            $existingId = $this->findPeriodPlanId($calendarEntryId);
-            if (null === $existingId) {
-                return $this->ensurePeriodPlanId($calendarEntryId);
-            }
-
-            // La fenêtre du plan suit celle de sa période : le plan naissant désormais
-            // avant toute génération, corriger les dates d'une période le laisserait
-            // sinon sur les dates d'origine (impossible sous le lot A, où il naissait à
-            // la génération). Le WHERE sur les valeurs évite de bumper version/updated_at
-            // à chaque écriture de l'entrée — un simple renommage ne touche pas le plan.
-            $this->entityManager->getConnection()->executeStatement(
-                'UPDATE schedule_plan SET type = :type, start_date = :start, end_date = :end, '
-                . 'updated_at = now(), version = version + 1 WHERE id = :pid '
-                . 'AND (type <> :type OR start_date <> :start OR end_date <> :end)',
-                [
-                    'type' => $type->value,
-                    'start' => new DateTimeImmutable((string) $row['start_date']),
-                    'end' => new DateTimeImmutable((string) $row['end_date']),
-                    'pid' => $existingId,
-                ],
-                ['start' => Types::DATETIMETZ_IMMUTABLE, 'end' => Types::DATETIMETZ_IMMUTABLE],
-            );
-
-            return $existingId;
+            return $this->ensurePeriodPlanId($calendarEntryId);
         });
     }
 
-    /**
-     * Une version pend-elle à cette période ? Garde du 422 amont (changer l'identité
-     * d'une période qui porte un planning généré) ET du DELETE de syncPeriodPlan.
-     *
-     * Ne PAS dériver cette réponse de `CalendarEntry.overlayScheduleId` : ce pointeur ne
-     * nomme que la version ACTIVE, et OverlayManager le remet à null dès que la seule
-     * sœur survivante n'est pas COMPLETED (newestOtherOverlayId ne promeut que du
-     * COMPLETED). Une version PENDING resterait alors invisible à la garde — c'est
-     * exactement la brèche par laquelle une rétrogradation détruisait le plan.
-     */
-    public function periodPlanHasVersions(string $calendarEntryId): bool
+    /** Cette période porte-t-elle un plan ? Garde du 422 d'identité (voir plus haut). */
+    public function periodPlanExists(string $calendarEntryId): bool
     {
-        return (int) $this->entityManager->getConnection()->fetchOne(
-            'SELECT COUNT(*) FROM schedule s JOIN schedule_plan p ON p.id = s.schedule_plan_id '
-            . 'WHERE p.calendar_entry_id = :eid',
-            ['eid' => $calendarEntryId],
-        ) > 0;
+        return null !== $this->findPeriodPlanId($calendarEntryId);
     }
 
     private function currentStructureHash(string $clubId, string $seasonId): ?string

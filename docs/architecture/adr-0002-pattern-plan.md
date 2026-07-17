@@ -321,12 +321,20 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     `CalendarEntryStateProcessor`). C'est la contrepartie obligatoire du point précédent : le
     self-heal de `choose()` ne peut plus réparer une période sans plan, donc une période sans
     plan ne doit pas pouvoir exister. En cas d'échec, on préfère ne pas créer la période.
-  - **Toute écriture sur l'entrée réconcilie son plan** (`syncPeriodPlan`) : naissance,
-    synchronisation de la **fenêtre** (le plan naissant plus tôt, ses dates deviendraient sinon
-    obsolètes dès une correction — symétrique de `syncSeasonPlan` pour la saison), ou
-    **suppression** si la période est rétrogradée hors closure/holiday (inv. 9). Le **nom**, lui,
-    n'est jamais synchronisé : il appartient au plan (inv. 12), un second écrivain le rendrait
-    non durable.
+  - **L'identité d'une période qui porte un plan est GELÉE** (422) : ni type, ni fenêtre, ni
+    `kind`. Une closure/holiday ayant toujours un plan depuis ce lot, cela revient à dire que
+    **le type et les dates se choisissent à la création** et se corrigent en supprimant la
+    période puis en la recréant — ce que l'UI impose déjà : elle n'expose **que POST et DELETE**
+    sur les périodes, jamais PUT (chaque type naît de son propre geste dédié). Ce choix rend
+    inatteignables **par construction** deux défauts qu'une machinerie de synchronisation avait
+    tenté de réparer sans y parvenir (3 rounds de code-review) : la rétrogradation qui détruit
+    un plan sous ses versions, et la fenêtre du plan qui se périme quand on corrige les dates de
+    sa période. Une période **sans** plan (cutoff/mutualisation) reste librement promouvable —
+    la promotion est un geste, elle crée le plan.
+  - **Supprimer la période supprime son plan et ses versions** (cascade existante,
+    `deleteEntryAndCascade`) : l'incident est annulé, la réponse qu'on lui avait apportée n'a
+    plus d'objet. La destruction passe par une **confirmation explicite** côté cockpit — c'est
+    le seul chemin destructeur, et il est voulu.
 
   Le flag de seed `teamSelectionInitialized` a suivi les réglages sur le plan (inv. 5).
   **Reste C2/C3** (re-keyage `calendarEntryId` → `planId`) **et C4** (génération sur `plan.type`,
