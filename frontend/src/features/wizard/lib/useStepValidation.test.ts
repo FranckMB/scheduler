@@ -7,6 +7,11 @@ import { useWizardStore } from "../store";
 
 // A gym with NO availability slot — the "sans créneau" rule fires on it in base
 // mode but must stay silent in period mode (slots are inherited & read-only).
+// Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
+vi.mock("@/features/cockpit/queries", () => ({
+  useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
+  usePeriodAnchor: () => ({ planId: "plan-1", ready: true, isLoading: false }),
+}));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }], isLoading: false }),
@@ -43,7 +48,7 @@ const slot = (venueId: string, dayOfWeek: number, startTime: string, capacity: n
 
 const reservation = (id: string, teamId: string, venueId: string, dayOfWeek: number, startTime: string): Reservation => ({
   id,
-  calendarEntryId: null,
+  schedulePlanId: null, // réservation de BASE (structure partagée, inv. 6)
   teamId,
   venueId,
   dayOfWeek,

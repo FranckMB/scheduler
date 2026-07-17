@@ -186,9 +186,9 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
 
         // Default listing = SEASONAL only (the wizard's seasonal editor).
-        self::assertSame([null], $this->listCalendarEntryIds(''), 'default listing excludes period slots');
+        self::assertSame([null], $this->listPlanIds(''), 'default listing excludes period slots');
         // Period listing = that period's slots only.
-        self::assertSame([$period], $this->listCalendarEntryIds('?calendarEntryId=' . $period), 'period listing returns only period slots');
+        self::assertSame([$period], $this->listPlanIds('?schedulePlanId=' . $period), 'period listing returns only period slots');
     }
 
     public function testPeriodSlotOverlappingSeasonalIsRejectedButDifferentPeriodAllowed(): void
@@ -227,19 +227,19 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $this->token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->user);
     }
 
-    private function postPeriodSlot(string $venueId, int $day, string $start, int $duration, string $calendarEntryId): void
+    private function postPeriodSlot(string $venueId, int $day, string $start, int $duration, string $schedulePlanId): void
     {
         $this->client->request('POST', '/api/venue_training_slots', [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
             'CONTENT_TYPE' => 'application/ld+json',
-        ], json_encode(['venueId' => $venueId, 'dayOfWeek' => $day, 'startTime' => $start, 'durationMinutes' => $duration, 'capacity' => 1, 'calendarEntryId' => $calendarEntryId], \JSON_THROW_ON_ERROR));
+        ], json_encode(['venueId' => $venueId, 'dayOfWeek' => $day, 'startTime' => $start, 'durationMinutes' => $duration, 'capacity' => 1, 'schedulePlanId' => $schedulePlanId], \JSON_THROW_ON_ERROR));
     }
 
     /**
-     * @return list<string|null> the calendarEntryId of every listed slot
+     * @return list<string|null> the schedulePlanId of every listed slot (null = créneau saisonnier)
      */
-    private function listCalendarEntryIds(string $query): array
+    private function listPlanIds(string $query): array
     {
         $this->client->request('GET', '/api/venue_training_slots' . $query, [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
@@ -247,10 +247,10 @@ final class VenueTrainingSlotApiTest extends WebTestCase
             'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
         ]);
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
-        /** @var list<array{calendarEntryId?: string|null}> $members */
+        /** @var list<array{schedulePlanId?: string|null}> $members */
         $members = \is_array($body) && \is_array($body['member'] ?? null) ? $body['member'] : [];
 
-        return array_values(array_unique(array_map(static fn (array $s): ?string => $s['calendarEntryId'] ?? null, $members)));
+        return array_values(array_unique(array_map(static fn (array $s): ?string => $s['schedulePlanId'] ?? null, $members)));
     }
 
     private function postSlot(string $venueId, int $day, string $start, int $duration): void

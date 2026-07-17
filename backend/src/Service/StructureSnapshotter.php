@@ -122,9 +122,11 @@ final class StructureSnapshotter
             TeamTagAssignment::class => ['seasonId' => $seasonId],
             default => ['clubId' => $clubId, 'seasonId' => $seasonId],
         };
-        // Only the PERMANENT structure: dated rows belong to the calendar.
-        if (Constraint::class === $entityClass || Reservation::class === $entityClass || VenueTrainingSlot::class === $entityClass) {
-            $criteria['calendarEntryId'] = null;
+        // Only the PERMANENT structure — les lignes de période n'y entrent pas. L'ancre
+        // diffère selon l'entité (voir StructureAnchor, qui porte le pourquoi) ; dans tous
+        // les cas NULL = la structure partagée (inv. 6), et c'est elle qu'on photographie.
+        if (StructureAnchor::isPeriodScoped($entityClass)) {
+            $criteria[StructureAnchor::of($entityClass)] = null;
         }
 
         return $this->entityManager->getRepository($entityClass)->findBy($criteria);

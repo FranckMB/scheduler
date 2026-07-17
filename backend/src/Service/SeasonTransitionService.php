@@ -149,6 +149,16 @@ final class SeasonTransitionService
 
         $slots = 0;
         foreach ($this->rows(VenueTrainingSlot::class, $clubId, $sourceId) as $slot) {
+            // Seule la structure PARTAGÉE se transmet (ancre nulle, inv. 6). Un créneau
+            // PRÊTÉ appartient à un plan de la saison source — « la mairie me prête ce
+            // gymnase POUR cet ajustement d'octobre » n'a aucun sens en N+1, et la copie
+            // ne posant jamais l'ancre, il deviendrait un créneau SAISONNIER PERMANENT du
+            // club : le socle de la nouvelle saison hériterait d'un gymnase prêté une
+            // semaine. Planning plausible, et faux. (Défaut préexistant : la copie ne
+            // portait pas non plus l'ancien calendarEntryId.)
+            if (null !== $slot->getSchedulePlanId()) {
+                continue;
+            }
             $newVenueId = $venueMap[$slot->getVenueId()] ?? null;
             if (null === $newVenueId) {
                 continue; // dangling venue reference — nothing to attach to.

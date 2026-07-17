@@ -52,6 +52,35 @@ export function useSchedulePlanForEntry(calendarEntryId: string | null) {
 }
 
 /**
+ * L'ANCRE des réglages d'une période, et son état — ADR-0002 inv. 5 (lots C2-C3).
+ *
+ * À utiliser PARTOUT plutôt que `useSchedulePlanForEntry(x).data?.id ?? null`. Cet idiome
+ * nu a produit deux bugs en deux rounds de review, et toujours le même : il écrase
+ * « le plan n'est pas encore résolu » et « mode socle » dans le même `null`.
+ *
+ * Or `null` est une ancre LÉGITIME — elle veut dire « ligne de base », structure partagée
+ * (inv. 6) — que le serveur ne peut pas refuser. Écrire pendant la fenêtre de chargement
+ * pose donc le réglage SUR LE SOCLE DU CLUB : le gymnase prêté pour une semaine de
+ * vacances devient un créneau permanent, nourrit toutes les générations de la saison, et
+ * se transmet à N+1. Aucune erreur, aucun signal.
+ *
+ * `ready` répond « sait-on où écrire ? » :
+ *  - hors mode période (`calendarEntryId` null), `planId` null EST la bonne réponse → prêt ;
+ *  - en mode période, il faut le plan → pas prêt tant qu'il n'est pas là.
+ *
+ * **Ne jamais écrire un réglage quand `ready` est faux.** Lire est sans risque (la requête
+ * est simplement désactivée), mais l'appelant doit alors afficher un état de CHARGEMENT —
+ * une liste vide affirmerait « aucun réglage », ce qui pousse le gestionnaire à les
+ * re-saisir… et donc à déclencher l'écriture corrompue.
+ */
+export function usePeriodAnchor(calendarEntryId: string | null): { planId: string | null; ready: boolean; isLoading: boolean } {
+  const { data, isLoading } = useSchedulePlanForEntry(calendarEntryId);
+  const planId = data?.id ?? null;
+
+  return { planId, ready: null === calendarEntryId || null !== planId, isLoading };
+}
+
+/**
  * School holidays. Without a window → the season default (radar, season-wide).
  * With a [from, to] → that window (the calendar's visible month, so summer and
  * any month outside the season are shown when browsed).

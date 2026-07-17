@@ -15,7 +15,7 @@ interface Props {
   tiers: PriorityTier[];
   reservations: Reservation[];
   venueCanSplit: Map<string, boolean>;
-  calendarEntryId: string | null;
+  schedulePlanId: string | null;
   onClose: () => void;
 }
 
@@ -24,7 +24,7 @@ interface Props {
  * Shows the teams already pinned (removable) and a rank-ordered picker limited to
  * the slot's remaining capacity, excluding teams at their session ceiling.
  */
-export function SlotReservationModal({ slot, venue, teams, tiers, reservations, venueCanSplit, calendarEntryId, onClose }: Props) {
+export function SlotReservationModal({ slot, venue, teams, tiers, reservations, venueCanSplit, schedulePlanId, onClose }: Props) {
   const create = useCreateReservation();
   const del = useDeleteReservation();
 
@@ -39,7 +39,7 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
     if ("" === teamId) {
       return;
     }
-    create.mutate({ teamId, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, calendarEntryId });
+    create.mutate({ teamId, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, schedulePlanId });
   };
 
   return (

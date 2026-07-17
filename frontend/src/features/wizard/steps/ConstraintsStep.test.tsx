@@ -408,14 +408,16 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     expect(h.resDelete).toHaveBeenCalledWith("r1");
   });
 
-  it("adding a team from the modal → useCreateReservation with the slot payload + base calendarEntryId", async () => {
+  // Hors période : la réservation est de BASE, son ancre est nulle (structure partagée,
+  // inv. 6) — seul le NOM du champ change au lot C3, pas la sémantique.
+  it("adding a team from the modal → useCreateReservation with the slot payload + base anchor (null)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
 
     await openSlot(user);
     // Picker is rank-ordered (Fanion=S before SM1=B); pick the fanion.
     await user.selectOptions(screen.getByLabelText("Ajouter une équipe"), "t2");
-    expect(h.resCreate).toHaveBeenCalledWith(expect.objectContaining({ teamId: "t2", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, calendarEntryId: null }));
+    expect(h.resCreate).toHaveBeenCalledWith(expect.objectContaining({ teamId: "t2", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, schedulePlanId: null }));
   });
 
   it("hides a team that reached its sessionsPerWeek from the picker", async () => {

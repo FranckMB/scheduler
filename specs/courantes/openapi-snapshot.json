@@ -14130,7 +14130,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "type": [
                             "string",
                             "null"
@@ -14203,7 +14203,7 @@
                             "null"
                         ]
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "description": "NULL = base plan; set = a period overlay.",
                         "type": [
                             "string",
@@ -14231,7 +14231,7 @@
                         "type": "string",
                         "format": "date-time"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "type": [
                             "string",
                             "null"
@@ -14283,7 +14283,7 @@
                                 "type": "string",
                                 "format": "date-time"
                             },
-                            "calendarEntryId": {
+                            "schedulePlanId": {
                                 "type": [
                                     "string",
                                     "null"
@@ -17907,7 +17907,7 @@
                         "default": 1,
                         "type": "integer"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
                         "type": [
                             "string",
@@ -17968,7 +17968,7 @@
                             "null"
                         ]
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "format": "uuid",
                         "description": "Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive).",
                         "externalDocs": {
@@ -18020,7 +18020,7 @@
                         "default": 1,
                         "type": "integer"
                     },
-                    "calendarEntryId": {
+                    "schedulePlanId": {
                         "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
                         "type": [
                             "string",
@@ -18073,7 +18073,7 @@
                                 "default": 1,
                                 "type": "integer"
                             },
-                            "calendarEntryId": {
+                            "schedulePlanId": {
                                 "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
                                 "type": [
                                     "string",

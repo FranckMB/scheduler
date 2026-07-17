@@ -60,7 +60,7 @@ final class StructureSnapshotterTest extends KernelTestCase
         $overlayReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(2)->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)
-            ->setCalendarEntryId('44444444-4444-4444-8444-444444444444');
+            ->setSchedulePlanId('44444444-4444-4444-8444-444444444444');
         $baseReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(4)->setStartTime(new DateTimeImmutable('20:30'))->setDurationMinutes(120);

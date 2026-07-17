@@ -37,5 +37,5 @@ class VenueTrainingSlotInput
     /** Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive). */
     #[Assert\Uuid]
     #[Groups(['write'])]
-    public ?string $calendarEntryId = null;
+    public ?string $schedulePlanId = null;
 }

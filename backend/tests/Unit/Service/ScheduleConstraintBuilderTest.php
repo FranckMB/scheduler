@@ -239,7 +239,7 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $reservation = (new \App\Entity\Reservation)
             ->setClubId('club-1')
             ->setSeasonId('season-1')
-            ->setCalendarEntryId(null)
+            ->setSchedulePlanId(null) // réservation de BASE
             ->setTeamId('team-sm1')
             ->setVenueId('venue-mateo')
             ->setDayOfWeek(2)

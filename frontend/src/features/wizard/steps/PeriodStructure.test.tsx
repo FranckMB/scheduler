@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +41,8 @@ const entryState: { data: { periodType: string } | undefined } = { data: { perio
 // qu'un composant lit par le déclencheur au lieu du plan : les deux sont des `string`, tsc
 // est muet, et l'API répondrait 200 avec une liste vide — panne silencieuse (lot C2).
 const teamOverridesAnchor: { value: string | null } = { value: null };
+const periodSlotsAnchor: { value: string | null } = { value: null };
+const periodSlotWriteAnchor: { value: string | null } = { value: null };
 const constraintOverridesAnchor: { value: string | null } = { value: null };
 const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
 
@@ -60,9 +62,16 @@ vi.mock("../queries", () => ({
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: false, isActive: true }] }),
   useVenueSlots: () => ({ data: [] }),
-  // Les CRÉNEAUX restent ancrés au déclencheur : leur re-keyage est le lot C3.
-  usePeriodSlots: () => ({ data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, calendarEntryId: "e1" }] }),
-  useCreatePeriodSlot: () => ({ mutate: createSlot, isPending: false }),
+  usePeriodSlots: (anchor: string | null) => {
+    periodSlotsAnchor.value = anchor;
+
+    return { data: [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }] };
+  },
+  useCreatePeriodSlot: (anchor: string | null) => {
+    periodSlotWriteAnchor.value = anchor;
+
+    return { mutate: createSlot, isPending: false };
+  },
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
   usePeriodConstraintOverrides: (anchor: string | null) => {
@@ -80,13 +89,26 @@ vi.mock("@/features/cockpit/queries", () => ({
   useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }),
   useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
+  // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
+  // encore résolu, et `ready` bascule — c'est ce que le NR d'écriture exerce.
+  usePeriodAnchor: (calendarEntryId: string | null) => {
+    const planId = planState.data?.id ?? null;
+
+    return { planId, ready: null === calendarEntryId || null !== planId, isLoading: false };
+  },
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+import { toast } from "@/shared/stores/toastStore";
 
 import { PeriodConstraints, PeriodTeams, PeriodVenues } from "./PeriodStructure";
 import { resetPeriodSeed } from "./periodSeed";
 
 afterEach(() => {
+  // Les vi.fn() ACCUMULENT leurs appels d'un test à l'autre : sans ça, un
+  // `not.toHaveBeenCalled` voit l'appel d'un test précédent et échoue à tort (ou pire,
+  // un `toHaveBeenCalled` passe grâce à lui).
+  vi.clearAllMocks();
   resetPeriodSeed();
   overridesState.data = [];
   constraintsState.data = [];
@@ -185,6 +207,68 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(constraintOverridesAnchor.value).toBe("plan-1");
     expect(teamOverridesAnchor.value).toBe("plan-1");
+  });
+
+  // Le NR de C2 ne couvrait QUE PeriodTeams et PeriodConstraints — PeriodVenues est
+  // resté hors de vue, et le lot C3 l'a laissé lire par le déclencheur : le gymnase
+  // prêté était confirmé à l'écran (l'UI relisait avec le MÊME mauvais id, donc
+  // cohérente avec elle-même) mais n'atteignait jamais le solveur. D'où ce test.
+  it("PeriodVenues lit ses créneaux prêtés par le PLAN", () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(periodSlotsAnchor.value).toBe("plan-1");
+  });
+
+  // Le NR du round 1 n'assertait que la LECTURE — et c'est par l'ÉCRITURE que le bug est
+  // passé au round 2 : le hook d'écriture recevait bien le plan, mais rien n'empêchait de
+  // muter AVANT qu'il soit résolu (ancre null = « base » → le gymnase prêté atterrissait
+  // sur le socle du club). On assert donc les deux.
+  it("PeriodVenues ÉCRIT ses créneaux prêtés par le PLAN", () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(periodSlotWriteAnchor.value).toBe("plan-1");
+  });
+
+  it("PeriodVenues n'écrit RIEN tant que le plan n'est pas résolu (sinon : sur le socle)", async () => {
+    const user = userEvent.setup();
+    planState.data = undefined; // plan en cours de chargement, ou GET en échec
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
+
+    // 1. protection visible : le bouton est refusé.
+    expect(screen.getByRole("button", { name: /Ajouter/ })).toBeDisabled();
+
+    // 2. protection de fond : le handler lui-même refuse. On soumet le formulaire
+    //    DIRECTEMENT — un clic ne prouverait rien, le bouton étant déjà désactivé (c'est
+    //    ce qui rendait la première version de ce test décorative : elle passait sans la
+    //    garde). Enter dans un champ, un submit programmatique ou une régression du
+    //    `disabled` passeraient par ici.
+    fireEvent.submit(screen.getByLabelText("Gymnase").closest("form") as HTMLFormElement);
+    expect(createSlot).not.toHaveBeenCalled();
+
+    // 3. et une fois le plan résolu, l'écriture part — avec l'ancre du PLAN.
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("PeriodTeams ne confirme PAS « Sélection appliquée » quand rien n'a été écrit", async () => {
+    const user = userEvent.setup();
+    planState.data = undefined; // plan pas encore résolu → aucune écriture possible
+    render(<PeriodTeams calendarEntryId="e1" />);
+
+    await user.click(screen.getByRole("button", { name: "Fanion seul" }));
+    // Le piège : sans ancre, chaque upsert bail en Promise.resolve() → zéro rejet → le
+    // toast se déclenchait. Un succès qui ment est pire qu'une erreur : le gestionnaire
+    // croit sa sélection posée, et l'overlay part avec tout le club actif.
+    expect(toast.success).not.toHaveBeenCalledWith("Sélection appliquée");
+    expect(createOverride).not.toHaveBeenCalled();
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("PeriodVenues écrit dès que le plan est résolu", async () => {
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
+    await user.click(screen.getByRole("button", { name: /Ajouter/ }));
+    expect(createSlot).toHaveBeenCalled();
+    expect(periodSlotWriteAnchor.value).toBe("plan-1");
   });
 });
 

@@ -6,10 +6,15 @@ namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenueTrainingSlot;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Service\SeasonResolver;
@@ -269,6 +274,87 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertCount(1, $this->overridesOf($user, $planA->getId()), 'le réglage se relit par le plan qui le porte');
         // …et reste invisible à l'autre.
         self::assertCount(0, $this->overridesOf($user, $planB->getId()), 'un plan ne voit jamais les réglages d’un autre');
+    }
+
+    /**
+     * NR lot C3 — les CALQUES aussi pendent au plan, et leur nullité garde son sens.
+     *
+     * Ancre nullable : NULL = la structure PARTAGÉE (inv. 6 — créneau saisonnier,
+     * réservation de base), non-NULL = propre à ce plan. C'est plus dangereux que les
+     * jumeaux de C2 : une ancre mélangée ne casse rien, elle fait passer une ligne de
+     * PÉRIODE pour une ligne de BASE — le socle hériterait d'un gymnase prêté pour une
+     * semaine de vacances, et le planning serait plausible mais faux.
+     */
+    public function testPeriodLayersHangOffThePlanAndNullStillMeansShared(): void
+    {
+        [$user, $club, $season] = $this->createClubWithSeason();
+        $planId = $this->planOf($club->getId(), $this->postPeriod($user, 'holiday', 'Vacances'))?->getId();
+        self::assertIsString($planId);
+
+        $this->scopeGucToClub($club->getId());
+        $venueId = '99999999-9999-4999-8999-999999999999';
+        // Un créneau SAISONNIER (ancre nulle) et un créneau PRÊTÉ à ce plan.
+        foreach ([null, $planId] as $anchor) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($club->getId());
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($venueId);
+            $slot->setDayOfWeek(null === $anchor ? 1 : 2);
+            $slot->setStartTime(new DateTimeImmutable('18:00'));
+            $slot->setDurationMinutes(90);
+            $slot->setCapacity(1);
+            $slot->setSchedulePlanId($anchor);
+            $this->em->persist($slot);
+        }
+        $this->em->flush();
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+
+        $repo = $this->em->getRepository(VenueTrainingSlot::class);
+        self::assertCount(1, $repo->findBy(['schedulePlanId' => null]), 'le créneau saisonnier reste SANS ancre : c’est la structure partagée (inv. 6), pas un réglage de période');
+        self::assertCount(1, $repo->findBy(['schedulePlanId' => $planId]), 'le créneau prêté pend au plan');
+    }
+
+    /**
+     * NR lot C3 — les contraintes DATÉES, elles, NE bougent PAS : elles restent sur la
+     * CalendarEntry, et le RADAR doit pouvoir les lire AVANT tout plan.
+     *
+     * Décision fondateur (2026-07-17), qui a levé une contradiction de l'ADR : une
+     * contrainte datée décrit le FAIT (« Barros fermé »), pas la réponse. Le radar la lit
+     * PAR L'ENTRÉE pour annoncer « cette fermeture gêne 3 séances » — c'est ce qui
+     * DÉCLENCHE le geste « ajuster ». L'ancrer au plan la rendrait illisible tant qu'aucun
+     * plan n'existe… or le plan naît de ce geste : le radar ne pourrait plus jamais le
+     * provoquer.
+     *
+     * On teste le COMPORTEMENT (la contrainte se relit par son entrée), pas la forme de la
+     * classe : un method_exists ne dirait rien de ce qui compte.
+     */
+    public function testDatedConstraintsStayReadableByTheirCalendarEntry(): void
+    {
+        [$user, $club, $season] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'closure', 'Barros fermé');
+
+        $this->scopeGucToClub($club->getId());
+        $dated = new Constraint;
+        $dated->setClubId($club->getId());
+        $dated->setSeasonId($season->getId());
+        $dated->setName('Barros fermé');
+        $dated->setScope(ConstraintScope::FACILITY);
+        $dated->setFamily(ConstraintFamily::FACILITY);
+        $dated->setRuleType(ConstraintRuleType::HARD);
+        $dated->setConfig([]);
+        $dated->setCalendarEntryId($entryId); // le FAIT, pas la réponse
+        $this->em->persist($dated);
+        $this->em->flush();
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+
+        // Le radar part du déclencheur, et il doit trouver — c'est ce qui déclenche le geste.
+        self::assertCount(
+            1,
+            $this->em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entryId]),
+            'la contrainte datée se relit par SON entrée : sans ça le radar ne peut plus annoncer l’impact d’une fermeture',
+        );
     }
 
     protected function setUp(): void

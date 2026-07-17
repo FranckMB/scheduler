@@ -113,28 +113,28 @@ export function useDeleteSlot() {
 
 // --- Period-editable structure (F1): slots + team overrides scoped to a period ---
 
-export function usePeriodSlots(calendarEntryId: string | null) {
+export function usePeriodSlots(schedulePlanId: string | null) {
   return useQuery({
-    queryKey: ["wizard", "period_slots", calendarEntryId],
-    queryFn: () => wizardApi.listPeriodSlots(calendarEntryId as string),
-    enabled: null !== calendarEntryId,
+    queryKey: ["wizard", "period_slots", schedulePlanId],
+    queryFn: () => wizardApi.listPeriodSlots(schedulePlanId as string),
+    enabled: null !== schedulePlanId,
     staleTime: 30_000,
   });
 }
 
-export function useCreatePeriodSlot(calendarEntryId: string) {
+export function useCreatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: Omit<SlotPayload, "calendarEntryId">) => wizardApi.createSlot({ ...body, calendarEntryId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+    mutationFn: (body: Omit<SlotPayload, "schedulePlanId">) => wizardApi.createSlot({ ...body, schedulePlanId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
   });
 }
 
-export function useDeletePeriodSlot(calendarEntryId: string) {
+export function useDeletePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteSlot(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", calendarEntryId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
   });
 }
 
@@ -296,11 +296,20 @@ export function useWizardConstraints(calendarEntryId?: string | null) {
   });
 }
 
-/** Server-backed reservations (team→slot HARD pins), scoped base vs period overlay. */
-export function useReservations(calendarEntryId?: string | null) {
+/**
+ * Server-backed reservations (team→slot HARD pins), scoped base vs period overlay.
+ *
+ * `enabled` n'est PAS déductible de `schedulePlanId` : `null` y est AMBIGU — c'est l'ancre
+ * légitime du socle, et aussi ce que vaut un plan pas encore résolu. Sans ce drapeau, la
+ * fenêtre de chargement d'une période sert les réservations DU SOCLE en les faisant passer
+ * pour celles de la période (récap faux, avertissements faux). L'appelant tranche avec le
+ * `ready` de `usePeriodAnchor` — lui seul sait s'il est en mode période.
+ */
+export function useReservations(schedulePlanId?: string | null, enabled = true) {
   return useQuery({
-    queryKey: ["wizard", "reservations", calendarEntryId ?? "base"],
-    queryFn: () => wizardApi.listReservations(calendarEntryId ? { calendarEntryId } : undefined),
+    queryKey: ["wizard", "reservations", schedulePlanId ?? "base"],
+    queryFn: () => wizardApi.listReservations(schedulePlanId ? { schedulePlanId } : undefined),
+    enabled,
     staleTime: 30_000,
   });
 }

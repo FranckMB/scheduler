@@ -39,15 +39,15 @@ class ReservationStateProvider extends AbstractStateProvider
                ->setMaxResults($this->pagination->getLimit($operation, $context));
         }
 
-        // Base/overlay layering (same as constraints): ?calendarEntryId=<id> lists a
-        // period overlay's reservations; without it, the base plan (calendarEntryId
+        // Base/overlay layering (same as constraints): ?schedulePlanId=<id> lists a
+        // period overlay's reservations; without it, the base plan (schedulePlanId
         // IS NULL) so the wizard's Réserver tab shows the permanent reservations.
         $request = $this->requestStack->getCurrentRequest();
-        if ($request instanceof Request && $request->query->has('calendarEntryId')) {
-            $qb->andWhere('e.calendarEntryId = :calendarEntryId')
-               ->setParameter('calendarEntryId', $request->query->get('calendarEntryId'));
+        if ($request instanceof Request && $request->query->has('schedulePlanId')) {
+            $qb->andWhere('e.schedulePlanId = :schedulePlanId')
+               ->setParameter('schedulePlanId', $request->query->get('schedulePlanId'));
         } else {
-            $qb->andWhere('e.calendarEntryId IS NULL');
+            $qb->andWhere('e.schedulePlanId IS NULL');
         }
 
         return array_map([$this, 'mapEntityToOutput'], $qb->getQuery()->getResult());

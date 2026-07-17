@@ -61,8 +61,20 @@ Schedule (= Version)                    ← existant, recentré
 5. **Les réglages de période s'accrochent au Plan** (pas au déclencheur calendrier) :
    coches équipes (`TeamPeriodOverride`), contraintes gardées/enlevées
    (`ConstraintPeriodOverride`), créneaux prêtés (`VenueTrainingSlot` scopé période),
-   réservations et contraintes datées, flag de seed (`teamSelectionInitialized`) →
+   réservations, flag de seed (`teamSelectionInitialized`) →
    **re-keyés `calendarEntryId` → `planId`**. Chaque plan-semaine a SES réglages.
+
+   ⚠️ **Correction (décision fondateur, 2026-07-17)** : les **contraintes datées** sortent
+   de cette liste — elles **restent sur `CalendarEntry`**. Elles décrivent le **FAIT**
+   (« Barros fermé du 20 au 26 »), pas la réponse qu'on lui apporte, et le **radar de
+   conflits les lit par l'entrée** (`CalendarEntryConflictsController`) pour annoncer
+   « cette fermeture gêne 3 séances » — c'est ce qui **déclenche** le geste « ajuster ».
+   Les accrocher au plan les rendrait illisibles tant qu'aucun plan n'existe… or le plan
+   naît justement de ce geste : le radar ne pourrait plus jamais le provoquer. Cela
+   inverserait l'invariant fondateur « l'indisponibilité est déclarée d'abord, puis le
+   gestionnaire décide ». La section « Rôle de `CalendarEntry` » ci-dessous disait déjà
+   qu'elle **garde** les contraintes datées du fait : c'est l'invariant 5 qui était trop
+   large, et les deux se contredisaient depuis la rédaction.
 6. **La structure (équipes/gymnases/coachs/contraintes permanentes) reste PARTAGÉE**
    (état vivant du club par saison) — **pas de duplication par version**. L'indépendance
    des versions passe par la **photo** (JSON, D2, existante) : chaque version COMPLETED

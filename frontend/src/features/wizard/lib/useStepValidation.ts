@@ -1,3 +1,4 @@
+import { usePeriodAnchor } from "@/features/cockpit/queries";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
@@ -90,7 +91,11 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const periodMode = useWizardStore((s) => "period" === s.mode);
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   // Reservations are server-backed now (base vs period overlay), not the client store.
-  const { data: reservations = [] } = useReservations(periodEntryId);
+  // Elles pendent au PLAN (inv. 5, lot C3) : le composant tient le déclencheur, il en
+  // résout l'ancre.
+  // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
+  const periodAnchor = usePeriodAnchor(periodEntryId);
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.

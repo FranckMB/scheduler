@@ -938,7 +938,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $reservation = new Reservation;
                 $reservation->setClubId($club->getId());
                 $reservation->setSeasonId($season->getId());
-                $reservation->setCalendarEntryId(null);
+                $reservation->setSchedulePlanId(null); // réservation de BASE (structure partagée, inv. 6)
                 $reservation->setTeamId($slotData['team']->getId());
                 $reservation->setVenueId($venues[$slotData['venue']]->getId());
                 $reservation->setDayOfWeek($slotData['day']);

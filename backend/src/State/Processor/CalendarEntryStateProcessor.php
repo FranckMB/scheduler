@@ -288,12 +288,8 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             foreach ($dated as $constraint) {
                 $this->entityManager->remove($constraint);
             }
-            // Period-editable structure (B1): the period's own training slots and
-            // team overrides are keyed on this entry — remove them too, else they orphan.
-            foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['calendarEntryId' => $id]) as $slot) {
-                $this->entityManager->remove($slot);
-            }
-            // Les deux jumeaux sont ancrés au PLAN depuis C2 — d'où l'id capturé plus haut.
+            // Tous les réglages de la période pendent au PLAN (inv. 5, lots C2-C3) — d'où
+            // l'id capturé AVANT sa destruction, sans quoi ils orphelineraient.
             if (null !== $schedulePlanId) {
                 foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
                     $this->entityManager->remove($override);
@@ -302,10 +298,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
                 foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
                     $this->entityManager->remove($override);
                 }
-            }
-            // A period's own reservations (dated pins) are keyed on the entry too.
-            foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['calendarEntryId' => $id]) as $reservation) {
-                $this->entityManager->remove($reservation);
+                // Les créneaux prêtés pour cette période (« la mairie me prête ce gymnase
+                // POUR cet ajustement ») et ses réservations : des RÉPONSES, donc au plan.
+                foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
+                    $this->entityManager->remove($slot);
+                }
+                foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
+                    $this->entityManager->remove($reservation);
+                }
             }
             // …and any reminder logged for this period (else a ghost survives to the season purge).
             foreach ($this->entityManager->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $id]) as $log) {

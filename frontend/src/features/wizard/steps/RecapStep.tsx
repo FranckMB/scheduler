@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -41,7 +42,11 @@ export function RecapStep() {
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodEntryId);
+  // Les réservations pendent au PLAN (inv. 5, lot C3) — les contraintes, elles, restent
+  // lues par l'entrée (elles décrivent le FAIT).
+  // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
+  const periodAnchor = usePeriodAnchor(periodEntryId);
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la

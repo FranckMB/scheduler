@@ -50,13 +50,13 @@ class VenueTrainingSlot implements TenantOwnedInterface
     private int $capacity = 1;
 
     /**
-     * Period-editable structure: a slot scoped to a CalendarEntry (period) exists
-     * ONLY for that period's overlay build (e.g. a gym the city lends just for a
-     * resumption window). null = the permanent seasonal slot. The overlay build
-     * uses seasonal ∪ period slots (additive); the base plan never sees period ones.
+     * ADR-0002 inv. 5 (lot C3) — le créneau PRÊTÉ s'accroche au PLAN : « la mairie me prête
+     * ce gymnase POUR CET AJUSTEMENT » est une réponse, pas un fait. null = le créneau
+     * saisonnier permanent (structure PARTAGÉE, inv. 6 — surtout pas rattaché au plan
+     * SEASON : la structure n'est pas un réglage de période).
      */
     #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $calendarEntryId = null;
+    private ?string $schedulePlanId = null;
 
     public function __construct()
     {
@@ -197,14 +197,14 @@ class VenueTrainingSlot implements TenantOwnedInterface
         return $this;
     }
 
-    public function getCalendarEntryId(): ?string
+    public function getSchedulePlanId(): ?string
     {
-        return $this->calendarEntryId;
+        return $this->schedulePlanId;
     }
 
-    public function setCalendarEntryId(?string $calendarEntryId): self
+    public function setSchedulePlanId(?string $schedulePlanId): self
     {
-        $this->calendarEntryId = $calendarEntryId;
+        $this->schedulePlanId = $schedulePlanId;
 
         return $this;
     }
