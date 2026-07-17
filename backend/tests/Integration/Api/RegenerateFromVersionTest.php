@@ -426,10 +426,10 @@ final class RegenerateFromVersionTest extends WebTestCase
     {
         $schedule = (new Schedule)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setName('V')->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
         // du /regenerate-from lèverait sur une version sans plan (saison ou overlay).
+        // lot D : pas de persist/flush ici — linkSeededSchedule pose le plan AVANT de
+        // persister (schedule_plan_id NOT NULL) ; les appelants flushent ensuite.
         $this->linkSeededSchedule($schedule, $calendarEntryId);
 
         return $schedule;

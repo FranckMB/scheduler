@@ -192,16 +192,9 @@ final class ScheduleConstraintBuilder
         $seasonId = $schedule->getSeasonId();
         $periodType = $entry->getPeriodType();
 
-        // ADR-0002 inv. 5 (lot C2) — les réglages de la période pendent au PLAN. Sans lui,
-        // on ne sait pas QUELS réglages appliquer. Échouer bruyamment plutôt que bâtir avec
-        // zéro override : ce silence-là génèrerait un planning avec TOUTES les équipes
-        // actives, en ignorant la sélection du gestionnaire — un plan faux vaut moins qu'une
-        // génération FAILED avec un diagnostic. Inatteignable en pratique : le plan naît du
-        // geste (C1) et linkSchedule rattache la version.
+        // ADR-0002 inv. 5 — les réglages de période (coches équipes/contraintes, créneaux
+        // prêtés) s'ancrent au PLAN. Le plan est non-nullable (lot D) : une version a toujours le sien.
         $schedulePlanId = $schedule->getSchedulePlanId();
-        if (null === $schedulePlanId) {
-            throw new LogicException('Overlay build requires the schedule to be linked to its period plan.');
-        }
 
         $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
 

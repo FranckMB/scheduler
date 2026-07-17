@@ -183,10 +183,9 @@ final class ScheduleLifecycleGuardTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // Prod links every version at creation ; sans ça, depuis C4 la garde de
         // suppression (planIsSeason) ne reconnaîtrait pas la dernière version de saison.
+        // linkSeededSchedule persiste lui-même le planning (plan résolu avant le flush).
         $this->linkSeededSchedule($schedule);
 
         return $schedule;

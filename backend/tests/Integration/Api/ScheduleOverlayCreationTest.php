@@ -283,8 +283,6 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $baseline->setSeasonId($season->getId());
         $baseline->setName('Baseline');
         $baseline->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($baseline);
-        $this->em->flush();
         $this->choosePlanVersion($baseline);
 
         return [$user, $club, $season];

@@ -211,7 +211,9 @@ final class ManualEditBehaviorTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
+        // lot D : la version ne peut être flushée sans plan (schedule_plan_id NOT NULL).
+        // linkSeededSchedule résout le plan SEASON, le pose, persiste et numérote.
+        $this->linkSeededSchedule($schedule);
         $this->em->flush();
 
         return $schedule;

@@ -116,8 +116,6 @@ final class ScheduleReadOnlyGuardTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
 
         return $schedule;
     }

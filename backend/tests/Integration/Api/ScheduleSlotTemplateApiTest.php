@@ -14,6 +14,7 @@ use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +30,7 @@ use Symfony\Component\Uid\Uuid;
 #[Group('integration')]
 final class ScheduleSlotTemplateApiTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -160,7 +162,10 @@ final class ScheduleSlotTemplateApiTest extends WebTestCase
         $schedule->setSeasonId($this->season->getId());
         $schedule->setName($name);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($schedule);
+        // lot D : schedule_plan_id/version_number NOT NULL — la version doit être liée à son
+        // plan SEASON AVANT tout flush. linkSeededSchedule résout le plan, le pose et persiste ;
+        // le flush écrit la ligne (nécessaire, l'API la relit + les slots pointent son id).
+        $this->linkSeededSchedule($schedule);
         $this->em->flush();
 
         return $schedule;

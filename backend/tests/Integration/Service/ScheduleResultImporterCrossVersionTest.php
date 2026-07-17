@@ -12,6 +12,7 @@ use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
 use App\Service\ScheduleResultImporter;
 use App\Service\SlotIdScoper;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -28,6 +29,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 #[Group('integration')]
 final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private const ENGINE_ID = '11111111-1111-4111-8111-111111111111'; // an engine placement-global id
@@ -118,7 +120,9 @@ final class ScheduleResultImporterCrossVersionTest extends KernelTestCase
     private function schedule(Club $club, Season $season, ScheduleStatus $status): Schedule
     {
         $schedule = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('S')->setStatus($status);
-        $this->em->persist($schedule);
+        // lot D : la version ne peut être persistée sans plan — le helper résout le plan SEASON,
+        // le pose AVANT persist, persiste et numérote (le flush reste au test appelant).
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

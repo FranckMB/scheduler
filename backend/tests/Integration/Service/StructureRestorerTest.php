@@ -17,6 +17,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\StructureRestorer;
 use App\Service\StructureSnapshotter;
 use App\Tests\ProvisionsPeriodPlanTrait;
@@ -221,8 +222,12 @@ final class StructureRestorerTest extends KernelTestCase
     private function makeSchedule(Club $club, Season $season): Schedule
     {
         $schedule = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())
-            ->setName('V')->setStatus(ScheduleStatus::COMPLETED);
+            ->setName('V')->setStatus(ScheduleStatus::COMPLETED)
+            ->setSchedulePlanId($this->seasonPlanIdOf($season));
         $this->em->persist($schedule);
+        // Numéroter : plusieurs versions du MÊME plan SEASON ne peuvent pas rester à
+        // version_number 0 (uniq_schedule_plan_version) — linkSchedule les met à V1, V2, …
+        self::getContainer()->get(SchedulePlanProvisioner::class)->linkSchedule($schedule);
 
         return $schedule;
     }

@@ -373,11 +373,26 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   overlay envoie le `planId` (résolu via `usePeriodAnchor`, déjà en main depuis C2/C3). **Restent**
   au **lot D** (PR3) : `NOT NULL` sur `schedule_plan_id`/`version_number`, purge des orphelins,
   drop `CalendarEntry.overlayScheduleId`.
-- **Lot D** — nettoyage résiduel : la bascule a déjà supprimé baseline / socle / nom legacy
-  et les statuts `VALIDATED`/`ARCHIVED`. Restent : `CalendarEntry.overlayScheduleId` (pointeur
-  inverse, encore utile tant que le lot C n'a pas re-keyé les périodes) et les colonnes
-  `schedule_plan_id`/`version_number` à rendre `NOT NULL`. La ★ (`liveContextScheduleId`)
-  **reste par décision** (inv. 17) — c'est l'auto-pointeur qui est mort, pas la ★.
+- **Lot D** — nettoyage résiduel, découpé en **2 PR** (D-a puis D-b).
+  - **D-a livré (PR3, 2026-07-17)** : `schedule.schedule_plan_id` + `version_number` deviennent
+    **NOT NULL** — l'invariant « une version sans plan n'existe pas » est désormais **SCELLÉ EN
+    BASE** (précédé d'une purge défensive des orphelins ; 0 en base — filet). Le choix est
+    **non-nullable STRICT** : les propriétés PHP passent à `string`/`int` (une version orpheline
+    est **inreprésentable**), toutes les gardes null mortes tombent (`requirePlanRow`, `choose`,
+    `linkSchedule`, `buildForOverlay`), et le NR teste le sceau (schéma) + le plan-disparu qui
+    lève. `linkSchedule` numérote AVANT le flush-INSERT (`version_number` sentinelle 0 en mémoire,
+    ≥ 1 en base) et **lève** si le plan disparaît (au lieu de laisser un orphelin). Coût assumé :
+    ~26 fichiers de seeds re-passés en **link-avant-persist** (le `NOT NULL` refuse un INSERT sans
+    plan, indépendamment du type PHP).
+  - **Reste D-b** : drop `CalendarEntry.overlayScheduleId` (pointeur inverse « version active de la
+    période »). **Décision fondateur (2026-07-18)** : ce pointeur est un **vestige du palier B**
+    (avant le Plan) redondant avec le modèle ; « période → version active » se dérive de son plan.
+    Sémantique cible **binaire** : plan **validé** (`chosenScheduleId` non-null) → on **MONTRE** la
+    version choisie (consultation) ; plan **non validé** → on **AJUSTE** (wizard), on ne montre
+    **jamais** une version non validée. Changement de comportement cockpit (aujourd'hui le pointeur
+    est posé dès la création). Cross-stack (entité/OverlayManager + cockpit front + tests).
+  - La ★ (`liveContextScheduleId`) **reste par décision** (inv. 17) — c'est l'auto-pointeur qui est
+    mort, pas la ★.
   - **Dette C4-PR1 à solder ici (code-review)** : depuis que `OverlayManager::deleteOverlayForEntry`
     et le `--dry-run` de `PurgeOverlaysCommand` collectent les versions d'une période PAR son plan
     (`schedulePlanId`), un overlay **legacy non lié** (`schedulePlanId` null, non pointé) n'est plus

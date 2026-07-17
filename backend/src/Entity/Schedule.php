@@ -45,20 +45,26 @@ class Schedule implements TenantOwnedInterface
     /**
      * ADR-0002: the SchedulePlan this schedule is a VERSION of. Nullable during
      * the additive transition (Lot A) — the backfill + SchedulePlanProvisioner
-     * fill it; made NOT NULL in Lot D once every schedule is linked. Le type du plan
-     * (SEASON vs CLOSURE/HOLIDAY) dit « socle ou overlay ? » — plus de doublon
-     * `calendarEntryId` porté par le schedule (C4).
+     * fill it. **NOT NULL depuis le lot D** : une version sans plan n'existe pas
+     * (toute création la lie). Le type du plan (SEASON vs CLOSURE/HOLIDAY) dit
+     * « socle ou overlay ? » — plus de doublon `calendarEntryId` (C4). La propriété
+     * PHP reste `?string` (posée après `new` mais AVANT le flush-INSERT) ; c'est la
+     * colonne qui scelle l'invariant, et les gardes défensives sur null restent utiles.
      */
-    #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $schedulePlanId = null;
+    #[ORM\Column(type: 'guid', nullable: false)]
+    private string $schedulePlanId;
 
     /**
      * ADR-0002: this schedule's position within its SchedulePlan (V1, V2…),
-     * stored (not derived). Nullable during the additive transition; assigned by
-     * the provisioner as MAX(versionNumber of the plan) + 1.
+     * stored (not derived). **NOT NULL depuis le lot D** ; posé par le provisioner
+     * (`MAX(versionNumber du plan) + 1`) AVANT le flush-INSERT. PHP `?int` conservé :
+     * la garde d'idempotence de linkSchedule lit `getVersionNumber()` avant l'affectation.
      */
-    #[ORM\Column(type: 'integer', nullable: true)]
-    private ?int $versionNumber = null;
+    // 0 = pas encore numérotée (les versions vont de 1) — sentinelle interne : linkSchedule
+    // lit getVersionNumber() pour son idempotence AVANT de l'affecter. En base : toujours ≥ 1
+    // (linkSchedule numérote avant le flush-INSERT ; sinon il lève et la création rollback).
+    #[ORM\Column(type: 'integer', nullable: false)]
+    private int $versionNumber = 0;
 
     #[ORM\Column(type: 'string', length: 180)]
     private string $name;
@@ -191,24 +197,24 @@ class Schedule implements TenantOwnedInterface
         return $this;
     }
 
-    public function getSchedulePlanId(): ?string
+    public function getSchedulePlanId(): string
     {
         return $this->schedulePlanId;
     }
 
-    public function setSchedulePlanId(?string $schedulePlanId): self
+    public function setSchedulePlanId(string $schedulePlanId): self
     {
         $this->schedulePlanId = $schedulePlanId;
 
         return $this;
     }
 
-    public function getVersionNumber(): ?int
+    public function getVersionNumber(): int
     {
         return $this->versionNumber;
     }
 
-    public function setVersionNumber(?int $versionNumber): self
+    public function setVersionNumber(int $versionNumber): self
     {
         $this->versionNumber = $versionNumber;
 

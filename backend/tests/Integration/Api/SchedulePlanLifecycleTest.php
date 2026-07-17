@@ -246,10 +246,9 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Version');
         $schedule->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
         // C4 : linkSchedule numérote — la version de saison doit d'abord porter son plan SEASON.
         $schedule->setSchedulePlanId($this->provisioner->ensureSeasonPlanId($season->getId()));
+        $this->em->persist($schedule);
         $this->em->flush();
         $this->provisioner->linkSchedule($schedule);
         $this->em->flush();

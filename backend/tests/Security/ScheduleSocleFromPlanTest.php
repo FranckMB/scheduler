@@ -53,10 +53,11 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
 
     /**
      * Le point de passage que TOUT site de décision consomme (génération, validation,
-     * régénération) : la vérité « socle ? » vient du type du plan, et le troisième état
-     * (aucun plan) LÈVE au lieu de retomber sur « saison ».
+     * régénération) : la vérité « socle ? » vient du TYPE du plan (SEASON), pas d'un doublon.
+     * Une version a TOUJOURS un plan (lot D) ; si sa LIGNE de plan a disparu sous les pieds
+     * (reset concurrent), la lecture LÈVE plutôt que de deviner un socle.
      */
-    public function testTheSocleTruthComesFromThePlanTypeAndTheThirdStateRaises(): void
+    public function testTheSocleTruthComesFromThePlanType(): void
     {
         [$user, $club, $season] = $this->seed();
         $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
@@ -71,39 +72,31 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         self::assertFalse($provisioner->isSeasonSchedule($overlay), 'un overlay de période n’est jamais le socle');
         self::assertSame($entryId, $provisioner->periodEntryIdOf($overlay), 'l’overlay pointe sa période via son plan');
 
-        // Une version SANS plan (anomalie) : le 3e état LÈVE — il ne retombe pas sur « socle ».
-        $orphan = $this->unlinkedVersion($season, ScheduleStatus::COMPLETED);
+        // Plan disparu (reset concurrent) : la ligne du plan n'existe plus → LÈVE.
+        $this->scopeGucToClub($club->getId());
+        $this->em->getConnection()->executeStatement('DELETE FROM schedule_plan WHERE id = :pid', ['pid' => $seasonVersion->getSchedulePlanId()]);
         $this->expectException(LogicException::class);
-        $provisioner->isSeasonSchedule($orphan);
+        $provisioner->isSeasonSchedule($seasonVersion);
     }
 
     /**
-     * Chemin de PROD : une version non liée poussée dans /regenerate ne se fait pas passer
-     * pour le socle. Sous l'ancienne logique (`null === calendarEntryId` ⇒ saison), ce POST
-     * régénérait la saison ; sous C4 la garde « socle ? » lève, la requête échoue fort et
-     * AUCUNE version n'est mintée comme si c'était le calendrier de la saison.
+     * NR lot D — L'INVARIANT EST SCELLÉ EN BASE : « une version sans plan n'existe pas » n'est
+     * plus une garde applicative contournable, c'est une impossibilité STRUCTURELLE. Le type PHP
+     * est non-nullable (on ne peut pas construire une version orpheline) ET les colonnes
+     * `schedule_plan_id` / `version_number` sont NOT NULL (la DB refuse tout INSERT sans plan).
      */
-    public function testRegenerateNeverTreatsAnUnlinkedVersionAsTheSocle(): void
+    public function testTheNoVersionWithoutPlanInvariantIsSealedInTheSchema(): void
     {
-        [$user, $club, $season] = $this->seed();
-        // On pointe un socle pour écarter le SocleGuard : ce n'est pas LUI la cause du refus.
-        $this->settleSeasonPlan($season);
+        [, $club] = $this->seed();
+        $this->scopeGucToClub($club->getId());
 
-        $orphan = $this->unlinkedVersion($season, ScheduleStatus::COMPLETED);
-        $before = $this->scheduleCount($club->getId());
-
-        $this->client->request('POST', '/api/schedules/' . $orphan->getId() . '/regenerate', [], [], $this->authHeaders($user));
-
-        self::assertGreaterThanOrEqual(
-            500,
-            $this->client->getResponse()->getStatusCode(),
-            'un état impossible (version sans plan) échoue fort — il ne passe pas pour le socle',
-        );
-        self::assertSame(
-            $before,
-            $this->scheduleCount($club->getId()),
-            'aucune version n’a été créée : l’anomalie n’a pas été régénérée comme la saison',
-        );
+        foreach (['schedule_plan_id', 'version_number'] as $column) {
+            $nullable = $this->em->getConnection()->fetchOne(
+                'SELECT is_nullable FROM information_schema.columns WHERE table_name = \'schedule\' AND column_name = :col',
+                ['col' => $column],
+            );
+            self::assertSame('NO', $nullable, \sprintf('schedule.%s est NOT NULL — une version sans plan est impossible en base (lot D)', $column));
+        }
     }
 
     /**
@@ -215,9 +208,7 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
             ->setSeasonId($season->getId())
             ->setName('V socle')
             ->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($schedule);
-        $this->em->flush();
-        $this->linkSeededSchedule($schedule);
+        $this->linkSeededSchedule($schedule); // lot D : pose le plan AVANT de persister
 
         return $schedule;
     }
@@ -234,26 +225,9 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
             ->setSeasonId($season->getId())
             ->setName('V overlay')
             ->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($overlay);
-        $this->em->flush();
-        $this->linkSeededSchedule($overlay, $entryId);
+        $this->linkSeededSchedule($overlay, $entryId); // lot D : pose le plan AVANT de persister
 
         return [$overlay, $entryId];
-    }
-
-    private function unlinkedVersion(Season $season, ScheduleStatus $status): Schedule
-    {
-        // Volontairement NON liée (schedulePlanId null) : l'état exact qui, sous
-        // l'ancienne logique, se faisait passer pour le socle.
-        $schedule = (new Schedule)
-            ->setClubId($season->getClubId())
-            ->setSeasonId($season->getId())
-            ->setName('V orpheline')
-            ->setStatus($status);
-        $this->em->persist($schedule);
-        $this->em->flush();
-
-        return $schedule;
     }
 
     private function postClosurePeriod(User $user): string
@@ -274,16 +248,6 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         self::assertIsString($payload['id']);
 
         return $payload['id'];
-    }
-
-    private function scheduleCount(string $clubId): int
-    {
-        $this->scopeGucToClub($clubId);
-
-        return (int) $this->em->getConnection()->fetchOne(
-            'SELECT COUNT(*) FROM schedule WHERE club_id = :cid',
-            ['cid' => $clubId],
-        );
     }
 
     /**

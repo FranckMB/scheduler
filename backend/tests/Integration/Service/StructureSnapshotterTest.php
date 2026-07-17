@@ -21,6 +21,7 @@ use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
 use App\Service\StructureSnapshotter;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,6 +38,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 #[Group('integration')]
 final class StructureSnapshotterTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -163,7 +165,9 @@ final class StructureSnapshotterTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('V1');
         $schedule->setStatus(ScheduleStatus::GENERATING);
-        $this->em->persist($schedule);
+        // lot D : la version doit porter son plan AVANT l'INSERT (schedule_plan_id NOT NULL) —
+        // linkSeededSchedule résout le plan SEASON, le pose, persiste et numérote.
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

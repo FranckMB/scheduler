@@ -9,6 +9,7 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[Group('integration')]
 final class ReconcileStuckSchedulesTest extends KernelTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     public function testStuckScheduleIsFailedAndFreshOneIsUntouched(): void
@@ -59,7 +61,7 @@ final class ReconcileStuckSchedulesTest extends KernelTestCase
         $stuck->setSeasonId($season->getId());
         $stuck->setName('stuck');
         $stuck->setStatus(ScheduleStatus::GENERATING);
-        $em->persist($stuck);
+        $this->linkSeededSchedule($stuck);
         $em->flush();
         $stuckId = $stuck->getId();
 
@@ -68,7 +70,7 @@ final class ReconcileStuckSchedulesTest extends KernelTestCase
         $fresh->setSeasonId($season->getId());
         $fresh->setName('fresh');
         $fresh->setStatus(ScheduleStatus::GENERATING);
-        $em->persist($fresh);
+        $this->linkSeededSchedule($fresh);
         $em->flush();
         $freshId = $fresh->getId();
 
@@ -81,7 +83,7 @@ final class ReconcileStuckSchedulesTest extends KernelTestCase
         $pending->setSeasonId($season->getId());
         $pending->setName('pending');
         $pending->setStatus(ScheduleStatus::PENDING);
-        $em->persist($pending);
+        $this->linkSeededSchedule($pending);
         $em->flush();
         $pendingId = $pending->getId();
 

@@ -393,7 +393,9 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Plan N');
         $schedule->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($schedule);
+        // lot D : schedule_plan_id NOT NULL — le helper résout le plan SEASON, le POSE,
+        // persiste et NUMÉROTE la version avant le flush (pas de persist brut sans plan).
+        $this->linkSeededSchedule($schedule);
 
         $this->em->flush();
 
