@@ -1,7 +1,7 @@
 import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { useCalendarEntry, useEntryConflicts } from "@/features/cockpit/queries";
+import { useCalendarEntry, useEntryConflicts, useSchedulePlanForEntry } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -38,7 +38,7 @@ import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
 // In-session guard against re-seeding between firing the Fanion-only seed and the
-// entry query reflecting teamSelectionInitialized (the DURABLE, reload-proof signal).
+// plan query reflecting teamSelectionInitialized (the DURABLE, reload-proof signal).
 // Module-level so it survives a step remount (WizardLayout unmounts inactive steps).
 // Claimed ONCE and never un-claimed (un-claiming on a partial failure would re-run the
 // seed against a still-empty cache and double-write): a failed seed is best-effort, the
@@ -54,7 +54,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
   const { data: overrides = [], isLoading } = useTeamPeriodOverrides(calendarEntryId);
-  const { data: entry, isLoading: entryLoading } = useCalendarEntry(calendarEntryId);
+  const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
   const create = useCreateTeamPeriodOverride(calendarEntryId);
   const update = useUpdateTeamPeriodOverride(calendarEntryId);
   const del = useDeleteTeamPeriodOverride(calendarEntryId);
@@ -91,15 +91,16 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // double-writes the teams that already succeeded. On a failure the global toast
   // informs; the manager applies "Fanion seul" (ramp) to complete.
   //
-  // The DURABLE signal is entry.teamSelectionInitialized (server-set on the first
+  // The DURABLE signal is plan.teamSelectionInitialized (server-set on the first
   // override, survives reload); seededPeriods only guards the in-session window
-  // between firing the seed and the entry query reflecting the flag.
+  // between firing the seed and the plan query reflecting the flag. ADR-0002 lot C:
+  // the flag lives on the plan — the RESPONSE — not on the calendar event.
   useEffect(() => {
-    // `false !== entry?.teamSelectionInitialized` bails on undefined too: a fetch
-    // error / 404 leaves entry undefined, and we must NOT seed an unknown period
-    // (it could be an already-configured one whose GET blipped) — only seed when the
-    // entry loaded AND is explicitly uninitialised.
-    if (isLoading || entryLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== entry?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
+    // `false !== plan?.teamSelectionInitialized` bails on undefined AND on null too:
+    // a fetch error leaves it undefined, and a period with no plan (inv. 9) returns
+    // null — we must NOT seed an unknown period (it could be an already-configured one
+    // whose GET blipped). Only seed when the plan loaded AND is explicitly uninitialised.
+    if (isLoading || planLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
       return;
     }
     claimPeriodSeed(calendarEntryId);
@@ -110,7 +111,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
     setBusy(true);
     void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ calendarEntryId, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [isLoading, entryLoading, entry, teams, overrides, topTierId, calendarEntryId, create]);
+  }, [isLoading, planLoading, plan, teams, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {

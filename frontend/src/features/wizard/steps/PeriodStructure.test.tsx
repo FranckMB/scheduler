@@ -35,7 +35,9 @@ const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
-const entryState: { data: { teamSelectionInitialized: boolean; periodType: string } | undefined } = { data: { teamSelectionInitialized: false, periodType: "closure" } };
+const entryState: { data: { periodType: string } | undefined } = { data: { periodType: "closure" } };
+// ADR-0002 lot C: le garde de seed vit sur le PLAN, pas sur l'événement calendrier.
+const planState: { data: { teamSelectionInitialized: boolean } | null | undefined } = { data: { teamSelectionInitialized: false } };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [
@@ -63,6 +65,7 @@ vi.mock("../queries", () => ({
 vi.mock("@/features/cockpit/queries", () => ({
   useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }),
   useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
+  useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -81,7 +84,8 @@ afterEach(() => {
   constraintOverridesLoadingState.value = false;
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
-  entryState.data = { teamSelectionInitialized: false, periodType: "closure" };
+  entryState.data = { periodType: "closure" };
+    planState.data = { teamSelectionInitialized: false };
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
@@ -102,7 +106,7 @@ describe("PeriodTeams — Fanion-only default + toggles", () => {
   });
 
   it("does NOT seed a period already configured server-side (teamSelectionInitialized)", () => {
-    entryState.data = { teamSelectionInitialized: true, periodType: "closure" }; // e.g. manager reset it to all-active, then reloaded
+    planState.data = { teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
     render(<PeriodTeams calendarEntryId="already-init" />);
     expect(createOverride).not.toHaveBeenCalled();
   });
@@ -204,7 +208,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("reprise (holiday): default follows the team selection", () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    entryState.data = { periodType: "holiday" };
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }]; // t2 en pause
     constraintsState.data = [
       constraint({ id: "kc", name: "Club rule", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null }),
@@ -220,7 +224,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("reprise: waits for team overrides before rendering (no wrong-default flash)", () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    entryState.data = { periodType: "holiday" };
     teamOverridesLoadingState.value = true; // team overrides still fetching
     constraintsState.data = [constraint({ id: "kt", name: "U13 rule", ruleType: "PREFERRED", scope: "TEAM", scopeTargetId: "t2" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
@@ -269,7 +273,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("reprise: keeping a facility (off by default) creates an isActive=true override", async () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    entryState.data = { periodType: "holiday" };
     constraintsState.data = [constraint({ id: "kf", name: "Gym rule", ruleType: "PREFERRED", scope: "FACILITY", scopeTargetId: "v1" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     await userEvent.click(screen.getByRole("checkbox", { name: "Gym rule appliquée cette période" }));
@@ -288,7 +292,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("hides a CLUB+targetTag constraint when every tagged team is paused", () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "holiday" };
+    entryState.data = { periodType: "holiday" };
     tagsState.data = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
     tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-sen", seasonId: "s1" }];
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, calendarEntryId: "e1" }];
@@ -300,7 +304,7 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   });
 
   it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {
-    entryState.data = { teamSelectionInitialized: false, periodType: "cutoff" };
+    entryState.data = { periodType: "cutoff" };
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
     expect(screen.queryByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).not.toBeInTheDocument();

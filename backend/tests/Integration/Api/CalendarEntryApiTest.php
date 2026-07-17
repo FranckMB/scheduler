@@ -14,6 +14,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -322,6 +323,10 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
         $overlay->setCalendarEntryId($entry->getId());
+        // ADR-0002 lot C : une période a toujours son plan (né du geste). Rejoué ici,
+        // l'entrée étant fabriquée à la main plutôt que par le POST.
+        $this->em->flush();
+        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($club->getId());
@@ -364,6 +369,9 @@ final class CalendarEntryApiTest extends WebTestCase
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
         $this->em->persist($entry);
         $this->em->flush();
+        // ADR-0002 lot C : le plan naît du geste. Rejoué ici — sans lui, l'overlay ne
+        // se rattacherait à aucun plan et ne pourrait pas être pointé.
+        self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
 
         $overlay = new Schedule;
         $overlay->setClubId($club->getId());

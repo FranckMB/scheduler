@@ -31,6 +31,24 @@ export function useCalendarEntry(id: string | null) {
 }
 
 /**
+ * Le plan d'une période (ADR-0002 lot C). Il naît avec le geste « ajuster cette
+ * période », donc il est là dès que l'entrée existe — inutile d'attendre une
+ * génération. Porte les réglages de la période (inv. 5), dont le garde de seed
+ * `teamSelectionInitialized`.
+ *
+ * Sous le préfixe "calendar-entries" pour hériter de l'invalidation partagée : le
+ * flag bascule côté serveur au 1er override, sans mutation directe sur le plan.
+ */
+export function useSchedulePlanForEntry(calendarEntryId: string | null) {
+  return useQuery({
+    queryKey: ["calendar-entries", "plan", calendarEntryId],
+    queryFn: () => cockpitApi.getSchedulePlanForEntry(calendarEntryId as string),
+    enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * School holidays. Without a window → the season default (radar, season-wide).
  * With a [from, to] → that window (the calendar's visible month, so summer and
  * any month outside the season are shown when browsed).

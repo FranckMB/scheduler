@@ -923,6 +923,12 @@
                                                 },
                                                 "hasFinishedVersion": {
                                                     "type": "boolean"
+                                                },
+                                                "currentStructureHash": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
                                                 }
                                             }
                                         },
@@ -11304,11 +11310,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "teamSelectionInitialized": {
-                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                        "default": false,
-                        "type": "boolean"
                     }
                 }
             },
@@ -11466,11 +11467,6 @@
                             "string",
                             "null"
                         ]
-                    },
-                    "teamSelectionInitialized": {
-                        "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                        "default": false,
-                        "type": "boolean"
                     }
                 }
             },
@@ -11545,11 +11541,6 @@
                                     "string",
                                     "null"
                                 ]
-                            },
-                            "teamSelectionInitialized": {
-                                "description": "Period-editable structure: has this period's team selection been configured once (seed guard)?",
-                                "default": false,
-                                "type": "boolean"
                             }
                         }
                     }
@@ -15189,6 +15180,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15261,6 +15257,11 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "teamSelectionInitialized": {
+                        "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
@@ -15323,6 +15324,11 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "teamSelectionInitialized": {
+                                "description": "Period-editable structure (ADR-0002 inv. 5): has this plan's team selection\nbeen configured once? Seed guard for the wizard's Fanion-only default.",
+                                "default": false,
+                                "type": "boolean"
                             }
                         }
                     }

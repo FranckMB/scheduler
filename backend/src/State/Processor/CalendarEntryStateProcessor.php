@@ -146,8 +146,40 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * @param CalendarEntry $entity
+     * ADR-0002 lot C — LE PLAN NAÎT DU GESTE. Creating a CLOSURE/HOLIDAY entry IS
+     * the gesture "ajuster cette période", so its plan is provisioned here, not at
+     * the first generation: the period's settings (inv. 5) are entered BEFORE any
+     * version exists and must have a plan to hang off.
+     *
+     * @param CalendarEntryInput $input
      */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        $output = parent::processPost($input, $clubId, $seasonId);
+        // parent::processPost has flushed — provisionPeriodPlan reads the row back
+        // as raw SQL. A non-generating type (inv. 9) returns null: no plan, no error.
+        $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+
+        return $output;
+    }
+
+    /**
+     * A PUT can promote a non-generating entry (cutoff/mutualisation) to
+     * closure/holiday — that promotion IS the gesture too, so it must mint the plan
+     * exactly like a POST. provisionPeriodPlan is idempotent and returns null for a
+     * type that carries no plan, so the unconditional call is safe on every edit.
+     *
+     * @param array<string, mixed> $uriVariables
+     * @param CalendarEntryInput   $input
+     */
+    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+    {
+        $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
+        $this->schedulePlanProvisioner->provisionPeriodPlan($output->id);
+
+        return $output;
+    }
+
     protected function mapEntityToOutput(object $entity): CalendarEntryResource
     {
         return CalendarEntryResource::fromEntity($entity);

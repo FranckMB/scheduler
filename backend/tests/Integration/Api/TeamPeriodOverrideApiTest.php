@@ -7,10 +7,12 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -80,20 +82,28 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
-    public function testFirstOverrideMarksThePeriodTeamSelectionInitialized(): void
+    /**
+     * ADR-0002 lot C: the seed guard lives on the PLAN (inv. 5 — the settings hang off
+     * the plan, not off the calendar event), so the first override marks the plan.
+     */
+    public function testFirstOverrideMarksThePlanTeamSelectionInitialized(): void
     {
         $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Reprise')
             ->setStartDate(new DateTimeImmutable('2026-01-05'))->setEndDate(new DateTimeImmutable('2026-01-11'));
         $this->em->persist($entry);
         $this->em->flush();
-        self::assertFalse($entry->isTeamSelectionInitialized(), 'a fresh period is not yet configured');
+        // En prod le geste (POST /api/calendar_entries) crée le plan ; l'entrée est
+        // fabriquée à la main ici, on rejoue donc le geste explicitement.
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::assertIsString($planId);
+        self::assertFalse($this->planById($planId)->isTeamSelectionInitialized(), 'a fresh plan is not yet configured');
 
         $this->post(['calendarEntryId' => $entry->getId(), 'teamId' => self::TEAM, 'isActive' => false, 'sessionsPerWeek' => null]);
         self::assertResponseStatusCodeSame(201);
 
-        $this->client->request('GET', '/api/calendar_entries/' . $entry->getId(), [], [], $this->headers());
-        self::assertTrue(json_decode((string) $this->client->getResponse()->getContent(), true)['teamSelectionInitialized'], 'the first override marks the period configured');
+        $this->client->request('GET', '/api/schedule_plans/' . $planId, [], [], $this->headers());
+        self::assertTrue(json_decode((string) $this->client->getResponse()->getContent(), true)['teamSelectionInitialized'], 'the first override marks the plan configured');
     }
 
     protected function setUp(): void
@@ -119,6 +129,15 @@ final class TeamPeriodOverrideApiTest extends WebTestCase
         $this->em->flush();
 
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    private function planById(string $planId): SchedulePlan
+    {
+        $this->em->clear();
+        $plan = $this->em->getRepository(SchedulePlan::class)->find($planId);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+
+        return $plan;
     }
 
     /**

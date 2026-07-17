@@ -72,6 +72,14 @@ class SchedulePlanResource
     #[Groups(['read'])]
     public ?string $chosenScheduleId = null;
 
+    /**
+     * Period-editable structure (ADR-0002 inv. 5): has this plan's team selection
+     * been configured once? Seed guard for the wizard's Fanion-only default.
+     * Always false on SEASON plans — only CLOSURE/HOLIDAY carry the step.
+     */
+    #[Groups(['read'])]
+    public bool $teamSelectionInitialized = false;
+
     public static function fromEntity(SchedulePlan $entity): self
     {
         $dto = new self;
@@ -86,6 +94,7 @@ class SchedulePlanResource
         $dto->endDate = $entity->getEndDate();
         $dto->calendarEntryId = $entity->getCalendarEntryId();
         $dto->chosenScheduleId = $entity->getChosenScheduleId();
+        $dto->teamSelectionInitialized = $entity->isTeamSelectionInitialized();
 
         return $dto;
     }

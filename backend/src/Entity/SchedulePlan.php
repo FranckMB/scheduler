@@ -16,7 +16,10 @@ use Doctrine\ORM\Mapping as ORM;
  * - SEASON: the base plan of the whole season, exactly one per season
  *   (calendarEntryId null). Its name is the season plan's public name.
  * - CLOSURE / HOLIDAY: a bounded secondary plan bound to a CalendarEntry period
- *   (calendarEntryId set), created lazily at the period's first version.
+ *   (calendarEntryId set), created with the manager's gesture — "ajuster cette
+ *   période" IS the creation of the CalendarEntry, and of this plan with it
+ *   (lot C; it used to appear lazily at the period's first version, which was too
+ *   late for the settings that hang off the plan).
  *
  * chosenScheduleId points at the version the manager validated ("le pointeur");
  * null = espace de travail (no version chosen yet).
@@ -88,6 +91,20 @@ class SchedulePlan implements TenantOwnedInterface
      */
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private int $lastVersionNumber = 0;
+
+    /**
+     * Period-editable structure (ADR-0002 inv. 5): has the manager configured this
+     * plan's team selection at least once? Distinguishes a FRESH plan (seed the
+     * Fanion-only default) from one set back to all-active (0 sparse overrides, NOT
+     * to be re-seeded). Set true on the first TeamPeriodOverride write; survives
+     * reload (unlike a client-side guard).
+     *
+     * Lot C: moved off CalendarEntry — it is a property of the RESPONSE (the plan),
+     * not of the FACT (the calendar event). Meaningless on SEASON plans, which have
+     * no period team-selection step; only CLOSURE/HOLIDAY ever flip it.
+     */
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $teamSelectionInitialized = false;
 
     public function __construct()
     {
@@ -210,6 +227,18 @@ class SchedulePlan implements TenantOwnedInterface
     public function setCalendarEntryId(?string $calendarEntryId): self
     {
         $this->calendarEntryId = $calendarEntryId;
+
+        return $this;
+    }
+
+    public function isTeamSelectionInitialized(): bool
+    {
+        return $this->teamSelectionInitialized;
+    }
+
+    public function setTeamSelectionInitialized(bool $teamSelectionInitialized): self
+    {
+        $this->teamSelectionInitialized = $teamSelectionInitialized;
 
         return $this;
     }

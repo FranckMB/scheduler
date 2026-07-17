@@ -18,11 +18,22 @@ use Throwable;
  * Schedule to its plan/version. Reused at every season- and schedule-creation
  * site so the new model stays in sync additively (nothing legacy is touched).
  *
+ * A plan is born FROM A CALENDAR EVENT (ADR-0002, lot C — décision fondateur
+ * 2026-07-17). There are exactly two birth sites, and no other:
+ *
  * - ensureSeasonPlan(): the SEASON plan exists as soon as the season does (an
  *   empty "espace de travail" with no version yet).
+ * - provisionPeriodPlan(): the CLOSURE/HOLIDAY plan exists as soon as the manager
+ *   makes the gesture — "ajuster une période de vacances / un souci du calendrier"
+ *   — which IS the creation of the CalendarEntry. Called from
+ *   CalendarEntryStateProcessor, the only site in src/ that creates an entry.
+ *   Periods are configured BEFORE any generation, so the plan must predate the
+ *   settings that hang off it (inv. 5); provisioning it at the first version — as
+ *   lot A did — was simply too late.
  * - linkSchedule(): stamps schedulePlanId + versionNumber on a freshly-created
- *   schedule, creating the CLOSURE/HOLIDAY plan lazily at the period's first
- *   version. Idempotent-safe: a schedule already linked keeps its version.
+ *   schedule. It only ever LOOKS UP a period plan (findPeriodPlanId), never
+ *   creates one: a second creation site would let a missing gesture-time plan pass
+ *   unnoticed. Idempotent-safe: a schedule already linked keeps its version.
  *
  * Existence/version lookups run as RAW SQL on purpose: the request-scoped
  * ORM season_filter pins every ORM read to the active season, but the
@@ -93,9 +104,14 @@ final class SchedulePlanProvisioner
         $this->entityManager->wrapInTransaction(function () use ($schedule): void {
             $this->lockPlanScope($schedule->getCalendarEntryId() ?? ('season:' . $schedule->getSeasonId()));
 
+            // Period plans are LOOKED UP, never created here: they are born with the
+            // manager's gesture (provisionPeriodPlan). A null means the entry carries
+            // no plan — either a non-generating type (inv. 9: cutoff/mutualisation) or
+            // an entry created outside CalendarEntryStateProcessor (tests). Either way
+            // the schedule stays unlinked rather than silently minting a second plan.
             $planId = null === $schedule->getCalendarEntryId()
                 ? $this->ensureSeasonPlanId($schedule->getSeasonId())
-                : $this->ensurePeriodPlanId($schedule->getCalendarEntryId());
+                : $this->findPeriodPlanId($schedule->getCalendarEntryId());
             if (null === $planId) {
                 return;
             }
@@ -270,6 +286,32 @@ final class SchedulePlanProvisioner
             . 'WHERE chosen_schedule_id = :sid',
             ['sid' => $scheduleId],
         ) > 0;
+    }
+
+    /**
+     * ADR-0002 inv. 5 + décision fondateur 2026-07-17 — LE PLAN NAÎT DU GESTE.
+     *
+     * Creating a CLOSURE/HOLIDAY CalendarEntry ("ajuster cette période") IS the
+     * creation of its plan. Returns the plan id, or null when the entry carries no
+     * plan by design — inv. 9: cutoff/mutualisation stay calendar reminders, and
+     * ensurePeriodPlanId maps only 'closure'/'holiday' to a type.
+     *
+     * Serialized per period with the same advisory lock as linkSchedule, so a
+     * double-submitted POST cannot mint two plans for one entry (check-then-insert).
+     * The caller must have FLUSHED the entry: the row is read back as raw SQL.
+     */
+    public function provisionPeriodPlan(string $calendarEntryId): ?string
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): ?string {
+            $this->lockPlanScope($calendarEntryId);
+
+            $planId = $this->ensurePeriodPlanId($calendarEntryId);
+            if (null !== $planId) {
+                $this->entityManager->flush();
+            }
+
+            return $planId;
+        });
     }
 
     private function currentStructureHash(string $clubId, string $seasonId): ?string

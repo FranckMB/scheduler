@@ -7,7 +7,7 @@ namespace App\State\Processor;
 use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\TeamPeriodOverrideResource;
 use App\Dto\TeamPeriodOverrideInput;
-use App\Entity\CalendarEntry;
+use App\Entity\SchedulePlan;
 use App\Entity\TeamPeriodOverride;
 
 /**
@@ -42,13 +42,19 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
         $entity->setIsActive($input->isActive);
         $entity->setSessionsPerWeek($input->sessionsPerWeek);
 
-        // Mark the period configured on its first override write, so the wizard's
+        // Mark the PLAN configured on its first override write, so the wizard's
         // Fanion-only seed runs once and never re-fires after an all-active reset
         // (survives reload, unlike a client-side guard). Flushed with the override.
+        //
+        // Lot C: the flag lives on the plan (inv. 5 — the settings hang off the plan,
+        // not off the calendar event). The override is still keyed by calendarEntryId
+        // until C2, so the plan is resolved through it; C2 will make that a direct
+        // planId read. The plan exists by now — it is born with the entry (lot C).
         if (null !== $input->calendarEntryId) {
-            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($input->calendarEntryId);
-            if ($entry instanceof CalendarEntry && !$entry->isTeamSelectionInitialized()) {
-                $entry->setTeamSelectionInitialized(true);
+            $plan = $this->entityManager->getRepository(SchedulePlan::class)
+                ->findOneBy(['calendarEntryId' => $input->calendarEntryId]);
+            if ($plan instanceof SchedulePlan && !$plan->isTeamSelectionInitialized()) {
+                $plan->setTeamSelectionInitialized(true);
             }
         }
 
