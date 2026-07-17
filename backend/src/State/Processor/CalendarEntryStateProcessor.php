@@ -81,7 +81,15 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // was built for THIS kind/periodType/window. Mutating any of them would leave
         // the overlay semantically wrong (or crash the next regeneration in
         // buildForOverlay). Title/status/isDisruptive edits stay allowed.
-        if (null !== $entity->getOverlayScheduleId()) {
+        //
+        // La garde porte sur « ce plan a-t-il des VERSIONS ? », pas sur
+        // `overlayScheduleId` : ce pointeur ne nomme que la version ACTIVE, et
+        // OverlayManager le remet à null dès que la seule sœur survivante n'est pas
+        // COMPLETED. Une période gardant une version PENDING passait donc la garde, et
+        // sa rétrogradation faisait supprimer le plan sous les pieds de cette version
+        // (lot C, round 2 du code-review). `overlayScheduleId` est conservé comme
+        // court-circuit : vrai ⇒ il y a forcément une version, on évite la requête.
+        if (null !== $entity->getOverlayScheduleId() || $this->schedulePlanProvisioner->periodPlanHasVersions($entity->getId())) {
             $kindChanged = null !== $input->kind && $this->parseKind($input->kind) !== $entity->getKind();
             $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
             $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
@@ -187,6 +195,17 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
+            // Verrou de plan-scope AVANT l'UPDATE de l'entrée : tout autre écrivain du
+            // scope (linkSchedule, choose, deletePeriodPlan) prend le verrou consultatif
+            // PUIS touche les lignes. Laisser le flush du parent verrouiller la ligne
+            // calendar_entry d'abord inverserait l'ordre — deux transactions concurrentes
+            // se tiendraient chacune la ressource que l'autre attend (ABBA). Ré-entrant :
+            // syncPeriodPlan le reprend plus bas, sans effet.
+            $entryId = $uriVariables['id'] ?? null;
+            if (\is_string($entryId)) {
+                $this->schedulePlanProvisioner->lockPlanScope($entryId);
+            }
+
             $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
             $this->schedulePlanProvisioner->syncPeriodPlan($output->id);
 

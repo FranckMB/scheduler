@@ -20,6 +20,40 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
     }
 
     /**
+     * Le 1er override d'une période marque son PLAN comme configuré, pour que le seed
+     * Fanion-only du wizard ne se rejoue jamais après un retour « tout actif » (0
+     * override épars) — signal durable, contrairement à un garde côté client.
+     *
+     * ATOMIQUE avec l'override, et écrit APRÈS lui : le flag ne doit pas pouvoir rester
+     * vrai sans qu'aucun override n'existe (le wizard cesserait alors de seeder une
+     * période pourtant vierge). En createEntityFromInput, l'UPDATE brut s'auto-commettait
+     * avant même le persist (round 2 du code-review).
+     *
+     * SQL BRUT plutôt que l'ORM, pour la raison que documente SchedulePlanProvisioner :
+     * `season_filter` épingle toute lecture ORM à la saison ACTIVE de la requête, or
+     * `calendarEntryId` arrive dans le corps sans être validé contre elle — un findOneBy
+     * filtré rendrait null pour une période d'une autre saison et l'échec serait avalé en
+     * silence. RLS continue de scoper le club. Le `= false` rend l'écriture idempotente.
+     *
+     * @param TeamPeriodOverrideInput $input
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
+            $output = parent::processPost($input, $clubId, $seasonId);
+            if (null !== $input->calendarEntryId) {
+                $this->entityManager->getConnection()->executeStatement(
+                    'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
+                    . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
+                    ['eid' => $input->calendarEntryId],
+                );
+            }
+
+            return $output;
+        });
+    }
+
+    /**
      * @param TeamPeriodOverrideInput $input
      */
     protected function createEntityFromInput(object $input): TeamPeriodOverride
@@ -40,30 +74,6 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
         }
         $entity->setIsActive($input->isActive);
         $entity->setSessionsPerWeek($input->sessionsPerWeek);
-
-        // Mark the PLAN configured on its first override write, so the wizard's
-        // Fanion-only seed runs once and never re-fires after an all-active reset
-        // (survives reload, unlike a client-side guard). Flushed with the override.
-        //
-        // Lot C: the flag lives on the plan (inv. 5 — the settings hang off the plan,
-        // not off the calendar event). The override is still keyed by calendarEntryId
-        // until C2, so the plan is resolved through it; C2 will make that a direct
-        // planId read. The plan exists by now — it is born with the entry (lot C).
-        //
-        // SQL BRUT, pas l'ORM, pour la raison que documente SchedulePlanProvisioner :
-        // `season_filter` épingle toute lecture ORM à la saison ACTIVE de la requête,
-        // or `calendarEntryId` arrive dans le corps sans être validé contre elle. Un
-        // findOneBy filtré rendrait null pour une période d'une autre saison, et le
-        // `instanceof` avalerait l'échec en silence : le flag ne serait jamais posé, et
-        // le wizard re-seederait le Fanion-only par-dessus les choix du gestionnaire.
-        // RLS continue de scoper le club.
-        if (null !== $input->calendarEntryId) {
-            $this->entityManager->getConnection()->executeStatement(
-                'UPDATE schedule_plan SET team_selection_initialized = true, updated_at = now(), version = version + 1 '
-                . 'WHERE calendar_entry_id = :eid AND team_selection_initialized = false',
-                ['eid' => $input->calendarEntryId],
-            );
-        }
 
         return $entity;
     }

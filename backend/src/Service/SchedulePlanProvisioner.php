@@ -170,12 +170,17 @@ final class SchedulePlanProvisioner
             return false;
         }
 
-        $this->entityManager->getConnection()->executeStatement(
+        // Le nombre de lignes touchées est la VÉRITÉ : un schedulePlanId non-null peut
+        // pendre dans le vide (plan supprimé sous ses pieds). Le self-heal ci-dessus ne
+        // rattrape que le cas null, jamais celui-là. Rendre true sur zéro ligne ferait
+        // croire à l'appelant que la validation a eu lieu — or il supprime les versions
+        // sœurs juste après : on les détruirait pour un pointeur jamais posé.
+        $updated = $this->entityManager->getConnection()->executeStatement(
             'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
             ['sid' => $schedule->getId(), 'pid' => $planId],
         );
 
-        return true;
+        return $updated > 0;
     }
 
     /**
@@ -332,25 +337,40 @@ final class SchedulePlanProvisioner
      */
     public function syncPeriodPlan(string $calendarEntryId): ?string
     {
-        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId): ?string {
+        // Lecture AVANT le verrou : l'immense majorité des écritures calendrier (events,
+        // cutoff, mutualisation) n'ont aucun plan à réconcilier — prendre un verrou
+        // consultatif et lancer un DELETE no-op sur chacune serait payer le prix fort
+        // pour rien. SQL brut : season_filter cacherait une période dont la saison n'est
+        // pas l'active de la requête.
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
+            ['id' => $calendarEntryId],
+        );
+        if (false === $row) {
+            return null; // entrée disparue entre l'écriture et ici
+        }
+
+        $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
+        if (null === $type && null === $this->findPeriodPlanId($calendarEntryId)) {
+            return null; // ni plan attendu, ni plan à retirer
+        }
+
+        return $this->entityManager->wrapInTransaction(function () use ($calendarEntryId, $type, $row): ?string {
             $this->lockPlanScope($calendarEntryId);
 
-            // Filter-free: season_filter would hide a period whose season is not the
-            // request's active one (même raison que ensurePeriodPlanId).
-            $row = $this->entityManager->getConnection()->fetchAssociative(
-                'SELECT period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
-                ['id' => $calendarEntryId],
-            );
-            if (false === $row) {
-                return null; // entrée disparue entre l'écriture et ici
-            }
-
-            $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
             if (null === $type) {
-                // Inv. 9 — cette entrée ne porte pas de plan. Si elle en avait un (elle
-                // vient d'être rétrogradée), il part avec ses versions.
+                // Inv. 9 — l'entrée ne porte plus de plan (rétrogradée en cutoff /
+                // mutualisation, ou convertie en event).
+                //
+                // Le NOT EXISTS est un GARDE-FOU, pas une optimisation : ce DELETE ne
+                // doit JAMAIS emporter un plan qui porte des versions. Le gestionnaire
+                // est arrêté en amont par le 422 de CalendarEntryStateProcessor ; si un
+                // chemin le contournait, mieux vaut laisser un plan orphelin — visible et
+                // réparable — que détruire un planning généré en laissant ses versions
+                // pointer une ligne morte, que choose() validerait alors dans le vide.
                 $this->entityManager->getConnection()->executeStatement(
-                    'DELETE FROM schedule_plan WHERE calendar_entry_id = :eid',
+                    'DELETE FROM schedule_plan p WHERE p.calendar_entry_id = :eid '
+                    . 'AND NOT EXISTS (SELECT 1 FROM schedule s WHERE s.schedule_plan_id = p.id)',
                     ['eid' => $calendarEntryId],
                 );
 
@@ -362,12 +382,15 @@ final class SchedulePlanProvisioner
                 return $this->ensurePeriodPlanId($calendarEntryId);
             }
 
-            // La fenêtre du plan suit celle de sa période. Sans ça, corriger les dates
-            // d'une période avant toute génération laisserait le plan sur les dates
-            // d'origine — impossible sous le lot A, où il naissait à la génération.
+            // La fenêtre du plan suit celle de sa période : le plan naissant désormais
+            // avant toute génération, corriger les dates d'une période le laisserait
+            // sinon sur les dates d'origine (impossible sous le lot A, où il naissait à
+            // la génération). Le WHERE sur les valeurs évite de bumper version/updated_at
+            // à chaque écriture de l'entrée — un simple renommage ne touche pas le plan.
             $this->entityManager->getConnection()->executeStatement(
                 'UPDATE schedule_plan SET type = :type, start_date = :start, end_date = :end, '
-                . 'updated_at = now(), version = version + 1 WHERE id = :pid',
+                . 'updated_at = now(), version = version + 1 WHERE id = :pid '
+                . 'AND (type <> :type OR start_date <> :start OR end_date <> :end)',
                 [
                     'type' => $type->value,
                     'start' => new DateTimeImmutable((string) $row['start_date']),
@@ -379,6 +402,25 @@ final class SchedulePlanProvisioner
 
             return $existingId;
         });
+    }
+
+    /**
+     * Une version pend-elle à cette période ? Garde du 422 amont (changer l'identité
+     * d'une période qui porte un planning généré) ET du DELETE de syncPeriodPlan.
+     *
+     * Ne PAS dériver cette réponse de `CalendarEntry.overlayScheduleId` : ce pointeur ne
+     * nomme que la version ACTIVE, et OverlayManager le remet à null dès que la seule
+     * sœur survivante n'est pas COMPLETED (newestOtherOverlayId ne promeut que du
+     * COMPLETED). Une version PENDING resterait alors invisible à la garde — c'est
+     * exactement la brèche par laquelle une rétrogradation détruisait le plan.
+     */
+    public function periodPlanHasVersions(string $calendarEntryId): bool
+    {
+        return (int) $this->entityManager->getConnection()->fetchOne(
+            'SELECT COUNT(*) FROM schedule s JOIN schedule_plan p ON p.id = s.schedule_plan_id '
+            . 'WHERE p.calendar_entry_id = :eid',
+            ['eid' => $calendarEntryId],
+        ) > 0;
     }
 
     private function currentStructureHash(string $clubId, string $seasonId): ?string

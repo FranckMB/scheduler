@@ -6,10 +6,12 @@ namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\SchedulePlanType;
+use App\Enum\ScheduleStatus;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -183,6 +185,52 @@ final class PeriodPlanBirthTest extends WebTestCase
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
         self::assertSame('Nom de naissance', $plan->getName(), 'le nom du plan ne suit pas le titre de la période (inv. 12)');
+    }
+
+    /**
+     * NR — LE test qui manquait au round 1 : rétrograder une période qui porte une
+     * VERSION doit être REFUSÉ (422), jamais détruire son plan.
+     *
+     * La version est volontairement PENDING et `overlayScheduleId` volontairement null :
+     * c'est l'état exact que produit la suppression de la version active quand la seule
+     * sœur restante n'est pas COMPLETED (OverlayManager ne promeut que du COMPLETED).
+     * C'est par cette brèche que la garde d'identité, keyée sur `overlayScheduleId`,
+     * laissait passer la rétrogradation — et que le plan généré partait en silence.
+     */
+    public function testDemotingAPeriodThatCarriesAVersionIsRefused(): void
+    {
+        [$user, $club, $season] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances déjà générées');
+        $plan = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        $planId = $plan->getId();
+
+        // Une version PENDING pend au plan, sans pointeur actif sur l'entrée.
+        $this->scopeGucToClub($club->getId());
+        $version = new Schedule;
+        $version->setClubId($club->getId());
+        $version->setSeasonId($season->getId());
+        $version->setCalendarEntryId($entryId);
+        $version->setSchedulePlanId($planId);
+        $version->setName('V1');
+        $version->setStatus(ScheduleStatus::PENDING);
+        $this->em->persist($version);
+        $this->em->flush();
+
+        $this->client->request('PUT', '/api/calendar_entries/' . $entryId, [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'periodType' => 'cutoff',
+            'title' => 'Vacances déjà générées',
+            'startDate' => '2026-10-19',
+            'endDate' => '2026-11-02',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        $survivor = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $survivor, 'le plan qui porte une version ne doit pas être détruit');
+        self::assertSame($planId, $survivor->getId());
     }
 
     protected function setUp(): void
