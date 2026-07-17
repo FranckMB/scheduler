@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Entity\Venue;
 use App\Enum\ScheduleStatus;
 use App\Service\GenerationComplexityGuard;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -29,6 +30,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('integration')]
 final class GenerateScheduleComplexityCapTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -138,6 +140,9 @@ final class GenerateScheduleComplexityCapTest extends WebTestCase
         $schedule->setStatus($status);
         $this->em->persist($schedule);
         $this->em->flush();
+        // Prod links every version at creation ; sans ça, depuis C4 le site « socle ? »
+        // du /generate lèverait AVANT d'atteindre la garde de complexité.
+        $this->linkSeededSchedule($schedule);
 
         return $schedule;
     }

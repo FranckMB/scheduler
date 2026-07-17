@@ -70,9 +70,15 @@ final class OverlayManager
         // planning-versions: a period may hold SEVERAL overlay versions — delete
         // them ALL (the pointer only names the active one). Guard every version
         // first so a refusal never leaves the period half-cleared.
+        // ADR-0002 C4 : les versions d'une période sont celles de SON PLAN
+        // (schedulePlanId via periodPlanId), plus le doublon schedule.calendarEntryId.
+        // Une entrée sans plan (cutoff/mutualisation, inv. 9) → aucun overlay.
         $overlays = [];
-        foreach ($this->entityManager->getRepository(Schedule::class)->findBy(['calendarEntryId' => $entry->getId()]) as $schedule) {
-            $overlays[$schedule->getId()] = $schedule;
+        $planId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+        if (null !== $planId) {
+            foreach ($this->entityManager->getRepository(Schedule::class)->findBy(['schedulePlanId' => $planId]) as $schedule) {
+                $overlays[$schedule->getId()] = $schedule;
+            }
         }
         // Legacy overlays (pre-forward-marker) are only reachable via the reverse
         // pointer — include the active one if the forward set missed it.
@@ -114,11 +120,13 @@ final class OverlayManager
         $this->assertNotGenerating($schedule);
         $this->purgeArtifacts($schedule->getId());
 
-        // Forward link on the schedule identifies the entry directly; fall back
-        // to the reverse lookup for pre-palier-B rows with no marker.
-        $entry = null !== $schedule->getCalendarEntryId()
-            ? $this->entityManager->getRepository(CalendarEntry::class)->find($schedule->getCalendarEntryId())
-            : $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
+        // ADR-0002 C4 : plus de forward link schedule.calendarEntryId. Le reverse
+        // pointer suffit pour CE geste : findOneByOverlayScheduleId ne rend l'entrée
+        // QUE si ce schedule en est l'overlay ACTIF — exactement la condition sous
+        // laquelle on touche le pointeur. Une version non-active ne renvoyait de
+        // toute façon aucune action (la garde ci-dessous l'excluait). Le reverse
+        // pointer disparaît au lot D ; ce chemin sera revu avec lui.
+        $entry = $this->calendarEntryRepository->findOneByOverlayScheduleId($schedule->getId());
         // Only touch the pointer when the ACTIVE version is deleted: with several
         // overlay versions per period, deleting a non-active one must not orphan
         // the period. Promote the most recent surviving version, else clear.
@@ -132,8 +140,13 @@ final class OverlayManager
      *  active plan (that would show an empty overlay in the cockpit). */
     private function newestOtherOverlayId(string $entryId, string $excludeId): ?string
     {
+        // ADR-0002 C4 : les versions d'une période = celles de son plan (schedulePlanId).
+        $planId = $this->schedulePlanProvisioner->periodPlanId($entryId);
+        if (null === $planId) {
+            return null;
+        }
         $candidates = $this->entityManager->getRepository(Schedule::class)->findBy(
-            ['calendarEntryId' => $entryId],
+            ['schedulePlanId' => $planId],
             ['createdAt' => 'DESC'],
         );
         foreach ($candidates as $candidate) {

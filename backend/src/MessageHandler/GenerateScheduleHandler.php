@@ -16,6 +16,7 @@ use App\Service\DevScheduleReportWriter;
 use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
@@ -50,6 +51,7 @@ final class GenerateScheduleHandler
         private ClubGenerationLock $clubGenerationLock,
         private TenantConnectionContext $tenantConnectionContext,
         private StructureSnapshotter $structureSnapshotter,
+        private SchedulePlanProvisioner $schedulePlanProvisioner,
         private ?LoggerInterface $logger = null,
         private ?DevScheduleReportWriter $devReportWriter = null,
         private ?SolverMetricsRecorder $metricsRecorder = null,
@@ -161,9 +163,14 @@ final class GenerateScheduleHandler
     private function generate(Schedule $schedule, GenerateScheduleMessage $message): void
     {
         // Overlay (palier B): build from the period entry instead of the base plan.
+        // ADR-0002 C4 : le type de build se dérive du PLAN (plan.type), plus de
+        // Schedule.calendarEntryId. Un schedule sans plan LÈVE (periodEntryIdOf) —
+        // une version sans plan ne doit pas exister (ruling 2026-07-17) ; l'exception
+        // remonte à handleUnexpectedFailure → échec terminal, jamais un build socle muet.
         $overlayEntry = null;
-        if (null !== $schedule->getCalendarEntryId()) {
-            $overlayEntry = $this->entityManager->getRepository(CalendarEntry::class)->find($schedule->getCalendarEntryId());
+        $overlayEntryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
+        if (null !== $overlayEntryId) {
+            $overlayEntry = $this->entityManager->getRepository(CalendarEntry::class)->find($overlayEntryId);
             if (!$overlayEntry instanceof CalendarEntry) {
                 // The period was deleted between queueing and running — fail terminally.
                 $this->failSchedule($schedule, 'overlay_entry_missing', 'The overlay period no longer exists.');
@@ -193,7 +200,8 @@ final class GenerateScheduleHandler
         // season-scoped; overlays get their own tier later). Non-fatal: a read
         // failure cannot poison the EntityManager, nothing is written yet.
         $structureData = null;
-        if (null === $schedule->getCalendarEntryId()) {
+        if (null === $overlayEntry) {
+            // null === overlayEntry ⟺ plan SEASON (le socle) : la photo D2 est saison-scopée.
             try {
                 $structureData = $this->structureSnapshotter->serialize($schedule->getClubId(), $schedule->getSeasonId());
             } catch (Throwable $e) {
@@ -236,7 +244,9 @@ final class GenerateScheduleHandler
 
         // Persist the result BEFORE notifying: a COMPLETED solve must be durable
         // even if Mercure is momentarily down (publish is best-effort below).
-        $this->applyEngineResult($schedule, $result);
+        // « socle ? » est déjà connu ici (null === overlayEntry) — on le passe pour
+        // éviter de re-lire le plan à la complétion (C4 / code-review).
+        $this->applyEngineResult($schedule, $result, null === $overlayEntry);
         $this->metricsRecorder?->record($schedule, $result);
         $this->entityManager->flush();
 
@@ -290,7 +300,7 @@ final class GenerateScheduleHandler
     }
 
     /** @param array<string, mixed> $result */
-    private function applyEngineResult(Schedule $schedule, array $result): void
+    private function applyEngineResult(Schedule $schedule, array $result, bool $isSeasonPlan): void
     {
         $engineStatus = strtolower((string) ($result['status'] ?? 'failed'));
         $this->metricsMapper->apply($schedule, $result);
@@ -313,8 +323,10 @@ final class GenerateScheduleHandler
         $this->diagnosticsRecorder->record($schedule, $result);
         $schedule->setStatus(ScheduleStatus::COMPLETED);
         // An overlay (period plan) must NEVER become the season baseline nor the
-        // season's loaded context (both are season-plan concepts).
-        if (null === $schedule->getCalendarEntryId()) {
+        // season's loaded context (both are season-plan concepts). ADR-0002 C4 :
+        // « socle ? » = plan.type === SEASON, déjà résolu au début de generate()
+        // (null === overlayEntry) et passé ici — zéro lecture de plan à la complétion.
+        if ($isSeasonPlan) {
             $this->anchorSeasonToCompletedPlan($schedule);
         }
         $this->completeOnboarding($schedule);
@@ -334,17 +346,13 @@ final class GenerateScheduleHandler
      * "main" plan) automatically. Later generations do not steal it (re-designation
      * is an explicit user action via POST /api/schedules/{id}/validate).
      *
-     * UX-02: a period **overlay** (`calendarEntryId` non-null) must NEVER become
-     * the baseline — the baseline is the full season plan, an overlay is a bounded
-     * exception plan. The call site already skips overlays; this internal guard is
-     * belt-and-suspenders so the method stays safe if ever called from elsewhere.
+     * UX-02: a period **overlay** (plan CLOSURE/HOLIDAY) must NEVER become the
+     * baseline — the baseline is the full season plan, an overlay is a bounded
+     * exception plan. The SOLE caller only enters here for a season plan (the
+     * `isSeasonPlan` bool resolved once at generate() start, no extra plan SELECT).
      */
     private function anchorSeasonToCompletedPlan(Schedule $schedule): void
     {
-        if (null !== $schedule->getCalendarEntryId()) {
-            return; // overlay generation — never a season anchor
-        }
-
         $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
         if (!$season instanceof Season) {
             return;

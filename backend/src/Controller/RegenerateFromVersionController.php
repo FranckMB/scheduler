@@ -61,7 +61,8 @@ final class RegenerateFromVersionController extends AbstractController implement
         }
 
         // Season plans only — an overlay carries no restorable club structure.
-        if (null !== $source->getCalendarEntryId()) {
+        // ADR-0002 C4 : « socle ? » = plan.type === SEASON, plus calendarEntryId.
+        if (!$this->schedulePlanProvisioner->isSeasonSchedule($source)) {
             return $this->json(['error' => 'Only a season version can be regenerated from.'], Response::HTTP_CONFLICT);
         }
 

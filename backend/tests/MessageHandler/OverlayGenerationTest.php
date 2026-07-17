@@ -24,6 +24,7 @@ use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\ScheduleProgressPublisher;
 use App\Service\ScheduleResultImporter;
 use App\Service\SolverMetricsMapper;
@@ -221,6 +222,7 @@ final class OverlayGenerationTest extends KernelTestCase
             $container->get(ClubGenerationLock::class),
             $container->get(TenantConnectionContext::class),
             $container->get(StructureSnapshotter::class),
+            $container->get(SchedulePlanProvisioner::class),
         );
 
         $handler(new GenerateScheduleMessage(scheduleId: $scheduleId, clubId: $clubId));

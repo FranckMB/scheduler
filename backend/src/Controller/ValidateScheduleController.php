@@ -81,10 +81,17 @@ final class ValidateScheduleController extends AbstractController implements Sea
         // La portée est celle du linkSchedule : les versions de saison partagent
         // `season:{id}`, celles d'une période l'id de cette période — sérialiser sur une
         // autre clé ne protégerait rien.
-        $entryId = $schedule->getCalendarEntryId();
+        //
+        // ADR-0002 C4 : l'entrée-période se dérive du PLAN (plan.calendarEntryId), plus de
+        // schedule.calendarEntryId (redondant, même valeur). periodEntryIdOf LÈVE si le
+        // schedule n'a pas de plan (ruling 2026-07-17) : un schedule sans plan ne se fait
+        // JAMAIS passer pour le socle — l'ancien `null === calendarEntryId` l'y faisait
+        // retomber, et valider ce faux-socle aurait supprimé TOUTES les versions de la saison.
+        $entryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
+        $planId = $schedule->getSchedulePlanId(); // non-null ici : periodEntryIdOf a levé sinon
 
-        return $this->entityManager->wrapInTransaction(function () use ($schedule, $entryId): JsonResponse {
-            $this->schedulePlanProvisioner->lockPlanScope($entryId ?? ('season:' . $schedule->getSeasonId()));
+        return $this->entityManager->wrapInTransaction(function () use ($schedule, $entryId, $planId): JsonResponse {
+            $this->schedulePlanProvisioner->lockPlanScope($entryId ?? SchedulePlanProvisioner::seasonScopeKey($schedule->getSeasonId()));
 
             // RELIRE la version elle-même sous le verrou. Sérialiser le scan des sœurs
             // ne suffit pas : l'entité en mémoire a été chargée AVANT le verrou, et la
@@ -110,13 +117,14 @@ final class ValidateScheduleController extends AbstractController implements Sea
                 return $this->json(['error' => 'Cette version a changé entre-temps — rechargez le planning.'], Response::HTTP_CONFLICT);
             }
 
-            // Les versions sœurs de MÊME portée. Une sœur en cours de solve bloque :
-            // on ne supprime pas un planning sous les pieds du worker qui l'écrit.
+            // Les versions sœurs de MÊME portée = MÊME plan (C4 : schedulePlanId, plus
+            // calendarEntryId). Une sœur en cours de solve bloque : on ne supprime pas un
+            // planning sous les pieds du worker qui l'écrit.
             /** @var list<Schedule> $versions */
             $versions = $this->entityManager->getRepository(Schedule::class)->findBy([
                 'clubId' => $schedule->getClubId(),
                 'seasonId' => $schedule->getSeasonId(),
-                'calendarEntryId' => $entryId,
+                'schedulePlanId' => $planId,
             ]);
             $siblings = [];
             foreach ($versions as $sibling) {

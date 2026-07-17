@@ -69,6 +69,38 @@ trait ChoosesPlanVersionTrait
     }
 
     /**
+     * Rattache une version seedée à son plan, comme la PRODUCTION le fait à la création
+     * (POST /api/schedules → linkSchedule). Sans ça, une version seedée « à la main » a
+     * `schedulePlanId` null — et depuis le lot C4 tout site de décision « est-ce le
+     * socle ? » LÈVE sur ce troisième état (une version sans plan ne doit pas exister).
+     *
+     * - version de saison (`calendarEntryId` null) : ensureSeasonPlan puis linkSchedule ;
+     * - overlay (`calendarEntryId` set) : le plan de la période doit exister — on le
+     *   provisionne (idempotent, comme le geste de création de la période) puis linkSchedule.
+     *
+     * L'entrée/la saison doivent être persistées+flushées avant l'appel (linkSchedule lit
+     * la base en SQL brut).
+     */
+    private function linkSeededSchedule(Schedule $schedule): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $provisioner = static::getContainer()->get(SchedulePlanProvisioner::class);
+
+        $entryId = $schedule->getCalendarEntryId();
+        if (null === $entryId) {
+            $season = $em->getRepository(Season::class)->find($schedule->getSeasonId());
+            if ($season instanceof Season) {
+                $provisioner->ensureSeasonPlan($season);
+                $em->flush();
+            }
+        } else {
+            $provisioner->provisionPeriodPlan($entryId);
+        }
+        $provisioner->linkSchedule($schedule);
+        $em->flush();
+    }
+
+    /**
      * Le plan SEASON vide qu'une vraie saison possède dès sa naissance — les 4
      * chemins de création le posent (register, POST /api/seasons, transition N+1,
      * reset). Un test qui persiste une Season à la main court-circuite ce geste

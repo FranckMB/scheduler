@@ -67,7 +67,8 @@ final class RegenerateController extends AbstractController implements SeasonSco
         }
 
         // Season plans only — an overlay is regenerated via its own cockpit flow.
-        if (null !== $source->getCalendarEntryId()) {
+        // ADR-0002 C4 : « socle ? » = plan.type === SEASON, plus calendarEntryId.
+        if (!$this->schedulePlanProvisioner->isSeasonSchedule($source)) {
             return $this->json(['error' => 'Un overlay de période se régénère depuis le cockpit.'], Response::HTTP_CONFLICT);
         }
         // Only an already-generated version yields a new version: a DRAFT/in-flight
