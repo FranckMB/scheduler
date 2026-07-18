@@ -5,8 +5,8 @@ import { axe } from "vitest-axe";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { AdminClubsResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, runAdminJob } from "./api";
+import type { AdminActionsResponse, AdminClubsResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { getAdminActions, getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, runAdminClubAction, runAdminJob } from "./api";
 import { AdminDashboardPage } from "./AdminDashboardPage";
 import { useAdminStore } from "./store";
 
@@ -19,6 +19,8 @@ vi.mock("./api", async (importOriginal) => {
     getAdminJobs: vi.fn(),
     getAdminClubs: vi.fn(),
     runAdminJob: vi.fn(),
+    getAdminActions: vi.fn(),
+    runAdminClubAction: vi.fn(),
   };
 });
 
@@ -143,11 +145,21 @@ const jobs: AdminJobsResponse = {
   ],
 };
 
+// SA4 — catalogue fermé d'actions support (miroir du backend AdminActionCatalog).
+const actions: AdminActionsResponse = {
+  items: [
+    { key: "reset-generation-quota", label: "Réinitialiser le quota de générations", description: "Remet le compteur à zéro.", dangerous: false },
+    { key: "reset-current-season", label: "Réinitialiser la saison courante", description: "Vide toutes les données de la saison courante.", dangerous: true },
+  ],
+};
+
 const mockOverview = vi.mocked(getAdminOverview);
 const mockHealth = vi.mocked(getAdminHealth);
 const mockJobs = vi.mocked(getAdminJobs);
 const mockClubs = vi.mocked(getAdminClubs);
 const mockRunJob = vi.mocked(runAdminJob);
+const mockActions = vi.mocked(getAdminActions);
+const mockRunClubAction = vi.mocked(runAdminClubAction);
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
@@ -156,6 +168,8 @@ describe("AdminDashboardPage", () => {
     mockJobs.mockReset().mockResolvedValue(jobs);
     mockClubs.mockReset().mockResolvedValue(clubs);
     mockRunJob.mockReset().mockResolvedValue({ key: "import-school-holidays", status: "succeeded", exitCode: 0 });
+    mockActions.mockReset().mockResolvedValue(actions);
+    mockRunClubAction.mockReset().mockResolvedValue({ key: "reset-generation-quota", clubId: "club-1", status: "succeeded", exitCode: 0 });
     useAdminStore.setState({ identity: { id: "admin-1", email: "ops@example.test" }, csrfToken: "csrf-123" });
   });
 
@@ -204,6 +218,40 @@ describe("AdminDashboardPage", () => {
 
     expect(await screen.findByText("Les statistiques d’usage sont indisponibles.")).toBeInTheDocument();
     expect(screen.queryByText("Plans, clôtures et tailles de clubs")).not.toBeInTheDocument();
+  });
+
+  it("runs a non-dangerous support action from the club row after a simple confirm (SA4)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await user.click(await screen.findByRole("button", { name: /Réinitialiser le quota de générations/ }));
+    // Non-dangerous : pas de saisie nominative, exécution directe.
+    await user.click(screen.getByRole("button", { name: "Exécuter" }));
+
+    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "reset-generation-quota", "csrf-123"));
+  });
+
+  it("gates a dangerous support action behind typing the exact club name (SA4)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await user.click(await screen.findByRole("button", { name: /Réinitialiser la saison courante/ }));
+
+    // Tant que le nom exact n'est pas tapé, le bouton reste désactivé — le clic
+    // réflexe ne détruit jamais une saison.
+    const execute = screen.getByRole("button", { name: "Exécuter" });
+    expect(execute).toBeDisabled();
+    await user.type(screen.getByLabelText(/tapez le nom exact du club/i), "Mauvais nom");
+    expect(execute).toBeDisabled();
+
+    await user.clear(screen.getByLabelText(/tapez le nom exact du club/i));
+    await user.type(screen.getByLabelText(/tapez le nom exact du club/i), "Basket Club des Lacs");
+    expect(execute).toBeEnabled();
+    await user.click(execute);
+
+    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "reset-current-season", "csrf-123"));
   });
 
   it("searches and paginates through the clubs API", async () => {

@@ -142,6 +142,26 @@ export interface AdminJobRunResponse {
   exitCode: 0;
 }
 
+/** SA4 — action support sur un club, du catalogue FERMÉ (backend AdminActionCatalog). */
+export interface AdminAction {
+  key: string;
+  label: string;
+  description: string;
+  /** Destructif → confirmation nominative (taper le nom du club). */
+  dangerous: boolean;
+}
+
+export interface AdminActionsResponse {
+  items: AdminAction[];
+}
+
+export interface AdminClubActionRunResponse {
+  key: string;
+  clubId: string;
+  status: "succeeded";
+  exitCode: 0;
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -178,6 +198,14 @@ export function getAdminJobs(): Promise<AdminJobsResponse> {
 
 export function runAdminJob(key: string, csrfToken: string): Promise<AdminJobRunResponse> {
   return adminApi.post(`jobs/${encodeURIComponent(key)}/run`, { headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+export function getAdminActions(): Promise<AdminActionsResponse> {
+  return adminApi.get("actions").json();
+}
+
+export function runAdminClubAction(clubId: string, key: string, csrfToken: string): Promise<AdminClubActionRunResponse> {
+  return adminApi.post(`clubs/${encodeURIComponent(clubId)}/actions/${encodeURIComponent(key)}`, { headers: { "X-CSRF-Token": csrfToken } }).json();
 }
 
 export function logoutAdmin(csrfToken: string): Promise<void> {

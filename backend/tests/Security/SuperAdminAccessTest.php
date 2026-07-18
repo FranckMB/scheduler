@@ -192,7 +192,7 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
         self::assertResponseIsSuccessful();
         self::assertSame(['key' => 'import-school-holidays', 'status' => 'succeeded', 'exitCode' => 0], $this->responseBody());
-        self::assertSame([['key' => 'import-school-holidays', 'superAdminId' => $this->adminId]], $executor->calls);
+        self::assertSame([['key' => 'import-school-holidays', 'superAdminId' => $this->adminId, 'arguments' => []]], $executor->calls);
 
         $this->client->request('POST', '/api/admin/jobs/import-public-holidays/run', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
         self::assertResponseStatusCodeSame(409);

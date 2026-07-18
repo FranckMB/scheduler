@@ -22,12 +22,13 @@ import { type FormEvent, type ReactNode, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
+import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { AdminClub, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminJob } from "./queries";
+import type { AdminAction, AdminClub, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { useAdminActions, useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -457,6 +458,9 @@ function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }:
   loading: boolean;
   onPageChange: (page: number) => void;
 }) {
+  // SA4 : une action support à la fois — le dialog vit au niveau table, pas par ligne.
+  const [actionClub, setActionClub] = useState<AdminClub | null>(null);
+
   if (clubs.length === 0) {
     return <div className="rounded-xl border border-dashed border-white/15 px-6 py-12 text-center text-sm text-slate-500">{query ? `Aucun club ne correspond à « ${query} ».` : "Aucun club à afficher."}</div>;
   }
@@ -464,16 +468,17 @@ function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }:
   return (
     <div className={cn("overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]", loading && "opacity-70")}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] text-left text-sm">
+        <table className="w-full min-w-[1120px] text-left text-sm">
           <caption className="sr-only">Liste des comptes clubs et de leurs métriques</caption>
           <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wider text-slate-500">
-            <tr><th className="px-5 py-4 font-medium">Club</th><th className="px-4 py-4 font-medium">Activité</th><th className="px-4 py-4 font-medium">Offre</th><th className="px-4 py-4 font-medium">Saison / volume</th><th className="px-4 py-4 font-medium">Solveur · 30 j</th></tr>
+            <tr><th className="px-5 py-4 font-medium">Club</th><th className="px-4 py-4 font-medium">Activité</th><th className="px-4 py-4 font-medium">Offre</th><th className="px-4 py-4 font-medium">Saison / volume</th><th className="px-4 py-4 font-medium">Solveur · 30 j</th><th className="px-4 py-4 font-medium">Support</th></tr>
           </thead>
           <tbody className="divide-y divide-white/10">
-            {clubs.map((club) => <ClubRow key={club.id} club={club} />)}
+            {clubs.map((club) => <ClubRow key={club.id} club={club} onActions={() => setActionClub(club)} />)}
           </tbody>
         </table>
       </div>
+      {actionClub ? <ClubActionsDialog club={actionClub} onClose={() => setActionClub(null)} /> : null}
       <div className="flex items-center justify-between gap-4 border-t border-white/10 px-5 py-4">
         <p className="text-xs text-slate-500">{integerFormatter.format(total)} compte{total > 1 ? "s" : ""} · page {page} sur {Math.max(pages, 1)}</p>
         <div className="flex gap-2">
@@ -485,7 +490,7 @@ function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }:
   );
 }
 
-function ClubRow({ club }: { club: AdminClub }) {
+function ClubRow({ club, onActions }: { club: AdminClub; onActions: () => void }) {
   return (
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
       <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><Building2 className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{club.name}</p><p className="mt-1 text-xs text-slate-600">{club.ffbbClubCode ?? club.slug}</p>{club.unsubscribed ? <span className="mt-2 inline-block text-[11px] font-medium text-amber-300">Désabonné</span> : null}</div></div></td>
@@ -493,7 +498,104 @@ function ClubRow({ club }: { club: AdminClub }) {
       <td className="px-4 py-5"><p className="text-white">{club.planId === null ? "Découverte" : "Payant"}</p><p className="mt-1 text-xs text-slate-600">{club.generationCountSeason} génération{club.generationCountSeason > 1 ? "s" : ""}{club.billingCycle ? ` · ${club.billingCycle}` : ""}</p></td>
       <td className="px-4 py-5"><p>{club.currentSeason?.name ?? "Aucune saison"}</p><p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600"><span className="flex items-center gap-1"><Users className="size-3" aria-hidden="true" />{club.volumes.teams} équipes · {club.volumes.coaches} coachs</span><span className="flex items-center gap-1"><MapPin className="size-3" aria-hidden="true" />{club.volumes.venues} salles</span><span>{club.volumes.constraints} contraintes</span></p></td>
       <td className="px-4 py-5"><p><span className="font-medium text-white">{club.solver.generations}</span> générations · {formatRate(club.solver.infeasibleRate)} inf.</p><p className="mt-1 text-xs text-slate-600">P50 {formatDuration(club.solver.p50WallTimeMs)} · P95 {formatDuration(club.solver.p95WallTimeMs)}</p>{club.solver.latestStatus ? <p className="mt-2 text-[11px] text-slate-500">Dernière : {club.solver.latestStatus}</p> : null}</td>
+      <td className="px-4 py-5">
+        <Button type="button" size="sm" variant="outline" className="border-white/15 text-slate-200 hover:bg-white/10" onClick={onActions}>
+          Actions
+        </Button>
+      </td>
     </tr>
+  );
+}
+
+/**
+ * SA4 — dialog des actions support sur UN club. Catalogue FERMÉ servi par le
+ * backend ; une action `dangerous` exige de TAPER LE NOM du club (confirmation
+ * nominative, pattern GitHub) — le clic réflexe ne suffit jamais pour du destructif.
+ */
+function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => void }) {
+  const actions = useAdminActions();
+  const run = useRunAdminClubAction();
+  const [selected, setSelected] = useState<AdminAction | null>(null);
+  const [confirmName, setConfirmName] = useState("");
+
+  const confirmBlocked = null !== selected && selected.dangerous && confirmName.trim() !== club.name;
+
+  const execute = () => {
+    if (!selected || confirmBlocked || run.isPending) return;
+    const action = selected;
+    run.mutate(
+      { clubId: club.id, key: action.key },
+      {
+        onSuccess: () => {
+          toast.success(`${action.label} — terminé pour ${club.name}.`);
+          onClose();
+        },
+        onError: () => toast.error(`Impossible d’exécuter « ${action.label} » sur ${club.name}.`),
+      },
+    );
+  };
+
+  return (
+    <Modal label={`Actions support — ${club.name}`} title={`Actions support — ${club.name}`} onClose={onClose}>
+      <div className="mt-4 space-y-4">
+        {actions.isPending ? <p className="text-sm text-muted-foreground">Chargement du catalogue…</p> : null}
+        {actions.isError ? <p className="text-sm text-destructive">Catalogue d’actions indisponible.</p> : null}
+
+        {actions.data && null === selected ? (
+          <ul className="space-y-2">
+            {actions.data.items.map((action) => (
+              <li key={action.key}>
+                <button
+                  type="button"
+                  className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-accent/10"
+                  onClick={() => {
+                    setSelected(action);
+                    setConfirmName("");
+                  }}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">{action.label}</span>
+                    {action.dangerous ? <span className="shrink-0 text-[11px] font-semibold uppercase text-destructive">Destructif</span> : null}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{action.description}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {selected ? (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">{selected.label}</p>
+            <p className="text-xs text-muted-foreground">{selected.description}</p>
+            {selected.dangerous ? (
+              <div className="space-y-2">
+                <label className="block text-xs text-muted-foreground" htmlFor="confirm-club-name">
+                  Action destructive — tapez le nom exact du club (« {club.name} ») pour confirmer :
+                </label>
+                <input
+                  id="confirm-club-name"
+                  type="text"
+                  value={confirmName}
+                  onChange={(event) => setConfirmName(event.target.value)}
+                  className="h-10 w-full rounded-md border border-border bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-destructive/40"
+                  autoComplete="off"
+                />
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setSelected(null)} disabled={run.isPending}>
+                Retour
+              </Button>
+              <Button type="button" variant={selected.dangerous ? "destructive" : "default"} disabled={confirmBlocked || run.isPending} onClick={execute}>
+                {run.isPending ? <Spinner className="size-4" /> : null}
+                Exécuter
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 

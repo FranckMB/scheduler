@@ -1,6 +1,6 @@
 # Console super-admin (monitoring, exploitation & data ops) — spécification
 
-> **Statut** : **SA0 à SA3 livrés** (2026-07-16) + **SA2-stats livré** (2026-07-18, stats d'usage) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Suite : SA4 (catalogue d'actions) → SA5.
+> **Statut** : **SA0 à SA3 livrés** (2026-07-16) + **SA2-stats** et **SA4 v1 (catalogue d'actions)** livrés (2026-07-18) — vérité courante dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md). Suite : SA4 v2 (suspension/approbation, au premier cas réel) → SA5.
 > **Nature** : l'écran d'exploitation transverse (cross-tenant **par conception**) pour piloter le SaaS — santé, usage, conversion, support, **mise à jour automatique des données de référence**. Surface la **plus sensible** du produit (elle voit tous les clubs) → **sécurité d'abord**.
 > **Rattachement roadmap** : `roadmap.md` §9 (transverse/observabilité) — s'appuie sur `solver_metrics` (§9, à persister) + audit trail (§9) + rétention/purge (§3).
 > **Réutilise l'existant** : connexion Doctrine **`admin`** (`clubscheduler`, bypass RLS — déjà la porte superadmin) · conteneur **`cron-runner`** (déjà là) · commandes CLI déjà écrites (`app:seasons:purge`, `PurgeUnverifiedUsersCommand`, `ReconcileStuckSchedulesCommand`, `Import{School,Public}HolidaysCommand`, `PeriodReminderCommand`, `TransitionReminderCommand`) · métriques calculées par `SolverMetricsMapper` puis persistées par SA1 dans `solver_metrics` · route lot C `POST /api/club/ffbb-import` (refresh FFBB) · champs freemium `Club.planId`/`billingCycle`/`generationCountSeason`.
@@ -76,14 +76,24 @@ Répond au besoin fondateur « l'app est-elle utilisée, à quel volume ? » :
   validés), temps de clôture p50/p95 (saison vs périodes), charge solveur 30 j par type de plan,
   distribution des tailles de clubs (tranches d'équipes actives + gymnases médians).
 
-### Reste à implémenter après SA3 / SA2-stats
+### SA4 v1 — catalogue d'actions support *(✅ livré 2026-07-18 : socle + 3 actions)*
 
-- **SA4 — actions support** : **reformulé (décision fondateur 2026-07-18) en EXTENSION DU
-  CATALOGUE SA3** (des `AdminJobDefinition` paramétrables — ex. `clubId` — réutilisant la
-  plomberie confirm + CSRF + audit + historique), PAS en endpoints dédiés par action. Contenu
-  inchangé : reset quota Découverte, purge saison, reset club, suspension / désactivation,
-  validation d'un gestionnaire en fallback. Ajouter une action ≈ 1 entrée de catalogue quand la
-  commande CLI existe — c'est le levier « agir sans développer la fonctionnalité ».
+Le levier « agir sans développer la fonctionnalité » : catalogue FERMÉ (`AdminActionCatalog`)
+d'actions sur UN club, paramétrées par le seul `clubId` (jamais d'argument libre), réutilisant
+toute la plomberie SA3 (verrou, historique `admin_job_run` — désormais avec `arguments` —,
+CSRF, audit SA0). Manuel uniquement, jamais schedulé (`AdminJobSchedule::manual()` lève si
+atteint par le scheduler). Console : bouton « Actions » par ligne club ; action *dangereuse* →
+**confirmation nominative** (taper le nom du club). NR `phase1` : `AdminClubActionTest`
+(firewall, CSRF, catalogue/club bornés, trace arguments, commandes).
+- Livré : `reset-generation-quota` (`app:clubs:reset-quota`), `reset-current-season`
+  (`app:clubs:reset-season` — miroir CLI de `ResetSeasonController`, `--dry-run`),
+  `purge-old-seasons` (`app:seasons:purge --club`, existant).
+- **Différés AU PREMIER CAS RÉEL (décision fondateur 2026-07-18)** : **suspension /
+  désactivation d'un club** (aucun impayé/abus à ce jour ; l'effet exact — login ? génération ? —
+  reste à trancher) et **approbation d'un gestionnaire en fallback** (le circuit normal
+  `MembershipController` suffit tant qu'aucun club n'a de gestionnaire injoignable).
+
+### Reste à implémenter
 - **SA5 — impersonation support** : lecture bornée dans le temps, bannière visible, audit complet, aucune écriture tant qu'elle n'est pas décidée séparément.
 - **Hygiène de la console** : ~~partitionnement mensuel + purge 6 mois de `solver_metrics`~~ **abandonnés (2026-07-18)** — télémétrie append-only, rétention **≥ 13 mois** (une saison + marge, décision, sans mécanique de purge au volume cible ; le partitionnement n'est pas nécessaire, l'index `(club_id, created_at)` suffit). Reste : arbitrage de la rétention / des filtres de l'audit viewer.
 - **Data ops FFBB** : le refresh club existe, mais le mode batch de rattrapage des ligues / comités périmés reste à cadrer si on le garde dans le lot.
