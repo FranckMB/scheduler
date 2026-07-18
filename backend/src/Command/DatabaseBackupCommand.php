@@ -6,6 +6,8 @@ namespace App\Command;
 
 use App\Service\BackupCoverage;
 use DateTimeImmutable;
+use Doctrine\DBAL\Connection;
+use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -45,6 +47,11 @@ final class DatabaseBackupCommand extends Command
 
     public function __construct(
         private readonly BackupCoverage $coverage,
+        // Connexion admin (superuser, hors RLS) : pg_dump doit viser LA base que
+        // l'app utilise (test → clubscheduler_test), pas un POSTGRES_DB d'env qui
+        // peut désigner une base jamais migrée — dump vide « réussi » en CI.
+        #[Autowire(service: 'doctrine.dbal.admin_connection')]
+        private readonly Connection $adminConnection,
         #[Autowire('%kernel.project_dir%/var/backups')]
         private readonly string $defaultBackupDir,
         #[Autowire('%env(default::BACKUP_SYNC_COMMAND)%')]
@@ -113,9 +120,10 @@ final class DatabaseBackupCommand extends Command
         $partial = $final . '.part';
 
         try {
+            $db = $this->connectionParams();
             $process = new Process(
-                ['pg_dump', '--format=custom', '--file', $partial, '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), $this->env('POSTGRES_DB', 'clubscheduler')],
-                env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
+                ['pg_dump', '--format=custom', '--file', $partial, '--host', $db['host'], '--port', $db['port'], '--username', $db['user'], $db['dbname']],
+                env: ['PGPASSWORD' => $db['password']],
                 timeout: 600,
             );
             $process->run();
@@ -200,11 +208,32 @@ final class DatabaseBackupCommand extends Command
         }
     }
 
-    private function env(string $name, string $default): string
+    /**
+     * Paramètres de la connexion admin Doctrine — la seule source de vérité pour
+     * host/port/user/password/dbname. AUCUN fallback env : un dump de la mauvaise
+     * base est pire qu'un échec bruyant.
+     *
+     * @return array{host: string, port: string, user: string, password: string, dbname: string}
+     */
+    private function connectionParams(): array
     {
-        $value = $_ENV[$name] ?? $_SERVER[$name] ?? getenv($name);
+        $params = $this->adminConnection->getParams();
+        $host = $params['host'] ?? null;
+        $user = $params['user'] ?? null;
+        $dbname = $params['dbname'] ?? null;
+        if (!\is_string($host) || !\is_string($user) || !\is_string($dbname)) {
+            throw new RuntimeException('Admin connection is missing host/user/dbname — cannot locate the database to dump.');
+        }
+        $password = $params['password'] ?? '';
+        $port = $params['port'] ?? 5432;
 
-        return \is_string($value) && '' !== $value ? $value : $default;
+        return [
+            'host' => $host,
+            'port' => \is_int($port) || \is_string($port) ? (string) $port : '5432',
+            'user' => $user,
+            'password' => \is_string($password) ? $password : '',
+            'dbname' => $dbname,
+        ];
     }
 
     private function humanSize(int $bytes): string

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use Doctrine\DBAL\Connection;
+use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -29,6 +31,11 @@ final class DatabaseRestoreCheckCommand extends Command
     private const MIN_TABLES = 20;
 
     public function __construct(
+        // Mêmes credentials que le dump (connexion admin Doctrine, superuser) : la
+        // base jetable se crée/détruit là où le backup a été pris, pas là où un
+        // POSTGRES_* d'env pointerait (désync env = CI qui vérifie la mauvaise base).
+        #[Autowire(service: 'doctrine.dbal.admin_connection')]
+        private readonly Connection $adminConnection,
         #[Autowire('%kernel.project_dir%/var/backups')]
         private readonly string $defaultBackupDir,
     ) {
@@ -60,9 +67,10 @@ final class DatabaseRestoreCheckCommand extends Command
         $dropFailed = false;
 
         try {
+            $db = $this->connectionParams();
             $restore = new Process(
-                ['pg_restore', '--no-owner', '--no-privileges', '--dbname', $database, '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), $file],
-                env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
+                ['pg_restore', '--no-owner', '--no-privileges', '--dbname', $database, '--host', $db['host'], '--port', $db['port'], '--username', $db['user'], $file],
+                env: ['PGPASSWORD' => $db['password']],
                 timeout: 900,
             );
             $restore->run();
@@ -109,9 +117,10 @@ final class DatabaseRestoreCheckCommand extends Command
     /** Ordre administratif hors transaction, sur la base de maintenance 'postgres'. */
     private function maintenance(string $sql): void
     {
+        $db = $this->connectionParams();
         $psql = new Process(
-            ['psql', '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), '--dbname', 'postgres', '--command', $sql],
-            env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
+            ['psql', '--host', $db['host'], '--port', $db['port'], '--username', $db['user'], '--dbname', 'postgres', '--command', $sql],
+            env: ['PGPASSWORD' => $db['password']],
             timeout: 60,
         );
         $psql->mustRun();
@@ -134,9 +143,10 @@ final class DatabaseRestoreCheckCommand extends Command
 
     private function scalar(string $database, string $sql): string
     {
+        $db = $this->connectionParams();
         $psql = new Process(
-            ['psql', '--tuples-only', '--no-align', '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), '--dbname', $database, '--command', $sql],
-            env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
+            ['psql', '--tuples-only', '--no-align', '--host', $db['host'], '--port', $db['port'], '--username', $db['user'], '--dbname', $database, '--command', $sql],
+            env: ['PGPASSWORD' => $db['password']],
             timeout: 60,
         );
         $psql->mustRun();
@@ -144,10 +154,28 @@ final class DatabaseRestoreCheckCommand extends Command
         return trim($psql->getOutput());
     }
 
-    private function env(string $name, string $default): string
+    /**
+     * Paramètres de la connexion admin Doctrine — même source de vérité que le dump
+     * (DatabaseBackupCommand). AUCUN fallback env.
+     *
+     * @return array{host: string, port: string, user: string, password: string}
+     */
+    private function connectionParams(): array
     {
-        $value = $_ENV[$name] ?? $_SERVER[$name] ?? getenv($name);
+        $params = $this->adminConnection->getParams();
+        $host = $params['host'] ?? null;
+        $user = $params['user'] ?? null;
+        if (!\is_string($host) || !\is_string($user)) {
+            throw new RuntimeException('Admin connection is missing host/user — cannot reach the database server.');
+        }
+        $password = $params['password'] ?? '';
+        $port = $params['port'] ?? 5432;
 
-        return \is_string($value) && '' !== $value ? $value : $default;
+        return [
+            'host' => $host,
+            'port' => \is_int($port) || \is_string($port) ? (string) $port : '5432',
+            'user' => $user,
+            'password' => \is_string($password) ? $password : '',
+        ];
     }
 }
