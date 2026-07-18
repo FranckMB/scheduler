@@ -11,8 +11,9 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
-import { todayISO } from "./lib/date";
-import { isAdaptableHoliday } from "./lib/holidays";
+import { useWorkingSeason } from "@/features/auth/queries";
+
+import { clampRangeToSeason, todayISO } from "./lib/date";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry } from "./queries";
 
@@ -164,6 +165,11 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const createHoliday = useCreateHolidayPeriod();
+  // Clamp saison (même règle que le radar) : une période vit dans sa saison ;
+  // les vacances à cheval (été) ne créent que leur part en-saison. null = vacance
+  // entièrement hors saison, ou saison pas encore chargée → pas de création.
+  const workingSeason = useWorkingSeason();
+  const clamped = null === workingSeason ? null : clampRangeToSeason(holiday.startDate, holiday.endDate, workingSeason);
 
   const entry = entries.find((e) => e.schoolHolidayId === holiday.id) ?? null;
   // ADR-0002 lot D-b : « overlay généré » = plan validé (chosenScheduleId), dérivé du plan.
@@ -189,37 +195,42 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <span className="font-medium">Vacances</span> — {holiday.label}
         </span>
       </p>
-      {/* An existing overlay is always viewable (even for summer — legacy data).
-          "Adapter" (create/replay) is only offered for adaptable holidays: summer
-          (ete) is off-season, a schedule spans one season, so nothing to build —
-          same rule as the radar (isAdaptableHoliday, single source of truth). */}
+      {/* Toutes les vacances sont adaptables, été inclus (planning de reprise —
+          retour fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée). */}
       {null !== activeId ? (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
             Voir le planning
           </Button>
         </div>
-      ) : !isAdaptableHoliday(holiday) ? (
-        <p className="text-xs text-muted-foreground">Vacances d'été — hors saison, pas de planning à adapter.</p>
       ) : entry ? (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
             Adapter
           </Button>
         </div>
+      ) : null !== workingSeason && null === clamped ? (
+        // Fenêtre entièrement disjointe de la saison (fait VÉRIFIÉ — la saison est
+        // chargée) : un bouton mort sans explication serait pire que l'ancien
+        // message (revue #260 round 2). Saison encore en vol → bouton désactivé
+        // bref, ci-dessous.
+        <p className="text-xs text-muted-foreground">Hors de la saison en cours — rien à adapter.</p>
       ) : (
         <div className="flex justify-end">
           <Button
             variant="outline"
             size="sm"
-            disabled={createHoliday.isPending}
+            disabled={createHoliday.isPending || null === clamped}
             onClick={async () => {
+              if (null === clamped) {
+                return;
+              }
               // mutateAsync (not a mutate-scoped onSuccess): the navigation must
               // fire even if the modal is dismissed mid-POST — otherwise the period
               // IS created but the wizard never opens, leaving an orphan entry.
               // The 409/error is surfaced by the global mutation-cache net (queryClient.ts).
               try {
-                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: holiday.startDate, endDate: holiday.endDate });
+                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: clamped.startDate, endDate: clamped.endDate });
                 adapt(created.id);
               } catch {
                 /* surfaced by the global mutation-cache net */

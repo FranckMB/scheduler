@@ -1,3 +1,5 @@
+import { stripDiacritics } from "./utils";
+
 /** Trigger a browser download of a URL (same-origin or blob:) under a chosen filename. */
 export function download(url: string, filename: string): void {
   const a = document.createElement("a");
@@ -17,4 +19,16 @@ export function download(url: string, filename: string): void {
 /** Download a Blob under a chosen filename (objectURL lifecycle handled). */
 export function downloadBlob(blob: Blob, filename: string): void {
   download(URL.createObjectURL(blob), filename);
+}
+
+/**
+ * Turn a human plan name into a safe filename base: accents stripped,
+ * anything non-alphanumeric collapsed to "-", lowercased. Empty → "planning".
+ */
+export function slugFilename(name: string): string {
+  const slug = stripDiacritics(name)
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return "" === slug ? "planning" : slug;
 }

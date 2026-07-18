@@ -7,12 +7,16 @@ import type { Schedule } from "@/features/planning/api";
 
 const setSelectedScheduleId = vi.fn();
 const jumpTo = vi.fn();
+const startPeriodMode = vi.fn();
+const exitPeriodMode = vi.fn();
 const navigate = vi.fn();
 const run = vi.fn();
 
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
-vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo }) } }));
+vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode, exitPeriodMode }) } }));
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }) }));
+vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
+vi.mock("./queries", () => ({ useSchedulePlans: () => ({ data: [{ id: "p1", calendarEntryId: "entry-1", chosenScheduleId: null }, { id: "p2", calendarEntryId: "entry-2", chosenScheduleId: null }] }) }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
@@ -21,6 +25,8 @@ import { seasonPlanCounts } from "./seasonPlannings";
 beforeEach(() => {
   setSelectedScheduleId.mockClear();
   jumpTo.mockClear();
+  startPeriodMode.mockClear();
+  exitPeriodMode.mockClear();
   navigate.mockClear();
   run.mockClear();
 });
@@ -45,23 +51,34 @@ function open(list: Schedule[]) {
 
 describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("counts distinct plannings: 1 season plan + 1 overlay = 2 (not 4 versions)", () => {
-    expect(seasonPlanCounts(schedules)).toEqual({ total: 2, overlays: 1 });
+    expect(seasonPlanCounts(schedules)).toEqual({ total: 2, overlays: 1, openOverlays: 0 });
   });
 
-  it("counts only FINISHED periods as overlays (matches the modal, unlike a raw Set)", () => {
-    // One finished period (p1) + one period (p2) still mid-first-generation → 1 overlay.
+  it("counts OPEN periods too (a mid-generation planning is still a planning — founder 2026-07-18)", () => {
+    // One finished period (p1) + one period (p2) still mid-first-generation → BOTH listed.
     const withInFlight = [...schedules, plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", planType: "CLOSURE", schedulePlanId: "p2", createdAt: "2026-07-05T10:00:00+00:00" })];
-    expect(seasonPlanCounts(withInFlight)).toEqual({ total: 2, overlays: 1 });
+    // openOverlays distingue le planning EN COURS (bannière « (1 en cours) »).
+    expect(seasonPlanCounts(withInFlight)).toEqual({ total: 3, overlays: 2, openOverlays: 1 });
   });
 
   it("lists one row per PLANNING (principal + overlay), each with view + export", () => {
     open(schedules);
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    // Le socle porte le NOM de son plan (me.seasonPlan.name), pas un libellé générique.
+    expect(screen.getByText("Planning de la saison 2026-2027")).toBeInTheDocument();
     expect(screen.getByText("Vacances Toussaint")).toBeInTheDocument();
     // Each row offers a consult (eye) + an export — icon-only (aria-label), no visible "Exporter" text.
     expect(screen.getAllByRole("button", { name: /^Consulter/ })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /^Exporter/ })).toHaveLength(2);
     expect(screen.queryByText("Exporter")).not.toBeInTheDocument();
+  });
+
+  it("an OPEN overlay (no finished version) is listed with « Reprendre » and no export", async () => {
+    open([plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", planType: "CLOSURE", schedulePlanId: "p1", createdAt: "2026-07-05T10:00:00+00:00" })]);
+    expect(screen.getByText("Vacances Noël")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Exporter/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Reprendre/ }));
+    expect(startPeriodMode).toHaveBeenCalledWith("entry-1");
+    expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 
   it("represents each planning by its latest FINISHED version, never a failed/in-flight one", () => {
@@ -77,9 +94,11 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
-  it("eye on an in-progress SEASON planning opens the wizard's generation step", async () => {
+  it("eye on an in-progress SEASON planning opens the wizard's generation step, resetting a stale period mode", async () => {
     open([plan({ id: "v1", status: "COMPLETED" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
+    // Un mode période persisté générerait le plan de PÉRIODE — reset obligatoire.
+    expect(exitPeriodMode).toHaveBeenCalled();
     expect(jumpTo).toHaveBeenCalledWith("generate");
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });

@@ -7,7 +7,6 @@ import { useSchedules } from "@/features/planning/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { SeasonPlanBanner } from "./SeasonPlanBanner";
-import { isAdaptableHoliday } from "./lib/holidays";
 import { MonthCalendar } from "./MonthCalendar";
 import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
 import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
@@ -30,9 +29,10 @@ export function CockpitPage() {
   // calendar (so summer — and any month outside the season — shows when browsed).
   const { data: holidays, isLoading: holidaysLoading } = useSchoolHolidays();
   const { data: monthHolidays } = useSchoolHolidays(from, to);
-  // Summer is an INFO band only (season boundary, not an exception to plan) — it
-  // shows on the calendar but must never become a radar to-do reminder (revue #204).
-  const radarHolidays = (holidays?.items ?? []).filter(isAdaptableHoliday);
+  // Toutes les vacances sont adaptables — l'été inclus (planning de reprise,
+  // retour fondateur 2026-07-18 ; lève l'exclusion `ete` de la revue #204, P2-5 E2).
+  // Le radar clampe les dates à la fenêtre de saison avant toute création.
+  const radarHolidays = holidays?.items ?? [];
   // Two explicit windows (the endpoint 400s without one when no season is active):
   // the visible month grid for the calendar dots, the radar horizon for reminders.
   const { data: publicHolidays } = usePublicHolidays(from, to);

@@ -17,6 +17,9 @@ let conflictsPending = false;
 // PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
 // affichable).
 let plansData: SchedulePlan[] | undefined = [];
+// Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
+// = plan avec versions mais sans version validée → carte toujours visible).
+let schedulesData: { schedulePlanId: string }[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -26,6 +29,10 @@ vi.mock("./queries", () => ({
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
   useSchedulePlans: () => ({ data: plansData }),
 }));
+vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
+// Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
+// créations de vacances (revue #260 round 1) laisse passer les dates de test.
+vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ id: "sn1", name: "2998-2999", startDate: "2998-08-01", endDate: "2999-07-31", isCurrent: true, isReadonly: false }) }));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
 const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): SchedulePlan => ({
@@ -73,6 +80,43 @@ describe("RadarPanel", () => {
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
+    schedulesData = [];
+  });
+
+  it("a HOLIDAY period whose plan has versions but no validated one shows an always-on « en cours » card", async () => {
+    const user = userEvent.setup();
+    const started = new Date();
+    started.setDate(started.getDate() - 2);
+    const startedIso = started.toISOString().slice(0, 10);
+    // Période DÉJÀ COMMENCÉE (startDate < today) : le filtre « à venir » l'écarterait —
+    // la carte « en cours » doit survivre tant que la période n'est pas finie.
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ schedulePlanId: "pl-h1" }];
+    renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: startedIso, endDate: addDays(todayISO(), 3) })] });
+    expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+  });
+
+  it("a CLOSURE with an in-progress plan keeps its rich impact card (sessions count) with « Reprendre »", () => {
+    // La carte générique gommerait le détail des séances touchées (revue #260) :
+    // la fermeture garde ClosureRadarItem, marquée « en cours », CTA Reprendre.
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ schedulePlanId: "pl-c1" }];
+    conflictsData = { conflicts: [{ dates: ["2999-01-06", "2999-01-07"] }], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+    expect(screen.getByText(/2 séances à replacer · planning en cours — à finaliser/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reprendre" })).toBeInTheDocument();
+    expect(screen.queryByText("Planning en cours — à finaliser")).not.toBeInTheDocument();
+  });
+
+  it("no « en cours » card when the plan is validated or has no versions (fail-closed on missing data)", () => {
+    // Plan validé → carte « en cours » absente (le flux normal Voir/Adapter prend le relais).
+    plansData = [validatedPlan("c1", "s1")];
+    schedulesData = [{ schedulePlanId: "pl-c1" }];
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+    expect(screen.queryByText("Planning en cours — à finaliser")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reprendre" })).not.toBeInTheDocument();
   });
 
   it("asks for the school zone when unknown", () => {

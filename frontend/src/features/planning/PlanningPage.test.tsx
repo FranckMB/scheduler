@@ -79,6 +79,7 @@ vi.mock("@/features/auth/queries", () => ({
     },
   }),
   useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
+  useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }),
 }));
 
 const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];

@@ -1,4 +1,5 @@
 import type { Category, Fixture, LeagueWindow, Team } from "../api";
+import { stripDiacritics } from "@/shared/lib/utils";
 
 /** Time-ish string ("18:00", "18:00:00", ISO) → minutes since midnight. */
 export function timeToMinutes(time: string | null | undefined): number {
@@ -17,9 +18,7 @@ export function isoWeekday(dateStr: string): number {
 
 /** Normalize a label for a tolerant join (case/accents/spacing agnostic). */
 function normalize(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return stripDiacritics(value)
     .toLowerCase()
     .replace(/\s+/g, "")
     .trim();

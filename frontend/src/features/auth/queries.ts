@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/shared/stores/authStore";
+import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 import * as authApi from "./api";
 
@@ -14,6 +15,22 @@ export function useMe() {
     retry: false,
     staleTime: 60_000,
   });
+}
+
+/**
+ * The season the user is WORKING IN: the explicit selection (X-Season-Id,
+ * seasonStore) first, else the calendar-current one. null while `me` loads.
+ * Même dérivation que PlanningPage (workingSeason) — source partagée.
+ */
+export function useWorkingSeason(): authApi.MeSeason | null {
+  const { data: me } = useMe();
+  const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);
+  return (
+    me?.seasons.find((sn) => sn.id === selectedSeasonId)
+    ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
+    ?? me?.seasons.find((sn) => sn.isCurrent)
+    ?? null
+  );
 }
 
 /** ADR-0002: rename THE season plan (title next to the club logo). */

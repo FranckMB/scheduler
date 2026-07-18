@@ -1,11 +1,16 @@
 import { HTTPError } from "ky";
 import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
+
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { listSchedules } from "@/features/planning/api";
+import { useSchedules } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { cn } from "@/shared/lib/utils";
 
 import { toast } from "@/shared/stores/toastStore";
@@ -87,12 +92,18 @@ export function WizardPage() {
   const recapValidation = useStepValidation("recap");
   const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
 
+  // « On part » — lu par le prédicat du blocker au moment de la navigation (les
+  // valeurs de render y sont STALE : react-router enregistre le prédicat en
+  // useEffect, donc une nav déclenchée dans le même cycle voit l'ancien état).
+  const leavingRef = useRef(false);
+
   // The period mode is persisted (localStorage). If its entry was deleted in the
   // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).
   // The query is meta.silent404 — this toast is the only, explicit, feedback.
   useEffect(() => {
     if (periodMode && periodEntryError instanceof HTTPError && 404 === periodEntryError.response.status) {
       toast.error("Cette période n'existe plus — retour à l'accueil.");
+      leavingRef.current = true;
       exitPeriodMode();
       navigate("/");
     }
@@ -145,9 +156,106 @@ export function WizardPage() {
     }
   }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
-  const quitPeriod = () => {
+  // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
+  // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;
+  // repartir sans rien générer laissait une entrée orpheline sur tout le créneau des
+  // vacances. Quitter (bouton ou navigation SPA) propose de retirer la période dès
+  // qu'aucune version n'est CONNUE — donnée en vol/en échec incluse : dégrader en
+  // sortie silencieuse referait exactement l'orphelin (revue #260 round 2). Le
+  // dialogue est CONDITIONNEL (« si aucun planning n'a été généré… ») ; la décision
+  // destructive, elle, se prend sur une lecture serveur FRAÎCHE (confirmAbandon) —
+  // fetch muet ou plan irrésolu = jamais de suppression.
+  const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
+  const periodPlanId = periodAnchor.planId;
+  const wizardSchedules = useSchedules(periodMode);
+  const periodHasKnownVersion =
+    null !== periodPlanId
+    && undefined !== wizardSchedules.data
+    && wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
+  const periodMaybeEmpty = periodMode && !periodHasKnownVersion;
+  const deleteEntry = useDeleteEntry();
+  const queryClient = useQueryClient();
+  const [quitAsked, setQuitAsked] = useState(false);
+  // Latest-value : le prédicat est enregistré en useEffect par react-router — au
+  // moment d'une navigation il closure sur le render PRÉCÉDENT. Les refs portent
+  // l'état courant (armé ? en train de partir ?) sans dépendre du cycle de render :
+  // sans elles, le navigate() post-confirmation est re-bloqué et le dialogue
+  // se ré-ouvre après coup (revue #260 round 1).
+  const guardArmedRef = useRef(false);
+  useEffect(() => {
+    // Post-commit, comme l'enregistrement du prédicat par react-router : la ref est
+    // à jour avant toute navigation utilisateur.
+    guardArmedRef.current = periodMaybeEmpty;
+  });
+  const abandoningRef = useRef(false);
+  const blocker = useBlocker(({ nextLocation }) => guardArmedRef.current && !leavingRef.current && "/wizard" !== nextLocation.pathname);
+  const abandonOpen = quitAsked || "blocked" === blocker.state;
+
+  const finishQuit = () => {
+    leavingRef.current = true;
     exitPeriodMode();
     navigate("/");
+  };
+  const quitPeriod = () => {
+    if (periodMaybeEmpty) {
+      setQuitAsked(true);
+      return;
+    }
+    finishQuit();
+  };
+  const confirmAbandon = async () => {
+    if (abandoningRef.current) {
+      return;
+    }
+    abandoningRef.current = true;
+    const entryId = calendarEntryId;
+    const planId = periodPlanId;
+    // Re-vérification FRAÎCHE avant le geste destructif : le cache ["schedules"]
+    // peut être en retard d'une génération lancée à l'instant (l'invalidation ne
+    // part qu'au onSuccess du launch) — supprimer sur cette foi détruirait la
+    // version en vol via la cascade serveur. Fetch muet → on ne supprime PAS.
+    // Trois issues, décidées sur la lecture FRAÎCHE : vide prouvé → suppression ;
+    // version trouvée → conservation annoncée ; indécidable (fetch muet, plan
+    // irrésolu) → conservation SANS affirmer qu'une génération existe.
+    let verdict: "empty" | "has-version" | "unknown" = "unknown";
+    try {
+      const fresh = await queryClient.fetchQuery({ queryKey: ["schedules"], queryFn: listSchedules, staleTime: 0 });
+      if (null !== planId) {
+        verdict = fresh.some((s) => s.schedulePlanId === planId) ? "has-version" : "empty";
+      }
+    } catch {
+      // Fetch muet → verdict reste "unknown" : on ne supprime jamais sur donnée inconnue.
+    }
+    // Sortir du mode période AVANT le delete : ça désactive useCalendarEntry
+    // (sinon son 404 post-suppression déclenche le toast « n'existe plus »).
+    leavingRef.current = true;
+    exitPeriodMode();
+    setQuitAsked(false);
+    if ("empty" === verdict && null !== entryId) {
+      // .then/.catch sur la promesse (pas un callback mutate()) : ils survivent au
+      // démontage du wizard — le toast de succès arrive, et un échec est toasté
+      // par le filet global MutationCache.onError (useDeleteEntry n'a pas d'onError).
+      deleteEntry
+        .mutateAsync(entryId)
+        .then(() => toast.success("Période retirée du calendrier"))
+        .catch(() => { /* toasté par le filet global (queryClient.ts) */ });
+    } else if ("has-version" === verdict) {
+      toast.success("Une génération existe pour cette période — elle est conservée.");
+    } else {
+      toast.info("Période conservée — son contenu n'a pas pu être vérifié.");
+    }
+    if ("blocked" === blocker.state) {
+      blocker.proceed();
+    } else {
+      navigate("/");
+    }
+    abandoningRef.current = false;
+  };
+  const keepPeriod = () => {
+    setQuitAsked(false);
+    if ("blocked" === blocker.state) {
+      blocker.reset();
+    }
   };
 
   return (
@@ -169,6 +277,18 @@ export function WizardPage() {
           </Button>
         </div>
       ) : null}
+      {/* Texte CONDITIONNEL : la vérité se lit au serveur À LA CONFIRMATION (une
+          génération peut aboutir pendant que le dialogue est ouvert) — affirmer
+          « aucun planning n'a été généré » ici pourrait contredire l'action. */}
+      <ConfirmDialog
+        open={abandonOpen}
+        title="Abandonner l'ajustement ?"
+        description="Si aucun planning n'a été généré pour cette période, elle sera retirée du calendrier (recréable via « Adapter »). Si une génération existe, la période sera conservée."
+        confirmLabel="Retirer la période"
+        cancelLabel="Rester sur l'ajustement"
+        onConfirm={() => void confirmAbandon()}
+        onCancel={keepPeriod}
+      />
       <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (

@@ -44,7 +44,10 @@ vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("rea
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 // Freeze "today" so the fixed test date (2026-05-12) is not in the past (start ≥ today).
-vi.mock("./lib/date", () => ({ todayISO: () => "2026-05-12" }));
+// Partiel : clampRangeToSeason (clamp saison des créations, revue #260) reste le vrai.
+vi.mock("./lib/date", async (orig) => ({ ...(await orig<typeof import("./lib/date")>()), todayISO: () => "2026-05-12" }));
+// Saison de travail couvrant les dates de test : le clamp laisse créer.
+vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-08-01", endDate: "2026-07-31", isCurrent: true, isReadonly: false }) }));
 
 const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   id: "e1",
@@ -320,11 +323,20 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.getByText("🛑")).toBeInTheDocument();
   });
 
-  // Summer holidays: info only, never adaptable (off-season, no schedule to build).
-  it("shows summer-holiday info but NO « Adapter » action", () => {
+  // L'été s'adapte comme les autres vacances (planning de reprise — retour
+  // fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée).
+  it("offers « Adapter » on a summer holiday (planning de reprise)", () => {
     renderDialog([], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });
     expect(screen.getByText(/Vacances d'Été/)).toBeInTheDocument();
-    expect(screen.getByText(/hors saison/i)).toBeInTheDocument();
+    expect(screen.queryByText(/hors saison/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+  });
+
+  // Fenêtre entièrement hors de la saison de travail : un message, pas un
+  // bouton mort inexpliqué (revue #260 round 2).
+  it("explains instead of a dead button when the holiday is fully outside the season", () => {
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-out", label: "Vacances lointaines", startDate: "2027-10-01", endDate: "2027-10-15" }) });
+    expect(screen.getByText(/Hors de la saison en cours/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 });

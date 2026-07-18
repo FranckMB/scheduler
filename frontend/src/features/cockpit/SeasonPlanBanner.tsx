@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useMe } from "@/features/auth/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -21,6 +22,7 @@ interface SeasonPlanBannerProps {
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
 export function SeasonPlanBanner({ schedules, socleValidated, loading = false }: SeasonPlanBannerProps) {
   const navigate = useNavigate();
+  const { data: me } = useMe();
   const [listOpen, setListOpen] = useState(false);
 
   // Le planning de la saison TEL QU'IL EST : la version pointée si le gestionnaire
@@ -30,10 +32,11 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   // c'est-à-dire précisément quand le gestionnaire vient regarder son planning.
   const chosen = planRepresentative(visibleSeasonPlans(schedules));
   // Distinct plannings = the season main plan (1) + one per period overlay
-  // (versions are navigated inside the planning, not counted here).
-  // Both counts from one derivation (finished period plannings only, consistent
-  // with what the modal lists).
-  const { total: planCount, overlays: overlayCount } = seasonPlanCounts(schedules);
+  // (versions are navigated inside the planning, not counted here). Counts
+  // include OPEN plannings (no finished version) — same rows as the modal —
+  // and the subtitle names how many are still in progress so the number never
+  // implies a ready secondary schedule (revue #260 round 2).
+  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules);
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
   // wizard's generation step to finish/validate it.
@@ -42,6 +45,9 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
       navigate("/planning");
       return;
     }
+    // Même racine que la modale : un mode période persisté ferait générer le
+    // plan de PÉRIODE à la place du socle — reset avant d'ouvrir la génération.
+    useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");
   };
@@ -49,13 +55,16 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
       <div>
-        <p className="text-sm font-semibold">Planning principal</p>
+        {/* Le plan porte un NOM (ADR-0002 inv. 12) — l'afficher, pas un libellé générique
+            (retour fondateur 2026-07-18 : « Planning de la saison » ici, « Planning
+            principal » là = pas UX friendly). */}
+        <p className="text-sm font-semibold">{me?.seasonPlan?.name ?? "Planning principal"}</p>
         <p className="text-xs text-muted-foreground">
           {chosen ? (
             <>
               {STATUS_LABELS[chosen.status]}
               {chosen.score !== null ? ` · score ${chosen.score}` : ""}
-              {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
+              {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}${openOverlayCount > 0 ? ` (${openOverlayCount} en cours)` : ""}` : ""}
             </>
           ) : loading ? (
             "Chargement…"
