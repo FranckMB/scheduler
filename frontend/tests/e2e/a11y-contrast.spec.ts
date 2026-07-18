@@ -18,9 +18,13 @@ for (const mode of MODES) {
     await expect(page.getByRole("button", { name: /se connecter/i })).toBeVisible();
     await expectNoContrastViolations(page, `login (${mode})`);
 
+    // Register = 2 écrans (sport puis champs) — les deux sont publics, on vérifie les deux.
     await page.goto("/register");
+    await expect(page.getByRole("button", { name: /continuer/i })).toBeVisible();
+    await expectNoContrastViolations(page, `register · sport (${mode})`);
+    await page.getByRole("button", { name: /continuer/i }).click();
     await expect(page.getByRole("button", { name: /créer le compte/i })).toBeVisible();
-    await expectNoContrastViolations(page, `register (${mode})`);
+    await expectNoContrastViolations(page, `register · champs (${mode})`);
   });
 }
 

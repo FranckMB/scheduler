@@ -24,10 +24,15 @@ interface RegisterOpts {
 /** Fill and submit the register form, then assert the "check your email" state. */
 export async function submitRegister(page: Page, opts: RegisterOpts): Promise<void> {
   await page.goto("/register");
+  // Étape 1 = choix du sport (basket) → étape 2 = les champs (retour fondateur 2026-07-18).
+  await page.getByRole("button", { name: /continuer/i }).click();
+  const password = opts.password ?? "Password123!";
   await page.getByLabel("Prénom").fill(opts.firstName ?? "Jean");
   await page.getByLabel("Nom", { exact: true }).fill(opts.lastName ?? "Dupont");
   await page.getByLabel("Email", { exact: true }).fill(opts.email);
-  await page.getByLabel("Mot de passe", { exact: true }).fill(opts.password ?? "Password123!");
+  await page.getByLabel("Mot de passe", { exact: true }).fill(password);
+  // Champ de confirmation obligatoire (le bouton reste désarmé sans lui).
+  await page.getByLabel("Confirmer le mot de passe").fill(password);
   await page.getByLabel(/code ara/i).fill(opts.ara);
   if (undefined !== opts.clubName) {
     await page.getByLabel(/nom du club/i).fill(opts.clubName);
