@@ -55,7 +55,7 @@ if settings.sentry_dsn:
         import sentry_sdk
 
         sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment, traces_sample_rate=0.0)
-    except Exception as sentry_error:  # noqa: BLE001 — any init failure must not kill the engine
+    except Exception as sentry_error:  # any init failure must not kill the engine
         logger.warning("Sentry init failed (engine runs WITHOUT error capture): %s", sentry_error)
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
