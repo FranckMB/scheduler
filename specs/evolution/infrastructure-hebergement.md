@@ -3,7 +3,7 @@
 > **Statut** : **étude / aide à la décision** (2026-07-10, revue 2026-07-17). Pas un plan d'implémentation. But : comparer les options d'hébergement, chiffrer, et **recommander** une architecture pour la commercialisation (mi-2027).
 > **Périmètre** : **technique** uniquement. L'angle économique (coût par club, arbitrage managé vs temps fondateur, RGPD comme argument de vente) vit dans `business/hebergement-couts.md` — *dossier local, non versionné* (`.gitignore`).
 > **Nature** : SaaS multi-tenant (clubs de basket FFBB, marché **français**) → contraintes **RGPD / localisation UE**, données critiques (plannings, contacts), charge **CPU-bursty** (solveur CP-SAT).
-> **Prérequis liés** (prod-readiness, aujourd'hui absents) : **backups PostgreSQL**, observabilité (Sentry/health/alerting), config prod distincte. Le choix d'infra doit **résoudre le backup en priorité** (cf. `specs/evolution/roadmap.md` §Backlog P0).
+> **Prérequis liés** (prod-readiness) : **backups PostgreSQL** et **observabilité** (Sentry/health/alerting) **livrés côté code le 2026-07-18** (`docs/ops/backup-restore.md`) — reste l'activation OPS (snapshots hébergeur, DSN Sentry, `BACKUP_SYNC_COMMAND` off-site) à la mise en prod, cf. §6. **Config prod distincte reste ⬜** (P0-2, `specs/evolution/roadmap.md` §Backlog).
 
 ---
 
@@ -91,9 +91,9 @@ Le risque produit #1 n'est pas le CPU, c'est **la perte de données** (aujourd'h
 - **vCPU dédié, pas partagé** : CP-SAT est CPU-bound et sature jusqu'à 8 cœurs pendant un solve. Sur du vCPU mutualisé (gammes d'entrée type Hetzner CX/CPX, Scaleway DEV), le *CPU steal* fait varier les temps de solve sur un budget déjà fixé à 600 s. Les prix « plancher » des comparatifs §4 sont ceux du **partagé** ; le dédié équivalent coûte ~2×. Comparer à gamme égale.
 - **Le `pdf-worker` est un Chrome** (Puppeteer, ~0,5–1 Go RAM par instance) colocalisé avec le solveur : à compter dans la RAM, surtout au pic de septembre où exports et générations se disputent la machine.
 - **Exports PDF sur disque local** (`backend/public/exports`) : ne survivent pas à un redéploiement et croissent sans borne → **stockage objet** à prévoir avec le reste.
-- **Backups testés** : un backup non restauré n'existe pas → répéter une **restauration** régulièrement, et **mesurer le RTO** (temps de reconstruction depuis un backup nu). La saisonnalité rend la HA prématurée mais le RTO critique : une panne d'un jour en février ne se voit pas, la même en septembre tue la saison.
+- **Backups testés** : `app:db:restore-check` livré (2026-07-18) — restaure le dernier dump dans une base jetable et le prouve, cf. `docs/ops/backup-restore.md`. Reste à **mesurer le RTO** en conditions réelles sur l'infra retenue (temps de reconstruction depuis un backup nu) : la saisonnalité rend la HA prématurée mais le RTO critique — une panne d'un jour en février ne se voit pas, la même en septembre tue la saison.
 - **Secrets** : clés JWT/Mercure/DB hors repo (déjà tracké par l'audit A15) → gestionnaire de secrets du provider ou variables d'env chiffrées.
-- **Observabilité** : Sentry + health-checks + alerting **avant** la vente (la console superadmin les *affiche*, ne les remplace pas — cf. `console-superadmin.md`).
+- **Observabilité** : Sentry + health-checks + alerting **livrés côté code** (2026-07-18, cf. `docs/ops/backup-restore.md` §5) — reste à poser les DSN et activer à la mise en prod. La console superadmin les *affiche*, ne les remplace pas — cf. `console-superadmin.md`.
 - **CI/CD de déploiement** : build image → push registry → deploy (aujourd'hui `build-docker` en CI ; il manque le *deploy*).
 - **Coûts trafic/SSE** : Mercure = connexions longues ; vérifier que l'offre ne facture pas au vilain (concurrence de connexions).
 
