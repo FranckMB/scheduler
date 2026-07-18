@@ -1,5 +1,4 @@
 import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useWorkingSeason } from "@/features/auth/queries";
@@ -7,11 +6,11 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
-import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
-import { useCreateHolidayPeriod, useCreateWeekChildren, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
+import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
 import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
 /** Public holidays further out than this are noise, not a to-do. */
@@ -57,10 +56,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     navigate("/planning");
   };
 
-  // P2-5 E1 : adapter une période LONGUE (> 7 jours) passe par le choix des
-  // semaines (un plan par semaine cochée) — voir requestAdapt plus bas.
-  const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
-  const createWeekChildren = useCreateWeekChildren();
+  // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
+  const { pickerFor, setPickerFor, createWeekChildren, pickWeeks, createOneWeek } = useWeekAdapt(adapt);
 
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
@@ -116,15 +113,6 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // d'impact tant que le plan n'est pas validé (revue #260 round 1).
   const inProgressEntries = roots.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
 
-  // Semaines ORPHELINES D'AFFICHAGE (revue #262 round 2) : la fenêtre serveur du
-  // radar (endDate >= from) peut exclure une mère FINIE dont la semaine pleine,
-  // elle, court encore — sans sa mère, l'enfant n'a plus aucune surface. Carte
-  // dédiée tant qu'il n'est pas validé.
-  const entryIdSet = new Set(entries.map((e) => e.id));
-  const orphanWeekChildren = active.filter(
-    (e) => null !== e.parentEntryId && !entryIdSet.has(e.parentEntryId) && e.endDate >= today && !activeByEntry.has(e.id),
-  );
-
   // Mères découpées à COUVRIR : une semaine existante non validée OU une semaine
   // MANQUANTE (décochée au picker, échec partiel — revue #262 : sans chip « à
   // créer », une semaine décochée devenait à jamais implanifiable). Visible tant
@@ -153,6 +141,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     return motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id));
   });
 
+  // Semaines ORPHELINES D'AFFICHAGE : une semaine dont la mère ne porte AUCUNE
+  // carte de couverture — mère sortie de la fenêtre radar (finie), OU écartée
+  // (ignorée) : dans les deux cas, sans surface, la semaine encore courante et
+  // non validée serait implanifiable (revue #262 rounds 2-3). Carte dédiée.
+  const renderedMotherIds = new Set(splitMothers.map((m) => m.id));
+  const orphanWeekChildren = active.filter(
+    (e) => null !== e.parentEntryId && !renderedMotherIds.has(e.parentEntryId) && e.endDate >= today && !activeByEntry.has(e.id),
+  );
+
   // Adapter une période qui COUVRE PLUSIEURS SEMAINES = les choisir — sauf déjà
   // découpée (chips) ou déjà générée d'un bloc (on reste sur son plan). Le critère
   // est le NOMBRE de semaines calendaires, pas la durée : 7 jours à cheval
@@ -168,32 +165,6 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       return;
     }
     adapt(entry.id);
-  };
-  const announceWeekResult = ({ created, failedCount }: { created: CalendarEntry[]; failedCount: number }) => {
-    if (failedCount > 0) {
-      toast.error(`${failedCount} semaine${failedCount > 1 ? "s" : ""} n'a pas pu être créée — réessayez depuis la carte de couverture.`);
-    }
-    if (0 === created.length && 0 === failedCount) {
-      toast.info("Ces semaines étaient déjà découpées.");
-    }
-  };
-  const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
-    createWeekChildren.mutate(
-      { mother, weeks },
-      {
-        onSuccess: (result) => {
-          setPickerFor(null);
-          announceWeekResult(result);
-          if (1 === result.created.length && 0 === result.failedCount) {
-            adapt(result.created[0].id);
-            return;
-          }
-          if (result.created.length > 1) {
-            toast.success(`${result.created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
-          }
-        },
-      },
-    );
   };
 
   // A holiday already materialised as a period entry (matched by schoolHolidayId).
@@ -338,19 +309,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                     variant="outline"
                     size="sm"
                     disabled={createWeekChildren.isPending}
-                    onClick={() =>
-                      createWeekChildren.mutate(
-                        { mother: m, weeks: [week] },
-                        {
-                          onSuccess: (result) => {
-                            announceWeekResult(result);
-                            if (result.created[0]) {
-                              adapt(result.created[0].id);
-                            }
-                          },
-                        },
-                      )
-                    }
+                    onClick={() => createOneWeek(m, week)}
                   >
                     {`+ sem. du ${frDateShort(week.startDate)}`}
                   </Button>

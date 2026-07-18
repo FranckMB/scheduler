@@ -13,9 +13,10 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
-import { clampRangeToSeason, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, frDateShort, todayISO, weeksCovering } from "./lib/date";
+import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
-import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useCreateWeekChildren, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
+import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
 type Mode = "list" | "event" | "closure" | "cutoff";
@@ -190,10 +191,12 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
   const schedulesQuery = useSchedules();
   const schedulesResolved = undefined !== schedulesQuery.data;
+  // Plan résolu ? blockGenerated est faux tant que plan.data est undefined
+  // (chargement) — offrir le picker alors ferait 422 chaque semaine sur une mère
+  // déjà générée en bloc (revue #262 round 3). entry null (aucune période encore)
+  // = résolu par définition : la query est désactivée.
+  const planResolved = null === entry || undefined !== plan.data;
   const blockGenerated = undefined !== plan.data && null !== plan.data && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.data?.id);
-  const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
-  const createWeekChildren = useCreateWeekChildren();
-
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -204,44 +207,20 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     onClose();
     navigate("/planning");
   };
+  // Flux de découpage partagé avec le radar ; ici, plusieurs semaines créées →
+  // referme le DayDialog (le radar reprend le relais via ses cartes).
+  const { pickerFor, setPickerFor, createWeekChildren, pickWeeks, createOneWeek } = useWeekAdapt(adapt, onClose);
   // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
   // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
   // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →
   // direct aussi (fail-open du picker = 422 en série, revue #262 round 2).
   const requestAdapt = (target: CalendarEntry) => {
     const multiWeek = null !== workingSeason && weeksCovering(target.startDate, target.endDate, workingSeason).length > 1;
-    if (multiWeek && childrenResolved && 0 === weekChildren.length && schedulesResolved && !blockGenerated) {
+    if (multiWeek && childrenResolved && 0 === weekChildren.length && schedulesResolved && planResolved && !blockGenerated) {
       setPickerFor(target);
       return;
     }
     adapt(target.id);
-  };
-  const announceWeekResult = ({ created, failedCount }: { created: CalendarEntry[]; failedCount: number }) => {
-    if (failedCount > 0) {
-      toast.error(`${failedCount} semaine${failedCount > 1 ? "s" : ""} n'a pas pu être créée — réessayez depuis la carte de couverture.`);
-    }
-    if (0 === created.length && 0 === failedCount) {
-      toast.info("Ces semaines étaient déjà découpées.");
-    }
-  };
-  const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
-    createWeekChildren.mutate(
-      { mother, weeks },
-      {
-        onSuccess: (result) => {
-          setPickerFor(null);
-          announceWeekResult(result);
-          if (1 === result.created.length && 0 === result.failedCount) {
-            adapt(result.created[0].id);
-            return;
-          }
-          if (result.created.length > 1) {
-            toast.success(`${result.created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
-            onClose();
-          }
-        },
-      },
-    );
   };
 
   return (
@@ -274,19 +253,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
                   variant="outline"
                   size="sm"
                   disabled={createWeekChildren.isPending}
-                  onClick={() =>
-                    createWeekChildren.mutate(
-                      { mother: entry, weeks: [week] },
-                      {
-                        onSuccess: (result) => {
-                          announceWeekResult(result);
-                          if (result.created[0]) {
-                            adapt(result.created[0].id);
-                          }
-                        },
-                      },
-                    )
-                  }
+                  onClick={() => createOneWeek(entry, week)}
                 >
                   {`+ sem. du ${frDateShort(week.startDate)}`}
                 </Button>

@@ -195,7 +195,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             // génération « en bloc » concurrente (exclusivité bloc/semaines).
             if (null !== $input->parentEntryId) {
                 $this->schedulePlanProvisioner->lockPlanScope($input->parentEntryId);
-                $this->assertValidWeekChild($input, $clubId);
+                $this->assertValidWeekChild($input, $clubId, $seasonId);
             }
 
             $output = parent::processPost($input, $clubId, $seasonId);
@@ -253,10 +253,17 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
      * période déjà générée d'un bloc ne se découpe pas — supprimer ses versions
      * d'abord). Appelée SOUS le verrou du plan-scope de la mère.
      */
-    private function assertValidWeekChild(CalendarEntryInput $input, ?string $clubId): void
+    private function assertValidWeekChild(CalendarEntryInput $input, ?string $clubId, ?string $seasonId): void
     {
         $parent = $this->entityManager->getRepository(CalendarEntry::class)->find((string) $input->parentEntryId);
-        if (!$parent instanceof CalendarEntry || (null !== $clubId && $parent->getClubId() !== $clubId)) {
+        // Club ET saison (comme ScheduleStateProcessor) : le find() est season-filtré,
+        // mais l'identity-map peut surfacer une ligne d'une AUTRE saison (N-1 archivée)
+        // — un enfant rattaché à une mère de saison A hériterait des datées de A,
+        // que le season_filter de buildForOverlay dropperait ensuite en silence
+        // (le gymnase fermé serait ignoré au solve). Défense §7.1 (revue #262 round 3).
+        if (!$parent instanceof CalendarEntry
+            || (null !== $clubId && $parent->getClubId() !== $clubId)
+            || (null !== $seasonId && $parent->getSeasonId() !== $seasonId)) {
             throw new UnprocessableEntityHttpException('La période mère n’existe pas.');
         }
         if (null !== $parent->getParentEntryId()) {

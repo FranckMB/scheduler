@@ -228,9 +228,11 @@ export function useCreateHolidayPeriod() {
   });
 }
 
-/** Le 422 « cette semaine existe déjà » (chevauchement/doublon) — le SEUL sauté par
+/** Le 422 « cette semaine existe déjà » (chevauchement) — le SEUL sauté par
  *  useCreateWeekChildren : l'état visé existe. Tout autre 422 (titre trop long, mère
- *  générée en bloc, type) est une vraie erreur (revue #262 round 2). */
+ *  générée en bloc, type) est une vraie erreur (revue #262 round 2). Match sur le
+ *  noyau stable « déjà découpée » (moins fragile qu'un reword ; couplage au message
+ *  serveur assumé tant qu'il n'y a pas de code machine — revue #262 round 3). */
 async function isAlreadySplit422(error: unknown): Promise<boolean> {
   if (!(error instanceof HTTPError) || 422 !== error.response.status) {
     return false;
@@ -238,7 +240,7 @@ async function isAlreadySplit422(error: unknown): Promise<boolean> {
   try {
     const body: unknown = await error.response.clone().json();
     const detail = "object" === typeof body && null !== body && "detail" in body && "string" === typeof body.detail ? body.detail : "";
-    return detail.includes("chevauche une semaine déjà découpée");
+    return detail.includes("déjà découpée");
   } catch {
     return false;
   }

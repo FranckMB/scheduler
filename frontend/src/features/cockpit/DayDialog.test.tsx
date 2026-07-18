@@ -313,6 +313,19 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 
+  // La branche à UNE seule semaine calendaire va DIRECT au wizard (pas de picker) —
+  // le test multi-semaines ci-dessus ne la couvre plus (revue #262 round 3).
+  it("adapts a single-calendar-week holiday directly, without the week picker", async () => {
+    // Vacances d'UNE semaine pleine (lun→dim) → weeksCovering rend 1 semaine.
+    holidayMutateAsync.mockResolvedValueOnce({ id: "hol-1w", kind: "period", periodType: "holiday", title: "Court", startDate: "2026-05-11", endDate: "2026-05-15", isDisruptive: false, schoolHolidayId: "sh-1w", parentEntryId: null, status: "active", createdBy: null });
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-1w", label: "Court", startDate: "2026-05-11", endDate: "2026-05-15" }) });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("hol-1w"));
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+
   // finding [1]: an existing overlay stays viewable even for a summer holiday (legacy data).
   it("still offers « Voir le planning » for a summer holiday that already has an overlay", () => {
     plansByEntry = { pe: { id: "plan-pe", chosenScheduleId: "ov-ete" } };

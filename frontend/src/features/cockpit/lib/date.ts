@@ -32,10 +32,13 @@ export interface GridDay {
  * A 6-row Monday-first grid of the month. Leading/trailing days spill from the
  * adjacent months so every row has 7 cells.
  */
+/** getDay(): 0=Sun..6=Sat → décalage Monday-first (Mon=0 … Sun=6). Source unique
+ *  partagée par la grille du mois et le découpage en semaines (mondayOf). */
+const mondayOffset = (date: Date): number => (date.getDay() + 6) % 7;
+
 export function buildMonthGrid(year: number, month: number): GridDay[] {
   const first = new Date(year, month, 1);
-  // getDay(): 0=Sun..6=Sat → Monday-first offset (Mon=0 … Sun=6).
-  const offset = (first.getDay() + 6) % 7;
+  const offset = mondayOffset(first);
   const start = new Date(year, month, 1 - offset);
 
   const days: GridDay[] = [];
@@ -86,12 +89,10 @@ export function clampRangeToSeason(
   return s <= e ? { startDate: s, endDate: e } : null;
 }
 
-/** Le lundi de la semaine ISO contenant `iso`. */
+/** Le lundi de la semaine ISO contenant `iso` (même décalage que la grille du mois). */
 export function mondayOf(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  const offset = (date.getDay() + 6) % 7; // Mon=0 … Sun=6
-  return toISODate(new Date(y, m - 1, d - offset));
+  return toISODate(new Date(y, m - 1, d - mondayOffset(new Date(y, m - 1, d))));
 }
 
 export interface WeekWindow {
