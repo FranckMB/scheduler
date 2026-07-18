@@ -3,10 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
-import { Label } from "@/shared/components/ui/label";
-import { PasswordInput } from "@/shared/components/ui/password-input";
+import { NewPasswordFields } from "@/shared/components/ui/new-password-fields";
 import { Spinner } from "@/shared/components/ui/spinner";
-import { PASSWORD_REQUIREMENT, validatePassword } from "@/shared/lib/passwordPolicy";
+import { isPasswordValid } from "@/shared/lib/passwordPolicy";
 
 import { AuthLayout } from "./AuthLayout";
 import { useResetPassword } from "./queries";
@@ -22,9 +21,8 @@ export function ResetPasswordPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const passwordError = validatePassword(password);
-    if (null !== passwordError) {
-      setError(passwordError);
+    if (!isPasswordValid(password)) {
+      setError("Le mot de passe ne respecte pas les critères.");
       return;
     }
     if (password !== confirm) {
@@ -46,17 +44,9 @@ export function ResetPasswordPage() {
       footer={<Link className="text-accent hover:underline" to="/login">Retour à la connexion</Link>}
     >
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="password">Nouveau mot de passe</Label>
-          <PasswordInput id="password" autoComplete="new-password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <p className="text-xs text-muted-foreground">{PASSWORD_REQUIREMENT}</p>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="confirm">Confirmer le mot de passe</Label>
-          <PasswordInput id="confirm" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </div>
+        <NewPasswordFields password={password} confirm={confirm} onPasswordChange={setPassword} onConfirmChange={setConfirm} passwordLabel="Nouveau mot de passe" />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="submit" disabled={reset.isPending}>
+        <Button type="submit" disabled={reset.isPending || !isPasswordValid(password) || password !== confirm}>
           {reset.isPending ? <Spinner className="size-4" /> : null}
           Réinitialiser
         </Button>

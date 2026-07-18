@@ -5,8 +5,9 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { NewPasswordFields } from "@/shared/components/ui/new-password-fields";
 import { PasswordInput } from "@/shared/components/ui/password-input";
-import { isPasswordValid, PASSWORD_REQUIREMENT } from "@/shared/lib/passwordPolicy";
+import { isPasswordValid } from "@/shared/lib/passwordPolicy";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
@@ -75,6 +76,7 @@ function PasswordForm() {
   const change = useChangePassword();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -84,6 +86,7 @@ function PasswordForm() {
         onSuccess: () => {
           setCurrent("");
           setNext("");
+          setConfirm("");
         },
       },
     );
@@ -100,12 +103,8 @@ function PasswordForm() {
             <Label htmlFor="current">Mot de passe actuel</Label>
             <PasswordInput id="current" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="next">Nouveau mot de passe</Label>
-            <PasswordInput id="next" autoComplete="new-password" minLength={12} value={next} onChange={(e) => setNext(e.target.value)} required />
-            <p className="text-xs text-muted-foreground">{PASSWORD_REQUIREMENT}</p>
-          </div>
-          <Button type="submit" disabled={current === "" || !isPasswordValid(next) || change.isPending}>
+          <NewPasswordFields password={next} confirm={confirm} onPasswordChange={setNext} onConfirmChange={setConfirm} idPrefix="profile-" passwordLabel="Nouveau mot de passe" />
+          <Button type="submit" disabled={current === "" || !isPasswordValid(next) || next !== confirm || change.isPending}>
             {change.isPending ? <Spinner className="size-4" /> : null}
             Changer le mot de passe
           </Button>

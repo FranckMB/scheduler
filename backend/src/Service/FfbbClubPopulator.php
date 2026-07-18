@@ -81,6 +81,14 @@ final class FfbbClubPopulator
     {
         // Set only when FFBB actually provides a value — never null out a
         // manager-entered (lot B) address/phone/email on a refresh with gaps.
+        // Le NOM du club : FFBB fait autorité (décision fondateur 2026-07-18) — le
+        // nom saisi au register n'est qu'un fallback ; dès que la fédération répond,
+        // c'est SON nom qui prend la place (register ET re-import). Null-check inline
+        // (setName n'accepte pas null, contrairement aux autres setters).
+        $ffbbName = $this->str($hit['nom'] ?? null);
+        if (null !== $ffbbName) {
+            $club->setName($ffbbName);
+        }
         $this->setIfPresent($this->str($hit['adresse'] ?? null), $club->setAddress(...));
         $this->setIfPresent($this->postalCode($hit), $club->setPostalCode(...));
         $this->setIfPresent($this->city($hit), $club->setCity(...));

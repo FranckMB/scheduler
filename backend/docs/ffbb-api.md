@@ -48,7 +48,7 @@ Body:
 | Champ JSON | Cible |
 |------------|-------|
 | `code` | `Club.ffbbClubCode` (déjà là) |
-| `nom` | `Club.name` (déjà là) |
+| `nom` | `Club.name` — **FFBB fait autorité** : le nom saisi au register n'est qu'un fallback, écrasé dès que la fédération répond (register ET re-import). Décision fondateur 2026-07-18 (`FfbbClubPopulator::applyClub`) |
 | `adresse` | `Club.address` |
 | `cartographie.codePostal` / `commune.codePostal` | `Club.postalCode` |
 | `cartographie.ville` / `commune.libelle` | `Club.city` |

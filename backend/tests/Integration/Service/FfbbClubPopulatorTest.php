@@ -42,6 +42,9 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertTrue($populator->populate($club));
 
         $reloaded = $this->em->getRepository(Club::class)->find($club->getId());
+        // NR (retour fondateur 2026-07-18) : FFBB fait autorité sur le NOM — le nom
+        // provisoire du seed est remplacé par celui de la fédération.
+        self::assertSame('B CHARPENNES CROIX LUIZET', $reloaded?->getName(), 'FFBB name overrides the seed name');
         self::assertSame('5 RUE EMILE DUNIERE', $reloaded?->getAddress());
         self::assertSame('69100', $reloaded?->getPostalCode());
         self::assertSame('VILLEURBANNE', $reloaded?->getCity());
@@ -115,6 +118,8 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         $reloaded = $this->em->getRepository(Club::class)->find($club->getId());
         self::assertSame('manuel@club.fr', $reloaded?->getContactEmail(), 'manual email preserved');
         self::assertSame('Adresse manuelle', $reloaded?->getAddress(), 'manual address preserved');
+        // Le nom, lui, reste FFBB-autoritaire même au refresh (présent dans le hit).
+        self::assertSame('BCCL', $reloaded?->getName(), 'FFBB name applied on refresh');
     }
 
     protected function setUp(): void
