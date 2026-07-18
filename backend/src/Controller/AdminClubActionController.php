@@ -38,6 +38,7 @@ final readonly class AdminClubActionController
         private AdminSessionCsrf $csrf,
         private TokenStorageInterface $tokens,
         private ManagerRegistry $managerRegistry,
+        private \App\Service\TenantConnectionContext $tenantContext,
     ) {}
 
     #[Route('/actions', methods: ['GET'])]
@@ -52,9 +53,17 @@ final readonly class AdminClubActionController
         ], $this->catalog->all())]);
     }
 
-    #[Route('/clubs/{clubId}/actions/{key}', methods: ['POST'])]
+    // requirements clubId : un segment non-UUID doit être un 404 du routeur, jamais un
+    // 22P02 Postgres (500) dans le lookup d'existence (revue SA4, finding 6).
+    #[Route('/clubs/{clubId}/actions/{key}', requirements: ['clubId' => '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'], methods: ['POST'])]
     public function run(string $clubId, string $key, Request $request): JsonResponse
     {
+        // Contexte d'audit posé AVANT toute garde : même une tentative REFUSÉE
+        // (CSRF, action/club inconnus) doit tracer QUEL club était visé — la
+        // reconstruction forensique sur la surface cross-tenant l'exige (finding 4).
+        // AdminAuditSubscriber fusionne cet attribut dans details.
+        $request->attributes->set('_admin_audit_context', ['clubId' => $clubId, 'actionKey' => $key]);
+
         if (!$this->csrf->isValid($request)) {
             return new JsonResponse(['error' => 'Invalid CSRF token.'], 403);
         }
@@ -80,14 +89,16 @@ final readonly class AdminClubActionController
         $request->attributes->set('_admin_audit_actor_id', $admin->getId());
 
         // Définition ÉPHÉMÈRE : hors catalogue des jobs → jamais schedulée (et sa
-        // cadence manual() lèverait si elle atteignait le scheduler). Le verrou et
-        // l'historique sont par action (clé stable), le club tracé via arguments.
+        // cadence manual() lèverait si elle atteignait le scheduler). Verrou/historique
+        // sur lockKey() — IDENTIQUE à la clé du job planifié quand la commande est
+        // partagée (purge-seasons), pour que geste manuel et cron se sérialisent.
+        // Arguments = catalogue (fixes) + le seul --club runtime (validé ci-dessus).
         $definition = new AdminJobDefinition(
-            'action:' . $action->key,
+            $action->lockKey(),
             $action->label,
             $action->command,
             AdminJobSchedule::manual(),
-            ['--club' => $clubId],
+            [...$action->arguments, '--club' => $clubId],
             manualTriggerAllowed: true,
         );
 
@@ -97,6 +108,12 @@ final readonly class AdminClubActionController
             return new JsonResponse(['error' => 'Support action already running.'], 409);
         } catch (Throwable) {
             return new JsonResponse(['error' => 'Support action failed unexpectedly.'], 500);
+        } finally {
+            // Ceinture SA0 : une commande in-process (reset-season) scope le GUC tenant
+            // sur la connexion runtime et le clear() elle-même — mais la requête ADMIN ne
+            // doit JAMAIS continuer tenant-scopée, même si la commande a levé avant son
+            // finally. Exception documentée dans console-superadmin.md (SA4).
+            $this->tenantContext->clear();
         }
 
         if (Command::SUCCESS !== $exitCode) {

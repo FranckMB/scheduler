@@ -53,6 +53,10 @@ final class PurgeSeasonsCommand extends Command
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'List what would be purged without deleting anything.');
         $this->addOption('date', null, InputOption::VALUE_REQUIRED, 'Treat this YYYY-MM-DD as "today" (rehearsal/tests).');
         $this->addOption('club', null, InputOption::VALUE_REQUIRED, 'Restrict to a single club id.');
+        // SA4 : la grâce post-pivot protège le cron AUTOMATIQUE d'une purge sans préavis ;
+        // un geste HUMAIN explicite (action support confirmée nominativement) ne doit pas
+        // être un no-op silencieux pendant 30 jours chaque été (revue SA4, finding 1).
+        $this->addOption('no-grace', null, InputOption::VALUE_NONE, 'Skip the 30-day post-pivot grace window (explicit support gesture).');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -76,10 +80,11 @@ final class PurgeSeasonsCommand extends Command
             : $repository->findAll();
         $this->entityManager->clear();
 
+        $noGrace = (bool) $input->getOption('no-grace');
         $purgedTotal = 0;
         foreach ($clubs as $club) {
             try {
-                $purgedTotal += $this->purgeClub($club->getId(), $today, $dryRun, $io);
+                $purgedTotal += $this->purgeClub($club->getId(), $today, $dryRun, $io, $noGrace);
             } catch (Throwable $e) {
                 $this->hadFailure = true;
                 $io->warning(\sprintf('Club %s skipped: %s', $club->getId(), $e->getMessage()));
@@ -94,7 +99,7 @@ final class PurgeSeasonsCommand extends Command
         return $this->hadFailure ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private function purgeClub(string $clubId, ?DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io): int
+    private function purgeClub(string $clubId, ?DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io, bool $noGrace = false): int
     {
         $this->tenantConnectionContext->setClubId($clubId);
 
@@ -108,8 +113,9 @@ final class PurgeSeasonsCommand extends Command
         // d'un coup — automatisé, il serait supprimé dans l'heure sans aucun
         // préavis. On laisse 30 j après le DÉBUT de la saison courante avant de
         // purger, le temps qu'un gestionnaire consulte/exporte l'historique.
+        // --no-grace (SA4) : un geste support explicite saute cette fenêtre.
         $effectiveToday = $today ?? new DateTimeImmutable;
-        if ($current->getStartDate() > $effectiveToday->modify('-30 days')) {
+        if (!$noGrace && $current->getStartDate() > $effectiveToday->modify('-30 days')) {
             return 0;
         }
 

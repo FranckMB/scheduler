@@ -49,7 +49,15 @@ final class AdminAuditSubscriber implements EventSubscriberInterface
                     'action' => 'admin.http_access',
                     'route' => $event->getRequest()->attributes->get('_route'),
                     'status' => $event->getResponse()->getStatusCode(),
-                    'details' => json_encode(['method' => $event->getRequest()->getMethod()], \JSON_THROW_ON_ERROR),
+                    // SA4 : un controller peut poser `_admin_audit_context` (ex. quel CLUB
+                    // une action support visait) — fusionné dans details pour que même une
+                    // tentative REFUSÉE trace sa cible. Jamais de contenu de requête brut
+                    // ici (mot de passe/TOTP) : uniquement des attributs posés par NOS
+                    // controllers.
+                    'details' => json_encode([
+                        'method' => $event->getRequest()->getMethod(),
+                        ...(\is_array($context = $event->getRequest()->attributes->get('_admin_audit_context')) ? $context : []),
+                    ], \JSON_THROW_ON_ERROR),
                 ],
             );
         } catch (Throwable $exception) {

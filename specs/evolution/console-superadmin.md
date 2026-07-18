@@ -84,7 +84,15 @@ toute la plomberie SA3 (verrou, historique `admin_job_run` — désormais avec `
 CSRF, audit SA0). Manuel uniquement, jamais schedulé (`AdminJobSchedule::manual()` lève si
 atteint par le scheduler). Console : bouton « Actions » par ligne club ; action *dangereuse* →
 **confirmation nominative** (taper le nom du club). NR `phase1` : `AdminClubActionTest`
-(firewall, CSRF, catalogue/club bornés, trace arguments, commandes).
+(firewall, CSRF, catalogue/club bornés, trace arguments, commandes, chemin destructif réel,
+contrat catalogue↔commandes).
+**⚠️ Exception SA0 assumée (revue SA4)** : l'invariant « la session admin ne pose jamais
+`app.club_id` » connaît UNE exception délibérée — `app:clubs:reset-season` s'exécute
+in-process dans la requête admin et scope la connexion RUNTIME au club ciblé (RLS active,
+jamais en bypass) le temps de la purge ; le GUC est relâché dans le `finally` de la commande
+ET par une ceinture dans le controller (`AdminClubActionController`), la requête admin ne
+continue jamais tenant-scopée. L'audit trace le club visé (`_admin_audit_context` → details),
+y compris sur les tentatives refusées.
 - Livré : `reset-generation-quota` (`app:clubs:reset-quota`), `reset-current-season`
   (`app:clubs:reset-season` — miroir CLI de `ResetSeasonController`, `--dry-run`),
   `purge-old-seasons` (`app:seasons:purge --club`, existant).

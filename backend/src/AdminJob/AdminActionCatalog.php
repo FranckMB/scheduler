@@ -40,6 +40,12 @@ final readonly class AdminActionCatalog
                 'Supprime les saisons au-delà de la rétention (N-2 et plus anciennes) de ce club.',
                 'app:seasons:purge',
                 dangerous: true,
+                // Geste humain explicite : la grâce post-pivot du cron ne s'applique pas
+                // (sinon l'action confirmée serait un no-op silencieux tout l'été).
+                arguments: ['--no-grace' => true],
+                // Même clé de verrou/historique que le job planifié : le geste manuel et
+                // le cron de 03:00 balaient les mêmes tables — ils DOIVENT se sérialiser.
+                runKey: 'purge-seasons',
             ),
         ];
     }

@@ -72,9 +72,11 @@ final class ResetClubSeasonCommand extends Command
             }
 
             $this->tenantConnectionContext->setClubId($clubId);
-            // Saison courante = même règle calendrier que partout (SeasonResolver,
-            // pivot 15 juillet) — jamais une saison passée/future par accident.
-            $current = SeasonResolver::currentAmong($this->seasonResolver->seasonsForClub($clubId));
+            // Saison courante = la MÊME résolution que toutes les surfaces de l'app :
+            // currentSeason() est CLOCK-AWARE (simulateur de date compris) — la version
+            // statique prendrait l'horloge murale et pourrait viser une autre saison que
+            // celle que la console affiche (revue SA4, finding 0).
+            $current = $this->seasonResolver->currentSeason($clubId);
             if (null === $current) {
                 $io->error(\sprintf('Club %s has no current season — nothing to reset.', $clubId));
 
@@ -93,8 +95,11 @@ final class ResetClubSeasonCommand extends Command
 
             return Command::SUCCESS;
         } finally {
-            $this->entityManager->clear();
+            // GUC d'abord : si em->clear() levait, le GUC resterait posé pour la suite
+            // de la requête admin (exécution in-process, exception SA0 documentée dans
+            // console-superadmin.md — le controller a une ceinture en plus).
             $this->tenantConnectionContext->clear();
+            $this->entityManager->clear();
         }
     }
 }

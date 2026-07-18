@@ -518,7 +518,9 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
   const [selected, setSelected] = useState<AdminAction | null>(null);
   const [confirmName, setConfirmName] = useState("");
 
-  const confirmBlocked = null !== selected && selected.dangerous && confirmName.trim() !== club.name;
+  // trim SYMÉTRIQUE : un nom de club stocké avec un espace de bord resterait
+  // inconfirmable sinon (revue SA4, finding 5).
+  const confirmBlocked = null !== selected && selected.dangerous && confirmName.trim() !== club.name.trim();
 
   const execute = () => {
     if (!selected || confirmBlocked || run.isPending) return;

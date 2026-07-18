@@ -180,6 +180,62 @@ final class AdminClubActionTest extends WebTestCase
         self::assertSame(Command::FAILURE, $unknown->execute(['--club' => Uuid::v4()->toRfc4122()]));
     }
 
+    public function testResetSeasonCommandActuallyWipesTheSeasonDataKeepingTheSeasonRow(): void
+    {
+        // Le chemin DESTRUCTIF réel (pas seulement le dry-run) : la structure part,
+        // la ligne Season et le club survivent (revue SA4, finding 8).
+        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
+        $club = (new \App\Entity\Club)->setName('Club wipe SA4')->setSlug('sa4-wipe-' . strtolower(substr(md5(uniqid('', true)), 0, 8)))
+            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
+        $em->persist($club);
+        $em->flush();
+        $clubId = $club->getId();
+        $this->scopeGucToClub($clubId);
+        $season = (new \App\Entity\Season)->setClubId($clubId)->setName('SA4-wipe')
+            ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
+            ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
+            ->setStatus('active');
+        $em->persist($season);
+        $em->flush();
+        $team = (new \App\Entity\Team)->setClubId($clubId)->setSeasonId($season->getId())
+            ->setSportCategoryId('33333333-3333-3333-3333-333333333333')->setPriorityTierId(1)
+            ->setName('SM1')->setSessionsPerWeek(1)->setIsActive(true);
+        $em->persist($team);
+        $em->flush();
+        $seasonId = $season->getId();
+        $teamId = $team->getId();
+
+        $application = new Application(self::$kernel);
+        $wipe = new CommandTester($application->find('app:clubs:reset-season'));
+        self::assertSame(Command::SUCCESS, $wipe->execute(['--club' => $clubId]), $wipe->getDisplay());
+
+        $em->clear();
+        $this->scopeGucToClub($clubId);
+        self::assertNull($em->getRepository(\App\Entity\Team::class)->find($teamId), 'la structure de la saison est vidée');
+        self::assertNotNull($em->getRepository(\App\Entity\Season::class)->find($seasonId), 'la ligne Season survit — le club repart au wizard');
+    }
+
+    public function testTheCatalogCommandsExistAndAcceptTheClubOption(): void
+    {
+        // Contrat catalogue ↔ commandes : chaque entrée nomme une commande RÉELLE qui
+        // accepte --club (une typo de catalogue doit rougir ici, pas en prod — finding 9).
+        $application = new Application(self::$kernel);
+        $catalog = self::getContainer()->get(\App\AdminJob\AdminActionCatalog::class);
+        foreach ($catalog->all() as $action) {
+            $command = $application->find($action->command);
+            self::assertTrue($command->getDefinition()->hasOption('club'), \sprintf('%s doit accepter --club', $action->command));
+            foreach (array_keys($action->arguments) as $argument) {
+                self::assertTrue($command->getDefinition()->hasOption(ltrim((string) $argument, '-')), \sprintf('%s doit accepter %s', $action->command, $argument));
+            }
+        }
+
+        // La clé de verrou de purge-old-seasons DOIT rester celle du job planifié :
+        // geste manuel et cron balaient les mêmes tables (finding 3, gravé ici).
+        $purge = $catalog->find('purge-old-seasons');
+        self::assertNotNull($purge);
+        self::assertSame('purge-seasons', $purge->lockKey());
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
