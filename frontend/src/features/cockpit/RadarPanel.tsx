@@ -43,14 +43,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
   // mappé par entrée, plutôt qu'un hook par carte (règles des hooks dans la liste).
-  // Fail-closed : tant que les plans ne sont pas RÉSOLUS (chargement OU erreur), l'état d'une
-  // période est INCONNU — on ne décide donc ni « à traiter » ni « tout roule », et on n'affiche
-  // aucun CTA qui, à tort, pousserait à régénérer un plan déjà validé (même philosophie que
-  // closureImpactsPending). Une erreur laisse activeByEntry vide comme le chargement : la
-  // traiter comme « résolu » mal-étiquetterait une période validée en « pas de planning ».
+  // Fail-closed sur l'absence de DONNÉE : sans les plans, l'état d'une période est INCONNU —
+  // on ne décide ni « à traiter » ni « tout roule », et on n'affiche aucun CTA qui pousserait à
+  // régénérer un plan déjà validé (même philosophie que closureImpactsPending). Clé sur `data`,
+  // PAS sur isSuccess : TanStack bascule en error sur un refetch d'arrière-plan tout en gardant
+  // la donnée périmée — s'y fier ferait DISPARAÎTRE tout le radar sur un simple blip, alors qu'on
+  // a des plans valides à afficher. Un 1er chargement en échec (aucune donnée) reste fail-closed.
   const plansQuery = useSchedulePlans();
   const plans = plansQuery.data;
-  const plansUnresolved = !plansQuery.isSuccess;
+  const plansUnresolved = undefined === plans;
   const activeByEntry = new Map<string, string>();
   for (const p of plans ?? []) {
     if (null !== p.calendarEntryId && null !== p.chosenScheduleId) {

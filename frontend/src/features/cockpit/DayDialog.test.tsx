@@ -23,11 +23,10 @@ const setSelectedScheduleId = vi.fn();
 // pointeur sur l'entrée.
 let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
 let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
-// État des requêtes plan/schedules : ni chargées ni en erreur = résolues (fail-closed
-// avertit tant que non résolu — chargement OU erreur).
-let queriesLoading = false;
-let queriesError = false;
-const queriesResolved = () => !queriesLoading && !queriesError;
+// undefined data = requêtes pas encore résolues (1er chargement ou 1er échec sans donnée) →
+// fail-closed. Le code clé sur la PRÉSENCE de `data`, pas sur le statut (une donnée périmée
+// après un refetch en échec reste exploitable).
+let queriesNoData = false;
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
@@ -35,11 +34,11 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
-  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null, isLoading: null !== id && queriesLoading, isSuccess: null !== id && queriesResolved() }),
+  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
-  useSchedules: () => ({ data: schedulesData, isLoading: queriesLoading, isSuccess: queriesResolved() }),
+  useSchedules: () => ({ data: queriesNoData ? undefined : schedulesData }),
 }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
@@ -82,8 +81,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     holidayMutateAsync.mockClear();
     plansByEntry = {};
     schedulesData = [];
-    queriesLoading = false;
-    queriesError = false;
+    queriesNoData = false;
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -130,10 +128,10 @@ describe("DayDialog — deletion is always confirmed", () => {
     expect(screen.getByText("Cette entrée sera retirée du calendrier.")).toBeInTheDocument();
   });
 
-  it("fail-closed: while the period's plan/versions are still loading, warns about the cascade (never under-warns)", async () => {
-    // Le dialogue s'ouvre avant que le plan réponde : sous-avertir ferait perdre des
-    // versions après un message bénin (régression P4-19). Tant qu'on ne sait pas → cascade.
-    queriesLoading = true;
+  it("fail-closed: while the period's plan/versions are unresolved (no data yet), warns about the cascade (never under-warns)", async () => {
+    // Le dialogue s'ouvre avant que le plan réponde (1er chargement, ou 1er échec sans donnée) :
+    // sous-avertir ferait perdre des versions après un message bénin (régression P4-19).
+    queriesNoData = true;
     plansByEntry = {}; // plan pas encore résolu
     schedulesData = [];
     renderDialog([entry({ id: "p3", kind: "period", periodType: "closure", title: "En cours" })]);
@@ -143,23 +141,22 @@ describe("DayDialog — deletion is always confirmed", () => {
     expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
   });
 
-  it("fail-closed: on a plan/schedules query ERROR, still warns about the cascade (isError, not just isLoading)", async () => {
-    // Une erreur laisse data indéfini avec isLoading=false : sans garde sur isSuccess, le
-    // message retombait en bénin et un delete confirmé emportait le plan et ses versions.
-    queriesError = true;
-    plansByEntry = {};
-    schedulesData = [];
+  it("resolved data stays benign for an empty plan even if a background refetch errors (keys on data, not status)", async () => {
+    // TanStack passe en error sur un refetch d'arrière-plan en gardant la donnée : un plan
+    // VIDE résolu doit rester bénin — s'y fier sur isSuccess sur-avertirait à chaque blip.
+    plansByEntry = { p4: { id: "plan-p4", chosenScheduleId: null } };
+    schedulesData = []; // plan résolu et vide → rien à perdre
     renderDialog([entry({ id: "p4", kind: "period", periodType: "holiday", title: "Vacances" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Vacances" }));
 
-    expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
+    expect(screen.getByText("Cette entrée sera retirée du calendrier.")).toBeInTheDocument();
   });
 
-  it("never flashes the cascade warning for a cutoff, even while loading (no plan, inv. 9)", async () => {
+  it("never flashes the cascade warning for a cutoff, even while unresolved (no plan, inv. 9)", async () => {
     // Régression évitée : le fail-closed ne doit pas s'armer sur un type non overlayable —
     // cutoff/mutualisation/custom ne portent jamais de plan, aucune cascade à annoncer.
-    queriesLoading = true;
+    queriesNoData = true;
     renderDialog([entry({ id: "p5", kind: "period", periodType: "cutoff", title: "Coupure" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Coupure" }));
@@ -274,8 +271,7 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     setSelectedScheduleId.mockClear();
     plansByEntry = {};
     schedulesData = [];
-    queriesLoading = false;
-    queriesError = false;
+    queriesNoData = false;
   });
 
   // item 1: a public holiday (jour férié) shows read-only info.

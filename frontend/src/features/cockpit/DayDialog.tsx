@@ -59,12 +59,14 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // cutoff/mutualisation/custom et les événements n'en ont jamais, donc aucune cascade à
   // annoncer (les avertir serait un faux positif alarmant).
   const overlayCapable = "closure" === toDelete?.periodType || "holiday" === toDelete?.periodType;
-  // Fail-closed sur tout état NON RÉSOLU (chargement OU erreur) : le dialogue s'ouvre avant
-  // que le plan/les versions répondent. On n'affiche le message bénin que si on SAIT (les
-  // deux requêtes ont abouti) qu'il n'y a pas de version — sinon un delete confirmé pendant
-  // le chargement/une erreur afficherait « rien à perdre » puis emporterait le plan et ses
-  // versions. (usePeriodAnchor n'expose pas isError → lecture directe des deux requêtes ici.)
-  const versionsResolved = planQuery.isSuccess && schedulesQuery.isSuccess;
+  // Fail-closed sur l'absence de DONNÉE (pas le statut) : le dialogue s'ouvre avant que le
+  // plan/les versions répondent. On n'affiche le message bénin que si on A la donnée des deux
+  // requêtes — sinon un delete confirmé pendant le chargement/1er échec afficherait « rien à
+  // perdre » puis emporterait le plan et ses versions. Clé sur `data`, PAS sur isSuccess :
+  // TanStack bascule en error sur un refetch d'arrière-plan tout en gardant la donnée périmée
+  // — s'y fier sur-avertirait un plan vide après un simple blip. (usePeriodAnchor n'expose pas
+  // cet état → lecture directe des deux requêtes ici.)
+  const versionsResolved = undefined !== planQuery.data && undefined !== schedulesQuery.data;
   const toDeleteHasVersions = overlayCapable && (!versionsResolved || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId)));
 
   const confirmDelete = () => {

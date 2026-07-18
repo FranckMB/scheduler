@@ -13,9 +13,10 @@ let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolea
 let conflictsPending = false;
 // ADR-0002 lot D-b : le radar dérive « version active » du plan de la période
 // (chosenScheduleId), plus d'un pointeur sur l'entrée.
-let plansData: SchedulePlan[] = [];
-let plansLoading = false;
-let plansError = false;
+// undefined = plans pas encore résolus (aucune donnée). Le fail-closed du radar clé sur la
+// PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
+// affichable).
+let plansData: SchedulePlan[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -23,8 +24,7 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
-  // isSuccess pilote le fail-closed : ni chargement ni erreur = résolu.
-  useSchedulePlans: () => ({ data: plansLoading || plansError ? undefined : plansData, isLoading: plansLoading, isSuccess: !plansLoading && !plansError }),
+  useSchedulePlans: () => ({ data: plansData }),
 }));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
@@ -73,8 +73,6 @@ describe("RadarPanel", () => {
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
-    plansLoading = false;
-    plansError = false;
   });
 
   it("asks for the school zone when unknown", () => {
@@ -156,10 +154,11 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
   });
 
-  it("fail-closed: while plans are loading, neither flashes the all-clear nor offers a misleading 'Adapter'", () => {
-    // État d'une période INCONNU tant que les plans chargent : ne pas dire « tout roule »
-    // (masquerait une fermeture validée) ni proposer « Adapter » (régénérerait un plan validé).
-    plansLoading = true;
+  it("fail-closed: while plans are unresolved (no data yet), neither flashes the all-clear nor offers a misleading 'Adapter'", () => {
+    // État d'une période INCONNU tant qu'on n'a pas les plans (1er chargement, ou 1er échec sans
+    // donnée) : ne pas dire « tout roule » (masquerait une fermeture validée) ni proposer
+    // « Adapter » (régénérerait un plan validé).
+    plansData = undefined;
     renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
 
     expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
@@ -167,13 +166,13 @@ describe("RadarPanel", () => {
     expect(screen.queryByRole("button", { name: "Voir le planning" })).not.toBeInTheDocument();
   });
 
-  it("fail-closed on a plans query ERROR too: never mislabels a period as 'pas de planning' (isSuccess, not just isLoading)", () => {
-    // Une erreur laisse activeByEntry vide comme le chargement : la traiter comme « résolu »
-    // afficherait « Adapter » sur une période potentiellement validée → régénération destructive.
-    plansError = true;
-    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+  it("keeps rendering stale plans after a background refetch error (keys on data presence, not query status)", () => {
+    // TanStack passe en error sur un refetch d'arrière-plan tout en gardant la donnée : le radar
+    // ne doit PAS disparaître — la donnée présente reste affichable (« Voir le planning »).
+    plansData = [validatedPlan("c1", "ov1")];
+    renderRadar({ entries: [closure({})] });
 
-    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 
