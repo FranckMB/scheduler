@@ -12,7 +12,11 @@ const cutoffMutate = vi.fn();
 const closureMutate = vi.fn();
 // "Adapter" (create branch) uses mutateAsync so the wizard navigation survives a
 // mid-POST modal dismiss — the mock resolves with the created period's id.
-const holidayMutateAsync = vi.fn(() => Promise.resolve({ id: "created-hol" }));
+// Entrée COMPLÈTE (comme l'API réelle) : requestAdapt lit startDate/endDate pour
+// calculer les semaines — un {id} nu ferait jeter weeksCovering en silence.
+const holidayMutateAsync = vi.fn(() =>
+  Promise.resolve({ id: "created-hol", kind: "period", periodType: "holiday", title: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20", isDisruptive: false, schoolHolidayId: "sh1", parentEntryId: null, status: "active", createdBy: null }),
+);
 const navigate = vi.fn();
 const startPeriodMode = vi.fn();
 const setSelectedScheduleId = vi.fn();
@@ -290,7 +294,9 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
   });
 
   // item 1 + 3: a school holiday shows info AND the "Adapter" entry point.
-  it("shows the school-holiday info + an « Adapter » action when no period exists yet", async () => {
+  // P2-5 E1 : ces vacances couvrent PLUSIEURS semaines calendaires → « Adapter »
+  // crée la période mère puis ouvre le CHOIX DES SEMAINES (plus d'adapt direct).
+  it("shows the school-holiday info + « Adapter » opens the week picker on a multi-week holiday", async () => {
     renderDialog([], { holiday: schoolHoliday() });
     expect(screen.getByText("Vacances")).toBeInTheDocument();
     expect(screen.getByText(/Vacances de Noël/)).toBeInTheDocument();
@@ -298,8 +304,12 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
     // mutateAsync (no mutate-scoped options) so the wizard navigation survives a dismiss.
     expect(holidayMutateAsync).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" });
-    // …AND once it resolves, the wizard opens on the created period (the orphan-entry guard).
-    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("created-hol"));
+    // …AND once it resolves, the WEEK PICKER opens for the created period.
+    await waitFor(() => expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument());
+    expect(startPeriodMode).not.toHaveBeenCalled();
+    // Le chemin « d'un bloc » reste offert et mène au wizard sur la mère.
+    await userEvent.click(screen.getByRole("button", { name: /d'un bloc/i }));
+    expect(startPeriodMode).toHaveBeenCalledWith("created-hol");
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 

@@ -13,7 +13,7 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
-import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useCreateWeekChildren, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -181,6 +181,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // elles y vivent par construction). Le DayDialog ne reçoit que les entrées du
   // JOUR : requête ciblée, cache partagé avec le cockpit.
   const childrenQuery = useCalendarEntries(entry?.startDate ?? "", entry?.endDate ?? "", null !== entry);
+  // Résolu ? — gate du picker : « 0 enfant » pendant le chargement n'est PAS
+  // « pas découpée » (fail-open → 422 en série, revue #262 round 2).
+  const childrenResolved = null === entry || undefined !== childrenQuery.data;
   const weekChildren = (childrenQuery.data ?? []).filter((e) => e.parentEntryId === (entry?.id ?? "")).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const { data: allPlans } = useSchedulePlans();
   const chosenOfChild = (childId: string): string | null => (allPlans ?? []).find((p) => p.calendarEntryId === childId)?.chosenScheduleId ?? null;
@@ -201,29 +204,41 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     onClose();
     navigate("/planning");
   };
-  // Même règle que le radar : période longue → choix des semaines ; sinon direct.
-  // schedules pas résolus → « bloc généré ? » inconnu : adapter direct (fail-open
-  // du picker = 422 chaque semaine, revue #262).
+  // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
+  // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
+  // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →
+  // direct aussi (fail-open du picker = 422 en série, revue #262 round 2).
   const requestAdapt = (target: CalendarEntry) => {
-    const longPeriod = daysUntil(target.startDate, target.endDate) + 1 > 7;
-    if (longPeriod && 0 === weekChildren.length && schedulesResolved && !blockGenerated && null !== workingSeason) {
+    const multiWeek = null !== workingSeason && weeksCovering(target.startDate, target.endDate, workingSeason).length > 1;
+    if (multiWeek && childrenResolved && 0 === weekChildren.length && schedulesResolved && !blockGenerated) {
       setPickerFor(target);
       return;
     }
     adapt(target.id);
   };
+  const announceWeekResult = ({ created, failedCount }: { created: CalendarEntry[]; failedCount: number }) => {
+    if (failedCount > 0) {
+      toast.error(`${failedCount} semaine${failedCount > 1 ? "s" : ""} n'a pas pu être créée — réessayez depuis la carte de couverture.`);
+    }
+    if (0 === created.length && 0 === failedCount) {
+      toast.info("Ces semaines étaient déjà découpées.");
+    }
+  };
   const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
     createWeekChildren.mutate(
       { mother, weeks },
       {
-        onSuccess: (created) => {
+        onSuccess: (result) => {
           setPickerFor(null);
-          if (1 === created.length) {
-            adapt(created[0].id);
+          announceWeekResult(result);
+          if (1 === result.created.length && 0 === result.failedCount) {
+            adapt(result.created[0].id);
             return;
           }
-          toast.success(`${created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
-          onClose();
+          if (result.created.length > 1) {
+            toast.success(`${result.created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
+            onClose();
+          }
         },
       },
     );
@@ -262,7 +277,14 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
                   onClick={() =>
                     createWeekChildren.mutate(
                       { mother: entry, weeks: [week] },
-                      { onSuccess: (created) => created[0] && adapt(created[0].id) },
+                      {
+                        onSuccess: (result) => {
+                          announceWeekResult(result);
+                          if (result.created[0]) {
+                            adapt(result.created[0].id);
+                          }
+                        },
+                      },
                     )
                   }
                 >

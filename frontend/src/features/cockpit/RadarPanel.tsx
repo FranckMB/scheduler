@@ -116,6 +116,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // d'impact tant que le plan n'est pas validé (revue #260 round 1).
   const inProgressEntries = roots.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
 
+  // Semaines ORPHELINES D'AFFICHAGE (revue #262 round 2) : la fenêtre serveur du
+  // radar (endDate >= from) peut exclure une mère FINIE dont la semaine pleine,
+  // elle, court encore — sans sa mère, l'enfant n'a plus aucune surface. Carte
+  // dédiée tant qu'il n'est pas validé.
+  const entryIdSet = new Set(entries.map((e) => e.id));
+  const orphanWeekChildren = active.filter(
+    (e) => null !== e.parentEntryId && !entryIdSet.has(e.parentEntryId) && e.endDate >= today && !activeByEntry.has(e.id),
+  );
+
   // Mères découpées à COUVRIR : une semaine existante non validée OU une semaine
   // MANQUANTE (décochée au picker, échec partiel — revue #262 : sans chip « à
   // créer », une semaine décochée devenait à jamais implanifiable). Visible tant
@@ -144,33 +153,44 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     return motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id));
   });
 
-  // Adapter une période longue = choisir ses semaines — sauf déjà découpée (chips)
-  // ou déjà générée d'un bloc (on reste sur son plan). ≤ 7 jours : direct, comme
-  // avant (zéro friction sur une petite coupure). Saison inconnue → direct aussi
-  // (le picker a besoin de la fenêtre de saison pour clamper).
+  // Adapter une période qui COUVRE PLUSIEURS SEMAINES = les choisir — sauf déjà
+  // découpée (chips) ou déjà générée d'un bloc (on reste sur son plan). Le critère
+  // est le NOMBRE de semaines calendaires, pas la durée : 7 jours à cheval
+  // jeu→mer = 2 semaines (l'exemple fondateur 12–18 nov — revue #262 round 2).
+  // Saison inconnue ou schedules pas résolus → direct (fail-safe : « bloc
+  // généré ? » inconnu, offrir le picker ferait 422 chaque semaine).
   const requestAdapt = (entry: CalendarEntry) => {
     const planId = (plans ?? []).find((p) => p.calendarEntryId === entry.id)?.id ?? null;
     const blockGenerated = null !== planId && plansWithVersions.has(planId);
-    const longPeriod = daysUntil(entry.startDate, entry.endDate) + 1 > 7;
-    // schedules pas résolus → « bloc généré ? » est INCONNU : offrir le picker
-    // ferait 422 chaque semaine (fail-open, revue #262) — on adapte direct.
-    if (longPeriod && !childrenByParent.has(entry.id) && !schedulesUnresolved && !blockGenerated && null !== workingSeason) {
+    const multiWeek = null !== workingSeason && weeksCovering(entry.startDate, entry.endDate, workingSeason).length > 1;
+    if (multiWeek && !childrenByParent.has(entry.id) && !schedulesUnresolved && !blockGenerated) {
       setPickerFor(entry);
       return;
     }
     adapt(entry.id);
   };
+  const announceWeekResult = ({ created, failedCount }: { created: CalendarEntry[]; failedCount: number }) => {
+    if (failedCount > 0) {
+      toast.error(`${failedCount} semaine${failedCount > 1 ? "s" : ""} n'a pas pu être créée — réessayez depuis la carte de couverture.`);
+    }
+    if (0 === created.length && 0 === failedCount) {
+      toast.info("Ces semaines étaient déjà découpées.");
+    }
+  };
   const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
     createWeekChildren.mutate(
       { mother, weeks },
       {
-        onSuccess: (created) => {
+        onSuccess: (result) => {
           setPickerFor(null);
-          if (1 === created.length) {
-            adapt(created[0].id);
+          announceWeekResult(result);
+          if (1 === result.created.length && 0 === result.failedCount) {
+            adapt(result.created[0].id);
             return;
           }
-          toast.success(`${created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
+          if (result.created.length > 1) {
+            toast.success(`${result.created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
+          }
         },
       },
     );
@@ -236,6 +256,14 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // du libellé vers le filtre de visibilité, où le drapeau n'est même plus lu. Tant
   // qu'un impact est en vol, le panneau n'est pas « vide », il est incomplet.
   const closureImpactsPending = closureImpacts.some((q) => q.isPending);
+  // Impact des mères CLOSURE découpées : la carte de couverture remplace leur
+  // ClosureRadarItem — elle doit garder le CHIFFRE des séances touchées (revue
+  // #260 l'avait exigé ; #262 round 2 l'a vu disparaître au découpage).
+  const splitClosureMothers = splitMothers.filter((m) => "closure" === m.periodType);
+  const splitClosureImpacts = useEntryConflictsList(splitClosureMothers.map((m) => m.id));
+  const splitImpactCountByEntry = new Map<string, number>(
+    splitClosureMothers.map((m, i) => [m.id, (splitClosureImpacts[i]?.data?.conflicts ?? []).reduce((sum, c) => sum + c.dates.length, 0)]),
+  );
   // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
   const cutoffs = upcomingPeriods("cutoff");
 
@@ -245,6 +273,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   const isEmpty =
     inProgressEntries.length === 0 &&
+    orphanWeekChildren.length === 0 &&
     splitMothers.length === 0 &&
     upcomingHolidays.length === 0 &&
     disruptiveEvents.length === 0 &&
@@ -281,6 +310,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         </RadarCard>
       ))}
 
+      {/* Semaine dont la MÈRE est sortie de la fenêtre radar : sa seule surface. */}
+      {orphanWeekChildren.map((e) => (
+        <RadarCard key={`orphan-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning de semaine à finaliser">
+          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
+            Reprendre
+          </Button>
+        </RadarCard>
+      ))}
+
       {/* Couverture d'une période DÉCOUPÉE (P2-5 E1) : l'état par semaine, d'un
           coup d'œil — validée → Voir, en cours/à faire → Reprendre, MANQUANTE
           (décochée, échec partiel) → « + créer » (le dead-end de la revue #262).
@@ -288,8 +326,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {splitMothers.map((m) => {
         const slots = motherWeekSlots(m);
         const covered = slots.filter(({ child }) => null !== child && activeByEntry.has(child.id)).length;
+        const impactCount = splitImpactCountByEntry.get(m.id) ?? 0;
+        const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""}` : ""}`;
         return (
-          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={`${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}`}>
+          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={coverageDetail}>
             {slots.map(({ week, child }) => {
               if (null === child) {
                 return (
@@ -301,7 +341,14 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                     onClick={() =>
                       createWeekChildren.mutate(
                         { mother: m, weeks: [week] },
-                        { onSuccess: (created) => created[0] && adapt(created[0].id) },
+                        {
+                          onSuccess: (result) => {
+                            announceWeekResult(result);
+                            if (result.created[0]) {
+                              adapt(result.created[0].id);
+                            }
+                          },
+                        },
                       )
                     }
                   >

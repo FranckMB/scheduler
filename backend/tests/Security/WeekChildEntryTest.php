@@ -92,6 +92,9 @@ final class WeekChildEntryTest extends WebTestCase
         $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Hors mère', '2026-12-07', '2026-12-13');
         // Chevauche la semaine 1 (même partiellement) → 422, pas seulement le même lundi.
         $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Chevauche', '2026-11-10', '2026-11-16');
+        // Une « semaine » de 2 mois → 422 : elle hériterait le venue_closed
+        // date-blind sur toute sa fenêtre (revue #262 round 2).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Deux mois', '2026-11-16', '2027-01-10');
     }
 
     public function testABlockGeneratedMotherRefusesWeekSplitting(): void
@@ -117,14 +120,28 @@ final class WeekChildEntryTest extends WebTestCase
 
     public function testASplitMotherRefusesBlockGeneration(): void
     {
-        [$user, $club] = $this->createClubWithSeason();
+        [$user, $club, $season] = $this->createClubWithSeason();
         $motherId = $this->postPeriod($user, 'closure', 'Travaux découpés', '2026-11-12', '2026-11-18');
         $this->postWeekChild($user, $motherId, 'closure', 'Semaine 1', '2026-11-09', '2026-11-15');
         $motherPlan = $this->planOf($club->getId(), $motherId);
         self::assertInstanceOf(SchedulePlan::class, $motherPlan);
 
-        // POST d'une version sur le plan BLOC d'une mère découpée → 409, avant même
-        // la garde socle (le découpage l'emporte : le travail vit sur les semaines).
+        // POINTER le socle d'abord : sans lui, SocleGuard rend SON 409 avant la garde
+        // testée — le test passait pour la mauvaise raison (revue #262 round 2).
+        $this->scopeGucToClub($club->getId());
+        $provisioner = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class);
+        $seasonPlanId = $provisioner->ensureSeasonPlanId($season->getId());
+        self::assertIsString($seasonPlanId);
+        $socle = new Schedule;
+        $socle->setClubId($club->getId());
+        $socle->setSeasonId($season->getId());
+        $socle->setSchedulePlanId($seasonPlanId);
+        $socle->setName('Socle');
+        $socle->setStatus(ScheduleStatus::COMPLETED);
+        $this->em->persist($socle);
+        $this->em->flush();
+        self::assertTrue($provisioner->choose($socle));
+
         $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + [
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
@@ -133,6 +150,8 @@ final class WeekChildEntryTest extends WebTestCase
             'schedulePlanId' => $motherPlan->getId(),
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(409);
+        // LE bon 409 : celui de l'exclusivité bloc/semaines, pas celui du socle.
+        self::assertStringContainsString('découpée en semaines', (string) $this->client->getResponse()->getContent());
     }
 
     public function testDeletingTheMotherCascadesToItsWeekChildren(): void

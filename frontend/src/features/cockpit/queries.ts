@@ -228,22 +228,46 @@ export function useCreateHolidayPeriod() {
   });
 }
 
+/** Le 422 « cette semaine existe déjà » (chevauchement/doublon) — le SEUL sauté par
+ *  useCreateWeekChildren : l'état visé existe. Tout autre 422 (titre trop long, mère
+ *  générée en bloc, type) est une vraie erreur (revue #262 round 2). */
+async function isAlreadySplit422(error: unknown): Promise<boolean> {
+  if (!(error instanceof HTTPError) || 422 !== error.response.status) {
+    return false;
+  }
+  try {
+    const body: unknown = await error.response.clone().json();
+    const detail = "object" === typeof body && null !== body && "detail" in body && "string" === typeof body.detail ? body.detail : "";
+    return detail.includes("chevauche une semaine déjà découpée");
+  } catch {
+    return false;
+  }
+}
+
+export interface WeekChildrenResult {
+  created: CalendarEntry[];
+  /** Semaines en ÉCHEC RÉEL (hors « existe déjà ») — l'appelant doit le dire. */
+  failedCount: number;
+}
+
 /**
  * P2-5 E1 — découpe une période mère en SEMAINES : une entrée ENFANT par semaine
  * cochée (parentEntryId), type hérité, titre E6 (« {mère} — semaine du {lundi} »).
  * Chaque enfant naît avec son plan (rail 1 entrée = 1 plan).
  *
- * Reprenable (revue #262 round 1) : un 422 « déjà découpée/chevauche » est SAUTÉ
- * (la semaine existe — un retry après échec partiel ne meurt plus dessus) ; une
- * autre erreur est collectée et relevée seulement si RIEN n'a été créé. Invalidation
+ * Reprenable (revue #262) : seul le 422 « chevauche une semaine déjà découpée »
+ * est sauté (l'état visé existe — un retry ne meurt plus dessus) ; toute autre
+ * erreur est comptée (failedCount) et relevée si RIEN n'a été créé. Invalidation
  * en onSettled : même un échec partiel rafraîchit le cache (les enfants créés
- * apparaissent, les chips « à créer » listent les manquantes).
+ * apparaissent, les chips « à créer » listent les manquantes). Titre borné à 180
+ * (colonne title) — un titre de mère long ne fait plus 422 chaque semaine.
  */
 export function useCreateWeekChildren() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { mother: CalendarEntry; weeks: { startDate: string; endDate: string; monday: string }[] }) => {
+    mutationFn: async (payload: { mother: CalendarEntry; weeks: { startDate: string; endDate: string; monday: string }[] }): Promise<WeekChildrenResult> => {
       const created: CalendarEntry[] = [];
+      let failedCount = 0;
       let firstHardError: unknown = null;
       for (const week of payload.weeks) {
         try {
@@ -251,24 +275,24 @@ export function useCreateWeekChildren() {
             await cockpitApi.createCalendarEntry({
               kind: "period",
               periodType: payload.mother.periodType,
-              title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`,
+              title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`.slice(0, 180),
               startDate: week.startDate,
               endDate: week.endDate,
               parentEntryId: payload.mother.id,
             }),
           );
         } catch (error) {
-          const status = error instanceof HTTPError ? error.response.status : null;
-          if (422 === status) {
-            continue; // semaine déjà découpée — l'état visé existe, on poursuit
+          if (await isAlreadySplit422(error)) {
+            continue;
           }
+          failedCount += 1;
           firstHardError = firstHardError ?? error;
         }
       }
       if (null !== firstHardError && 0 === created.length) {
         throw firstHardError;
       }
-      return created;
+      return { created, failedCount };
     },
     onSettled: () => invalidateEntries(queryClient),
   });

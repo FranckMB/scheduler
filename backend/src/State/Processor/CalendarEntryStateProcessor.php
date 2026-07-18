@@ -280,6 +280,13 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         if ($childEnd < $parent->getStartDate()->format('Y-m-d') || $childStart > $parent->getEndDate()->format('Y-m-d')) {
             throw new UnprocessableEntityHttpException('La semaine ne recouvre pas la période mère.');
         }
+        // …et rester UNE semaine (≤ 7 jours — le clamp saison peut la rogner, jamais
+        // l'allonger). Sans cette garde, un « enfant » de 2 mois hériterait le
+        // venue_closed date-blind sur toute sa fenêtre (revue #262 round 2).
+        $days = (int) new DateTimeImmutable($childStart)->diff(new DateTimeImmutable($childEnd))->format('%a') + 1;
+        if ($days > 7) {
+            throw new UnprocessableEntityHttpException('Une semaine enfant couvre au plus 7 jours (lundi→dimanche).');
+        }
         // Anti-CHEVAUCHEMENT entre semaines d'une même mère (pas seulement le même
         // lundi) : deux plans de semaine qui se recouvrent = deux overlays actifs
         // possibles sur les mêmes jours, sans vainqueur défini (revue #262 round 1).
