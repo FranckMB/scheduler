@@ -4,13 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CalendarEntry, SchoolHoliday } from "./api";
+import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
 import { addDays, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
 let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
 let conflictsPending = false;
+// ADR-0002 lot D-b : le radar dérive « version active » du plan de la période
+// (chosenScheduleId), plus d'un pointeur sur l'entrée.
+let plansData: SchedulePlan[] = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -18,7 +21,18 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
+  useSchedulePlans: () => ({ data: plansData }),
 }));
+
+/** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
+const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): SchedulePlan => ({
+  id: `pl-${calendarEntryId}`,
+  type: "CLOSURE",
+  name: "Plan",
+  calendarEntryId,
+  chosenScheduleId,
+  teamSelectionInitialized: false,
+});
 
 const FUTURE = "2999-01-05";
 const FUTURE_END = "2999-01-18";
@@ -35,7 +49,6 @@ const closure = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   periodType: "closure",
   schoolHolidayId: null,
   status: "active",
-  overlayScheduleId: null,
   createdBy: null,
   ...overrides,
 });
@@ -56,6 +69,7 @@ describe("RadarPanel", () => {
     createHolidayMutate.mockReset();
     conflictsData = undefined;
     conflictsPending = false;
+    plansData = [];
   });
 
   it("asks for the school zone when unknown", () => {
@@ -137,10 +151,12 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
   });
 
-  it("switches to consult/adjust once the overlay exists", () => {
-    renderRadar({ entries: [closure({ overlayScheduleId: "ov1" })] });
+  it("switches to consult/adjust once the plan is validated", () => {
+    // ADR-0002 lot D-b : « l'overlay existe » = le plan de la période est VALIDÉ.
+    plansData = [validatedPlan("c1", "ov1")];
+    renderRadar({ entries: [closure({})] });
 
-    expect(screen.getByText("Planning secondaire généré")).toBeInTheDocument();
+    expect(screen.getByText("Planning secondaire validé")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ajuster" })).toBeInTheDocument();
   });

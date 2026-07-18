@@ -238,6 +238,22 @@ final class SchedulePlanProvisioner
         return \is_string($chosen) ? $chosen : null;
     }
 
+    /**
+     * La version CHOISIE du plan d'une PÉRIODE (ADR-0002) — l'overlay validé de
+     * l'entrée. null = plan non validé (espace de travail) : on n'expose alors
+     * aucune version active (le cockpit route vers « Ajuster »). Miroir période de
+     * {@see chosenOfSeasonPlan} ; source unique depuis le drop de overlayScheduleId.
+     */
+    public function chosenOfPeriodPlan(string $calendarEntryId): ?string
+    {
+        $chosen = $this->entityManager->getConnection()->fetchOne(
+            'SELECT chosen_schedule_id FROM schedule_plan WHERE calendar_entry_id = :eid',
+            ['eid' => $calendarEntryId],
+        );
+
+        return \is_string($chosen) ? $chosen : null;
+    }
+
     /** Cette version est-elle celle que pointe son plan ? (= « validée ») */
     public function isChosen(string $scheduleId): bool
     {

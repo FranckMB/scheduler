@@ -6,7 +6,6 @@ namespace App\State\Processor;
 
 use App\ApiResource\ScheduleResource;
 use App\Dto\ScheduleInput;
-use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\SchedulePlanType;
@@ -52,8 +51,9 @@ class ScheduleStateProcessor extends AbstractStateProcessor
      * ADR-0002 C4 : POST crée une version SOUS un plan nommé (`schedulePlanId`) — un overlay
      * de période — ou, si omis, sous le plan SEASON (le socle). On valide que le plan
      * appartient au club, on en dérive la saison, et pour un overlay on applique les gardes
-     * de période (une génération en cours bloque ; le socle doit être pointé, inv. 13) avant
-     * de poser le pointeur inverse (`CalendarEntry.overlayScheduleId`, encore sur l'entrée — lot D).
+     * de période (une génération en cours bloque ; le socle doit être pointé, inv. 13). La
+     * version créée n'est PAS montrée tant qu'elle n'est pas validée (lot D-b : « actif » =
+     * plan.chosenScheduleId, plus de pointeur inverse posé à la création).
      *
      * @param ScheduleInput $input
      *
@@ -98,11 +98,6 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 }
                 // inv. 13 : un plan secondaire se bâtit SUR le calendrier de base pointé.
                 $this->socleGuard->assertSeasonPlanChosen($resolvedSeasonId);
-                // Le pointeur inverse vit encore sur l'entrée (lot D) — on la résout DEPUIS le
-                // plan. Le plan étant de la saison active, l'entrée l'est aussi : le find()
-                // season-filtré la trouve (sinon elle serait invisible et le pointeur pas posé).
-                $entryId = $plan['calendarEntryId'];
-                $entry = null !== $entryId ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId) : null;
             }
         }
 
@@ -122,29 +117,16 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         }
         $schedule->setSchedulePlanId($resolvedPlanId);
 
-        // Atomic (like RegenerateController): the row, its version number and the
-        // overlay pointer commit together. A linkSchedule failure must never
-        // leave a committed-but-unnumbered schedule occupying the period slot.
-        $this->entityManager->wrapInTransaction(function () use ($schedule, $entry): void {
+        // Atomic (like RegenerateController): the row and its version number commit
+        // together. A linkSchedule failure must never leave a committed-but-unnumbered
+        // schedule occupying the period slot.
+        $this->entityManager->wrapInTransaction(function () use ($schedule): void {
             $this->entityManager->persist($schedule);
 
             // ADR-0002 C4 : numérote la version dans son plan (déjà posé ci-dessus).
+            // La version n'est pas « active » : elle le devient à la validation (le plan
+            // pointe sa chosenScheduleId), jamais à la création (lot D-b).
             $this->schedulePlanProvisioner->linkSchedule($schedule);
-
-            if ($entry instanceof CalendarEntry) {
-                // The new version becomes the ACTIVE overlay only if the period has
-                // no usable one to fall back on — mirror of the season baseline,
-                // which moves only on validation. This keeps a good V1 shown while
-                // a regenerated V2 solves (or fails): validating V2 later flips the
-                // pointer (ValidateScheduleController). Otherwise a failed
-                // regenerate would strand the period on an empty draft.
-                $activeId = $entry->getOverlayScheduleId();
-                $active = null !== $activeId ? $this->entityManager->getRepository(Schedule::class)->find($activeId) : null;
-                $activeIsUsable = $active instanceof Schedule && ScheduleStatus::COMPLETED === $active->getStatus();
-                if (!$activeIsUsable) {
-                    $entry->setOverlayScheduleId($schedule->getId());
-                }
-            }
 
             $this->entityManager->flush();
         });

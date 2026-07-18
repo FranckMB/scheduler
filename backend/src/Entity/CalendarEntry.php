@@ -15,8 +15,9 @@ use Doctrine\ORM\Mapping as ORM;
  * A dated entry on the club's season calendar (cockpit exception layer).
  * kind=event: an informative marker (AG, tournament), optionally disruptive.
  * kind=period: a window that alters the base plan (closure, holiday, cutoff,
- * mutualisation); carries dated constraints (Constraint.calendarEntryId) and,
- * from palier B on, a secondary-plan overlay (overlayScheduleId).
+ * mutualisation); carries dated constraints (Constraint.calendarEntryId). Its
+ * secondary plan (ADR-0002) lives in schedule_plan.calendarEntryId — the active
+ * version is the plan's chosenScheduleId, no longer a pointer on the entry.
  * See specs/courantes/accueil-cockpit-temporel.md §9ter.
  */
 #[ORM\Entity(repositoryClass: CalendarEntryRepository::class)]
@@ -69,9 +70,6 @@ class CalendarEntry implements TenantOwnedInterface
 
     #[ORM\Column(length: 20, enumType: CalendarEntryStatus::class, options: ['default' => 'active'])]
     private CalendarEntryStatus $status = CalendarEntryStatus::ACTIVE;
-
-    #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $overlayScheduleId = null;
 
     #[ORM\Column(type: 'string', length: 80, nullable: true)]
     private ?string $createdBy = null;
@@ -247,18 +245,6 @@ class CalendarEntry implements TenantOwnedInterface
     public function setStatus(CalendarEntryStatus $status): self
     {
         $this->status = $status;
-
-        return $this;
-    }
-
-    public function getOverlayScheduleId(): ?string
-    {
-        return $this->overlayScheduleId;
-    }
-
-    public function setOverlayScheduleId(?string $overlayScheduleId): self
-    {
-        $this->overlayScheduleId = $overlayScheduleId;
 
         return $this;
     }

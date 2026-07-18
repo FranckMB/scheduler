@@ -15,7 +15,6 @@ export interface CalendarEntry {
   periodType: CalendarEntryPeriodType | null;
   schoolHolidayId: string | null;
   status: CalendarEntryStatus;
-  overlayScheduleId: string | null;
   createdBy: string | null;
 }
 
@@ -42,6 +41,14 @@ export const getSchedulePlanForEntry = async (calendarEntryId: string): Promise<
 
   return items[0] ?? null;
 };
+
+/**
+ * Tous les plans de la saison (tenant + saison résolus côté serveur). Le radar en
+ * dérive, PAR PÉRIODE, sa « version active » = chosenScheduleId du plan (ADR-0002
+ * lot D-b) — binaire : validé → on montre, non validé → on ajuste. Un seul appel
+ * plutôt qu'un hook par entrée (règles des hooks dans la liste du radar).
+ */
+export const getAllSchedulePlans = async (): Promise<SchedulePlan[]> => collectionAll<SchedulePlan>("schedule_plans");
 
 export interface SchoolHoliday {
   id: string;

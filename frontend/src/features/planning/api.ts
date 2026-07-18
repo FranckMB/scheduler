@@ -213,7 +213,7 @@ export async function validateSchedule(id: string, opts?: { confirmDeleteOverlay
     return await api.post(`schedules/${id}/validate`, opts?.confirmDeleteOverlays ? { json: { confirmDeleteOverlays: true } } : undefined).json();
   } catch (error) {
     if (error instanceof HTTPError && 409 === error.response.status) {
-      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string }[] };
       if ("overlays_exist" === body.code) {
         throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
       }
@@ -225,9 +225,9 @@ export async function validateSchedule(id: string, opts?: { confirmDeleteOverlay
 /** Thrown when reopening the season's chosen version would delete period overlays (409). */
 export class OverlaysExistError extends Error {
   readonly count: number;
-  readonly overlays: { entryId: string; title: string; overlayScheduleId: string }[];
+  readonly overlays: { entryId: string; title: string }[];
 
-  constructor(count: number, overlays: { entryId: string; title: string; overlayScheduleId: string }[]) {
+  constructor(count: number, overlays: { entryId: string; title: string }[]) {
     super("overlays_exist");
     this.name = "OverlaysExistError";
     this.count = count;
@@ -247,7 +247,7 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
     if (error instanceof HTTPError && 409 === error.response.status) {
       // ky 2.x parses the error body into error.data (re-reading the response
       // throws "body stream already read").
-      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string; overlayScheduleId: string }[] };
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; count?: number; overlays?: { entryId: string; title: string }[] };
       if ("overlays_exist" === body.code) {
         throw new OverlaysExistError(body.count ?? 0, body.overlays ?? []);
       }

@@ -82,23 +82,19 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // the overlay semantically wrong (or crash the next regeneration in
         // buildForOverlay). Title/status/isDisruptive edits stay allowed.
         //
-        // La garde porte sur « cette période a-t-elle un PLAN ? ». Deux raisons :
-        //
-        // 1. `overlayScheduleId` seul ne suffit pas : il ne nomme que la version ACTIVE,
-        //    et OverlayManager le remet à null dès que la seule sœur survivante n'est pas
-        //    COMPLETED — une période gardant une version PENDING passait donc la garde.
-        // 2. Depuis le lot C, une closure/holiday a TOUJOURS un plan (né du geste, cf.
-        //    processPost). Geler leur identité revient donc à dire : le type et la fenêtre
-        //    d'une période se choisissent à sa création, et se corrigent en la supprimant
-        //    puis en la recréant — ce que l'UI impose déjà (elle n'expose aucun PUT ; ce
-        //    verbe n'est atteignable qu'en direct sur l'API).
+        // La garde porte sur « cette période a-t-elle un PLAN ? » : depuis le lot C une
+        // closure/holiday a TOUJOURS un plan (né du geste, cf. processPost). Geler leur
+        // identité revient donc à dire : le type et la fenêtre d'une période se choisissent
+        // à sa création, et se corrigent en la supprimant puis en la recréant — ce que
+        // l'UI impose déjà (elle n'expose aucun PUT ; ce verbe n'est atteignable qu'en
+        // direct sur l'API).
         //
         // Ce choix rend inatteignables, PAR CONSTRUCTION, deux défauts que les rounds 1
         // et 2 du code-review avaient trouvés : la rétrogradation qui détruit un plan, et
         // la fenêtre du plan qui se périme quand on corrige les dates de sa période. Une
         // machinerie de synchronisation les réparait ; ne pas les laisser exister est plus
         // sûr. Un cutoff/mutualisation (sans plan) reste librement promouvable.
-        if (null !== $entity->getOverlayScheduleId() || $this->schedulePlanProvisioner->periodPlanExists($entity->getId())) {
+        if ($this->schedulePlanProvisioner->periodPlanExists($entity->getId())) {
             $kindChanged = null !== $input->kind && $this->parseKind($input->kind) !== $entity->getKind();
             $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
             $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
@@ -249,9 +245,9 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     /** @param array<string, mixed> $uriVariables */
     private function deleteEntryAndCascade(array $uriVariables, ?string $clubId): void
     {
-        // Delete the overlay BEFORE the parent removes the entry (we need the
-        // entry to read overlayScheduleId). Guard club ownership inline so a
-        // cross-club delete deletes nothing before the parent throws 403.
+        // Delete the overlay versions BEFORE the parent removes the entry (we need
+        // the entry managed to drive deleteOverlayForEntry). Guard club ownership
+        // inline so a cross-club delete deletes nothing before the parent throws 403.
         $id = $uriVariables['id'] ?? null;
         // Capturé AVANT deletePeriodPlan : depuis le lot C2 les réglages de la période sont
         // ancrés au PLAN (inv. 5), or c'est le plan qu'on détruit juste en dessous — après

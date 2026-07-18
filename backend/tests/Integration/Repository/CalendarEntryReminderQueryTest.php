@@ -7,12 +7,15 @@ namespace App\Tests\Integration\Repository;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Enum\ScheduleStatus;
 use App\Repository\CalendarEntryRepository;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -127,11 +130,25 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         $entry->setTitle('P');
         $entry->setStartDate(new DateTimeImmutable($start));
         $entry->setEndDate(new DateTimeImmutable($start));
-        if ($overlay) {
-            $entry->setOverlayScheduleId('99999999-9999-4999-8999-999999999999');
-        }
         $this->em->persist($entry);
         $this->em->flush();
+
+        if ($overlay) {
+            // lot D-b : « a un overlay » = le plan de la période porte ≥ 1 version (une
+            // génération a eu lieu), plus un pointeur sur l'entrée. Le rappel s'arrête là.
+            $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+            $planId = $provisioner->provisionPeriodPlan($entry->getId());
+            self::assertIsString($planId, 'une closure/holiday porte un plan overlayable');
+            $schedule = (new Schedule)
+                ->setClubId($club->getId())
+                ->setSeasonId($season->getId())
+                ->setName('Overlay')
+                ->setStatus(ScheduleStatus::COMPLETED)
+                ->setSchedulePlanId($planId);
+            $this->em->persist($schedule);
+            $provisioner->linkSchedule($schedule);
+            $this->em->flush();
+        }
     }
 
     private function season(Club $club, string $status): Season

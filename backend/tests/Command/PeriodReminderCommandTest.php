@@ -8,15 +8,18 @@ use App\Command\PeriodReminderCommand;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Enum\ScheduleStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
 use App\Service\PeriodReminderMailBuilder;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
@@ -272,11 +275,25 @@ final class PeriodReminderCommandTest extends KernelTestCase
         $entry->setTitle('Gym fermé');
         $entry->setStartDate($start);
         $entry->setEndDate($start->modify('+6 days'));
-        if ($overlay) {
-            $entry->setOverlayScheduleId('99999999-9999-4999-8999-999999999999');
-        }
         $this->em->persist($entry);
         $this->em->flush();
+
+        if ($overlay) {
+            // lot D-b : « a un overlay » = le plan de la période porte ≥ 1 version (générée),
+            // plus un pointeur sur l'entrée — le rappel s'arrête dès la 1re génération.
+            $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+            $planId = $provisioner->provisionPeriodPlan($entry->getId());
+            self::assertIsString($planId);
+            $schedule = (new Schedule)
+                ->setClubId($season->getClubId())
+                ->setSeasonId($season->getId())
+                ->setName('Overlay')
+                ->setStatus(ScheduleStatus::COMPLETED)
+                ->setSchedulePlanId($planId);
+            $this->em->persist($schedule);
+            $provisioner->linkSchedule($schedule);
+            $this->em->flush();
+        }
     }
 
     private function addMember(Club $club, string $email, string $role, bool $active): void

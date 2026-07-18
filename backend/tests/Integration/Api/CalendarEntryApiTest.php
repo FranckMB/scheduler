@@ -337,9 +337,8 @@ final class CalendarEntryApiTest extends WebTestCase
         $overlay->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($overlay);
         $this->em->flush();
-
-        $entry->setOverlayScheduleId($overlay->getId());
-        $this->em->flush();
+        // lot D-b : la cascade retrouve l'overlay PAR son plan (schedulePlanId) — plus de
+        // pointeur inverse à poser sur l'entrée.
 
         $slot = new ScheduleSlotTemplate;
         $slot->setClubId($club->getId());
@@ -399,9 +398,7 @@ final class CalendarEntryApiTest extends WebTestCase
         // choosePlanVersion ne re-lie alors plus (version ≠ 0) : il pointe le plan de la
         // période sur cet overlay — c'est ce pointeur qui le met « en vigueur ».
         $provisioner->linkSchedule($overlay);
-        $this->choosePlanVersion($overlay);
-        $entry->setOverlayScheduleId($overlay->getId());
-        $this->em->flush();
+        $this->choosePlanVersion($overlay); // le plan de la période POINTE l'overlay → en vigueur (lot D-b)
 
         // The entry-delete cascade must not bypass the read-only guard: the period's
         // plan POINTS at this overlay, so it is in force.
@@ -444,9 +441,8 @@ final class CalendarEntryApiTest extends WebTestCase
         $overlay->setStatus(ScheduleStatus::COMPLETED);
         $this->em->persist($overlay);
         $this->em->flush();
-
-        $entry->setOverlayScheduleId($overlay->getId());
-        $this->em->flush();
+        // lot D-b : le gel d'identité s'arme sur « la période a un PLAN » (periodPlanExists),
+        // plus sur un pointeur inverse — l'overlay pend au plan (schedulePlanId) qui suffit.
 
         $base = ['title' => 'Gym fermé', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10'];
 

@@ -167,6 +167,48 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         self::assertResponseStatusCodeSame(422, 'un plan d’une autre saison est refusé — pas de contournement de la garde archive');
     }
 
+    /**
+     * NR lot D-b (axe *planning lifecycle*) — LA VERSION ACTIVE D'UNE PÉRIODE EST BINAIRE, et
+     * elle vient du POINTEUR de son plan (`chosenScheduleId`), plus d'un `overlayScheduleId`
+     * posé sur l'entrée. Plan NON validé → AUCUNE version active (le cockpit AJUSTE) ; plan
+     * validé → la version choisie (le cockpit MONTRE). Décision fondateur (2026-07-18) : « plan
+     * en cours on ajuste, plan validé on montre » — on ne montre JAMAIS une version non validée.
+     *
+     * Vu P4-21, vérifié en CASSANT le code d'abord (re-poser un pointeur à la création) :
+     * l'assertion « non validé → null » rougit, puis repasse au vert une fois le pointeur mort.
+     */
+    public function testThePeriodActiveVersionIsTheChosenPointerBinary(): void
+    {
+        [$user, $club, $season] = $this->seed();
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        // inv. 13 : un overlay se bâtit sur un socle pointé.
+        $this->settleSeasonPlan($season);
+
+        // Une période née du geste porte un plan, mais rien n'est encore validé.
+        [$overlay, $entryId] = $this->linkedOverlay($user, $club, $season);
+        self::assertNull($provisioner->chosenOfPeriodPlan($entryId), 'plan non validé → aucune version active (le cockpit ajuste)');
+
+        // Valider = POINTER : la version choisie devient la version active de la période.
+        $this->choosePlanVersion($overlay);
+        self::assertSame($overlay->getId(), $provisioner->chosenOfPeriodPlan($entryId), 'plan validé → la version choisie est montrée');
+    }
+
+    /**
+     * NR lot D-b — LE POINTEUR INVERSE A DISPARU DE LA BASE : `calendar_entry.overlay_schedule_id`
+     * n'existe plus. La « version active » d'une période ne se lit QUE du plan (chosenScheduleId) ;
+     * il n'y a plus de doublon de pointeur à maintenir ni à désynchroniser. Clôt l'ADR-0002.
+     */
+    public function testTheOverlayPointerIsGoneFromTheSchema(): void
+    {
+        [, $club] = $this->seed();
+        $this->scopeGucToClub($club->getId());
+
+        $exists = $this->em->getConnection()->fetchOne(
+            'SELECT 1 FROM information_schema.columns WHERE table_name = \'calendar_entry\' AND column_name = \'overlay_schedule_id\'',
+        );
+        self::assertFalse((bool) $exists, 'calendar_entry.overlay_schedule_id supprimée (lot D-b) — la version active vient du plan');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

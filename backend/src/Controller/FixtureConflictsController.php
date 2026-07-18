@@ -69,7 +69,10 @@ final class FixtureConflictsController extends AbstractController
         $activePeriods = [];
         $scheduleIds = null !== $seasonScheduleId ? [$seasonScheduleId] : [];
         foreach ($this->calendarEntryRepository->findActivePeriodsOrdered() as $period) {
-            $overlayId = $period->getOverlayScheduleId();
+            // ADR-0002 lot D-b : l'overlay d'une période = la version VALIDÉE de son
+            // plan (chosenScheduleId). null = plan non validé → aucun overlay ne
+            // s'applique (« soit un overlay généré, soit le planning de base »).
+            $overlayId = $this->schedulePlanProvisioner->chosenOfPeriodPlan($period->getId());
             $activePeriods[] = [
                 'start' => $period->getStartDate(),
                 'end' => $period->getEndDate(),

@@ -136,9 +136,6 @@ final class ValidateScheduleController extends AbstractController implements Sea
                 }
                 $siblings[] = $sibling;
             }
-            $overlayEntry = null !== $entryId
-                ? $this->entityManager->getRepository(CalendarEntry::class)->find($entryId)
-                : null;
 
             $season = $this->entityManager->getRepository(Season::class)->find($schedule->getSeasonId());
 
@@ -166,7 +163,6 @@ final class ValidateScheduleController extends AbstractController implements Sea
                         'overlays' => array_map(static fn (CalendarEntry $e): array => [
                             'entryId' => $e->getId(),
                             'title' => $e->getTitle(),
-                            'overlayScheduleId' => $e->getOverlayScheduleId(),
                         ], $overlaysToDelete),
                     ], Response::HTTP_CONFLICT);
                 }
@@ -198,10 +194,9 @@ final class ValidateScheduleController extends AbstractController implements Sea
                 }
             }
 
-            // Le plan de la période pointe sa version choisie.
-            if (null !== $entryId && $overlayEntry instanceof CalendarEntry) {
-                $overlayEntry->setOverlayScheduleId($schedule->getId());
-            }
+            // Le plan de la période pointe déjà sa version choisie : choose() ci-dessus
+            // a posé chosenScheduleId sur le plan (SEASON ou période), source unique de
+            // la version active depuis le lot D-b — plus de pointeur inverse sur l'entrée.
 
             // inv. 1 : les versions non choisies sont SUPPRIMÉES (plus de filet
             // ARCHIVED). Les pointeurs ont tous été déplacés sur la gagnante ci-dessus.

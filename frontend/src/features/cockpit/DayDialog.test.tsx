@@ -17,15 +17,24 @@ const navigate = vi.fn();
 const startPeriodMode = vi.fn();
 const setSelectedScheduleId = vi.fn();
 
+// ADR-0002 lot D-b : « overlay validé » (HolidayBlock « Voir le planning ») = plan de
+// période avec chosenScheduleId ; « porte des versions » (garde destructive de suppression)
+// = une Schedule pend au plan (schedulePlanId). Les deux se dérivent du plan, plus de
+// pointeur sur l'entrée.
+let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
+let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
+
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
+  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
+  useSchedules: () => ({ data: schedulesData }),
 }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
@@ -43,7 +52,6 @@ const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   periodType: null,
   schoolHolidayId: null,
   status: "active",
-  overlayScheduleId: null,
   createdBy: null,
   ...overrides,
 });
@@ -67,6 +75,8 @@ describe("DayDialog — deletion is always confirmed", () => {
     cutoffMutate.mockReset();
     closureMutate.mockReset();
     holidayMutateAsync.mockClear();
+    plansByEntry = {};
+    schedulesData = [];
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -91,12 +101,26 @@ describe("DayDialog — deletion is always confirmed", () => {
     expect(screen.queryByText(/Supprimer « AG du club » \?/)).not.toBeInTheDocument();
   });
 
-  it("warns that the generated overlay plan dies with a period", async () => {
-    renderDialog([entry({ id: "p1", kind: "period", periodType: "closure", title: "Gym fermé", overlayScheduleId: "ov1" })]);
+  it("warns that deleting a period cascades to its plan and all its versions", async () => {
+    // Décision fondateur : la suppression emporte le plan ET toutes ses versions —
+    // on avertit dès qu'une version pend au plan (brouillon inclus), pas seulement validée.
+    plansByEntry = { p1: { id: "plan-p1", chosenScheduleId: null } };
+    schedulesData = [{ id: "draft1", schedulePlanId: "plan-p1" }];
+    renderDialog([entry({ id: "p1", kind: "period", periodType: "closure", title: "Gym fermé" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Gym fermé" }));
 
-    expect(screen.getByText(/plan de période généré/i)).toBeInTheDocument();
+    expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
+  });
+
+  it("keeps the benign message when the period plan carries no version yet", async () => {
+    plansByEntry = { p2: { id: "plan-p2", chosenScheduleId: null } };
+    schedulesData = []; // plan vide → la suppression ne perd rien
+    renderDialog([entry({ id: "p2", kind: "period", periodType: "closure", title: "Vide" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer Vide" }));
+
+    expect(screen.getByText("Cette entrée sera retirée du calendrier.")).toBeInTheDocument();
   });
 
   it("keeps the custom period button disabled (deferred palier B/C)", () => {
@@ -204,6 +228,8 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     navigate.mockClear();
     startPeriodMode.mockClear();
     setSelectedScheduleId.mockClear();
+    plansByEntry = {};
+    schedulesData = [];
   });
 
   // item 1: a public holiday (jour férié) shows read-only info.
@@ -229,7 +255,8 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
 
   // finding [1]: an existing overlay stays viewable even for a summer holiday (legacy data).
   it("still offers « Voir le planning » for a summer holiday that already has an overlay", () => {
-    const periodEntry = entry({ id: "pe", kind: "period", periodType: "holiday", schoolHolidayId: "sh-ete", startDate: "2026-05-10", endDate: "2026-05-20", overlayScheduleId: "ov-ete" });
+    plansByEntry = { pe: { id: "plan-pe", chosenScheduleId: "ov-ete" } };
+    const periodEntry = entry({ id: "pe", kind: "period", periodType: "holiday", schoolHolidayId: "sh-ete", startDate: "2026-05-10", endDate: "2026-05-20" });
     renderDialog([periodEntry], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });
     expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
@@ -237,7 +264,8 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
 
   // item 3: once the holiday overlay is generated, offer "Voir le planning" instead.
   it("offers « Voir le planning » when the holiday's overlay is already generated", () => {
-    const periodEntry = entry({ id: "p9", kind: "period", periodType: "holiday", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20", overlayScheduleId: "ov9" });
+    plansByEntry = { p9: { id: "plan-p9", chosenScheduleId: "ov9" } };
+    const periodEntry = entry({ id: "p9", kind: "period", periodType: "holiday", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20" });
     renderDialog([periodEntry], { holiday: schoolHoliday() });
     expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();

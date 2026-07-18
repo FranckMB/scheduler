@@ -139,8 +139,7 @@ final class ValidateScheduleTest extends WebTestCase
         $this->em->persist($entry);
         $this->em->flush();
         $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
-        $entry->setOverlayScheduleId($overlay->getId());
-        $this->em->flush();
+        $this->choosePlanVersion($overlay); // lot D-b : un plan secondaire RÉEL = plan validé
         $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
 
         // Two sequential authenticated calls → Bearer on each (stateless firewall).
@@ -179,11 +178,10 @@ final class ValidateScheduleTest extends WebTestCase
         $this->em->persist($entry);
         $this->em->flush();
         $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
-        $entry->setOverlayScheduleId($overlay->getId());
-        $this->em->flush();
+        $this->choosePlanVersion($overlay); // un plan secondaire VALIDÉ survit, même sans socle pointé (donnée d'avant la bascule / socle rouvert)
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
 
-        self::assertNull($this->chosenPlanVersion($season), 'le plan ne pointe rien : c\'est le cas qui désarmait la garde');
+        self::assertNull($this->chosenPlanVersion($season), 'le plan de la SAISON ne pointe rien : c\'est le cas qui désarmait la garde');
 
         $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
         $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json'];
