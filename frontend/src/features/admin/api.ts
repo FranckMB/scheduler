@@ -162,6 +162,19 @@ export interface AdminClubActionRunResponse {
   exitCode: 0;
 }
 
+/** Data-freshness board : un référentiel externe et l'âge de sa dernière mise à jour. */
+export interface AdminFreshnessItem {
+  key: string;
+  label: string;
+  lastUpdatedAt: string | null;
+  staleAfterDays: number;
+  stale: boolean;
+}
+
+export interface AdminFreshnessResponse {
+  items: AdminFreshnessItem[];
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -202,6 +215,10 @@ export function runAdminJob(key: string, csrfToken: string): Promise<AdminJobRun
 
 export function getAdminActions(): Promise<AdminActionsResponse> {
   return adminApi.get("actions").json();
+}
+
+export function getAdminFreshness(): Promise<AdminFreshnessResponse> {
+  return adminApi.get("freshness").json();
 }
 
 export function runAdminClubAction(clubId: string, key: string, csrfToken: string): Promise<AdminClubActionRunResponse> {
