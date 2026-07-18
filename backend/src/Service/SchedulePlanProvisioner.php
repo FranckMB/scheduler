@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
+use App\Enum\ConstraintFamily;
 use App\Enum\SchedulePlanType;
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
@@ -525,6 +526,53 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * E6 / correctif F2 : recale le nom d'un plan de FERMETURE une fois la datée `venue_closed`
+     * connue (elle naît après l'entrée, 2 POST). Le nom n'est recalé QUE tant qu'il vaut ENCORE
+     * le générique de naissance (« Ajustement gymnase du … au … ») — comparé à l'octet près, pas
+     * par gabarit : dès qu'il est résolu OU renommé par le gestionnaire (inv. 12), il est figé.
+     *
+     * Conséquence assumée : re-cibler le gymnase d'UNE MÊME fermeture ne renomme pas (le nom est
+     * gelé à la 1re résolution) — un vrai changement de gymnase se fait en créant une nouvelle
+     * fermeture (nouvelle entrée → nouveau plan, correctement nommé). Ce compromis protège inv. 12
+     * de façon absolue : aucune heuristique de nom ne peut confondre un renommage avec un auto.
+     *
+     * Best-effort côté appelant (ConstraintStateProcessor l'entoure d'un try/catch) : un nom est
+     * cosmétique et ne doit jamais faire échouer l'écriture de la contrainte, déjà committée.
+     */
+    public function refreshClosurePlanName(string $sourceEntryId): void
+    {
+        $venue = $this->closedVenueName($sourceEntryId);
+        if (null === $venue) {
+            return; // pas (encore) de gymnase résoluble : rien à recaler
+        }
+
+        // Le plan de la fermeture (mère) ET ceux de ses semaines enfants.
+        $rows = $this->entityManager->getConnection()->fetchAllAssociative(
+            'SELECT p.id AS pid, e.start_date, e.end_date FROM schedule_plan p '
+            . 'JOIN calendar_entry e ON e.id = p.calendar_entry_id '
+            . 'WHERE p.type = \'CLOSURE\' AND (e.id = :src OR e.parent_entry_id = :src)',
+            ['src' => $sourceEntryId],
+        );
+        foreach ($rows as $r) {
+            $start = new DateTimeImmutable((string) $r['start_date']);
+            $end = new DateTimeImmutable((string) $r['end_date']);
+            // Compare-and-set ATOMIQUE sur le nom générique : ne recale QUE si le nom est encore
+            // exactement celui de naissance. Un renommage concurrent (chemin ORM) fait 0 ligne —
+            // pas de TOCTOU, pas de lost update. UPDATE brut : esquive le season_filter (le plan
+            // peut vivre hors saison active), bump `version` à la main (pas de flush ORM → pas
+            // d'OptimisticLock), étanche (RLS scope par club).
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE schedule_plan SET name = :name, updated_at = now(), version = version + 1 WHERE id = :id AND name = :generic',
+                [
+                    'name' => $this->closurePlanName($venue, $start, $end),
+                    'id' => (string) $r['pid'],
+                    'generic' => $this->closurePlanName(null, $start, $end),
+                ],
+            );
+        }
+    }
+
+    /**
      * @throws LogicException le plan du schedule a disparu (reset concurrent)
      *
      * @return array{type: SchedulePlanType, calendarEntryId: string|null}
@@ -623,7 +671,7 @@ final class SchedulePlanProvisioner
         // Read the entry filter-free: season_filter would hide a period whose
         // season is not the request's active one.
         $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT club_id, season_id, title, period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
+            'SELECT club_id, season_id, title, period_type, start_date, end_date, parent_entry_id, school_holiday_id FROM calendar_entry WHERE id = :id',
             ['id' => $calendarEntryId],
         );
         if (false === $row) {
@@ -639,7 +687,7 @@ final class SchedulePlanProvisioner
             ->setClubId((string) $row['club_id'])
             ->setSeasonId((string) $row['season_id'])
             ->setType($type)
-            ->setName((string) $row['title'])
+            ->setName($this->periodPlanName($type, $row, $calendarEntryId))
             ->setStartDate(new DateTimeImmutable((string) $row['start_date']))
             ->setEndDate(new DateTimeImmutable((string) $row['end_date']))
             ->setCalendarEntryId($calendarEntryId);
@@ -697,5 +745,103 @@ final class SchedulePlanProvisioner
     private function seasonPlanName(Season $season): string
     {
         return 'Planning de la saison ' . $season->getName();
+    }
+
+    /**
+     * E6 (types-de-planning « Nom par défaut ») : le nom PUBLIC du plan de période
+     * (ADR-0002 inv. 12) — la RÉPONSE, distincte du FAIT déclencheur (`CalendarEntry.title`,
+     * ex. « Gymnase A — fermé »). Source unique côté serveur ; le gestionnaire renomme ensuite.
+     * - CLOSURE : « Ajustement {gymnase} du {début} au {fin} » (gymnase = la datée `venue_closed`).
+     * - HOLIDAY : « Planning de {label} du {début} au {fin} » (label = « Vacances de la Toussaint »
+     *   → « Planning de vacances de la Toussaint … »).
+     * Fallback sobre si la donnée manque (gymnase inconnu / vacances hors référentiel) — jamais de crash.
+     *
+     * ⚠ CLOSURE : la datée `venue_closed` naît APRÈS l'entrée (le front fait 2 POST) ; à la
+     * naissance du plan le gymnase est donc souvent introuvable → nom générique « Ajustement
+     * gymnase … ». {@see refreshClosurePlanName} le recale quand la datée arrive.
+     *
+     * @param array<string, mixed> $row colonnes lues dans ensurePeriodPlanId
+     */
+    private function periodPlanName(SchedulePlanType $type, array $row, string $calendarEntryId): string
+    {
+        $start = new DateTimeImmutable((string) $row['start_date']);
+        $end = new DateTimeImmutable((string) $row['end_date']);
+        // Les datées ET le rattachement vacances d'une semaine ENFANT vivent sur sa MÈRE
+        // (datedConstraintSourceId = parent_entry_id ?? id).
+        $source = \is_string($row['parent_entry_id'] ?? null) ? (string) $row['parent_entry_id'] : $calendarEntryId;
+
+        if (SchedulePlanType::HOLIDAY === $type) {
+            // Un enfant de semaine ne porte pas school_holiday_id : remonter à la mère.
+            $holidayId = \is_string($row['school_holiday_id'] ?? null) ? (string) $row['school_holiday_id'] : $this->holidayIdOf($source);
+
+            return $this->holidayPlanName($holidayId, $start, $end);
+        }
+
+        // CLOSURE : la datée venue_closed naît APRÈS l'entrée (2 POST), donc le gymnase n'est
+        // JAMAIS résoluble ici — nom générique direct, sans requête inutile. refreshClosurePlanName
+        // le recale dès que la datée arrive (ConstraintStateProcessor::afterPersist).
+        return $this->closurePlanName(null, $start, $end);
+    }
+
+    private function holidayIdOf(string $entryId): ?string
+    {
+        $id = $this->entityManager->getConnection()->fetchOne(
+            'SELECT school_holiday_id FROM calendar_entry WHERE id = :id',
+            ['id' => $entryId],
+        );
+
+        return \is_string($id) && '' !== $id ? $id : null;
+    }
+
+    private function holidayPlanName(?string $holidayId, DateTimeImmutable $start, DateTimeImmutable $end): string
+    {
+        $label = null;
+        if (null !== $holidayId) {
+            $found = $this->entityManager->getConnection()->fetchOne(
+                'SELECT label FROM school_holiday_period WHERE id = :id',
+                ['id' => $holidayId],
+            );
+            $label = \is_string($found) && '' !== $found ? $found : null;
+        }
+        // « Vacances de la Toussaint » → « Planning de vacances de la Toussaint … ».
+        $name = null === $label
+            ? 'Planning de vacances ' . $this->windowSuffix($start, $end)
+            : 'Planning de ' . lcfirst($label) . ' ' . $this->windowSuffix($start, $end);
+
+        return mb_substr($name, 0, 180);
+    }
+
+    /**
+     * Nom du gymnase fermé = scopeTargetId de la datée `venue_closed`. Filtré STRICTEMENT sur
+     * `config.type = 'venue_closed'` (R3-D : FACILITY couvre aussi forced/preferred/forbidden
+     * Venue — un type absent ou autre ne doit JAMAIS fournir un gymnase pour le nom ; en cas de
+     * doute on garde le nom générique plutôt qu'un mauvais gymnase). `created_at` pour un choix
+     * déterministe s'il y en a plusieurs.
+     */
+    private function closedVenueName(string $sourceEntryId): ?string
+    {
+        $name = $this->entityManager->getConnection()->fetchOne(
+            'SELECT v.name FROM venue v JOIN "constraint" c ON c.scope_target_id = v.id '
+            . 'WHERE c.calendar_entry_id = :eid AND c.family = :fam AND c.is_active = true '
+            . 'AND c.config->>\'type\' = \'venue_closed\' '
+            . 'ORDER BY c.created_at ASC LIMIT 1',
+            ['eid' => $sourceEntryId, 'fam' => ConstraintFamily::FACILITY->value],
+        );
+
+        return \is_string($name) ? $name : null;
+    }
+
+    private function closurePlanName(?string $venue, DateTimeImmutable $start, DateTimeImmutable $end): string
+    {
+        // R3-B : tronquer le GYMNASE (pas la phrase entière) — le suffixe daté doit TOUJOURS
+        // survivre à la limite de 180 (SchedulePlan.name), sinon le nom ne serait plus comparable
+        // au générique et le compare-and-set ne recalerait plus jamais. « Ajustement » (11) +
+        // gymnase (≤140) + espace (1) + suffixe (~27) ≤ 179.
+        return 'Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' ' . $this->windowSuffix($start, $end);
+    }
+
+    private function windowSuffix(DateTimeImmutable $start, DateTimeImmutable $end): string
+    {
+        return 'du ' . $start->format('d/m/Y') . ' au ' . $end->format('d/m/Y');
     }
 }

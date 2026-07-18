@@ -187,11 +187,18 @@ final class PeriodPlanBirthTest extends WebTestCase
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Nom de naissance');
 
+        // Le nom de NAISSANCE du plan est la réponse générée (E6, « Planning de vacances … »),
+        // distincte du titre de la période — on le capture, puis on prouve qu'il ne bouge pas.
+        $bornPlan = $this->planOf($club->getId(), $entryId);
+        self::assertInstanceOf(SchedulePlan::class, $bornPlan);
+        $birthName = $bornPlan->getName();
+
         $this->putPeriod($user, $entryId, ['periodType' => 'holiday', 'title' => 'Titre changé']);
 
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        self::assertSame('Nom de naissance', $plan->getName(), 'le nom du plan ne suit pas le titre de la période (inv. 12)');
+        self::assertSame($birthName, $plan->getName(), 'le nom du plan ne suit pas le titre de la période (inv. 12)');
+        self::assertStringNotContainsString('Titre changé', $plan->getName());
     }
 
     /**

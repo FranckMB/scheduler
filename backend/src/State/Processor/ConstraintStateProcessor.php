@@ -11,15 +11,62 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SeasonAccessGuard;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Throwable;
 
 /**
  * @extends AbstractStateProcessor<Constraint, ConstraintInput, ConstraintResource>
  */
 class ConstraintStateProcessor extends AbstractStateProcessor
 {
+    private readonly LoggerInterface $logger;
+
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        ?LoggerInterface $logger = null,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+        $this->logger = $logger ?? new NullLogger;
+    }
+
     protected function getEntityClass(): string
     {
         return Constraint::class;
+    }
+
+    /**
+     * F2 : une datée `venue_closed` naît APRÈS l'entrée de fermeture (2 POST côté front) ;
+     * le plan CLOSURE est donc minté avec un nom générique. Dès que le gymnase est connu,
+     * on recale le nom du (des) plan(s) de cette fermeture — best-effort, jamais bloquant.
+     */
+    protected function afterPersist(object $entity): void
+    {
+        if (!$entity instanceof Constraint
+            || ConstraintFamily::FACILITY !== $entity->getFamily()
+            || null === $entity->getCalendarEntryId()
+            || 'venue_closed' !== ($entity->getConfig()['type'] ?? null)) {
+            return;
+        }
+        // Best-effort : la contrainte est DÉJÀ committée (flush du base processor). Un recalage
+        // de nom raté (erreur DB transitoire, verrou) ne doit JAMAIS 500 le POST — sinon le
+        // gestionnaire croit l'indispo perdue et la re-crée en double. On avale et on trace.
+        try {
+            $this->schedulePlanProvisioner->refreshClosurePlanName($entity->getCalendarEntryId());
+        } catch (Throwable $e) {
+            $this->logger->warning('refreshClosurePlanName failed after venue_closed constraint {id}', ['id' => $entity->getId(), 'exception' => $e]);
+        }
     }
 
     /**

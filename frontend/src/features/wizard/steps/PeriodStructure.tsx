@@ -53,6 +53,10 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
 export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
+  // Le TYPE de période gouverne le défaut d'équipes (E3) : reprise = Fanion + importantes,
+  // fermeture = tout le club (structure verrouillée). Lu comme PeriodConstraints le fait.
+  const { data: entry } = useCalendarEntry(calendarEntryId);
+  const isClosure = "closure" === entry?.periodType;
   // Le PLAN entier est nécessaire ici (le garde de seed lit teamSelectionInitialized) ;
   // `usePeriodAnchor` fournit l'ancre ET son état — ne pas re-dériver un `?? null` nu.
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
@@ -89,13 +93,17 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // global MutationCache already toasts it — this only avoids an unhandledrejection.
   const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next).catch(() => {});
 
-  // Fanion-only default: on a FRESH period (no overrides yet, not already seeded this
-  // session) deactivate every team below the top tier, ONCE — best-effort. Controls
-  // stay disabled (busy) until the async writes settle so a first click can't race
-  // them. The key is claimed BEFORE firing and never un-claimed: un-claiming on a
+  // Default team selection on a FRESH period (no overrides yet, not already seeded this
+  // session), ONCE — best-effort. The DEPTH depends on the period type (E3) :
+  //  - reprise (holiday) : Fanion + importantes reprennent (tiers S+A) ; le reste démarre
+  //    en pause, coché au fil de la montée en charge.
+  //  - fermeture (closure) : structure verrouillée → tout le club reste actif, rien n'est
+  //    désactivé d'office (le gestionnaire décoche à la main une équipe loisir au besoin).
+  // Controls stay disabled (busy) until the async writes settle so a first click can't
+  // race them. The key is claimed BEFORE firing and never un-claimed: un-claiming on a
   // partial failure re-runs the effect against a still-empty override cache and
   // double-writes the teams that already succeeded. On a failure the global toast
-  // informs; the manager applies "Fanion seul" (ramp) to complete.
+  // informs; the manager applies a ramp preset to complete.
   //
   // The DURABLE signal is plan.teamSelectionInitialized (server-set on the first
   // override, survives reload); seededPeriods only guards the in-session window
@@ -105,26 +113,35 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // `false !== plan?.teamSelectionInitialized` bails on undefined AND on null:
     // seed ONLY when the plan loaded and says explicitly "jamais configuré".
     //
-    // Les deux cas de sortie sont voulus, et aucun n'est le cas nominal. `undefined` =
-    // fetch en erreur : ne pas seeder une période inconnue (elle pourrait être déjà
-    // configurée, son GET ayant simplement raté) — seeder à tort désactiverait des
-    // équipes que le gestionnaire vient d'activer. `null` = aucun plan : inatteignable
-    // pour une closure/holiday depuis que le geste est atomique (l'entrée et son plan
-    // naissent ensemble, ou pas du tout), et le mode période ne s'ouvre que sur ces deux
-    // types. Un null ici est donc une anomalie, pas un état neuf : ne rien faire est le
-    // choix conservateur (le gestionnaire garde la main via « Fanion seul »).
-    if (isLoading || planLoading || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
+    // Les cas de sortie sont voulus, et aucun n'est le cas nominal. `undefined` (plan OU
+    // entry) = fetch en erreur/en vol : ne pas seeder une période inconnue (elle pourrait
+    // être déjà configurée, son GET ayant simplement raté) — seeder à tort désactiverait
+    // des équipes que le gestionnaire vient d'activer, et sans le type on ne connaît pas la
+    // profondeur du seed. `null` (plan) = aucun plan : inatteignable pour une closure/holiday
+    // depuis que le geste est atomique (l'entrée et son plan naissent ensemble, ou pas du
+    // tout), et le mode période ne s'ouvre que sur ces deux types. Un null ici est donc une
+    // anomalie, pas un état neuf : ne rien faire est le choix conservateur.
+    if (isLoading || planLoading || undefined === entry || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
       return;
     }
     claimPeriodSeed(calendarEntryId);
-    const belowTop = teams.filter((t) => t.priorityTierId !== topTierId);
-    if (0 === belowTop.length) {
+    // Fermeture (structure verrouillée) : tout le club reste actif → aucun retrait d'office.
+    // Reprise : garder les 2 premiers RANGS (S+A) par RANG et non par occupation — un rang vide
+    // (pas de Fanion) ne doit pas promouvoir un rang inférieur par un slice() positionnel des
+    // groupes. Les rangs sont ordonnés par id (1=S…5=D). GARDE-FOU : un club SANS aucune équipe
+    // en S/A (petit club tout en loisir) ne doit pas voir TOUT le monde désactivé — on retombe
+    // alors sur le meilleur rang réellement présent (topTierId) : la reprise n'est jamais vide.
+    const topRankIds = new Set([...tiers].sort((a, b) => a.id - b.id).slice(0, 2).map((t) => t.id));
+    const keptByRank = teams.filter((t) => topRankIds.has(t.priorityTierId));
+    const keepIds = new Set((keptByRank.length > 0 ? keptByRank : teams.filter((t) => t.priorityTierId === topTierId)).map((t) => t.id));
+    const toDeactivate = isClosure ? [] : teams.filter((t) => !keepIds.has(t.id));
+    if (0 === toDeactivate.length) {
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async Fanion-only seed writes settle
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async default-selection writes settle
     setBusy(true);
-    void Promise.allSettled(belowTop.map((t) => create.mutateAsync({ schedulePlanId: plan.id, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [isLoading, planLoading, plan, teams, overrides, topTierId, calendarEntryId, create]);
+    void Promise.allSettled(toDeactivate.map((t) => create.mutateAsync({ schedulePlanId: plan.id, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
+  }, [isLoading, planLoading, plan, entry, isClosure, teams, tiers, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
@@ -165,7 +182,15 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   return (
     <div className="space-y-3" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">
-        Choisissez qui reprend sur cette période. Par défaut seul le <strong>Fanion</strong> est actif — cochez les équipes au fur et à mesure de la montée en charge.
+        {isClosure ? (
+          <>
+            Tout le club reste actif sur cette période — <strong>décochez</strong> les équipes qui ne s'entraînent pas (ex. loisir).
+          </>
+        ) : (
+          <>
+            Choisissez qui reprend sur cette période. Par défaut le <strong>Fanion</strong> et les équipes <strong>importantes</strong> reprennent — cochez les autres au fur et à mesure de la montée en charge.
+          </>
+        )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void rampTo(0)}>
