@@ -23,6 +23,8 @@ const setSelectedScheduleId = vi.fn();
 // pointeur sur l'entrée.
 let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
 let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
+// Fenêtre de chargement : quand vrai, plan/schedules n'ont pas encore répondu (fail-closed).
+let queriesLoading = false;
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
@@ -30,11 +32,11 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
-  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null }),
+  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null, isLoading: null !== id && queriesLoading }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
-  useSchedules: () => ({ data: schedulesData }),
+  useSchedules: () => ({ data: schedulesData, isLoading: queriesLoading }),
 }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
@@ -77,6 +79,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     holidayMutateAsync.mockClear();
     plansByEntry = {};
     schedulesData = [];
+    queriesLoading = false;
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -121,6 +124,19 @@ describe("DayDialog — deletion is always confirmed", () => {
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Vide" }));
 
     expect(screen.getByText("Cette entrée sera retirée du calendrier.")).toBeInTheDocument();
+  });
+
+  it("fail-closed: while the period's plan/versions are still loading, warns about the cascade (never under-warns)", async () => {
+    // Le dialogue s'ouvre avant que le plan réponde : sous-avertir ferait perdre des
+    // versions après un message bénin (régression P4-19). Tant qu'on ne sait pas → cascade.
+    queriesLoading = true;
+    plansByEntry = {}; // plan pas encore résolu
+    schedulesData = [];
+    renderDialog([entry({ id: "p3", kind: "period", periodType: "closure", title: "En cours" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer En cours" }));
+
+    expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
   });
 
   it("keeps the custom period button disabled (deferred palier B/C)", () => {
@@ -230,6 +246,7 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     setSelectedScheduleId.mockClear();
     plansByEntry = {};
     schedulesData = [];
+    queriesLoading = false;
   });
 
   // item 1: a public holiday (jour férié) shows read-only info.

@@ -43,7 +43,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
   // mappé par entrée, plutôt qu'un hook par carte (règles des hooks dans la liste).
-  const { data: plans } = useSchedulePlans();
+  // Fail-closed : tant que les plans chargent, l'état d'une période est INCONNU — on ne
+  // décide donc ni « à traiter » ni « tout roule », et on n'affiche aucun CTA qui, à tort,
+  // pousserait à régénérer un plan déjà validé (même philosophie que closureImpactsPending).
+  const { data: plans, isLoading: plansLoading } = useSchedulePlans();
   const activeByEntry = new Map<string, string>();
   for (const p of plans ?? []) {
     if (null !== p.calendarEntryId && null !== p.chosenScheduleId) {
@@ -113,6 +116,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     disruptiveEvents.length === 0 &&
     visibleClosures.length === 0 &&
     !closureImpactsPending &&
+    !plansLoading &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
@@ -134,9 +138,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);
         const activeId = entry ? (activeByEntry.get(entry.id) ?? null) : null;
+        // Entrée matérialisée mais plans encore en vol : validée ou non, on ne sait PAS —
+        // on n'offre donc ni « Voir » ni « Adapter » (adapter à tort régénère un plan validé).
+        const stateUnknown = undefined !== entry && plansLoading;
         return (
-          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${null !== activeId ? "planning validé" : "pas de planning"}`}>
-            {null !== activeId ? (
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${null !== activeId ? "planning validé" : stateUnknown ? "chargement…" : "pas de planning"}`}>
+            {stateUnknown ? null : null !== activeId ? (
               <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
                 Voir le planning
               </Button>
@@ -167,10 +174,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${frDateShort(e.startDate)} · pas d'entraînement`} />
       ))}
 
-      {visibleClosures.map((e) => {
-        const activeId = activeByEntry.get(e.id) ?? null;
-        return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} onAdapt={() => adapt(e.id)} onView={() => null !== activeId && viewOverlay(activeId)} />;
-      })}
+      {/* Fermetures : tenues tant que les plans chargent (Voir/Adapter dépend de l'état du plan). */}
+      {plansLoading
+        ? null
+        : visibleClosures.map((e) => {
+            const activeId = activeByEntry.get(e.id) ?? null;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} onAdapt={() => adapt(e.id)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+          })}
 
       {cutoffs.map((e) => (
         <RadarCard

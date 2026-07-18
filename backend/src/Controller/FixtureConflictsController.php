@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
@@ -68,11 +69,14 @@ final class FixtureConflictsController extends AbstractController
         // so overlapping periods resolve deterministically.
         $activePeriods = [];
         $scheduleIds = null !== $seasonScheduleId ? [$seasonScheduleId] : [];
-        foreach ($this->calendarEntryRepository->findActivePeriodsOrdered() as $period) {
-            // ADR-0002 lot D-b : l'overlay d'une période = la version VALIDÉE de son
-            // plan (chosenScheduleId). null = plan non validé → aucun overlay ne
-            // s'applique (« soit un overlay généré, soit le planning de base »).
-            $overlayId = $this->schedulePlanProvisioner->chosenOfPeriodPlan($period->getId());
+        // ADR-0002 lot D-b : l'overlay d'une période = la version VALIDÉE de son plan
+        // (chosenScheduleId). null = plan non validé → aucun overlay ne s'applique
+        // (« soit un overlay généré, soit le planning de base »). Résolu en UNE requête
+        // pour toutes les périodes (chosenByPeriodPlans) plutôt qu'un SELECT par période.
+        $periods = $this->calendarEntryRepository->findActivePeriodsOrdered();
+        $overlayByEntry = $this->schedulePlanProvisioner->chosenByPeriodPlans(array_map(static fn (CalendarEntry $p): string => $p->getId(), $periods));
+        foreach ($periods as $period) {
+            $overlayId = $overlayByEntry[$period->getId()] ?? null;
             $activePeriods[] = [
                 'start' => $period->getStartDate(),
                 'end' => $period->getEndDate(),

@@ -14,6 +14,7 @@ let conflictsPending = false;
 // ADR-0002 lot D-b : le radar dérive « version active » du plan de la période
 // (chosenScheduleId), plus d'un pointeur sur l'entrée.
 let plansData: SchedulePlan[] = [];
+let plansLoading = false;
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -21,7 +22,7 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
-  useSchedulePlans: () => ({ data: plansData }),
+  useSchedulePlans: () => ({ data: plansLoading ? undefined : plansData, isLoading: plansLoading }),
 }));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
@@ -70,6 +71,7 @@ describe("RadarPanel", () => {
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
+    plansLoading = false;
   });
 
   it("asks for the school zone when unknown", () => {
@@ -149,6 +151,17 @@ describe("RadarPanel", () => {
     expect(screen.queryByText("Gymnase fermé")).not.toBeInTheDocument();
     // …et le panneau redevient franchement vide, au lieu d'un cadre « À traiter » désert.
     expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
+  });
+
+  it("fail-closed: while plans are loading, neither flashes the all-clear nor offers a misleading 'Adapter'", () => {
+    // État d'une période INCONNU tant que les plans chargent : ne pas dire « tout roule »
+    // (masquerait une fermeture validée) ni proposer « Adapter » (régénérerait un plan validé).
+    plansLoading = true;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voir le planning" })).not.toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the plan is validated", () => {

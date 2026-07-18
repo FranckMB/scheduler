@@ -46,15 +46,21 @@ export function DayDialog({ iso, entries, holiday, publicHoliday, onClose }: Day
 
 function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entries: CalendarEntry[]; holiday?: SchoolHoliday; publicHoliday?: PublicHoliday; onCreate: (m: Mode) => void; onClose: () => void }) {
   const deleteEntry = useDeleteEntry();
-  const { data: schedules = [] } = useSchedules();
+  const schedulesQuery = useSchedules();
   const [toDelete, setToDelete] = useState<CalendarEntry | null>(null);
   // Décision fondateur (2026-07-18) : supprimer une période supprime son PLAN, donc TOUTES
   // ses versions liées — le gestionnaire doit en valider la PORTÉE. On avertit fort dès que
   // le plan porte ≥ 1 version (brouillon inclus : la cascade les emporte), pas seulement une
   // version validée. « Porte des versions » se dérive du plan de la période (schedulePlanId),
   // plus d'un pointeur sur l'entrée (lot D-b). Un plan vide (aucune version) ne perd rien → bénin.
-  const toDeletePlanId = useSchedulePlanForEntry(toDelete?.id ?? null).data?.id ?? null;
-  const toDeleteHasVersions = null !== toDeletePlanId && schedules.some((s) => s.schedulePlanId === toDeletePlanId);
+  const planQuery = useSchedulePlanForEntry(toDelete?.id ?? null);
+  const toDeletePlanId = planQuery.data?.id ?? null;
+  // Fail-closed : le dialogue s'ouvre AVANT que le plan/les versions soient résolus. Tant
+  // qu'on ne SAIT PAS (fenêtre de chargement, périodes seulement — un événement n'a pas de
+  // plan), on avertit de la cascade plutôt que de sous-avertir : sinon un delete confirmé
+  // pendant le chargement affiche « rien à perdre » puis emporte le plan et ses versions.
+  const resolving = "period" === toDelete?.kind && (planQuery.isLoading || schedulesQuery.isLoading);
+  const toDeleteHasVersions = resolving || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId));
 
   const confirmDelete = () => {
     if (!toDelete) return;
