@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
-import { download } from "@/shared/lib/download";
+import { download, slugFilename } from "@/shared/lib/download";
 import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
@@ -108,8 +108,10 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 /**
  * Export a schedule to PDF/PNG (async worker → poll status → download the file)
  * or XLSX (synchronous blob → download). `busy` is the in-flight format, or null.
+ * `exportName` names the downloaded file after the PLANNING (slugified), not a
+ * generic "planning" (founder feedback 2026-07-18).
  */
-export function useScheduleExport(scheduleId: string | null) {
+export function useScheduleExport(scheduleId: string | null, exportName: string | null = null) {
   const [busy, setBusy] = useState<ExportFormat | null>(null);
 
   const run = useCallback(
@@ -117,11 +119,12 @@ export function useScheduleExport(scheduleId: string | null) {
       if (null === scheduleId || null !== busy) {
         return;
       }
+      const fileBase = slugFilename(exportName ?? "planning");
       setBusy(format);
       try {
         if ("xlsx" === format) {
           const blob = await planningApi.exportScheduleXlsx(scheduleId, venueId);
-          download(URL.createObjectURL(blob), "planning.xlsx");
+          download(URL.createObjectURL(blob), `${fileBase}.xlsx`);
           return;
         }
         await planningApi.exportSchedulePdf(scheduleId, venueId);
@@ -139,7 +142,7 @@ export function useScheduleExport(scheduleId: string | null) {
           }
           const url = "pdf" === format ? schedule.pdfExportUrl : schedule.pngExportUrl;
           if ("completed" === schedule.pdfExportStatus && null != url && url.endsWith(scopeToken)) {
-            download(url, `planning.${format}`);
+            download(url, `${fileBase}.${format}`);
             return;
           }
         }
@@ -149,7 +152,7 @@ export function useScheduleExport(scheduleId: string | null) {
         setBusy(null);
       }
     },
-    [scheduleId, busy],
+    [scheduleId, busy, exportName],
   );
 
   return { run, busy };

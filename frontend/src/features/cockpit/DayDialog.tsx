@@ -12,7 +12,6 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { todayISO } from "./lib/date";
-import { isAdaptableHoliday } from "./lib/holidays";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry } from "./queries";
 
@@ -189,18 +188,14 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <span className="font-medium">Vacances</span> — {holiday.label}
         </span>
       </p>
-      {/* An existing overlay is always viewable (even for summer — legacy data).
-          "Adapter" (create/replay) is only offered for adaptable holidays: summer
-          (ete) is off-season, a schedule spans one season, so nothing to build —
-          same rule as the radar (isAdaptableHoliday, single source of truth). */}
+      {/* Toutes les vacances sont adaptables, été inclus (planning de reprise —
+          retour fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée). */}
       {null !== activeId ? (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
             Voir le planning
           </Button>
         </div>
-      ) : !isAdaptableHoliday(holiday) ? (
-        <p className="text-xs text-muted-foreground">Vacances d'été — hors saison, pas de planning à adapter.</p>
       ) : entry ? (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>

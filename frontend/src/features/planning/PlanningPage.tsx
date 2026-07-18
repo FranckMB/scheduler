@@ -289,6 +289,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     ?? me?.seasons.find((sn) => sn.isCurrent)
     ?? null;
   const planningTitle = me?.seasonPlan?.name ?? "Planning";
+  // Nom du fichier exporté = nom du PLANNING affiché : la période pour un overlay,
+  // le nom du plan de saison sinon (retour fondateur 2026-07-18).
+  const exportName = null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) ? selectedSchedule.name : (me?.seasonPlan?.name ?? null);
   const structureDiverged =
     null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -381,7 +384,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               embedded={embedded}
               rightSlot={
                 <>
-                  {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} /> : null}
+                  {null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} exportName={exportName} /> : null}
                   <ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />
                 </>
               }

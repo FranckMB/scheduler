@@ -15,6 +15,8 @@ vi.mock("./SeasonSchedulesModal", () => ({
   ),
 }));
 vi.mock("./seasonPlannings", () => ({ seasonPlanCounts: () => ({ total: 2, overlays: 1 }) }));
+// Le bandeau lit le NOM du plan sur me.seasonPlan (retour fondateur 2026-07-18).
+vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
 
 const navigate = vi.fn();
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
@@ -36,6 +38,12 @@ describe("SeasonPlanBanner", () => {
     renderBanner();
     expect(screen.getByRole("button", { name: "Ouvrir" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Modifier/ })).not.toBeInTheDocument();
+  });
+
+  it("titles the strip with the plan's REAL name, not a generic label", () => {
+    renderBanner();
+    expect(screen.getByText("Planning de la saison 2026-2027")).toBeInTheDocument();
+    expect(screen.queryByText("Planning principal")).not.toBeInTheDocument();
   });
 
   it("« Ouvrir » navigates to the planning (validated socle)", async () => {

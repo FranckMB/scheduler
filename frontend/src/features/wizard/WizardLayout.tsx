@@ -1,11 +1,13 @@
 import { HTTPError } from "ky";
 import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, useDeleteEntry, useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { useSchedules } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { cn } from "@/shared/lib/utils";
 
 import { toast } from "@/shared/stores/toastStore";
@@ -145,9 +147,58 @@ export function WizardPage() {
     }
   }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
 
-  const quitPeriod = () => {
+  // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
+  // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;
+  // repartir sans rien générer laissait une entrée orpheline sur tout le créneau des
+  // vacances. Quand le plan de la période n'a AUCUNE version, quitter (bouton ou
+  // navigation SPA) propose de retirer la période. Fail-closed : donnée plan/versions
+  // pas encore chargée → on ne propose PAS la suppression (jamais de delete sur
+  // donnée inconnue — même règle que DayDialog).
+  const periodPlan = useSchedulePlanForEntry(periodMode ? calendarEntryId : null);
+  const wizardSchedules = useSchedules();
+  const periodPlanId = periodPlan.data?.id ?? null;
+  const periodPlanEmpty =
+    periodMode
+    && undefined !== periodPlan.data
+    && undefined !== wizardSchedules.data
+    && null !== periodPlanId
+    && !wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
+  const deleteEntry = useDeleteEntry();
+  const [quitAsked, setQuitAsked] = useState(false);
+  const blocker = useBlocker(({ nextLocation }) => periodMode && periodPlanEmpty && "/wizard" !== nextLocation.pathname);
+  const abandonOpen = quitAsked || "blocked" === blocker.state;
+
+  const finishQuit = () => {
     exitPeriodMode();
     navigate("/");
+  };
+  const quitPeriod = () => {
+    if (periodPlanEmpty) {
+      setQuitAsked(true);
+      return;
+    }
+    finishQuit();
+  };
+  const confirmAbandon = () => {
+    const entryId = calendarEntryId;
+    // Sortir du mode période AVANT le delete : ça désactive useCalendarEntry
+    // (sinon son 404 post-suppression déclenche le toast « n'existe plus »).
+    exitPeriodMode();
+    if (null !== entryId) {
+      deleteEntry.mutate(entryId, { onSuccess: () => toast.success("Période retirée du calendrier") });
+    }
+    setQuitAsked(false);
+    if ("blocked" === blocker.state) {
+      blocker.proceed();
+    } else {
+      navigate("/");
+    }
+  };
+  const keepPeriod = () => {
+    setQuitAsked(false);
+    if ("blocked" === blocker.state) {
+      blocker.reset();
+    }
   };
 
   return (
@@ -169,6 +220,15 @@ export function WizardPage() {
           </Button>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={abandonOpen}
+        title="Abandonner l'ajustement ?"
+        description="Aucun planning n'a été généré pour cette période : elle sera retirée du calendrier. Vous pourrez la recréer via « Adapter »."
+        confirmLabel="Retirer la période"
+        cancelLabel="Rester sur l'ajustement"
+        onConfirm={confirmAbandon}
+        onCancel={keepPeriod}
+      />
       <div className="flex flex-col gap-6 md:flex-row">
       {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
       {navCollapsed ? null : (

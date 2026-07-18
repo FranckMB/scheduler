@@ -1,6 +1,7 @@
-import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -63,6 +64,21 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // (status=ignored) must not resurface (the calendar still shows them).
   const active = entries.filter((e) => e.status !== "ignored");
 
+  // « Planning en cours » (retour fondateur 2026-07-18) : une période dont le plan a
+  // des VERSIONS mais pas de version validée = travail commencé, non fini — le
+  // gestionnaire a une action à faire. Ces cartes échappent au cap des vacances et
+  // au filtre « à venir » (visibles jusqu'à la fin de la période) : un planning en
+  // cours ne doit jamais disparaître du radar. Absence de donnée schedules →
+  // aucune carte (fail-closed, même règle que plansUnresolved).
+  const schedulesQuery = useSchedules();
+  const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
+  const inProgressEntryIds = new Set(
+    (plans ?? [])
+      .filter((p) => null !== p.calendarEntryId && null === p.chosenScheduleId && plansWithVersions.has(p.id))
+      .map((p) => p.calendarEntryId as string),
+  );
+  const inProgressEntries = active.filter((e) => inProgressEntryIds.has(e.id) && e.endDate >= today);
+
   // A holiday already materialised as a period entry (matched by schoolHolidayId).
   // Ignored ones stay in the map so a dismissed holiday is skipped below, not re-proposed.
   const entryByHoliday = new Map(entries.filter((e) => null !== e.schoolHolidayId).map((e) => [e.schoolHolidayId as string, e]));
@@ -70,6 +86,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const upcomingHolidays = holidays
     .filter((h) => h.startDate >= today)
     .filter((h) => entryByHoliday.get(h.id)?.status !== "ignored")
+    // Déjà affichée en carte « en cours » — pas de doublon.
+    .filter((h) => {
+      const e = entryByHoliday.get(h.id);
+      return undefined === e || !inProgressEntryIds.has(e.id);
+    })
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .slice(0, 3);
 
@@ -80,7 +101,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const upcomingPeriods = (periodType: CalendarEntryPeriodType): CalendarEntry[] =>
     active.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const closures = upcomingPeriods("closure");
+  // Une fermeture au plan en cours s'affiche en carte « en cours », pas ici.
+  const closures = upcomingPeriods("closure").filter((e) => !inProgressEntryIds.has(e.id));
   // Le radar montre ce qui CHANGE par rapport au quotidien, pas un inventaire : une
   // fermeture qui ne heurte aucune séance, sur un planning validé, ne demande rien —
   // elle n'a rien à faire dans une liste « à traiter ». On ne peut le savoir qu'en
@@ -117,6 +139,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const isEmpty =
+    inProgressEntries.length === 0 &&
     upcomingHolidays.length === 0 &&
     disruptiveEvents.length === 0 &&
     visibleClosures.length === 0 &&
@@ -139,6 +162,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           </Button>
         </RadarCard>
       ) : null}
+
+      {/* Plannings EN COURS d'abord : l'action la plus pressante, jamais cachée. */}
+      {inProgressEntries.map((e) => (
+        <RadarCard key={`wip-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning en cours — à finaliser">
+          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
+            Reprendre
+          </Button>
+        </RadarCard>
+      ))}
 
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);

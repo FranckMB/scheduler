@@ -18,3 +18,17 @@ export function download(url: string, filename: string): void {
 export function downloadBlob(blob: Blob, filename: string): void {
   download(URL.createObjectURL(blob), filename);
 }
+
+/**
+ * Turn a human plan name into a safe filename base: accents stripped (NFD),
+ * anything non-alphanumeric collapsed to "-", lowercased. Empty → "planning".
+ */
+export function slugFilename(name: string): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return "" === slug ? "planning" : slug;
+}

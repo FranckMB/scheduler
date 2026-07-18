@@ -17,6 +17,9 @@ let conflictsPending = false;
 // PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
 // affichable).
 let plansData: SchedulePlan[] | undefined = [];
+// Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
+// = plan avec versions mais sans version validée → carte toujours visible).
+let schedulesData: { schedulePlanId: string }[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -26,6 +29,7 @@ vi.mock("./queries", () => ({
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
   useSchedulePlans: () => ({ data: plansData }),
 }));
+vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
 const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): SchedulePlan => ({
@@ -73,6 +77,30 @@ describe("RadarPanel", () => {
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
+    schedulesData = [];
+  });
+
+  it("a period whose plan has versions but no validated one shows an always-on « en cours » card", async () => {
+    const user = userEvent.setup();
+    const started = new Date();
+    started.setDate(started.getDate() - 2);
+    const startedIso = started.toISOString().slice(0, 10);
+    // Période DÉJÀ COMMENCÉE (startDate < today) : le filtre « à venir » l'écarterait —
+    // la carte « en cours » doit survivre tant que la période n'est pas finie.
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ schedulePlanId: "pl-c1" }];
+    renderRadar({ entries: [closure({ startDate: startedIso, endDate: addDays(todayISO(), 3) })] });
+    expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+  });
+
+  it("no « en cours » card when the plan is validated or has no versions (fail-closed on missing data)", () => {
+    // Plan validé → carte « en cours » absente (le flux normal Voir/Adapter prend le relais).
+    plansData = [validatedPlan("c1", "s1")];
+    schedulesData = [{ schedulePlanId: "pl-c1" }];
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+    expect(screen.queryByText("Planning en cours — à finaliser")).not.toBeInTheDocument();
   });
 
   it("asks for the school zone when unknown", () => {

@@ -2,15 +2,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import { expect } from "vitest";
 import type { ReactElement } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { axe } from "vitest-axe";
 
-/** Render a component with the providers pages depend on (Query + Router). */
+/**
+ * Render a component with the providers pages depend on (Query + Router).
+ * DATA router (createMemoryRouter), like the app (createBrowserRouter): required
+ * by useBlocker (wizard period-abandon guard) — a plain MemoryRouter would throw.
+ */
 export function renderWithProviders(ui: ReactElement, { route = "/" }: { route?: string } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter([{ path: "*", element: ui }], { initialEntries: [route] });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
 }

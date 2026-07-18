@@ -64,7 +64,7 @@ describe("CockpitPage state machine", () => {
   it("state 2 — baseline exists but not validated → cockpit unlocked with a lock hint", () => {
     meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: null, hasFinishedVersion: true } };
     renderCockpit();
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    expect(screen.getByText("Planning")).toBeInTheDocument(); // le bandeau affiche le NOM du plan (me.seasonPlan.name)
     expect(screen.getByText(/validez-le pour débloquer/i)).toBeInTheDocument();
     expect(screen.queryByText("WIZARD SCREEN")).not.toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe("CockpitPage state machine", () => {
   it("state 3 — validated → full cockpit, no lock hint", () => {
     meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } };
     renderCockpit();
-    expect(screen.getByText("Planning principal")).toBeInTheDocument();
+    expect(screen.getByText("Planning")).toBeInTheDocument(); // le bandeau affiche le NOM du plan (me.seasonPlan.name)
     expect(screen.getByText("À traiter")).toBeInTheDocument();
     expect(screen.queryByText(/validez-le pour débloquer/i)).not.toBeInTheDocument();
   });

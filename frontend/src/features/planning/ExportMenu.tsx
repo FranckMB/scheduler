@@ -11,11 +11,11 @@ import { type ExportFormat, useScheduleExport } from "./queries";
  * Export the currently viewed schedule to PDF / PNG / Excel, scoped to every gym
  * or a single one (venue-only, per product). Each export fits one landscape page.
  */
-export function ExportMenu({ scheduleId, venues }: { scheduleId: string; venues: Venue[] }) {
+export function ExportMenu({ scheduleId, venues, exportName = null }: { scheduleId: string; venues: Venue[]; exportName?: string | null }) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<string>(""); // "" = all venues
   const rootRef = useRef<HTMLDivElement>(null);
-  const { run, busy } = useScheduleExport(scheduleId);
+  const { run, busy } = useScheduleExport(scheduleId, exportName);
 
   // Close on outside click / Escape.
   useEffect(() => {

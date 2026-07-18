@@ -320,11 +320,12 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.getByText("🛑")).toBeInTheDocument();
   });
 
-  // Summer holidays: info only, never adaptable (off-season, no schedule to build).
-  it("shows summer-holiday info but NO « Adapter » action", () => {
+  // L'été s'adapte comme les autres vacances (planning de reprise — retour
+  // fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée).
+  it("offers « Adapter » on a summer holiday (planning de reprise)", () => {
     renderDialog([], { holiday: schoolHoliday({ id: "sh-ete", label: "Vacances d'Été", holidayType: "ete" }) });
     expect(screen.getByText(/Vacances d'Été/)).toBeInTheDocument();
-    expect(screen.getByText(/hors saison/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/hors saison/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
   });
 });

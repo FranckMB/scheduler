@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useMe } from "@/features/auth/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -21,6 +22,7 @@ interface SeasonPlanBannerProps {
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
 export function SeasonPlanBanner({ schedules, socleValidated, loading = false }: SeasonPlanBannerProps) {
   const navigate = useNavigate();
+  const { data: me } = useMe();
   const [listOpen, setListOpen] = useState(false);
 
   // Le planning de la saison TEL QU'IL EST : la version pointée si le gestionnaire
@@ -49,7 +51,10 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
       <div>
-        <p className="text-sm font-semibold">Planning principal</p>
+        {/* Le plan porte un NOM (ADR-0002 inv. 12) — l'afficher, pas un libellé générique
+            (retour fondateur 2026-07-18 : « Planning de la saison » ici, « Planning
+            principal » là = pas UX friendly). */}
+        <p className="text-sm font-semibold">{me?.seasonPlan?.name ?? "Planning principal"}</p>
         <p className="text-xs text-muted-foreground">
           {chosen ? (
             <>

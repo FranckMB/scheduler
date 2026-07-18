@@ -9,11 +9,30 @@ vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "b1", hasFinishedVersion: true }, club: { id: "c", name: "C", onboardingCompleted: true } } }),
 }));
 
+// Garde d'abandon de période (retour fondateur 2026-07-18) : contrôle des
+// données plan/versions par variables — le défaut (plan vide) arme le dialogue.
+const deleteEntryMutate = vi.fn();
+let periodPlanData: { id: string } | null | undefined = { id: "plan-x" };
+let schedulesData: { schedulePlanId: string }[] | undefined = [];
+vi.mock("@/features/cockpit/queries", async (orig) => ({
+  ...(await orig<typeof import("@/features/cockpit/queries")>()),
+  useCalendarEntry: () => ({ data: { id: "entry-x", title: "Vacances de la Toussaint", startDate: "2026-10-16", endDate: "2026-10-31" }, error: null }),
+  useSchedulePlanForEntry: () => ({ data: periodPlanData }),
+  useDeleteEntry: () => ({ mutate: deleteEntryMutate, isPending: false }),
+}));
+vi.mock("@/features/planning/queries", async (orig) => ({
+  ...(await orig<typeof import("@/features/planning/queries")>()),
+  useSchedules: () => ({ data: schedulesData }),
+}));
+
 import * as api from "./api";
 import { useWizardStore } from "./store";
 import { WizardPage } from "./WizardLayout";
 
-vi.mock("./api", () => ({
+vi.mock("./api", async (orig) => ({
+  // Partiel : les steps non ciblés (Contraintes en mode période) touchent d'autres
+  // exports — un mock total ferait THROW tout l'arbre via l'ErrorBoundary du router.
+  ...(await orig<typeof import("./api")>()),
   listTeams: vi.fn(() => Promise.resolve([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }])),
   listSportCategories: vi.fn(() => Promise.resolve([{ id: "cat1", name: "U11", sortOrder: 0 }])),
   listPriorityTiers: vi.fn(() => Promise.resolve([{ id: 1, label: "S", name: "Elite", color: null }, { id: 2, label: "A", name: "Régional", color: null }])),
@@ -47,8 +66,11 @@ vi.mock("./api", () => ({
 }));
 
 beforeEach(() => {
-  useWizardStore.setState({ stepId: "teams" });
+  useWizardStore.setState({ stepId: "teams", mode: "season", calendarEntryId: null });
   vi.mocked(api.listTeams).mockResolvedValue([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }]);
+  deleteEntryMutate.mockClear();
+  periodPlanData = { id: "plan-x" };
+  schedulesData = [];
 });
 
 describe("Wizard (integration)", () => {
@@ -75,6 +97,33 @@ describe("Wizard (integration)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Ajoutez au moins une équipe");
     expect(screen.getByRole("button", { name: "Suivant" })).toBeDisabled();
+  });
+
+  // Bug Toussaint (retour fondateur 2026-07-18) : « Adapter » crée la période
+  // AVANT le wizard ; repartir sans rien générer laissait une entrée orpheline.
+  it("quitting an untouched period adjustment offers to remove the period, and deletes on confirm", async () => {
+    const user = userEvent.setup();
+    useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+
+    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    // Rien n'est supprimé sans confirmation explicite.
+    expect(deleteEntryMutate).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
+
+    await user.click(screen.getByRole("button", { name: "Retirer la période" }));
+    expect(deleteEntryMutate).toHaveBeenCalledWith("entry-x", expect.anything());
+  });
+
+  it("quitting a period whose plan HAS versions leaves silently (no dialog, nothing deleted)", async () => {
+    const user = userEvent.setup();
+    schedulesData = [{ schedulePlanId: "plan-x" }];
+    useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+
+    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(deleteEntryMutate).not.toHaveBeenCalled();
   });
 
   it("enters sort mode from the footer « Trier » button and shows the tier drop zones", async () => {
