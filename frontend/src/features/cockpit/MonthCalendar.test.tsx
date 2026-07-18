@@ -13,12 +13,12 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
   // DayDialog (ouvert au clic) dérive « overlay validé » du plan de la période (lot D-b).
-  useSchedulePlanForEntry: () => ({ data: null }),
+  useSchedulePlanForEntry: () => ({ data: null, isSuccess: true }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [] }),
   // DayDialog (ouvert au clic) lit les versions du plan pour la garde de suppression (lot D-b).
-  useSchedules: () => ({ data: [] }),
+  useSchedules: () => ({ data: [], isSuccess: true }),
 }));
 // Pin "today" to mid-May 2026 so the past/future split is deterministic
 // (real-clock today would make the whole rendered month past). Only todayISO

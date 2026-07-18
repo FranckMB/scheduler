@@ -55,12 +55,17 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // plus d'un pointeur sur l'entrée (lot D-b). Un plan vide (aucune version) ne perd rien → bénin.
   const planQuery = useSchedulePlanForEntry(toDelete?.id ?? null);
   const toDeletePlanId = planQuery.data?.id ?? null;
-  // Fail-closed : le dialogue s'ouvre AVANT que le plan/les versions soient résolus. Tant
-  // qu'on ne SAIT PAS (fenêtre de chargement, périodes seulement — un événement n'a pas de
-  // plan), on avertit de la cascade plutôt que de sous-avertir : sinon un delete confirmé
-  // pendant le chargement affiche « rien à perdre » puis emporte le plan et ses versions.
-  const resolving = "period" === toDelete?.kind && (planQuery.isLoading || schedulesQuery.isLoading);
-  const toDeleteHasVersions = resolving || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId));
+  // Restreint aux types OVERLAYABLES : seuls closure/holiday portent un plan (inv. 9) —
+  // cutoff/mutualisation/custom et les événements n'en ont jamais, donc aucune cascade à
+  // annoncer (les avertir serait un faux positif alarmant).
+  const overlayCapable = "closure" === toDelete?.periodType || "holiday" === toDelete?.periodType;
+  // Fail-closed sur tout état NON RÉSOLU (chargement OU erreur) : le dialogue s'ouvre avant
+  // que le plan/les versions répondent. On n'affiche le message bénin que si on SAIT (les
+  // deux requêtes ont abouti) qu'il n'y a pas de version — sinon un delete confirmé pendant
+  // le chargement/une erreur afficherait « rien à perdre » puis emporterait le plan et ses
+  // versions. (usePeriodAnchor n'expose pas isError → lecture directe des deux requêtes ici.)
+  const versionsResolved = planQuery.isSuccess && schedulesQuery.isSuccess;
+  const toDeleteHasVersions = overlayCapable && (!versionsResolved || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId)));
 
   const confirmDelete = () => {
     if (!toDelete) return;

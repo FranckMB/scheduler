@@ -15,6 +15,7 @@ let conflictsPending = false;
 // (chosenScheduleId), plus d'un pointeur sur l'entrée.
 let plansData: SchedulePlan[] = [];
 let plansLoading = false;
+let plansError = false;
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -22,7 +23,8 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
-  useSchedulePlans: () => ({ data: plansLoading ? undefined : plansData, isLoading: plansLoading }),
+  // isSuccess pilote le fail-closed : ni chargement ni erreur = résolu.
+  useSchedulePlans: () => ({ data: plansLoading || plansError ? undefined : plansData, isLoading: plansLoading, isSuccess: !plansLoading && !plansError }),
 }));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
@@ -72,6 +74,7 @@ describe("RadarPanel", () => {
     conflictsPending = false;
     plansData = [];
     plansLoading = false;
+    plansError = false;
   });
 
   it("asks for the school zone when unknown", () => {
@@ -162,6 +165,16 @@ describe("RadarPanel", () => {
     expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Voir le planning" })).not.toBeInTheDocument();
+  });
+
+  it("fail-closed on a plans query ERROR too: never mislabels a period as 'pas de planning' (isSuccess, not just isLoading)", () => {
+    // Une erreur laisse activeByEntry vide comme le chargement : la traiter comme « résolu »
+    // afficherait « Adapter » sur une période potentiellement validée → régénération destructive.
+    plansError = true;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
+
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
   });
 
   it("switches to consult/adjust once the plan is validated", () => {

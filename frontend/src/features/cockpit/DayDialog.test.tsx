@@ -23,8 +23,11 @@ const setSelectedScheduleId = vi.fn();
 // pointeur sur l'entrée.
 let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
 let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
-// Fenêtre de chargement : quand vrai, plan/schedules n'ont pas encore répondu (fail-closed).
+// État des requêtes plan/schedules : ni chargées ni en erreur = résolues (fail-closed
+// avertit tant que non résolu — chargement OU erreur).
 let queriesLoading = false;
+let queriesError = false;
+const queriesResolved = () => !queriesLoading && !queriesError;
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
@@ -32,11 +35,11 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
-  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null, isLoading: null !== id && queriesLoading }),
+  useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id ? (plansByEntry[id] ?? null) : null, isLoading: null !== id && queriesLoading, isSuccess: null !== id && queriesResolved() }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
-  useSchedules: () => ({ data: schedulesData, isLoading: queriesLoading }),
+  useSchedules: () => ({ data: schedulesData, isLoading: queriesLoading, isSuccess: queriesResolved() }),
 }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
@@ -80,6 +83,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     plansByEntry = {};
     schedulesData = [];
     queriesLoading = false;
+    queriesError = false;
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -137,6 +141,30 @@ describe("DayDialog — deletion is always confirmed", () => {
     await userEvent.click(screen.getByRole("button", { name: "Supprimer En cours" }));
 
     expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
+  });
+
+  it("fail-closed: on a plan/schedules query ERROR, still warns about the cascade (isError, not just isLoading)", async () => {
+    // Une erreur laisse data indéfini avec isLoading=false : sans garde sur isSuccess, le
+    // message retombait en bénin et un delete confirmé emportait le plan et ses versions.
+    queriesError = true;
+    plansByEntry = {};
+    schedulesData = [];
+    renderDialog([entry({ id: "p4", kind: "period", periodType: "holiday", title: "Vacances" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer Vacances" }));
+
+    expect(screen.getByText(/son plan et toutes ses versions/i)).toBeInTheDocument();
+  });
+
+  it("never flashes the cascade warning for a cutoff, even while loading (no plan, inv. 9)", async () => {
+    // Régression évitée : le fail-closed ne doit pas s'armer sur un type non overlayable —
+    // cutoff/mutualisation/custom ne portent jamais de plan, aucune cascade à annoncer.
+    queriesLoading = true;
+    renderDialog([entry({ id: "p5", kind: "period", periodType: "cutoff", title: "Coupure" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer Coupure" }));
+
+    expect(screen.getByText("Cette entrée sera retirée du calendrier.")).toBeInTheDocument();
   });
 
   it("keeps the custom period button disabled (deferred palier B/C)", () => {
@@ -247,6 +275,7 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     plansByEntry = {};
     schedulesData = [];
     queriesLoading = false;
+    queriesError = false;
   });
 
   // item 1: a public holiday (jour férié) shows read-only info.

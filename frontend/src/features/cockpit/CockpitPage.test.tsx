@@ -31,7 +31,7 @@ vi.mock("./queries", () => ({
   useEntryConflicts: () => ({ data: undefined }),
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: undefined })),
   // RadarPanel dérive « version active » du plan de la période (lot D-b).
-  useSchedulePlans: () => ({ data: [] }),
+  useSchedulePlans: () => ({ data: [], isSuccess: true }),
 }));
 
 function renderCockpit() {
