@@ -39,10 +39,12 @@ final readonly class BackupCoverage
         return \is_string($value) ? new DateTimeImmutable($value) : null;
     }
 
-    /** La base contient-elle des données à protéger, même sans signal d'activité ? */
+    /** La base contient-elle des données à protéger, même sans signal d'activité ?
+     *  Clubs OU comptes utilisateurs (un inscrit non vérifié n'a pas encore de club —
+     *  ses identifiants sont déjà des données à ne pas perdre, revue #258 round 2). */
     public function hasAnyData(): bool
     {
-        return (bool) $this->admin()->fetchOne('SELECT 1 FROM club LIMIT 1');
+        return (bool) $this->admin()->fetchOne('SELECT 1 WHERE EXISTS (SELECT 1 FROM club) OR EXISTS (SELECT 1 FROM app_user)');
     }
 
     /** Dernier dump COMPLET du dossier (les .part de dumps interrompus sont ignorés). */

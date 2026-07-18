@@ -70,6 +70,18 @@ final class DatabaseBackupCommand extends Command
             return Command::FAILURE;
         }
 
+        // Purge des .part ORPHELINS (> 1 h) : un SIGKILL/OOM pendant pg_dump laisse un
+        // .part que ni le finally (process mort) ni la rétention (glob *.dump) ne voient —
+        // sans ce balayage ils s'accumulent jusqu'au disque plein (round 2, finding 3).
+        // 1 h de grâce : ne jamais toucher le .part d'un dump concurrent encore en cours.
+        foreach (glob($dir . '/clubscheduler-*.dump.part') ?: [] as $orphan) {
+            $mtime = filemtime($orphan);
+            if (false !== $mtime && $mtime < time() - 3600) {
+                @unlink($orphan);
+                $io->writeln(\sprintf('Removed orphaned partial %s.', basename($orphan)));
+            }
+        }
+
         $lastDumpAt = $this->coverage->latestDumpTime($dir);
         $lastActivityAt = $this->coverage->latestActivity();
         $io->writeln(\sprintf('activity=%s lastDump=%s', $lastActivityAt?->format('Y-m-d H:i:s') ?? 'none', $lastDumpAt?->format('Y-m-d H:i:s') ?? 'none'), OutputInterface::VERBOSITY_VERBOSE);
@@ -125,12 +137,25 @@ final class DatabaseBackupCommand extends Command
             if (is_file($partial) && !is_file($final)) {
                 // Succès → promotion atomique + mtime = début du snapshot ; échec → purge.
                 if (isset($process) && $process->isSuccessful()) {
-                    rename($partial, $final);
-                    touch($final, (int) $snapshotStart->format('U'));
+                    if (!rename($partial, $final)) {
+                        @unlink($partial);
+                    } elseif (!touch($final, (int) $snapshotStart->format('U'))) {
+                        // mtime reste « maintenant » (> T0) : direction SÛRE — au pire un
+                        // re-dump de trop, jamais une activité crue couverte à tort.
+                        $io->warning('Could not set the dump mtime to snapshot start — next run may re-dump once.');
+                    }
                 } else {
                     @unlink($partial);
                 }
             }
+        }
+
+        // La promotion doit être VÉRIFIÉE : un rename en échec (permissions, disque) avec
+        // un « Dump written » de succès serait un faux backup (round 2, finding 5).
+        if (!is_file($final)) {
+            $io->error('Dump promotion failed — no backup was produced.');
+
+            return Command::FAILURE;
         }
 
         $size = filesize($final);

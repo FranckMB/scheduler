@@ -17,8 +17,10 @@ use Symfony\Component\DependencyInjection\EnvVarProcessorInterface;
  */
 final readonly class SentryDsnEnvVarProcessor implements EnvVarProcessorInterface
 {
-    /** Forme minimale d'un DSN Sentry : scheme://clé@hôte/id-projet. */
-    private const DSN_PATTERN = '#^https?://[^@\s]+@[^/\s]+/\d+$#';
+    /** Forme minimale d'un DSN Sentry : scheme://clé@hôte[/chemin]/id-projet —
+     *  le chemin optionnel couvre les Sentry self-hosted derrière un sous-chemin
+     *  (revue #258 round 2 : les rejeter désactivait silencieusement la capture). */
+    private const DSN_PATTERN = '#^https?://[^@\s]+@[^/\s]+(/[^/\s]+)*/\d+$#';
 
     public function __construct(private LoggerInterface $logger) {}
 

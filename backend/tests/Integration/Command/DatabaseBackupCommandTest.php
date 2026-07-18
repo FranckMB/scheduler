@@ -65,6 +65,11 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         // Revue #258, finding 3 : une base qui CONTIENT des données mais sans aucun
         // signal d'activité (déploiement existant, audit purgé, jamais de login depuis
         // la colonne) doit recevoir un PREMIER dump — « aucun signal » ≠ « rien à protéger ».
+        // Hermétique (round 2, finding 6) : neutraliser tout signal résiduel du process —
+        // la précondition du bootstrap est « latestActivity() null sur TOUTE la base ».
+        $this->admin()->executeStatement('UPDATE club SET last_activity_at = NULL');
+        $this->admin()->executeStatement('DELETE FROM solver_metrics');
+        $this->admin()->executeStatement('DELETE FROM audit_log');
         $this->seedActivity(withActivity: false);
         $application = new Application(self::$kernel);
 

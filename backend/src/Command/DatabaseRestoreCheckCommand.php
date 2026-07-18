@@ -57,6 +57,7 @@ final class DatabaseRestoreCheckCommand extends Command
         // Doctrine peut en porter une (wrapper transactionnel des tests).
         $database = 'clubscheduler_restore_' . bin2hex(random_bytes(4));
         $this->maintenance(\sprintf('CREATE DATABASE %s', $database));
+        $dropFailed = false;
 
         try {
             $restore = new Process(
@@ -80,19 +81,29 @@ final class DatabaseRestoreCheckCommand extends Command
                 return Command::FAILURE;
             }
 
-            $io->success(\sprintf('Restore check passed: %s → %d tables, %d club(s). The backup is real.', basename($file), $tables, $clubs));
-
-            return Command::SUCCESS;
+            $io->writeln(\sprintf('Restore check: %s → %d tables, %d club(s).', basename($file), $tables, $clubs));
         } finally {
             // Un DROP qui échoue (connexion résiduelle après un pg_restore tué) ne doit
-            // JAMAIS masquer l'erreur d'origine du bloc try — warning et on continue :
-            // la base jetable qui fuit est visible et se re-droppe à la main.
+            // JAMAIS masquer l'erreur d'origine du bloc try — warning + flag : sur le
+            // chemin SUCCÈS, la fuite d'une copie complète de prod derrière un exit 0
+            // serait invisible du monitoring (round 2, finding 4) → FAILURE plus bas.
             try {
                 $this->maintenance(\sprintf('DROP DATABASE IF EXISTS %s', $database));
             } catch (Throwable $e) {
+                $dropFailed = true;
                 $io->warning(\sprintf('Could not drop throwaway database %s (drop it manually): %s', $database, $e->getMessage()));
             }
         }
+
+        if ($dropFailed) {
+            $io->error(\sprintf('Restore verified BUT the throwaway database %s leaked a full data copy — drop it, then re-run.', $database));
+
+            return Command::FAILURE;
+        }
+
+        $io->success('The backup is real.');
+
+        return Command::SUCCESS;
     }
 
     /** Ordre administratif hors transaction, sur la base de maintenance 'postgres'. */
