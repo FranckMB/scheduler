@@ -16,13 +16,18 @@ use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Throwable;
 
 /**
  * @extends AbstractStateProcessor<Constraint, ConstraintInput, ConstraintResource>
  */
 class ConstraintStateProcessor extends AbstractStateProcessor
 {
+    private readonly LoggerInterface $logger;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
@@ -30,8 +35,10 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        ?LoggerInterface $logger = null,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+        $this->logger = $logger ?? new NullLogger;
     }
 
     protected function getEntityClass(): string
@@ -52,7 +59,14 @@ class ConstraintStateProcessor extends AbstractStateProcessor
             || 'venue_closed' !== ($entity->getConfig()['type'] ?? null)) {
             return;
         }
-        $this->schedulePlanProvisioner->refreshClosurePlanName($entity->getCalendarEntryId());
+        // Best-effort : la contrainte est DÉJÀ committée (flush du base processor). Un recalage
+        // de nom raté (erreur DB transitoire, verrou) ne doit JAMAIS 500 le POST — sinon le
+        // gestionnaire croit l'indispo perdue et la re-crée en double. On avale et on trace.
+        try {
+            $this->schedulePlanProvisioner->refreshClosurePlanName($entity->getCalendarEntryId());
+        } catch (Throwable $e) {
+            $this->logger->warning('refreshClosurePlanName failed after venue_closed constraint {id}', ['id' => $entity->getId(), 'exception' => $e]);
+        }
     }
 
     /**

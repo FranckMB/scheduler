@@ -204,6 +204,24 @@ describe("PeriodTeams — default team selection (E3) + toggles", () => {
     expect(createOverride).toHaveBeenCalledTimes(1); // t2 (rang A) reste actif
   });
 
+  it("reprise: un club SANS Fanion ni importante ne voit pas tout le monde désactivé (garde-fou top rang présent)", () => {
+    // Club tout en loisir : rangs B (t3) + C (t4), aucun S/A. Le fixe {S,A} éteindrait TOUT ;
+    // le garde-fou garde le meilleur rang présent (B) et ne met en pause que C.
+    entryState.data = { periodType: "holiday" };
+    const tB = { ...T2, id: "tB", name: "Loisir 1", priorityTierId: 3 };
+    const tC = { ...T2, id: "tC", name: "Loisir 2", priorityTierId: 4 };
+    teamsState.data = [tB, tC];
+    tiersState.data = [
+      { id: 1, label: "S", name: "Fanion", color: null },
+      { id: 2, label: "A", name: "Importante", color: null },
+      { id: 3, label: "B", name: "Moyenne", color: null },
+      { id: 4, label: "C", name: "De base", color: null },
+    ];
+    render(<PeriodTeams calendarEntryId="fresh-holiday-loisir" />);
+    expect(createOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", teamId: "tC", isActive: false });
+    expect(createOverride).toHaveBeenCalledTimes(1); // tB (meilleur rang présent) reste actif
+  });
+
   it("fermeture: une équipe hors des rangs chargés (data drift) reste active — jamais désactivée", () => {
     entryState.data = { periodType: "closure" };
     const orphan = { ...T2, id: "torphan", priorityTierId: 9 }; // tier absent du set chargé

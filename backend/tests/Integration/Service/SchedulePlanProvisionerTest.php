@@ -274,6 +274,33 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
+     * NR R2-B — re-cibler la fermeture (Gym A → Gym B) recale le nom AUTO : un nom auto déjà
+     * résolu n'est pas figé, seul un renommage gestionnaire l'est.
+     */
+    public function testRefreshRetargetsWhenTheClosedVenueChanges(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId());
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+
+        $closureA = $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase A', 'venue_closed');
+        $this->provisioner->refreshClosurePlanName($entry->getId());
+        $this->em->refresh($plan);
+        self::assertSame('Ajustement Gymnase A du 20/10/2025 au 26/10/2025', $plan->getName());
+
+        // Re-ciblage : Gym A retiré (inactif), Gym B posé — le nom AUTO suit.
+        $closureA->setIsActive(false);
+        $this->em->flush();
+        $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase B', 'venue_closed');
+        $this->provisioner->refreshClosurePlanName($entry->getId());
+        $this->em->refresh($plan);
+        self::assertSame('Ajustement Gymnase B du 20/10/2025 au 26/10/2025', $plan->getName());
+    }
+
+    /**
      * NR F4 — un plan de semaine ENFANT (holiday) ne porte pas school_holiday_id ; le nom
      * remonte le label de la MÈRE, sinon la semaine perdrait l'identité des vacances.
      */
@@ -323,7 +350,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         return '00000000-0000-4000-8000-000000000000';
     }
 
-    private function seedVenueConstraint(string $clubId, string $seasonId, string $entryId, string $venueName, string $type): void
+    private function seedVenueConstraint(string $clubId, string $seasonId, string $entryId, string $venueName, string $type): Constraint
     {
         $venue = new Venue;
         $venue->setClubId($clubId);
@@ -345,6 +372,8 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $constraint->setIsActive(true);
         $this->em->persist($constraint);
         $this->em->flush();
+
+        return $constraint;
     }
 
     private function makeHolidayWeekChild(string $clubId, string $seasonId, string $parentEntryId): CalendarEntry

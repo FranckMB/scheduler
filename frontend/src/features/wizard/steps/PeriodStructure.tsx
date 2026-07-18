@@ -126,11 +126,15 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     }
     claimPeriodSeed(calendarEntryId);
     // Fermeture (structure verrouillée) : tout le club reste actif → aucun retrait d'office.
-    // Reprise : garder les 2 premiers RANGS (S+A) par RANG, pas par occupation — un club sans
-    // Fanion ne doit pas voir un rang inférieur promu par un slice() positionnel des groupes
-    // (les rangs vides sont absents de `groups`). Les rangs sont ordonnés par id (1=S…5=D).
-    const keepRankIds = new Set([...tiers].sort((a, b) => a.id - b.id).slice(0, 2).map((t) => t.id));
-    const toDeactivate = isClosure ? [] : teams.filter((t) => !keepRankIds.has(t.priorityTierId));
+    // Reprise : garder les 2 premiers RANGS (S+A) par RANG et non par occupation — un rang vide
+    // (pas de Fanion) ne doit pas promouvoir un rang inférieur par un slice() positionnel des
+    // groupes. Les rangs sont ordonnés par id (1=S…5=D). GARDE-FOU : un club SANS aucune équipe
+    // en S/A (petit club tout en loisir) ne doit pas voir TOUT le monde désactivé — on retombe
+    // alors sur le meilleur rang réellement présent (topTierId) : la reprise n'est jamais vide.
+    const topRankIds = new Set([...tiers].sort((a, b) => a.id - b.id).slice(0, 2).map((t) => t.id));
+    const keptByRank = teams.filter((t) => topRankIds.has(t.priorityTierId));
+    const keepIds = new Set((keptByRank.length > 0 ? keptByRank : teams.filter((t) => t.priorityTierId === topTierId)).map((t) => t.id));
+    const toDeactivate = isClosure ? [] : teams.filter((t) => !keepIds.has(t.id));
     if (0 === toDeactivate.length) {
       return;
     }
