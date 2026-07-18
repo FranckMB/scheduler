@@ -209,6 +209,12 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
             Adapter
           </Button>
         </div>
+      ) : null !== workingSeason && null === clamped ? (
+        // Fenêtre entièrement disjointe de la saison (fait VÉRIFIÉ — la saison est
+        // chargée) : un bouton mort sans explication serait pire que l'ancien
+        // message (revue #260 round 2). Saison encore en vol → bouton désactivé
+        // bref, ci-dessous.
+        <p className="text-xs text-muted-foreground">Hors de la saison en cours — rien à adapter.</p>
       ) : (
         <div className="flex justify-end">
           <Button

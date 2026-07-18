@@ -64,7 +64,11 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
   return [...rows, ...periods];
 }
 
-export function seasonPlanCounts(schedules: Schedule[]): { total: number; overlays: number } {
+/** `openOverlays` : plannings secondaires SANS version terminée (en cours) — le
+ *  sous-titre de la bannière les distingue pour ne pas laisser croire à un
+ *  planning prêt (revue #260 round 2). */
+export function seasonPlanCounts(schedules: Schedule[]): { total: number; overlays: number; openOverlays: number } {
   const rows = seasonPlannings(schedules);
-  return { total: rows.length, overlays: rows.filter((row) => row.isOverlay).length };
+  const overlays = rows.filter((row) => row.isOverlay);
+  return { total: rows.length, overlays: overlays.length, openOverlays: overlays.filter((row) => row.isOpen).length };
 }

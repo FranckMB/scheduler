@@ -51,13 +51,14 @@ function open(list: Schedule[]) {
 
 describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("counts distinct plannings: 1 season plan + 1 overlay = 2 (not 4 versions)", () => {
-    expect(seasonPlanCounts(schedules)).toEqual({ total: 2, overlays: 1 });
+    expect(seasonPlanCounts(schedules)).toEqual({ total: 2, overlays: 1, openOverlays: 0 });
   });
 
   it("counts OPEN periods too (a mid-generation planning is still a planning — founder 2026-07-18)", () => {
     // One finished period (p1) + one period (p2) still mid-first-generation → BOTH listed.
     const withInFlight = [...schedules, plan({ id: "o3", name: "Vacances Noël", status: "GENERATING", planType: "CLOSURE", schedulePlanId: "p2", createdAt: "2026-07-05T10:00:00+00:00" })];
-    expect(seasonPlanCounts(withInFlight)).toEqual({ total: 3, overlays: 2 });
+    // openOverlays distingue le planning EN COURS (bannière « (1 en cours) »).
+    expect(seasonPlanCounts(withInFlight)).toEqual({ total: 3, overlays: 2, openOverlays: 1 });
   });
 
   it("lists one row per PLANNING (principal + overlay), each with view + export", () => {

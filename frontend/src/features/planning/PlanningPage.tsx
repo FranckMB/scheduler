@@ -3,7 +3,7 @@ import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-re
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useMe, useRenamePlanning } from "@/features/auth/queries";
+import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/queries";
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
@@ -23,7 +23,6 @@ import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
-import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { isSeasonPlanType, versionsDeletedByValidating } from "./lib/versions";
@@ -96,7 +95,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
-  const selectedSeasonId = useSeasonStore((st) => st.selectedSeasonId);
+  // Source partagée avec le cockpit (radar/DayDialog) — une seule dérivation de
+  // la saison de travail, plus de copie inline qui pourrait diverger.
+  const workingSeason = useWorkingSeason();
 
   // Keep a valid selection: default to the season base plan, else the latest
   // completed. A selection archived concurrently (sibling validation in another
@@ -279,15 +280,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
-  // The season the user is WORKING IN: the explicit selection (X-Season-Id,
-  // seasonStore) first, else the calendar-current one. Only used for the title
-  // fallback and the read-only check — renaming targets me.seasonPlan, which the
-  // server already resolved for the SELECTED season, so it can never drift.
-  const workingSeason =
-    me?.seasons.find((sn) => sn.id === selectedSeasonId)
-    ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
-    ?? me?.seasons.find((sn) => sn.isCurrent)
-    ?? null;
   const planningTitle = me?.seasonPlan?.name ?? "Planning";
   // Nom du fichier exporté = nom du PLANNING affiché : la période pour un overlay,
   // le nom du plan de saison sinon (retour fondateur 2026-07-18).

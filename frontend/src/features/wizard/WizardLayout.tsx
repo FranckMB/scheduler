@@ -159,20 +159,20 @@ export function WizardPage() {
   // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
   // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;
   // repartir sans rien générer laissait une entrée orpheline sur tout le créneau des
-  // vacances. Quand le plan de la période n'a AUCUNE version, quitter (bouton ou
-  // navigation SPA) propose de retirer la période. Fail-closed : donnée plan/versions
-  // pas encore chargée → on ne propose PAS la suppression (jamais de delete sur
-  // donnée inconnue — même règle que DayDialog). Le cache sert à ARMER le dialogue ;
-  // la décision destructive, elle, se prend sur une lecture FRAÎCHE (confirmAbandon).
+  // vacances. Quitter (bouton ou navigation SPA) propose de retirer la période dès
+  // qu'aucune version n'est CONNUE — donnée en vol/en échec incluse : dégrader en
+  // sortie silencieuse referait exactement l'orphelin (revue #260 round 2). Le
+  // dialogue est CONDITIONNEL (« si aucun planning n'a été généré… ») ; la décision
+  // destructive, elle, se prend sur une lecture serveur FRAÎCHE (confirmAbandon) —
+  // fetch muet ou plan irrésolu = jamais de suppression.
   const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
   const periodPlanId = periodAnchor.planId;
   const wizardSchedules = useSchedules(periodMode);
-  const periodPlanEmpty =
-    periodMode
-    && periodAnchor.ready
-    && null !== periodPlanId
+  const periodHasKnownVersion =
+    null !== periodPlanId
     && undefined !== wizardSchedules.data
-    && !wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
+    && wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
+  const periodMaybeEmpty = periodMode && !periodHasKnownVersion;
   const deleteEntry = useDeleteEntry();
   const queryClient = useQueryClient();
   const [quitAsked, setQuitAsked] = useState(false);
@@ -185,7 +185,7 @@ export function WizardPage() {
   useEffect(() => {
     // Post-commit, comme l'enregistrement du prédicat par react-router : la ref est
     // à jour avant toute navigation utilisateur.
-    guardArmedRef.current = periodMode && periodPlanEmpty;
+    guardArmedRef.current = periodMaybeEmpty;
   });
   const abandoningRef = useRef(false);
   const blocker = useBlocker(({ nextLocation }) => guardArmedRef.current && !leavingRef.current && "/wizard" !== nextLocation.pathname);
@@ -197,7 +197,7 @@ export function WizardPage() {
     navigate("/");
   };
   const quitPeriod = () => {
-    if (periodPlanEmpty) {
+    if (periodMaybeEmpty) {
       setQuitAsked(true);
       return;
     }
@@ -214,19 +214,24 @@ export function WizardPage() {
     // peut être en retard d'une génération lancée à l'instant (l'invalidation ne
     // part qu'au onSuccess du launch) — supprimer sur cette foi détruirait la
     // version en vol via la cascade serveur. Fetch muet → on ne supprime PAS.
-    let stillEmpty = false;
+    // Trois issues, décidées sur la lecture FRAÎCHE : vide prouvé → suppression ;
+    // version trouvée → conservation annoncée ; indécidable (fetch muet, plan
+    // irrésolu) → conservation SANS affirmer qu'une génération existe.
+    let verdict: "empty" | "has-version" | "unknown" = "unknown";
     try {
       const fresh = await queryClient.fetchQuery({ queryKey: ["schedules"], queryFn: listSchedules, staleTime: 0 });
-      stillEmpty = null !== planId && !fresh.some((s) => s.schedulePlanId === planId);
+      if (null !== planId) {
+        verdict = fresh.some((s) => s.schedulePlanId === planId) ? "has-version" : "empty";
+      }
     } catch {
-      // Fetch muet → stillEmpty reste false : on ne supprime jamais sur donnée inconnue.
+      // Fetch muet → verdict reste "unknown" : on ne supprime jamais sur donnée inconnue.
     }
     // Sortir du mode période AVANT le delete : ça désactive useCalendarEntry
     // (sinon son 404 post-suppression déclenche le toast « n'existe plus »).
     leavingRef.current = true;
     exitPeriodMode();
     setQuitAsked(false);
-    if (stillEmpty && null !== entryId) {
+    if ("empty" === verdict && null !== entryId) {
       // .then/.catch sur la promesse (pas un callback mutate()) : ils survivent au
       // démontage du wizard — le toast de succès arrive, et un échec est toasté
       // par le filet global MutationCache.onError (useDeleteEntry n'a pas d'onError).
@@ -234,8 +239,10 @@ export function WizardPage() {
         .mutateAsync(entryId)
         .then(() => toast.success("Période retirée du calendrier"))
         .catch(() => { /* toasté par le filet global (queryClient.ts) */ });
-    } else if (!stillEmpty) {
+    } else if ("has-version" === verdict) {
       toast.success("Une génération existe pour cette période — elle est conservée.");
+    } else {
+      toast.info("Période conservée — son contenu n'a pas pu être vérifié.");
     }
     if ("blocked" === blocker.state) {
       blocker.proceed();
@@ -270,10 +277,13 @@ export function WizardPage() {
           </Button>
         </div>
       ) : null}
+      {/* Texte CONDITIONNEL : la vérité se lit au serveur À LA CONFIRMATION (une
+          génération peut aboutir pendant que le dialogue est ouvert) — affirmer
+          « aucun planning n'a été généré » ici pourrait contredire l'action. */}
       <ConfirmDialog
         open={abandonOpen}
         title="Abandonner l'ajustement ?"
-        description="Aucun planning n'a été généré pour cette période : elle sera retirée du calendrier. Vous pourrez la recréer via « Adapter »."
+        description="Si aucun planning n'a été généré pour cette période, elle sera retirée du calendrier (recréable via « Adapter »). Si une génération existe, la période sera conservée."
         confirmLabel="Retirer la période"
         cancelLabel="Rester sur l'ajustement"
         onConfirm={() => void confirmAbandon()}

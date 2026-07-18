@@ -139,6 +139,21 @@ describe("Wizard (integration)", () => {
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
   });
 
+  it("still offers the removal dialog when the schedules cache is unresolved (no silent orphan)", async () => {
+    // Round 2 : donnée en vol/en échec ≠ « il y a des versions » — sortir en
+    // silence referait l'orphelin. Le dialogue s'arme ; la vérité se lit au
+    // serveur à la confirmation (ici : frais = vide → suppression).
+    const user = userEvent.setup();
+    schedulesData = undefined;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+
+    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
+    await user.click(screen.getByRole("button", { name: "Retirer la période" }));
+    await waitFor(() => expect(deleteEntryMutateAsync).toHaveBeenCalledWith("entry-x"));
+  });
+
   it("quitting a period whose plan HAS versions leaves silently (no dialog, nothing deleted)", async () => {
     const user = userEvent.setup();
     schedulesData = [{ schedulePlanId: "plan-x" }];

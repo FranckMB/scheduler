@@ -32,10 +32,11 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   // c'est-à-dire précisément quand le gestionnaire vient regarder son planning.
   const chosen = planRepresentative(visibleSeasonPlans(schedules));
   // Distinct plannings = the season main plan (1) + one per period overlay
-  // (versions are navigated inside the planning, not counted here).
-  // Both counts from one derivation (finished period plannings only, consistent
-  // with what the modal lists).
-  const { total: planCount, overlays: overlayCount } = seasonPlanCounts(schedules);
+  // (versions are navigated inside the planning, not counted here). Counts
+  // include OPEN plannings (no finished version) — same rows as the modal —
+  // and the subtitle names how many are still in progress so the number never
+  // implies a ready secondary schedule (revue #260 round 2).
+  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules);
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
   // wizard's generation step to finish/validate it.
@@ -63,7 +64,7 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
             <>
               {STATUS_LABELS[chosen.status]}
               {chosen.score !== null ? ` · score ${chosen.score}` : ""}
-              {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}` : ""}
+              {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}${openOverlayCount > 0 ? ` (${openOverlayCount} en cours)` : ""}` : ""}
             </>
           ) : loading ? (
             "Chargement…"

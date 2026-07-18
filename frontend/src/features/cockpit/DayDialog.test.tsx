@@ -331,4 +331,12 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.queryByText(/hors saison/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
   });
+
+  // Fenêtre entièrement hors de la saison de travail : un message, pas un
+  // bouton mort inexpliqué (revue #260 round 2).
+  it("explains instead of a dead button when the holiday is fully outside the season", () => {
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-out", label: "Vacances lointaines", startDate: "2027-10-01", endDate: "2027-10-15" }) });
+    expect(screen.getByText(/Hors de la saison en cours/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+  });
 });

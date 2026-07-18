@@ -34,9 +34,16 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const createHoliday = useCreateHolidayPeriod();
   // Une période vit DANS sa saison : les dates de vacances sont clampées à la
   // fenêtre de saison avant création (l'été chevauche la frontière). Saison
-  // inconnue (me en vol) → pas de création possible, fail-closed.
+  // inconnue (me en vol) → pas de création possible, fail-closed. Cache par
+  // vacance (le clamp est lu au filtre + au disabled + au clic).
   const workingSeason = useWorkingSeason();
-  const seasonClamp = (h: SchoolHoliday) => (null === workingSeason ? null : clampRangeToSeason(h.startDate, h.endDate, workingSeason));
+  const clampCache = new Map<string, { startDate: string; endDate: string } | null>();
+  const seasonClamp = (h: SchoolHoliday): { startDate: string; endDate: string } | null => {
+    if (!clampCache.has(h.id)) {
+      clampCache.set(h.id, null === workingSeason ? null : clampRangeToSeason(h.startDate, h.endDate, workingSeason));
+    }
+    return clampCache.get(h.id) ?? null;
+  };
 
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
