@@ -6,12 +6,18 @@ namespace App\Tests\Integration\Service;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
+use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
+use App\Entity\SchoolHolidayPeriod;
 use App\Entity\Season;
+use App\Entity\Venue;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Service\SchedulePlanProvisioner;
@@ -163,7 +169,9 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         ]);
         self::assertInstanceOf(SchedulePlan::class, $periodPlan);
         self::assertSame(SchedulePlanType::CLOSURE, $periodPlan->getType());
-        self::assertSame('Fermeture gymnase', $periodPlan->getName());
+        // E6 : le nom du PLAN est la RÉPONSE (« Ajustement … du … au … »), pas le FAIT
+        // déclencheur (`entry.title`). Aucune datée venue_closed seedée ici → fallback « gymnase ».
+        self::assertSame('Ajustement gymnase du 20/10/2025 au 26/10/2025', $periodPlan->getName());
         self::assertSame($entry->getId(), $periodPlan->getCalendarEntryId());
         self::assertSame($periodPlan->getId(), $overlay->getSchedulePlanId());
         self::assertSame(1, $overlay->getVersionNumber());
@@ -219,6 +227,44 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         self::assertSame($seasonB->getId(), $planB->getSeasonId());
     }
 
+    /**
+     * NR E6 (axe planning lifecycle §7.1 — identité du plan). Le plan de FERMETURE porte
+     * le nom-réponse « Ajustement {gymnase} du … au … », le gymnase venant de la datée
+     * venue_closed (pas de `entry.title`).
+     */
+    public function testClosurePlanIsNamedAfterTheClosedVenueAndWindow(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId());
+        $this->seedClosedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros');
+
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame('Ajustement Gymnase Barros du 20/10/2025 au 26/10/2025', $plan->getName());
+    }
+
+    /**
+     * NR E6. Le plan de REPRISE porte « Planning de {label vacances} du … au … » — le label
+     * du référentiel (« Vacances de la Toussaint ») en minuscule d'attaque donne la phrase cible.
+     */
+    public function testHolidayPlanIsNamedAfterTheHolidayLabelAndWindow(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $holiday = $this->seedSchoolHoliday('Vacances de la Toussaint');
+        $entry = $this->makeHolidayEntry($clubId, $season->getId(), $holiday->getId());
+
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
+        self::assertSame('Planning de vacances de la Toussaint du 20/10/2025 au 02/11/2025', $plan->getName());
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -229,6 +275,64 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     private function fakeUuid(): string
     {
         return '00000000-0000-4000-8000-000000000000';
+    }
+
+    private function seedClosedVenueConstraint(string $clubId, string $seasonId, string $entryId, string $venueName): void
+    {
+        $venue = new Venue;
+        $venue->setClubId($clubId);
+        $venue->setSeasonId($seasonId);
+        $venue->setName($venueName);
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+
+        $constraint = new Constraint;
+        $constraint->setClubId($clubId);
+        $constraint->setSeasonId($seasonId);
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId($venue->getId());
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setName('Salle fermée');
+        $constraint->setConfig(['type' => 'venue_closed']);
+        $constraint->setCalendarEntryId($entryId);
+        $constraint->setIsActive(true);
+        $this->em->persist($constraint);
+        $this->em->flush();
+    }
+
+    private function seedSchoolHoliday(string $label): SchoolHolidayPeriod
+    {
+        $holiday = new SchoolHolidayPeriod;
+        $holiday->setZone('A');
+        $holiday->setLabel($label);
+        $holiday->setHolidayType('toussaint');
+        $holiday->setSchoolYear('2025-2026');
+        $holiday->setStartDate(new DateTimeImmutable('2025-10-20'));
+        $holiday->setEndDate(new DateTimeImmutable('2025-11-02'));
+        $this->em->persist($holiday);
+        $this->em->flush();
+
+        return $holiday;
+    }
+
+    private function makeHolidayEntry(string $clubId, string $seasonId, string $schoolHolidayId): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($clubId);
+        $entry->setSeasonId($seasonId);
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setTitle('Reprise Toussaint');
+        $entry->setStartDate(new DateTimeImmutable('2025-10-20'));
+        $entry->setEndDate(new DateTimeImmutable('2025-11-02'));
+        $entry->setIsDisruptive(false);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setSchoolHolidayId($schoolHolidayId);
+        $entry->setStatus(CalendarEntryStatus::ACTIVE);
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry;
     }
 
     private function seedClub(): string

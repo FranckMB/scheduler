@@ -63,11 +63,11 @@
   équipe loisir pour la semaine. Les **contraintes** sont l'outil principal d'ajustement.
 - **Résultat** : un calendrier secondaire borné à la semaine ; hors des jours d'indispo,
   les créneaux du socle restants **sont conservés**.
-- **État** : 🟡 partiel — le moteur overlay existe (closure/reprise : contraintes héritées
-  cochables #211, expansion venue_closed, créneaux du socle) mais couvre **la fenêtre
-  d'indispo entière**, sans découpage hebdo ni notification multi-semaines, et les
-  séances/équipe n'y sont pas encore ajustables côté UI (le moteur les supporte —
-  `TeamPeriodOverride.sessionsPerWeek`). Voir « Écarts » ci-dessous.
+- **État** : 🟢 rodé sur les axes livrés — découpage hebdo + granularité JOUR (E1/5b),
+  contraintes héritées cochables (#211), **séances/équipe ajustables dans l'UI** (champ 1–7
+  + toggle = 0 séance, E4 via `TeamPeriodOverride`), **défaut = tout le club actif** (E3,
+  structure verrouillée), **nom auto** `Ajustement {gymnase} du … au …` (E6). Reste la
+  notification multi-semaines (cadrage à venir). Voir « Écarts » ci-dessous.
 
 ## 3. Planning de reprise (vacances)
 
@@ -87,11 +87,10 @@
   coachs »** (aujourd'hui vide) — la TODO-list des envies des coachs pour les vacances,
   **commune à toute la période de vacances**, que le gestionnaire **barre ou non**
   (accepte/refuse). Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
-- **État** : 🟡 partiel — le moteur reprise existe (holiday : héritage contraintes +
-  défaut intelligent #212, équipes on/off + séances, créneaux prêtés) mais « Adapter »
-  couvre **la fenêtre de vacances entière** (pas le choix de semaines), le défaut équipes
-  est **Fanion seul** (cible : Fanion + importantes), et **l'été est exclu**
-  (`isAdaptableHoliday`). Voir « Écarts » ci-dessous.
+- **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
+  équipes on/off + séances, créneaux prêtés, **choix des semaines** (E1), été inclus (E2),
+  **défaut équipes = Fanion + importantes** (E3), **nom auto** `Planning de vacances de … du …
+  au …` (E6). Reste la modale « Demandes des coachs » (E5, futur — P2-1). Voir « Écarts ».
 
 ## Écarts implémentation ↔ cible (actés 2026-07-12)
 
@@ -99,10 +98,10 @@
 |---|---|---|---|
 | E1 | ✅ **Livré (2026-07-18, version fondateur — remplace la cible d'origine)** : adapter une période couvrant **plusieurs semaines** ouvre le **choix des semaines** (lun→dim, clampées à la saison) — chaque semaine cochée = une `CalendarEntry` **enfant** (`parentEntryId`) avec **son plan indépendant** (rail 1 entrée = 1 plan intact ; « N cochées ensemble = identiques » abandonné). Le chemin « d'un bloc » reste offert ; exclusivité bloc/semaines gardée serveur (422/409). Couverture visible (chips par semaine au radar + DayDialog). Datées héritées de la mère. **Granularité JOUR livrée (5b, 2026-07-18)** : un gymnase fermé une partie de la semaine n'est indispo QUE ses jours réellement fermés (incident ∩ fenêtre) — ses créneaux sont retirés du payload ces jours-là (`VenueClosureDays`), pas de forbid tous-jours ; conflits day-précis aussi. Zéro engine | 2 + 3 | — |
 | E2 | ✅ **Livré (2026-07-18)** : exclusion été levée (`isAdaptableHoliday` supprimé), dates clampées à la saison | 3 | — |
-| E3 | Défaut équipes reprise = **Fanion seul** | 3 | **Fanion + importantes** (rangs S + A) pré-cochées |
-| E4 | **Séances/équipe non ajustables dans l'overlay** côté UI (moteur OK) | 2 | Exposer l'ajustement 3→2 / 0 séances dans le flux overlay |
+| E3 | ✅ **Livré (2026-07-19)** : défaut équipes reprise = **Fanion + importantes** (2 premiers rangs) pré-cochés ; **fermeture = tout le club actif** (structure verrouillée, équipes loisir décochables à la main). Le seed de `PeriodTeams` est désormais conscient du `periodType` | 3 | — |
+| E4 | ✅ **Livré (arrivé avec #262, tracé 2026-07-19)** : `PeriodTeams` expose l'ajustement des séances/équipe (champ 1–7) **et** le toggle actif/inactif (= 0 séance) dans le flux période — pour la **fermeture comme la reprise** (`TeamPeriodOverride`) | 2 | — |
 | E5 | Modale **« Demandes des coachs »** absente | 3 | Bouton → modale vide d'abord, puis TODO-list par coach commune aux vacances (futur) |
-| E6 | **Nommage des plannings** — souci de conception (le nom n'avait pas de conteneur ; 1re tentative sur `Schedule.name` = échec, PR #214) | 1 + 2 + 3 | **Absorbé par [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md)** : `Plan.name` = le nom public (défauts inv. 12), versions = noms auto « Vn - date » |
+| E6 | ✅ **Livré (2026-07-19)** : noms par défaut des plans conformes (`SchedulePlanProvisioner`, source unique serveur, ADR-0002 inv. 12) — SEASON `Planning de la saison …`, CLOSURE `Ajustement {gymnase} du … au …`, HOLIDAY `Planning de vacances de … du … au …`. Le nom du PLAN (réponse) est distinct du `CalendarEntry.title` (fait déclencheur) ; renommable | 1 + 2 + 3 | — |
 
 > Suivi : ces écarts sont des items de backlog dans
 > [`../evolution/roadmap.md`](../evolution/roadmap.md) — ils se cadrent et se livrent

@@ -46,12 +46,19 @@ const periodSlotWriteAnchor: { value: string | null } = { value: null };
 const constraintOverridesAnchor: { value: string | null } = { value: null };
 const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
 
+// Teams + tiers stateful : le défaut d'équipes E3 (reprise = 2 premiers rangs, fermeture =
+// tout le club) ne se prouve qu'avec un rang SOUS les importantes → certains tests ajoutent
+// un tier B/t3. Défaut = 2 rangs (S, A) / 2 équipes, inchangé pour les tests existants.
+const T1 = { id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true };
+const T2 = { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true };
+const teamsState: { data: Array<typeof T1> } = { data: [T1, T2] };
+const tiersState: { data: Array<{ id: number; label: string; name: string; color: string | null }> } = {
+  data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }],
+};
+
 vi.mock("../queries", () => ({
-  useWizardTeams: () => ({ data: [
-    { id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
-    { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true },
-  ] }),
-  usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }] }),
+  useWizardTeams: () => ({ data: teamsState.data }),
+  usePriorityTiers: () => ({ data: tiersState.data }),
   useTeamPeriodOverrides: (anchor: string | null) => {
     teamOverridesAnchor.value = anchor;
 
@@ -122,6 +129,8 @@ afterEach(() => {
   conflictState.venueIds = [];
   entryState.data = { periodType: "closure" };
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  teamsState.data = [T1, T2];
+  tiersState.data = [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }];
   createOverride.mockClear();
   updateOverride.mockClear();
   deleteOverride.mockClear();
@@ -132,26 +141,51 @@ afterEach(() => {
   deleteConstraintOverride.mockClear();
 });
 
-describe("PeriodTeams — Fanion-only default + toggles", () => {
-  it("seeds a fresh period with only the top tier active (deactivates the rest)", () => {
+describe("PeriodTeams — default team selection (E3) + toggles", () => {
+  // Un 3e rang B (t3) SOUS les importantes rend la PROFONDEUR du seed observable : sans lui,
+  // reprise (garde S+A) et fermeture (garde tout) désactiveraient tous deux personne.
+  const T3 = { ...T2, id: "t3", name: "Loisir", priorityTierId: 3 };
+  const withThreeTiers = () => {
+    teamsState.data = [T1, T2, T3];
+    tiersState.data = [
+      { id: 1, label: "S", name: "Fanion", color: null },
+      { id: 2, label: "A", name: "Importante", color: null },
+      { id: 3, label: "B", name: "Loisir", color: null },
+    ];
+  };
+
+  it("reprise (holiday): seeds Fanion + importantes active, deactivates the rest", () => {
     // Unique id: the module-level "already seeded" set persists across tests.
-    render(<PeriodTeams calendarEntryId="fresh-seed" />);
-    // U13 (tier 2) is deactivated by default; SM1 (Fanion) is not touched.
-    expect(createOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", teamId: "t2", isActive: false });
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
+    render(<PeriodTeams calendarEntryId="fresh-holiday" />);
+    // t3 (rang B, sous les importantes) passe en pause ; t1 (Fanion) et t2 (importante) gardés.
+    expect(createOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", teamId: "t3", isActive: false });
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
+  it("fermeture (closure): seeds nobody — tout le club reste actif (structure verrouillée)", () => {
+    entryState.data = { periodType: "closure" };
+    withThreeTiers();
+    render(<PeriodTeams calendarEntryId="fresh-closure" />);
+    expect(createOverride).not.toHaveBeenCalled();
+  });
+
   it("does NOT seed a period already configured server-side (teamSelectionInitialized)", () => {
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
     planState.data = { id: "plan-1", teamSelectionInitialized: true }; // e.g. manager reset it to all-active, then reloaded
     render(<PeriodTeams calendarEntryId="already-init" />);
     expect(createOverride).not.toHaveBeenCalled();
   });
 
   it("does NOT re-seed on a re-render (idempotent — guards the removed retry double-write)", () => {
-    const { rerender } = render(<PeriodTeams calendarEntryId="fresh-seed" />);
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
+    const { rerender } = render(<PeriodTeams calendarEntryId="fresh-holiday-2" />);
     expect(createOverride).toHaveBeenCalledTimes(1);
     // A re-render (effect re-runs) must not fire a second seed for the claimed period.
-    rerender(<PeriodTeams calendarEntryId="fresh-seed" />);
+    rerender(<PeriodTeams calendarEntryId="fresh-holiday-2" />);
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 

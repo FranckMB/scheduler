@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
+use App\Enum\ConstraintFamily;
 use App\Enum\SchedulePlanType;
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
@@ -623,7 +624,7 @@ final class SchedulePlanProvisioner
         // Read the entry filter-free: season_filter would hide a period whose
         // season is not the request's active one.
         $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT club_id, season_id, title, period_type, start_date, end_date FROM calendar_entry WHERE id = :id',
+            'SELECT club_id, season_id, title, period_type, start_date, end_date, parent_entry_id, school_holiday_id FROM calendar_entry WHERE id = :id',
             ['id' => $calendarEntryId],
         );
         if (false === $row) {
@@ -639,7 +640,7 @@ final class SchedulePlanProvisioner
             ->setClubId((string) $row['club_id'])
             ->setSeasonId((string) $row['season_id'])
             ->setType($type)
-            ->setName((string) $row['title'])
+            ->setName($this->periodPlanName($type, $row, $calendarEntryId))
             ->setStartDate(new DateTimeImmutable((string) $row['start_date']))
             ->setEndDate(new DateTimeImmutable((string) $row['end_date']))
             ->setCalendarEntryId($calendarEntryId);
@@ -697,5 +698,50 @@ final class SchedulePlanProvisioner
     private function seasonPlanName(Season $season): string
     {
         return 'Planning de la saison ' . $season->getName();
+    }
+
+    /**
+     * E6 (types-de-planning « Nom par défaut ») : le nom PUBLIC du plan de période
+     * (ADR-0002 inv. 12) — la RÉPONSE, distincte du FAIT déclencheur (`CalendarEntry.title`,
+     * ex. « Gymnase A — fermé »). Source unique côté serveur ; le gestionnaire renomme ensuite.
+     * - CLOSURE : « Ajustement {gymnase} du {début} au {fin} » (gymnase = la datée `venue_closed`).
+     * - HOLIDAY : « Planning de {label} du {début} au {fin} » (label = « Vacances de la Toussaint »
+     *   → « Planning de vacances de la Toussaint … »).
+     * Fallback sobre si la donnée manque (gymnase inconnu / vacances hors référentiel) — jamais de crash.
+     *
+     * @param array<string, mixed> $row colonnes lues dans ensurePeriodPlanId
+     */
+    private function periodPlanName(SchedulePlanType $type, array $row, string $calendarEntryId): string
+    {
+        $window = 'du ' . new DateTimeImmutable((string) $row['start_date'])->format('d/m/Y')
+            . ' au ' . new DateTimeImmutable((string) $row['end_date'])->format('d/m/Y');
+
+        if (SchedulePlanType::HOLIDAY === $type) {
+            $label = null;
+            if (\is_string($row['school_holiday_id'] ?? null)) {
+                $found = $this->entityManager->getConnection()->fetchOne(
+                    'SELECT label FROM school_holiday_period WHERE id = :id',
+                    ['id' => $row['school_holiday_id']],
+                );
+                $label = false === $found ? null : (string) $found;
+            }
+            $name = null === $label || '' === $label
+                ? 'Planning de vacances ' . $window
+                : 'Planning de ' . lcfirst($label) . ' ' . $window;
+
+            return mb_substr($name, 0, 180);
+        }
+
+        // CLOSURE : le gymnase fermé = scopeTargetId de la datée FACILITY. Les datées d'une
+        // semaine ENFANT vivent sur sa MÈRE (datedConstraintSourceId = parent_entry_id ?? id).
+        $source = \is_string($row['parent_entry_id'] ?? null) ? (string) $row['parent_entry_id'] : $calendarEntryId;
+        $venueName = $this->entityManager->getConnection()->fetchOne(
+            'SELECT v.name FROM venue v JOIN "constraint" c ON c.scope_target_id = v.id '
+            . 'WHERE c.calendar_entry_id = :eid AND c.family = :fam AND c.is_active = true LIMIT 1',
+            ['eid' => $source, 'fam' => ConstraintFamily::FACILITY->value],
+        );
+        $venue = false === $venueName ? 'gymnase' : (string) $venueName;
+
+        return mb_substr('Ajustement ' . $venue . ' ' . $window, 0, 180);
     }
 }
