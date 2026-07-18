@@ -39,6 +39,11 @@ final class SentryDsnEnvVarProcessorTest extends TestCase
         self::assertNull($this->resolve('https://key@host/'));
         self::assertNull($this->resolve('https://key@host/notdigits'));
         self::assertNull($this->resolve('https://key@ho st/42'));
+        // `?`/`#` : parse_url couperait là — le SDK viserait un autre projet (round 3).
+        self::assertNull($this->resolve('https://key@host/sentry?x/42'));
+        self::assertNull($this->resolve('https://key@host/path#frag/42'));
+        // \n final (docker secret, echo sans -n) : le SDK lèverait sur l'id non numérique.
+        self::assertNull($this->resolve("https://key@host/42\n"));
     }
 
     protected function setUp(): void

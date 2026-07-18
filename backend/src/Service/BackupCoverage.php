@@ -74,6 +74,17 @@ final readonly class BackupCoverage
         return (int) $dump->format('U') + self::TOLERANCE_SECONDS >= (int) $activity->format('U');
     }
 
+    /**
+     * BOOTSTRAP — la règle vit ICI, source unique (round 3, finding 5) : « aucun
+     * signal d'activité » ≠ « base vide ». Des données présentes (clubs OU comptes)
+     * sans AUCUN dump doivent recevoir un premier dump — et le board doit être
+     * rouge tant qu'il n'a pas eu lieu (cron cassé = visible).
+     */
+    public function bootstrapNeeded(?DateTimeImmutable $dump, ?DateTimeImmutable $activity): bool
+    {
+        return null === $activity && null === $dump && $this->hasAnyData();
+    }
+
     private function admin(): Connection
     {
         $connection = $this->registry->getConnection('admin');

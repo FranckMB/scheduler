@@ -76,8 +76,10 @@ final readonly class HealthAlertEvaluator
             // c'est de l'ACTIVITÉ CLUB non couverte par un dump (revue #258, finding 6).
             // Cas spécial assumé sur la clé (petit et lisible) ; le seuil vient de la
             // CONSTANTE partagée, jamais d'un littéral (round 2, finding 7).
+            // Formulation vraie dans les DEUX cas rouges (retard > 26 h ET bootstrap
+            // jamais dumpé — round 3, finding 4) : « des données ne sont pas couvertes ».
             $alerts[] = 'db-backup' === $referential['key']
-                ? ['key' => 'freshness:db-backup', 'message' => \sprintf('Sauvegarde base de données en retard : de l\'activité club n\'est couverte par aucun dump depuis plus de %d h (dernier dump : %s) — vérifier le job db-backup (app:db:backup).', BackupCoverage::STALE_AFTER_HOURS, $referential['lastUpdatedAt'] ?? 'jamais')]
+                ? ['key' => 'freshness:db-backup', 'message' => \sprintf('Sauvegarde base de données : des données ne sont couvertes par aucun dump (dernier dump : %s, seuil %d h) — vérifier le job db-backup (app:db:backup).', $referential['lastUpdatedAt'] ?? 'jamais', BackupCoverage::STALE_AFTER_HOURS)]
                 : ['key' => 'freshness:' . $referential['key'], 'message' => \sprintf('Référentiel « %s » périmé (dernière mise à jour : %s, seuil %d j) — l\'import automatique est peut-être mort en silence.', $referential['label'], $referential['lastUpdatedAt'] ?? 'jamais', $referential['staleAfterDays'])];
         }
 

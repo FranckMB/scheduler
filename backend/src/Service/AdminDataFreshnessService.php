@@ -61,13 +61,11 @@ final readonly class AdminDataFreshnessService
         $lastDumpAt = $this->backupCoverage->latestDumpTime($this->backupDir);
         $lastActivityAt = $this->backupCoverage->latestActivity();
 
-        $uncovered = !$this->backupCoverage->covers($lastDumpAt, $lastActivityAt);
-        // Miroir du BOOTSTRAP de la commande (round 2, finding 1) : des données sans
-        // signal d'activité et AUCUN dump = non couvert — si le cron bootstrap est
-        // cassé, le board doit le dire, pas rester vert sur une base jamais dumpée.
-        if (null === $lastActivityAt && null === $lastDumpAt && $this->backupCoverage->hasAnyData()) {
-            $uncovered = true;
-        }
+        // Non couvert = activité plus récente que le dump OU bootstrap dû (données
+        // sans signal, aucun dump, cron cassé) — les DEUX règles vivent dans
+        // BackupCoverage, source unique avec la commande.
+        $uncovered = !$this->backupCoverage->covers($lastDumpAt, $lastActivityAt)
+            || $this->backupCoverage->bootstrapNeeded($lastDumpAt, $lastActivityAt);
         $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', BackupCoverage::STALE_AFTER_HOURS)));
 
         return [

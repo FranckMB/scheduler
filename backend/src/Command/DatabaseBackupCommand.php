@@ -77,8 +77,13 @@ final class DatabaseBackupCommand extends Command
         foreach (glob($dir . '/clubscheduler-*.dump.part') ?: [] as $orphan) {
             $mtime = filemtime($orphan);
             if (false !== $mtime && $mtime < time() - 3600) {
-                @unlink($orphan);
-                $io->writeln(\sprintf('Removed orphaned partial %s.', basename($orphan)));
+                // Log gardé par le RETOUR d'unlink : annoncer une suppression qui a
+                // échoué (permissions) masquerait l'accumulation (round 3, finding 2).
+                if (@unlink($orphan)) {
+                    $io->writeln(\sprintf('Removed orphaned partial %s.', basename($orphan)));
+                } else {
+                    $io->warning(\sprintf('Could not remove orphaned partial %s — check permissions on the backup dir.', basename($orphan)));
+                }
             }
         }
 
@@ -87,20 +92,13 @@ final class DatabaseBackupCommand extends Command
         $io->writeln(\sprintf('activity=%s lastDump=%s', $lastActivityAt?->format('Y-m-d H:i:s') ?? 'none', $lastDumpAt?->format('Y-m-d H:i:s') ?? 'none'), OutputInterface::VERBOSITY_VERBOSE);
 
         if (!(bool) $input->getOption('force')) {
-            if (null === $lastActivityAt) {
-                // BOOTSTRAP (revue #258, finding 3) : aucun signal d'activité ne veut pas
-                // dire base vide — un déploiement existant (colonne d'activité récente,
-                // audit purgé) porte des données. S'il n'existe AUCUN dump et que la base
-                // a des données : premier dump quand même. Sinon : vraiment rien à protéger.
-                if (null === $lastDumpAt && $this->coverage->hasAnyData()) {
-                    $io->writeln('No activity signal but the database holds data and no dump exists — bootstrap dump.');
-                } else {
-                    $io->writeln('No activity at all — nothing to protect, skipping.');
-
-                    return Command::SUCCESS;
-                }
+            // La règle vit dans BackupCoverage (source unique, partagée avec le board).
+            if ($this->coverage->bootstrapNeeded($lastDumpAt, $lastActivityAt)) {
+                $io->writeln('No activity signal but the database holds data and no dump exists — bootstrap dump.');
             } elseif ($this->coverage->covers($lastDumpAt, $lastActivityAt)) {
-                $io->writeln(\sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt?->format('Y-m-d H:i') ?? '?'));
+                $io->writeln(null === $lastActivityAt
+                    ? 'No activity at all — nothing to protect, skipping.'
+                    : \sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt?->format('Y-m-d H:i') ?? '?'));
 
                 return Command::SUCCESS;
             }
@@ -140,9 +138,12 @@ final class DatabaseBackupCommand extends Command
                     if (!rename($partial, $final)) {
                         @unlink($partial);
                     } elseif (!touch($final, (int) $snapshotStart->format('U'))) {
-                        // mtime reste « maintenant » (> T0) : direction SÛRE — au pire un
-                        // re-dump de trop, jamais une activité crue couverte à tort.
-                        $io->warning('Could not set the dump mtime to snapshot start — next run may re-dump once.');
+                        // ⚠️ mtime resté à la FIN du dump = SUR-couverture : une écriture
+                        // faite PENDANT le dump (absente du snapshot pris au début) serait
+                        // crue couverte et jamais re-dumpée (round 3, finding 0). Cas
+                        // quasi impossible (fichier qu'on vient de créer, même FS/owner),
+                        // mais l'op doit savoir quoi faire, pas lire un faux rassurant.
+                        $io->warning('Could not set the dump mtime to snapshot start — writes made DURING this dump may be treated as covered. Run app:db:backup --force to be safe.');
                     }
                 } else {
                     @unlink($partial);
