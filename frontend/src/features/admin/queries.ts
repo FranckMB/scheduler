@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminJob } from "./api";
+import { getAdminActions, getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -61,5 +61,35 @@ export function useRunAdminJob() {
       return runAdminJob(key, csrfToken);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-jobs"] }),
+  });
+}
+
+/** SA4 — le catalogue fermé des actions support (stable : une seule lecture par session suffit). */
+export function useAdminActions() {
+  return useQuery({
+    queryKey: ["admin-actions"],
+    queryFn: getAdminActions,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** SA4 — exécute une action support sur un club (CSRF du store, comme useRunAdminJob). */
+export function useRunAdminClubAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ clubId, key }: { clubId: string; key: string }) => {
+      const csrfToken = useAdminStore.getState().csrfToken;
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return runAdminClubAction(clubId, key, csrfToken);
+    },
+    // Une action mute le club (quota, saison) : rafraîchir la liste ET l'overview.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-clubs"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+    },
   });
 }

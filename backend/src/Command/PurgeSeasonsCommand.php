@@ -12,6 +12,7 @@ use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -44,6 +45,7 @@ final class PurgeSeasonsCommand extends Command
         private readonly SeasonResolver $seasonResolver,
         private readonly SeasonDataPurger $seasonDataPurger,
         private readonly AuditTrail $auditTrail,
+        private readonly ClockInterface $clock,
     ) {
         parent::__construct();
     }
@@ -53,6 +55,10 @@ final class PurgeSeasonsCommand extends Command
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'List what would be purged without deleting anything.');
         $this->addOption('date', null, InputOption::VALUE_REQUIRED, 'Treat this YYYY-MM-DD as "today" (rehearsal/tests).');
         $this->addOption('club', null, InputOption::VALUE_REQUIRED, 'Restrict to a single club id.');
+        // SA4 : la grâce post-pivot protège le cron AUTOMATIQUE d'une purge sans préavis ;
+        // un geste HUMAIN explicite (action support confirmée nominativement) ne doit pas
+        // être un no-op silencieux pendant 30 jours chaque été (revue SA4, finding 1).
+        $this->addOption('no-grace', null, InputOption::VALUE_NONE, 'Skip the 30-day post-pivot grace window (explicit support gesture).');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -68,6 +74,10 @@ final class PurgeSeasonsCommand extends Command
 
             return Command::FAILURE;
         }
+        // Sans --date : « aujourd'hui » vient de l'HORLOGE (simulateur compris), pas du mur —
+        // sinon l'action support SA4 (--no-grace, geste destructif) résoudrait la rétention
+        // N-1 sur une autre saison que celle que la console affiche (revue SA4 round 2).
+        $today ??= $this->clock->now();
 
         $clubFilter = $input->getOption('club');
         $repository = $this->entityManager->getRepository(Club::class);
@@ -76,10 +86,11 @@ final class PurgeSeasonsCommand extends Command
             : $repository->findAll();
         $this->entityManager->clear();
 
+        $noGrace = (bool) $input->getOption('no-grace');
         $purgedTotal = 0;
         foreach ($clubs as $club) {
             try {
-                $purgedTotal += $this->purgeClub($club->getId(), $today, $dryRun, $io);
+                $purgedTotal += $this->purgeClub($club->getId(), $today, $dryRun, $io, $noGrace);
             } catch (Throwable $e) {
                 $this->hadFailure = true;
                 $io->warning(\sprintf('Club %s skipped: %s', $club->getId(), $e->getMessage()));
@@ -94,7 +105,7 @@ final class PurgeSeasonsCommand extends Command
         return $this->hadFailure ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private function purgeClub(string $clubId, ?DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io): int
+    private function purgeClub(string $clubId, DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io, bool $noGrace): int
     {
         $this->tenantConnectionContext->setClubId($clubId);
 
@@ -108,8 +119,8 @@ final class PurgeSeasonsCommand extends Command
         // d'un coup — automatisé, il serait supprimé dans l'heure sans aucun
         // préavis. On laisse 30 j après le DÉBUT de la saison courante avant de
         // purger, le temps qu'un gestionnaire consulte/exporte l'historique.
-        $effectiveToday = $today ?? new DateTimeImmutable;
-        if ($current->getStartDate() > $effectiveToday->modify('-30 days')) {
+        // --no-grace (SA4) : un geste support explicite saute cette fenêtre.
+        if (!$noGrace && $current->getStartDate() > $today->modify('-30 days')) {
             return 0;
         }
 

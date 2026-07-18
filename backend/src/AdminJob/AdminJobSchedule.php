@@ -35,8 +35,22 @@ final readonly class AdminJobSchedule
         return new self('quarterly', $hour, $minute);
     }
 
+    /**
+     * SA4 — cadence des ACTIONS support : déclenchement manuel uniquement, jamais
+     * planifié. Le scheduler n'itère que le catalogue des jobs ; une définition
+     * manuelle qui y entrerait par erreur lève au lieu de tourner en silence.
+     */
+    public static function manual(): self
+    {
+        return new self('manual');
+    }
+
     public function nextDueAt(DateTimeImmutable $now, ?DateTimeImmutable $lastScheduledFor): DateTimeImmutable
     {
+        if ('manual' === $this->cadence) {
+            throw new LogicException('A manual action has no schedule — it must never reach the scheduler.');
+        }
+
         $due = $this->mostRecentDueAt($now);
         if (!$lastScheduledFor instanceof DateTimeImmutable || $lastScheduledFor < $due) {
             return $due;

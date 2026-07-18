@@ -49,7 +49,18 @@ final class AdminAuditSubscriber implements EventSubscriberInterface
                     'action' => 'admin.http_access',
                     'route' => $event->getRequest()->attributes->get('_route'),
                     'status' => $event->getResponse()->getStatusCode(),
-                    'details' => json_encode(['method' => $event->getRequest()->getMethod()], \JSON_THROW_ON_ERROR),
+                    // SA4 : un controller peut poser `_admin_audit_context` (ex. quel CLUB
+                    // une action support visait) — fusionné dans details pour que même une
+                    // tentative REFUSÉE trace sa cible. Jamais de contenu de requête brut
+                    // ici (mot de passe/TOTP) : uniquement des attributs posés par NOS
+                    // controllers. Valeurs ASSAINIES (scalaires, UTF-8 forcé, tronquées) :
+                    // un segment de path %FF ferait lever JSON_THROW_ON_ERROR — et c'est
+                    // l'AUDIT qui mourrait (fail-closed → session admin détruite) sur la
+                    // tentative qu'on voulait justement tracer (revue SA4 round 2).
+                    'details' => json_encode([
+                        'method' => $event->getRequest()->getMethod(),
+                        ...$this->sanitizedContext($event->getRequest()->attributes->get('_admin_audit_context')),
+                    ], \JSON_THROW_ON_ERROR),
                 ],
             );
         } catch (Throwable $exception) {
@@ -65,5 +76,29 @@ final class AdminAuditSubscriber implements EventSubscriberInterface
             }
             $event->setResponse(new JsonResponse(['error' => 'Admin audit unavailable.'], 503));
         }
+    }
+
+    /**
+     * Assainit le contexte d'audit posé par un controller : scalaires uniquement,
+     * UTF-8 forcé (les octets invalides deviennent U+FFFD), tronqué à 120 caractères.
+     * L'audit doit survivre à N'IMPORTE QUELLE entrée — il est fail-closed.
+     *
+     * @return array<string, string>
+     */
+    private function sanitizedContext(mixed $context): array
+    {
+        if (!\is_array($context)) {
+            return [];
+        }
+
+        $sanitized = [];
+        foreach ($context as $key => $value) {
+            if (!\is_string($key) || !\is_scalar($value)) {
+                continue;
+            }
+            $sanitized[$key] = mb_substr(mb_convert_encoding((string) $value, 'UTF-8', 'UTF-8'), 0, 120);
+        }
+
+        return $sanitized;
     }
 }

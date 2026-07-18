@@ -45,6 +45,8 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:school-holidays:seed` / `app:school-holidays:import` | Vacances scolaires : seed offline / import API Éducation nationale — idempotents ; import **auto trimestriel (1er janv./avr./juil./oct. à 04:00)** |
 | `app:league-windows:seed` | Catalogue des fenêtres de matchs par ligue (JSON AURA) — idempotent |
 | `app:clubs:backfill-school-zone` | Déduit `Club.schoolZone` du code FFBB (dry-run sans `--apply`) |
+| `app:clubs:reset-quota` | SA4 : remet `generationCountSeason` à 0 pour `--club=<id>` (déblocage quota Découverte) — action support, aussi déclenchable depuis la console admin |
+| `app:clubs:reset-season` | SA4 : vide la SAISON COURANTE de `--club=<id>` (ligne Season et club gardés — retour au wizard) ; `--dry-run` annonce la saison résolue — miroir CLI de `ResetSeasonController` |
 
 ## Commandes Doctrine utiles (rappels RLS)
 

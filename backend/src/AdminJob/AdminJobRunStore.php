@@ -47,6 +47,9 @@ final readonly class AdminJobRunStore
             'started_at' => (new DateTimeImmutable)->format('Y-m-d H:i:sP'),
             'super_admin_id' => $superAdminId,
             'scheduled_for' => $scheduledFor?->format('Y-m-d H:i:sP'),
+            // SA4 : la trace « quelle action, sur QUEL club » — les arguments du
+            // catalogue (jamais de saisie libre). null pour les jobs sans paramètre.
+            'arguments' => [] === $definition->arguments ? null : json_encode($definition->arguments, \JSON_THROW_ON_ERROR),
         ]);
 
         return $id;

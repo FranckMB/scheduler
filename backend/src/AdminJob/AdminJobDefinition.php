@@ -15,5 +15,18 @@ final readonly class AdminJobDefinition
         public AdminJobSchedule $schedule,
         public array $arguments = [],
         public bool $manualTriggerAllowed = false,
+        /**
+         * SA4 : clé du VERROU anti-chevauchement quand elle diffère de la clé
+         * d'HISTORIQUE (`key`). Une action manuelle qui exécute la même commande
+         * qu'un job planifié (purge-seasons) doit se SÉRIALISER avec lui (même
+         * verrou) SANS écraser son latestRun au panneau jobs (historique séparé,
+         * revue SA4 round 2). null → verrou = `key`.
+         */
+        public ?string $lockKey = null,
     ) {}
+
+    public function effectiveLockKey(): string
+    {
+        return $this->lockKey ?? $this->key;
+    }
 }
