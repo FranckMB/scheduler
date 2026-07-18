@@ -194,7 +194,11 @@ describe("RadarPanel", () => {
   });
 
   it("offers to adapt an upcoming school holiday (never auto-applies)", async () => {
-    createHolidayMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.({ id: "created" }));
+    // L'objet créé porte ses DATES : requestAdapt lit created.startDate/endDate
+    // (weeksCovering) — un {id} nu ferait crasher .split sur undefined (CI #262).
+    createHolidayMutate.mockImplementation((_vars, opts) =>
+      opts?.onSuccess?.({ id: "created", kind: "period", periodType: "holiday", title: "Vacances de Noël", startDate: "2999-01-05", endDate: "2999-01-09", isDisruptive: false, schoolHolidayId: "h1", parentEntryId: null, status: "active", createdBy: null }),
+    );
     renderRadar({ holidays: [holiday] });
 
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
