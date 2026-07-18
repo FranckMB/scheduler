@@ -97,8 +97,8 @@
 
 | # | Écart | Type touché | Cible |
 |---|---|---|---|
-| E1 | Pas de **découpage hebdomadaire** : overlay = fenêtre d'indispo entière, reprise = fenêtre de vacances entière | 2 + 3 | 1 planning par semaine ; overlay : semaines **auto** (englobantes) + notification des suivants ; reprise : semaines **choisies** (N cochées ensemble = identiques) |
-| E2 | **Été exclu** de « Adapter » (`isAdaptableHoliday`) | 3 | Lever l'exclusion — l'été porte 2 semaines de reprise dégradée |
+| E1 | ✅ **Livré (2026-07-18, version fondateur — remplace la cible d'origine)** : adapter une période **> 7 jours** ouvre le **choix des semaines** (lun→dim, clampées à la saison) — chaque semaine cochée = une `CalendarEntry` **enfant** (`parentEntryId`) avec **son plan indépendant** (rail 1 entrée = 1 plan intact ; « N cochées ensemble = identiques » abandonné). Le chemin « d'un bloc » reste offert ; exclusivité bloc/semaines gardée serveur (422/409). Couverture visible (chips par semaine au radar + DayDialog). Datées héritées de la mère ; granularité JOUR (gymnase indispo seulement sur ses jours déclarés) = lot 5b à venir | 2 + 3 | — |
+| E2 | ✅ **Livré (2026-07-18)** : exclusion été levée (`isAdaptableHoliday` supprimé), dates clampées à la saison | 3 | — |
 | E3 | Défaut équipes reprise = **Fanion seul** | 3 | **Fanion + importantes** (rangs S + A) pré-cochées |
 | E4 | **Séances/équipe non ajustables dans l'overlay** côté UI (moteur OK) | 2 | Exposer l'ajustement 3→2 / 0 séances dans le flux overlay |
 | E5 | Modale **« Demandes des coachs »** absente | 3 | Bouton → modale vide d'abord, puis TODO-list par coach commune aux vacances (futur) |

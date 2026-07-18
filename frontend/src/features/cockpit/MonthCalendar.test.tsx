@@ -37,6 +37,7 @@ const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   isDisruptive: false,
   periodType: null,
   schoolHolidayId: null,
+  parentEntryId: null,
   status: "active",
   createdBy: null,
   ...overrides,

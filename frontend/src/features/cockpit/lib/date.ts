@@ -85,3 +85,35 @@ export function clampRangeToSeason(
   const e = end < season.endDate ? end : season.endDate;
   return s <= e ? { startDate: s, endDate: e } : null;
 }
+
+/** Le lundi de la semaine ISO contenant `iso`. */
+export function mondayOf(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const offset = (date.getDay() + 6) % 7; // Mon=0 … Sun=6
+  return toISODate(new Date(y, m - 1, d - offset));
+}
+
+export interface WeekWindow {
+  /** Fenêtre du plan de semaine : lun→dim, clampée à la saison. */
+  startDate: string;
+  endDate: string;
+  /** Le lundi théorique (clé d'affichage stable, même si la saison rogne la fenêtre). */
+  monday: string;
+}
+
+/**
+ * Les semaines pleines (lun→dim) couvrant [start, end], chacune clampée à la
+ * saison (P2-5 E1 : « la semaine est l'unité hors socle »). Une semaine
+ * entièrement hors saison est omise.
+ */
+export function weeksCovering(start: string, end: string, season: { startDate: string; endDate: string }): WeekWindow[] {
+  const weeks: WeekWindow[] = [];
+  for (let monday = mondayOf(start); monday <= end; monday = addDays(monday, 7)) {
+    const clamped = clampRangeToSeason(monday, addDays(monday, 6), season);
+    if (null !== clamped) {
+      weeks.push({ startDate: clamped.startDate, endDate: clamped.endDate, monday });
+    }
+  }
+  return weeks;
+}

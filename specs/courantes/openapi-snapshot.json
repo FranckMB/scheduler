@@ -11295,15 +11295,16 @@
                             "null"
                         ]
                     },
-                    "status": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "overlayScheduleId": {
+                    "parentEntryId": {
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
                         "type": [
                             "string",
                             "null"
                         ]
+                    },
+                    "status": {
+                        "default": "",
+                        "type": "string"
                     },
                     "createdBy": {
                         "type": [
@@ -11382,6 +11383,17 @@
                             "null"
                         ]
                     },
+                    "parentEntryId": {
+                        "format": "uuid",
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1). POST uniquement \u2014 l'identit\u00e9\n d'une entr\u00e9e \u00e0 plan est gel\u00e9e, le processor refuse tout changement au PUT.",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "status": {
                         "enum": [
                             "proposed",
@@ -11452,15 +11464,16 @@
                             "null"
                         ]
                     },
-                    "status": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "overlayScheduleId": {
+                    "parentEntryId": {
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
                         "type": [
                             "string",
                             "null"
                         ]
+                    },
+                    "status": {
+                        "default": "",
+                        "type": "string"
                     },
                     "createdBy": {
                         "type": [
@@ -11526,15 +11539,16 @@
                                     "null"
                                 ]
                             },
-                            "status": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "overlayScheduleId": {
+                            "parentEntryId": {
+                                "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
                                 "type": [
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "status": {
+                                "default": "",
+                                "type": "string"
                             },
                             "createdBy": {
                                 "type": [
@@ -14346,8 +14360,8 @@
                             "FAILED"
                         ]
                     },
-                    "calendarEntryId": {
-                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                    "planType": {
+                        "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
                         "type": [
                             "string",
                             "null"
@@ -14505,8 +14519,8 @@
                             "null"
                         ]
                     },
-                    "calendarEntryId": {
-                        "description": "Set at POST to create this schedule as a period overlay (palier B); ignored on PUT.",
+                    "schedulePlanId": {
+                        "description": "ADR-0002 C4 : POST cr\u00e9e une version SOUS un plan nomm\u00e9. Fourni \u2192 ce plan (overlay de\np\u00e9riode) ; omis \u2192 le plan SEASON de la saison (le socle). Ignor\u00e9 sur PUT. Le back valide\nque le plan appartient au club.",
                         "type": [
                             "string",
                             "null"
@@ -14547,8 +14561,8 @@
                             "FAILED"
                         ]
                     },
-                    "calendarEntryId": {
-                        "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                    "planType": {
+                        "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
                         "type": [
                             "string",
                             "null"
@@ -14712,8 +14726,8 @@
                                     "FAILED"
                                 ]
                             },
-                            "calendarEntryId": {
-                                "description": "Non-null \u2192 this is a period overlay (palier B), not a season plan.",
+                            "planType": {
+                                "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
                                 "type": [
                                     "string",
                                     "null"

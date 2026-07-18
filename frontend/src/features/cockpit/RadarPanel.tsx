@@ -1,4 +1,5 @@
 import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useWorkingSeason } from "@/features/auth/queries";
@@ -6,10 +7,12 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
+import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
-import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, todayISO } from "./lib/date";
+import { useCreateHolidayPeriod, useCreateWeekChildren, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
+import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { WeekPickerDialog } from "./WeekPickerDialog";
 
 /** Public holidays further out than this are noise, not a to-do. */
 export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
@@ -54,6 +57,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     navigate("/planning");
   };
 
+  // P2-5 E1 : adapter une période LONGUE (> 7 jours) passe par le choix des
+  // semaines (un plan par semaine cochée) — voir requestAdapt plus bas.
+  const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
+  const createWeekChildren = useCreateWeekChildren();
+
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
   // mappé par entrée, plutôt qu'un hook par carte (règles des hooks dans la liste).
@@ -77,6 +85,17 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // (status=ignored) must not resurface (the calendar still shows them).
   const active = entries.filter((e) => e.status !== "ignored");
 
+  // P2-5 E1 : une période DÉCOUPÉE = une mère + ses semaines enfants
+  // (parentEntryId). Les cartes classiques ne montrent que les RACINES ; une mère
+  // découpée porte une carte de COUVERTURE (chips par semaine) à la place.
+  const childrenByParent = new Map<string, CalendarEntry[]>();
+  for (const e of entries) {
+    if (null !== e.parentEntryId) {
+      childrenByParent.set(e.parentEntryId, [...(childrenByParent.get(e.parentEntryId) ?? []), e]);
+    }
+  }
+  const roots = active.filter((e) => null === e.parentEntryId);
+
   // « Planning en cours » (retour fondateur 2026-07-18) : une période dont le plan a
   // des VERSIONS mais pas de version validée = travail commencé, non fini — le
   // gestionnaire a une action à faire. Ces cartes échappent au cap des vacances et
@@ -95,7 +114,45 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // Les fermetures gardent leur ClosureRadarItem (détail des séances touchées) —
   // le remplacer par une carte générique ferait disparaître l'avertissement
   // d'impact tant que le plan n'est pas validé (revue #260 round 1).
-  const inProgressEntries = active.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && e.endDate >= today);
+  const inProgressEntries = roots.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
+
+  // Mères découpées à COUVRIR : au moins une semaine sans version validée (le radar
+  // est une to-do — tout validé, la carte s'efface). Tenues hors cap et hors filtre
+  // « à venir » : une couverture incomplète reste à traiter jusqu'au bout.
+  const splitMothers = roots.filter((e) => {
+    const children = childrenByParent.get(e.id);
+    return undefined !== children && e.endDate >= today && children.some((c) => !activeByEntry.has(c.id));
+  });
+
+  // Adapter une période longue = choisir ses semaines — sauf déjà découpée (chips)
+  // ou déjà générée d'un bloc (on reste sur son plan). ≤ 7 jours : direct, comme
+  // avant (zéro friction sur une petite coupure). Saison inconnue → direct aussi
+  // (le picker a besoin de la fenêtre de saison pour clamper).
+  const requestAdapt = (entry: CalendarEntry) => {
+    const planId = (plans ?? []).find((p) => p.calendarEntryId === entry.id)?.id ?? null;
+    const blockGenerated = null !== planId && plansWithVersions.has(planId);
+    const longPeriod = daysUntil(entry.startDate, entry.endDate) + 1 > 7;
+    if (longPeriod && !childrenByParent.has(entry.id) && !blockGenerated && null !== workingSeason) {
+      setPickerFor(entry);
+      return;
+    }
+    adapt(entry.id);
+  };
+  const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
+    createWeekChildren.mutate(
+      { mother, weeks },
+      {
+        onSuccess: (created) => {
+          setPickerFor(null);
+          if (1 === created.length) {
+            adapt(created[0].id);
+            return;
+          }
+          toast.success(`${created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
+        },
+      },
+    );
+  };
 
   // A holiday already materialised as a period entry (matched by schoolHolidayId).
   // Ignored ones stay in the map so a dismissed holiday is skipped below, not re-proposed.
@@ -107,20 +164,20 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // Entièrement hors de la fenêtre de saison → rien à bâtir, pas de carte.
     // (Saison inconnue = on garde la carte ; le bouton Adapter, lui, est gardé.)
     .filter((h) => null === workingSeason || null !== seasonClamp(h))
-    // Déjà affichée en carte « en cours » — pas de doublon.
+    // Déjà affichée en carte « en cours » ou en carte de COUVERTURE — pas de doublon.
     .filter((h) => {
       const e = entryByHoliday.get(h.id);
-      return undefined === e || !inProgressEntryIds.has(e.id);
+      return undefined === e || (!inProgressEntryIds.has(e.id) && !childrenByParent.has(e.id));
     })
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .slice(0, 3);
 
-  const disruptiveEvents = active
+  const disruptiveEvents = roots
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const upcomingPeriods = (periodType: CalendarEntryPeriodType): CalendarEntry[] =>
-    active.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+    roots.filter((e) => e.kind === "period" && e.periodType === periodType && e.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const closures = upcomingPeriods("closure");
   // Le radar montre ce qui CHANGE par rapport au quotidien, pas un inventaire : une
@@ -131,6 +188,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // seule laisserait le panneau vide SANS son « Rien à l'horizon »).
   const closureImpacts = useEntryConflictsList(closures.map((e) => e.id));
   const visibleClosures = closures.filter((entry, i) => {
+    if (childrenByParent.has(entry.id)) {
+      return false; // mère découpée : sa carte de COUVERTURE prend le relais
+    }
     if (activeByEntry.has(entry.id)) {
       return true; // un planning secondaire VALIDÉ existe : cette semaine EST différente
     }
@@ -163,6 +223,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   const isEmpty =
     inProgressEntries.length === 0 &&
+    splitMothers.length === 0 &&
     upcomingHolidays.length === 0 &&
     disruptiveEvents.length === 0 &&
     visibleClosures.length === 0 &&
@@ -198,6 +259,27 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         </RadarCard>
       ))}
 
+      {/* Couverture d'une période DÉCOUPÉE (P2-5 E1) : l'état par semaine, d'un
+          coup d'œil — validée → Voir, sinon → Reprendre. Visible tant qu'une
+          semaine n'est pas couverte. */}
+      {splitMothers.map((m) => {
+        const children = [...(childrenByParent.get(m.id) ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
+        const covered = children.filter((c) => activeByEntry.has(c.id)).length;
+        return (
+          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={`${covered}/${children.length} semaine${children.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}`}>
+            {children.map((c) => {
+              const activeId = activeByEntry.get(c.id) ?? null;
+              const wip = inProgressEntryIds.has(c.id);
+              return (
+                <Button key={c.id} variant={null !== activeId ? "ghost" : "outline"} size="sm" onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(c.id))}>
+                  {`sem. du ${frDateShort(c.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
+                </Button>
+              );
+            })}
+          </RadarCard>
+        );
+      })}
+
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);
         const activeId = entry ? (activeByEntry.get(entry.id) ?? null) : null;
@@ -211,7 +293,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 Voir le planning
               </Button>
             ) : entry ? (
-              <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
+              <Button variant="outline" size="sm" onClick={() => requestAdapt(entry)}>
                 Adapter
               </Button>
             ) : (
@@ -226,7 +308,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                   }
                   createHoliday.mutate(
                     { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate },
-                    { onSuccess: (created) => adapt(created.id) },
+                    // Vacances longues → choix des semaines (P2-5 E1) ; courtes → direct.
+                    { onSuccess: (created) => requestAdapt(created) },
                   );
                 }}
               >
@@ -246,7 +329,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         ? null
         : visibleClosures.map((e) => {
             const activeId = activeByEntry.get(e.id) ?? null;
-            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} onAdapt={() => adapt(e.id)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
           })}
 
       {cutoffs.map((e) => (
@@ -263,6 +346,20 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ))}
 
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}
+
+      {null !== pickerFor && null !== workingSeason ? (
+        <WeekPickerDialog
+          mother={pickerFor}
+          weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
+          busy={createWeekChildren.isPending}
+          onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
+          onAdaptWhole={() => {
+            setPickerFor(null);
+            adapt(pickerFor.id);
+          }}
+          onClose={() => setPickerFor(null)}
+        />
+      ) : null}
     </aside>
   );
 }

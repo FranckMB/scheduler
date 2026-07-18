@@ -96,6 +96,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 if ($inFlight > 0) {
                     throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
                 }
+                // P2-5 E1 (exclusivité bloc/semaines) : une période DÉCOUPÉE en semaines ne
+                // se génère plus « d'un bloc » — le travail vit sur les plans des semaines.
+                if (null !== $plan['calendarEntryId'] && $this->entryHasWeekChildren($plan['calendarEntryId'])) {
+                    throw new ConflictHttpException('Cette période est découpée en semaines : générez chaque semaine, pas la période d’un bloc.');
+                }
                 // inv. 13 : un plan secondaire se bâtit SUR le calendrier de base pointé.
                 $this->socleGuard->assertSeasonPlanChosen($resolvedSeasonId);
             }
@@ -260,5 +265,14 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         ]);
 
         return $others <= 1;
+    }
+
+    /** P2-5 E1 : cette période a-t-elle des semaines enfants ? SQL brut (hors season_filter), RLS scope le club. */
+    private function entryHasWeekChildren(string $calendarEntryId): bool
+    {
+        return (bool) $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :eid LIMIT 1',
+            ['eid' => $calendarEntryId],
+        );
     }
 }

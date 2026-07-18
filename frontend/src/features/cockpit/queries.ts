@@ -5,12 +5,14 @@ import { errorMessage } from "@/shared/lib/errorMessage";
 import { toast } from "@/shared/stores/toastStore";
 
 import * as cockpitApi from "./api";
-import type { CreateClosurePayload, CreateCutoffPayload, CreateEventPayload } from "./api";
+import type { CalendarEntry, CreateClosurePayload, CreateCutoffPayload, CreateEventPayload } from "./api";
+import { frDateShort } from "./lib/date";
 
-export function useCalendarEntries(from: string, to: string) {
+export function useCalendarEntries(from: string, to: string, enabled = true) {
   return useQuery({
     queryKey: ["calendar-entries", from, to],
     queryFn: () => cockpitApi.getCalendarEntries(from, to),
+    enabled,
     staleTime: 30_000,
   });
 }
@@ -221,6 +223,36 @@ export function useCreateHolidayPeriod() {
         endDate: holiday.endDate,
         schoolHolidayId: holiday.schoolHolidayId,
       }),
+    onSuccess: () => invalidateEntries(queryClient),
+  });
+}
+
+/**
+ * P2-5 E1 — découpe une période mère en SEMAINES : une entrée ENFANT par semaine
+ * cochée (parentEntryId), type hérité, titre E6 (« {mère} — semaine du {lundi} »).
+ * Chaque enfant naît avec son plan (rail 1 entrée = 1 plan). Séquentiel : un échec
+ * au milieu laisse les enfants déjà créés (visibles, reprenables ou supprimables) —
+ * le toast d'erreur global signale l'échec, pas de rollback silencieux.
+ */
+export function useCreateWeekChildren() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { mother: CalendarEntry; weeks: { startDate: string; endDate: string; monday: string }[] }) => {
+      const created: CalendarEntry[] = [];
+      for (const week of payload.weeks) {
+        created.push(
+          await cockpitApi.createCalendarEntry({
+            kind: "period",
+            periodType: payload.mother.periodType,
+            title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`,
+            startDate: week.startDate,
+            endDate: week.endDate,
+            parentEntryId: payload.mother.id,
+          }),
+        );
+      }
+      return created;
+    },
     onSuccess: () => invalidateEntries(queryClient),
   });
 }

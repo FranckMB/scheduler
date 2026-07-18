@@ -13,9 +13,10 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
-import { clampRangeToSeason, todayISO } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
-import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry } from "./queries";
+import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useCreateWeekChildren, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
+import { WeekPickerDialog } from "./WeekPickerDialog";
 
 type Mode = "list" | "event" | "closure" | "cutoff";
 
@@ -175,6 +176,20 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // ADR-0002 lot D-b : « overlay généré » = plan validé (chosenScheduleId), dérivé du plan.
   const plan = useSchedulePlanForEntry(entry?.id ?? null);
   const activeId = plan.data?.chosenScheduleId ?? null;
+
+  // P2-5 E1 : les SEMAINES enfants de cette période (fenêtrées sur la mère —
+  // elles y vivent par construction). Le DayDialog ne reçoit que les entrées du
+  // JOUR : requête ciblée, cache partagé avec le cockpit.
+  const childrenQuery = useCalendarEntries(entry?.startDate ?? "", entry?.endDate ?? "", null !== entry);
+  const weekChildren = (childrenQuery.data ?? []).filter((e) => e.parentEntryId === (entry?.id ?? "")).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const { data: allPlans } = useSchedulePlans();
+  const chosenOfChild = (childId: string): string | null => (allPlans ?? []).find((p) => p.calendarEntryId === childId)?.chosenScheduleId ?? null;
+  // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
+  const schedulesQuery = useSchedules();
+  const blockGenerated = undefined !== plan.data && null !== plan.data && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.data?.id);
+  const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
+  const createWeekChildren = useCreateWeekChildren();
+
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -184,6 +199,31 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     setSelectedScheduleId(overlayScheduleId);
     onClose();
     navigate("/planning");
+  };
+  // Même règle que le radar : période longue → choix des semaines ; sinon direct.
+  const requestAdapt = (target: CalendarEntry) => {
+    const longPeriod = daysUntil(target.startDate, target.endDate) + 1 > 7;
+    if (longPeriod && 0 === weekChildren.length && !blockGenerated && null !== workingSeason) {
+      setPickerFor(target);
+      return;
+    }
+    adapt(target.id);
+  };
+  const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]) => {
+    createWeekChildren.mutate(
+      { mother, weeks },
+      {
+        onSuccess: (created) => {
+          setPickerFor(null);
+          if (1 === created.length) {
+            adapt(created[0].id);
+            return;
+          }
+          toast.success(`${created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
+          onClose();
+        },
+      },
+    );
   };
 
   return (
@@ -197,7 +237,20 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
       </p>
       {/* Toutes les vacances sont adaptables, été inclus (planning de reprise —
           retour fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée). */}
-      {null !== activeId ? (
+      {null !== entry && weekChildren.length > 0 ? (
+        // P2-5 E1 — période DÉCOUPÉE : la couverture par semaine, même lecture
+        // que la carte radar (validée → Voir, sinon → Reprendre).
+        <div className="flex flex-wrap justify-end gap-1">
+          {weekChildren.map((c) => {
+            const chosen = chosenOfChild(c.id);
+            return (
+              <Button key={c.id} variant={null !== chosen ? "ghost" : "outline"} size="sm" onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(c.id))}>
+                {`sem. du ${frDateShort(c.startDate)} ${null !== chosen ? "✅" : "· à faire"}`}
+              </Button>
+            );
+          })}
+        </div>
+      ) : null !== activeId ? (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
             Voir le planning
@@ -205,7 +258,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         </div>
       ) : entry ? (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => adapt(entry.id)}>
+          <Button variant="outline" size="sm" onClick={() => requestAdapt(entry)}>
             Adapter
           </Button>
         </div>
@@ -231,7 +284,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
               // The 409/error is surfaced by the global mutation-cache net (queryClient.ts).
               try {
                 const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: clamped.startDate, endDate: clamped.endDate });
-                adapt(created.id);
+                // Vacances longues → choix des semaines (P2-5 E1) ; courtes → direct.
+                requestAdapt(created);
               } catch {
                 /* surfaced by the global mutation-cache net */
               }
@@ -241,6 +295,20 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           </Button>
         </div>
       )}
+
+      {null !== pickerFor && null !== workingSeason ? (
+        <WeekPickerDialog
+          mother={pickerFor}
+          weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
+          busy={createWeekChildren.isPending}
+          onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
+          onAdaptWhole={() => {
+            setPickerFor(null);
+            adapt(pickerFor.id);
+          }}
+          onClose={() => setPickerFor(null)}
+        />
+      ) : null}
     </div>
   );
 }

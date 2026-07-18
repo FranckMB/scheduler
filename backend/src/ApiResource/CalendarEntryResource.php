@@ -59,6 +59,10 @@ class CalendarEntryResource
     #[Groups(['read'])]
     public ?string $schoolHolidayId = null;
 
+    /** Semaine enfant d'une période mère (P2-5 E1) ; null = entrée racine. */
+    #[Groups(['read'])]
+    public ?string $parentEntryId = null;
+
     #[Groups(['read'])]
     public string $status = '';
 
@@ -79,6 +83,7 @@ class CalendarEntryResource
         $dto->isDisruptive = $entity->getIsDisruptive();
         $dto->periodType = $entity->getPeriodType()?->value;
         $dto->schoolHolidayId = $entity->getSchoolHolidayId();
+        $dto->parentEntryId = $entity->getParentEntryId();
         $dto->status = $entity->getStatus()->value;
         $dto->createdBy = $entity->getCreatedBy();
 

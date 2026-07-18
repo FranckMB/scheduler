@@ -23,6 +23,7 @@ let schedulesData: { schedulePlanId: string }[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
@@ -58,6 +59,7 @@ const closure = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   isDisruptive: false,
   periodType: "closure",
   schoolHolidayId: null,
+  parentEntryId: null,
   status: "active",
   createdBy: null,
   ...overrides,
@@ -117,6 +119,44 @@ describe("RadarPanel", () => {
     renderRadar({ entries: [closure({})] });
     expect(screen.queryByText("Planning en cours — à finaliser")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reprendre" })).not.toBeInTheDocument();
+  });
+
+  // P2-5 E1 : une période DÉCOUPÉE porte une carte de COUVERTURE (chips par
+  // semaine), et sa carte classique disparaît.
+  it("a split mother shows one coverage card with per-week chips, no classic closure card", async () => {
+    const user = userEvent.setup();
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+      { id: "pl-w2", type: "CLOSURE", name: "S2", calendarEntryId: "w2", chosenScheduleId: null, teamSelectionInitialized: false },
+    ];
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: FUTURE, endDate: FUTURE_END }),
+        closure({ id: "w1", title: "Barros — semaine 1", parentEntryId: "m1", startDate: "2999-01-04", endDate: "2999-01-10" }),
+        closure({ id: "w2", title: "Barros — semaine 2", parentEntryId: "m1", startDate: "2999-01-11", endDate: "2999-01-17" }),
+      ],
+    });
+    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    // Semaine validée → ✅ (Voir) ; à faire → Reprendre (adapt).
+    expect(screen.getByRole("button", { name: /sem\. du 4 janv\. 2999 ✅/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /sem\. du 11 janv\. 2999 · à faire/ }));
+    // Une seule carte pour la mère : pas de ClosureRadarItem classique en plus.
+    expect(screen.queryByText(/à replacer/)).not.toBeInTheDocument();
+  });
+
+  it("a fully covered split mother leaves the radar (to-do, not inventory)", () => {
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+    ];
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: FUTURE, endDate: FUTURE_END }),
+        closure({ id: "w1", title: "Barros — semaine 1", parentEntryId: "m1", startDate: "2999-01-04", endDate: "2999-01-10" }),
+      ],
+    });
+    expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
   });
 
   it("asks for the school zone when unknown", () => {

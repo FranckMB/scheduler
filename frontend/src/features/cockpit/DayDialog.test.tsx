@@ -33,8 +33,12 @@ vi.mock("./queries", () => ({
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
+  // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests.
+  useCalendarEntries: () => ({ data: [] }),
+  useSchedulePlans: () => ({ data: [] }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
@@ -58,6 +62,7 @@ const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   isDisruptive: false,
   periodType: null,
   schoolHolidayId: null,
+  parentEntryId: null,
   status: "active",
   createdBy: null,
   ...overrides,
