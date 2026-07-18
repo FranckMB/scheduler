@@ -65,6 +65,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         $entity->setIsDisruptive($input->isDisruptive ?? false);
         $entity->setPeriodType($this->parsePeriodType($input->periodType));
         $entity->setSchoolHolidayId($input->schoolHolidayId);
+        $entity->setParentEntryId($input->parentEntryId);
         $entity->setStatus($this->parseStatus($input->status));
         $entity->setCreatedBy($input->createdBy);
 
@@ -107,6 +108,13 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             if ($kindChanged || $periodTypeChanged || $startChanged || $endChanged || $holidayChanged) {
                 throw new UnprocessableEntityHttpException('Cette période porte un planning : son type, sa fenêtre et les vacances qu’elle adapte sont figés. Supprimez la période (son planning et ses versions partent avec) puis recréez-la.');
             }
+        }
+
+        // Le rattachement à une mère fait partie de l'identité (P2-5 E1) : il se
+        // choisit à la création, jamais au PUT — re-parenter déplacerait les datées
+        // héritées et la couverture sous les pieds du plan déjà bâti.
+        if (null !== $input->parentEntryId && $input->parentEntryId !== $entity->getParentEntryId()) {
+            throw new UnprocessableEntityHttpException('Le rattachement d’une semaine à sa période se choisit à la création.');
         }
 
         if (null !== $input->kind) {
@@ -182,6 +190,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
+            // Semaine enfant (P2-5 E1) : valider la MÈRE avant de créer quoi que ce
+            // soit — sous le verrou de son plan-scope, pour sérialiser avec une
+            // génération « en bloc » concurrente (exclusivité bloc/semaines).
+            if (null !== $input->parentEntryId) {
+                $this->schedulePlanProvisioner->lockPlanScope($input->parentEntryId);
+                $this->assertValidWeekChild($input, $clubId, $seasonId);
+            }
+
             $output = parent::processPost($input, $clubId, $seasonId);
             // Le flush du parent rend la ligne visible à la relecture SQL brute du
             // provisioner — même connexion, même transaction.
@@ -230,6 +246,76 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
+     * P2-5 E1 — garde du POST d'une semaine enfant : la mère existe (même club —
+     * RLS + filtre saison la masquent sinon), porte un plan (closure/holiday),
+     * n'est pas elle-même un enfant (1 seul niveau), le type de l'enfant est celui
+     * de la mère, et son plan « bloc » n'a AUCUNE version (exclusivité : une
+     * période déjà générée d'un bloc ne se découpe pas — supprimer ses versions
+     * d'abord). Appelée SOUS le verrou du plan-scope de la mère.
+     */
+    private function assertValidWeekChild(CalendarEntryInput $input, ?string $clubId, ?string $seasonId): void
+    {
+        $parent = $this->entityManager->getRepository(CalendarEntry::class)->find((string) $input->parentEntryId);
+        // Club ET saison (comme ScheduleStateProcessor) : le find() est season-filtré,
+        // mais l'identity-map peut surfacer une ligne d'une AUTRE saison (N-1 archivée)
+        // — un enfant rattaché à une mère de saison A hériterait des datées de A,
+        // que le season_filter de buildForOverlay dropperait ensuite en silence
+        // (le gymnase fermé serait ignoré au solve). Défense §7.1 (revue #262 round 3).
+        if (!$parent instanceof CalendarEntry
+            || (null !== $clubId && $parent->getClubId() !== $clubId)
+            || (null !== $seasonId && $parent->getSeasonId() !== $seasonId)) {
+            throw new UnprocessableEntityHttpException('La période mère n’existe pas.');
+        }
+        if (null !== $parent->getParentEntryId()) {
+            throw new UnprocessableEntityHttpException('Une semaine ne peut pas être découpée à son tour (un seul niveau).');
+        }
+        $parentType = $parent->getPeriodType();
+        if (!\in_array($parentType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
+            throw new UnprocessableEntityHttpException('Seule une période à plan (fermeture/vacances) se découpe en semaines.');
+        }
+        if ($this->parsePeriodType($input->periodType) !== $parentType) {
+            throw new UnprocessableEntityHttpException('Une semaine hérite du type de sa période mère.');
+        }
+        $parentPlanId = $this->schedulePlanProvisioner->periodPlanId($parent->getId());
+        if (null !== $parentPlanId && $this->planHasVersions($parentPlanId)) {
+            throw new UnprocessableEntityHttpException('Cette période a déjà été adaptée d’un bloc : supprimez d’abord ses versions pour la découper en semaines.');
+        }
+        // La FENÊTRE de l'enfant doit toucher celle de la mère : une semaine que
+        // l'événement ne couvre pas hériterait ses contraintes datées sans raison.
+        $childStart = (string) $input->startDate;
+        $childEnd = (string) $input->endDate;
+        if ($childEnd < $parent->getStartDate()->format('Y-m-d') || $childStart > $parent->getEndDate()->format('Y-m-d')) {
+            throw new UnprocessableEntityHttpException('La semaine ne recouvre pas la période mère.');
+        }
+        // …et rester UNE semaine (≤ 7 jours — le clamp saison peut la rogner, jamais
+        // l'allonger). Sans cette garde, un « enfant » de 2 mois hériterait le
+        // venue_closed date-blind sur toute sa fenêtre (revue #262 round 2).
+        $days = (int) new DateTimeImmutable($childStart)->diff(new DateTimeImmutable($childEnd))->format('%a') + 1;
+        if ($days > 7) {
+            throw new UnprocessableEntityHttpException('Une semaine enfant couvre au plus 7 jours (lundi→dimanche).');
+        }
+        // Anti-CHEVAUCHEMENT entre semaines d'une même mère (pas seulement le même
+        // lundi) : deux plans de semaine qui se recouvrent = deux overlays actifs
+        // possibles sur les mêmes jours, sans vainqueur défini (revue #262 round 1).
+        $overlap = $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :pid AND start_date <= :end AND end_date >= :start LIMIT 1',
+            ['pid' => $parent->getId(), 'start' => $childStart, 'end' => $childEnd],
+        );
+        if (false !== $overlap) {
+            throw new UnprocessableEntityHttpException('Cette semaine chevauche une semaine déjà découpée pour cette période.');
+        }
+    }
+
+    /** Le plan porte-t-il au moins une version ? SQL brut (hors season_filter), RLS scope le club. */
+    private function planHasVersions(string $schedulePlanId): bool
+    {
+        return (bool) $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM schedule WHERE schedule_plan_id = :pid LIMIT 1',
+            ['pid' => $schedulePlanId],
+        );
+    }
+
+    /**
      * N'entre dans le provisioner que pour ce qui peut porter un plan (inv. 9) : un
      * event ou un cutoff y paierait une transaction imbriquée, un verrou consultatif et
      * deux SELECT pour s'entendre répondre « pas de plan ». Le provisioner reste
@@ -249,6 +335,22 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // the entry managed to drive deleteOverlayForEntry). Guard club ownership
         // inline so a cross-club delete deletes nothing before the parent throws 403.
         $id = $uriVariables['id'] ?? null;
+
+        // P2-5 E1 : supprimer une MÈRE emporte ses semaines enfants — chacune par la
+        // même cascade complète (plan + versions + réglages + reminders). Récursion
+        // bornée par construction : un enfant n'est jamais parent (garde au POST).
+        // Verrou du plan-scope AVANT l'énumération : le POST d'un enfant concurrent
+        // tient le même verrou — énumérer avant laisserait survivre son enfant en
+        // orphelin au plan fantôme (TOCTOU, revue #262 round 1). Ré-entrant : les
+        // étapes plus bas le reprennent sans coût.
+        if (\is_string($id) && '' !== $id) {
+            $this->schedulePlanProvisioner->lockPlanScope($id);
+            foreach ($this->entityManager->getRepository(CalendarEntry::class)->findBy(['parentEntryId' => $id]) as $child) {
+                if (null === $clubId || $child->getClubId() === $clubId) {
+                    $this->deleteEntryAndCascade(['id' => $child->getId()], $clubId);
+                }
+            }
+        }
         // Capturé AVANT deletePeriodPlan : depuis le lot C2 les réglages de la période sont
         // ancrés au PLAN (inv. 5), or c'est le plan qu'on détruit juste en dessous — après
         // quoi plus rien ne relie ses réglages à cette période, et ils orphelineraient.

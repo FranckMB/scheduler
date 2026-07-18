@@ -131,7 +131,10 @@ final class ValidateConstraintsController extends AbstractController
     private function constraintsForPeriod(string $clubId, string $seasonId, CalendarEntry $calendarEntry): array
     {
         /** @var list<Constraint> $dated */
-        $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->getId(), 'clubId' => $clubId]);
+        // P2-5 E1 : les datées d'une SEMAINE enfant vivent sur sa mère (source unique
+        // datedConstraintSourceId) — le gate pré-solve doit valider le MÊME jeu que
+        // celui que buildForOverlay enverra au solveur (revue #262 round 2).
+        $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
         $periodType = $calendarEntry->getPeriodType();
         if (!\in_array($periodType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
             return $dated;

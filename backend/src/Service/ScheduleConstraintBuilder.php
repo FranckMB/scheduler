@@ -196,7 +196,13 @@ final class ScheduleConstraintBuilder
         // prêtés) s'ancrent au PLAN. Le plan est non-nullable (lot D) : une version a toujours le sien.
         $schedulePlanId = $schedule->getSchedulePlanId();
 
-        $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->getId()]);
+        // P2-5 E1 : une semaine ENFANT hérite les contraintes datées de sa période
+        // MÈRE (source unique : CalendarEntry::datedConstraintSourceId). La fenêtre
+        // de l'enfant (semaine pleine) borne le plan ; l'expansion venue_closed reste
+        // AVEUGLE AUX DATES en 5a — le gymnase est traité fermé sur TOUTE la semaine,
+        // même si l'incident n'en couvre qu'une partie (sur-contraint, jamais
+        // sous-contraint). Le clipping aux jours réellement fermés = lot 5b.
+        $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
 
         // Period-editable structure: sparse per-team overrides for THIS period. Loaded
         // BEFORE the constraint match — the reprise default follows the team selection

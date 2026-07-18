@@ -119,6 +119,11 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             // version (schedule_plan.calendarEntryId → schedule.schedulePlanId), plus un
             // pointeur sur l'entrée. Le rappel s'arrête dès la 1re génération, comme avant.
             ->andWhere('NOT EXISTS (SELECT s.id FROM App\Entity\Schedule s, App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id AND s.schedulePlanId = p.id)')
+            // P2-5 E1 : une mère DÉCOUPÉE en semaines ne porte jamais de version sur
+            // son plan bloc (exclusivité) — la rappeler serait un faux positif menant
+            // au 409. Ses SEMAINES, elles, sont des périodes à part entière et portent
+            // leurs propres rappels si elles restent sans version (revue #262 round 2).
+            ->andWhere('NOT EXISTS (SELECT c.id FROM App\Entity\CalendarEntry c WHERE c.parentEntryId = e.id)')
             // Only overlay-capable period types: reminding about a cutoff/custom/
             // mutualisation period would CTA into a 422 (overlay creation refuses
             // them) — a cutoff means "no training", there is no plan to prepare.

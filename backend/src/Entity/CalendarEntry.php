@@ -24,6 +24,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'calendar_entry')]
 #[ORM\Index(name: 'idx_calendar_entry_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_calendar_entry_window', columns: ['club_id', 'start_date', 'end_date'])]
+#[ORM\Index(name: 'idx_calendar_entry_parent', columns: ['parent_entry_id'])]
 #[ORM\HasLifecycleCallbacks]
 class CalendarEntry implements TenantOwnedInterface
 {
@@ -67,6 +68,13 @@ class CalendarEntry implements TenantOwnedInterface
 
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $schoolHolidayId = null;
+
+    // Découpage à la semaine (P2-5 E1, fondateur 2026-07-18) : une entrée ENFANT
+    // couvre UNE semaine pleine (lun→dim ∩ saison) d'une période mère et porte son
+    // propre plan par le rail existant (1 entrée = 1 plan). Un seul niveau — un
+    // enfant n'est jamais parent. null = entrée racine (mère ou période simple).
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $parentEntryId = null;
 
     #[ORM\Column(length: 20, enumType: CalendarEntryStatus::class, options: ['default' => 'active'])]
     private CalendarEntryStatus $status = CalendarEntryStatus::ACTIVE;
@@ -221,6 +229,28 @@ class CalendarEntry implements TenantOwnedInterface
     public function setPeriodType(?CalendarEntryPeriodType $periodType): self
     {
         $this->periodType = $periodType;
+
+        return $this;
+    }
+
+    public function getParentEntryId(): ?string
+    {
+        return $this->parentEntryId;
+    }
+
+    /**
+     * P2-5 E1 — SOURCE UNIQUE de la règle d'héritage : les contraintes datées d'une
+     * semaine ENFANT vivent sur sa période MÈRE (le venue_closed décrit l'incident,
+     * pas la réponse). Entrée racine → elle-même.
+     */
+    public function datedConstraintSourceId(): string
+    {
+        return $this->parentEntryId ?? $this->id;
+    }
+
+    public function setParentEntryId(?string $parentEntryId): self
+    {
+        $this->parentEntryId = $parentEntryId;
 
         return $this;
     }

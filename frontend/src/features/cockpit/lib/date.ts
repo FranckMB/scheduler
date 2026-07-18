@@ -32,10 +32,13 @@ export interface GridDay {
  * A 6-row Monday-first grid of the month. Leading/trailing days spill from the
  * adjacent months so every row has 7 cells.
  */
+/** getDay(): 0=Sun..6=Sat → décalage Monday-first (Mon=0 … Sun=6). Source unique
+ *  partagée par la grille du mois et le découpage en semaines (mondayOf). */
+const mondayOffset = (date: Date): number => (date.getDay() + 6) % 7;
+
 export function buildMonthGrid(year: number, month: number): GridDay[] {
   const first = new Date(year, month, 1);
-  // getDay(): 0=Sun..6=Sat → Monday-first offset (Mon=0 … Sun=6).
-  const offset = (first.getDay() + 6) % 7;
+  const offset = mondayOffset(first);
   const start = new Date(year, month, 1 - offset);
 
   const days: GridDay[] = [];
@@ -84,4 +87,34 @@ export function clampRangeToSeason(
   const s = start > season.startDate ? start : season.startDate;
   const e = end < season.endDate ? end : season.endDate;
   return s <= e ? { startDate: s, endDate: e } : null;
+}
+
+/** Le lundi de la semaine ISO contenant `iso` (même décalage que la grille du mois). */
+export function mondayOf(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return toISODate(new Date(y, m - 1, d - mondayOffset(new Date(y, m - 1, d))));
+}
+
+export interface WeekWindow {
+  /** Fenêtre du plan de semaine : lun→dim, clampée à la saison. */
+  startDate: string;
+  endDate: string;
+  /** Le lundi théorique (clé d'affichage stable, même si la saison rogne la fenêtre). */
+  monday: string;
+}
+
+/**
+ * Les semaines pleines (lun→dim) couvrant [start, end], chacune clampée à la
+ * saison (P2-5 E1 : « la semaine est l'unité hors socle »). Une semaine
+ * entièrement hors saison est omise.
+ */
+export function weeksCovering(start: string, end: string, season: { startDate: string; endDate: string }): WeekWindow[] {
+  const weeks: WeekWindow[] = [];
+  for (let monday = mondayOf(start); monday <= end; monday = addDays(monday, 7)) {
+    const clamped = clampRangeToSeason(monday, addDays(monday, 6), season);
+    if (null !== clamped) {
+      weeks.push({ startDate: clamped.startDate, endDate: clamped.endDate, monday });
+    }
+  }
+  return weeks;
 }

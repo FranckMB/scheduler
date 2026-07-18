@@ -1,7 +1,13 @@
-Last verified @ feat/adr0002-lot-c3-calques 2026-07-17
+Last verified @ feat/week-period-plans 2026-07-18
 
 Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **82 paths.**
 Changements récents :
+- **P2-5 E1 — plans de période à la semaine (2026-07-18)** : aucun path touché (82).
+  `CalendarEntry` gagne **`parentEntryId`** (lecture + écriture au POST seulement) — une
+  semaine ENFANT d'une période mère, qui naît avec son propre plan (rail 1 entrée = 1 plan).
+  Gardes serveur : type hérité, un seul niveau, anti-doublon par lundi, exclusivité
+  bloc/semaines (422 au POST enfant si le plan mère a des versions ; 409 au POST
+  /api/schedules sur le plan d'une mère découpée).
 - **ADR-0002 lot C3 — les calques s'ancrent au PLAN (2026-07-17, RUPTURE)** : aucun path
   touché (82). `VenueTrainingSlot` et `Reservation` remplacent **`calendarEntryId` par
   **`schedulePlanId`** (lecture, écriture, filtre `?schedulePlanId=`). L'ancre reste

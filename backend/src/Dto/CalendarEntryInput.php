@@ -40,6 +40,12 @@ class CalendarEntryInput
     #[Groups(['write'])]
     public ?string $schoolHolidayId = null;
 
+    /** Semaine enfant d'une période mère (P2-5 E1). POST uniquement — l'identité
+     *  d'une entrée à plan est gelée, le processor refuse tout changement au PUT. */
+    #[Assert\Uuid]
+    #[Groups(['write'])]
+    public ?string $parentEntryId = null;
+
     #[Assert\Choice(choices: ['proposed', 'active', 'ignored'])]
     #[Groups(['write'])]
     public ?string $status = null;
@@ -59,6 +65,12 @@ class CalendarEntryInput
         if ('period' === $this->kind && null === $this->periodType) {
             $context->buildViolation('periodType is required for a period entry.')
                 ->atPath('periodType')
+                ->addViolation();
+        }
+
+        if ('event' === $this->kind && null !== $this->parentEntryId) {
+            $context->buildViolation('parentEntryId is only allowed on a period entry.')
+                ->atPath('parentEntryId')
                 ->addViolation();
         }
 

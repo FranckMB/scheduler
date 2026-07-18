@@ -70,6 +70,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         }
 
         $entry = null;
+        $weekGuardEntryId = null;
         $planId = $input->schedulePlanId;
         if (null !== $planId) {
             $plan = $this->schedulePlanProvisioner->fetchPlanContext($planId);
@@ -96,6 +97,10 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 if ($inFlight > 0) {
                     throw new ConflictHttpException('Une génération est déjà en cours pour cette période — attendez sa fin.');
                 }
+                // P2-5 E1 (exclusivité bloc/semaines) : gardée plus bas, SOUS le verrou du
+                // plan-scope de l'entrée, dans la transaction de création — un verrou xact
+                // pris ici, hors transaction, se relâcherait au statement suivant.
+                $weekGuardEntryId = $plan['calendarEntryId'];
                 // inv. 13 : un plan secondaire se bâtit SUR le calendrier de base pointé.
                 $this->socleGuard->assertSeasonPlanChosen($resolvedSeasonId);
             }
@@ -120,7 +125,18 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // Atomic (like RegenerateController): the row and its version number commit
         // together. A linkSchedule failure must never leave a committed-but-unnumbered
         // schedule occupying the period slot.
-        $this->entityManager->wrapInTransaction(function () use ($schedule): void {
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $weekGuardEntryId): void {
+            // P2-5 E1 (exclusivité bloc/semaines) : une période DÉCOUPÉE ne se génère
+            // plus « d'un bloc ». SOUS le verrou du plan-scope de l'entrée (tenu
+            // jusqu'au commit) : le POST d'un enfant prend le même verrou avant sa
+            // garde symétrique (planHasVersions) — sans lui, un découpage et une
+            // génération bloc concurrents passeraient tous deux (TOCTOU, revue #262).
+            if (null !== $weekGuardEntryId) {
+                $this->schedulePlanProvisioner->lockPlanScope($weekGuardEntryId);
+                if ($this->entryHasWeekChildren($weekGuardEntryId)) {
+                    throw new ConflictHttpException('Cette période est découpée en semaines : générez chaque semaine, pas la période d’un bloc.');
+                }
+            }
             $this->entityManager->persist($schedule);
 
             // ADR-0002 C4 : numérote la version dans son plan (déjà posé ci-dessus).
@@ -260,5 +276,14 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         ]);
 
         return $others <= 1;
+    }
+
+    /** P2-5 E1 : cette période a-t-elle des semaines enfants ? SQL brut (hors season_filter), RLS scope le club. */
+    private function entryHasWeekChildren(string $calendarEntryId): bool
+    {
+        return (bool) $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :eid LIMIT 1',
+            ['eid' => $calendarEntryId],
+        );
     }
 }

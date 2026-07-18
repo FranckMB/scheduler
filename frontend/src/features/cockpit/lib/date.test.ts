@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addDays, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { addDays, mondayOf, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -49,5 +49,37 @@ describe("cockpit date utils", () => {
     expect(daysUntil("2026-05-01", "2026-05-25")).toBe(24);
     expect(daysUntil("2026-05-25", "2026-05-01")).toBe(-24);
     expect(daysUntil("2026-05-01", "2026-05-01")).toBe(0);
+  });
+});
+
+describe("weeksCovering (P2-5 E1 — la semaine est l'unité hors socle)", () => {
+  const season = { startDate: "2026-08-01", endDate: "2027-07-14" };
+
+  it("finds the Monday of any date", () => {
+    expect(mondayOf("2026-11-12")).toBe("2026-11-09"); // jeudi → lundi
+    expect(mondayOf("2026-11-09")).toBe("2026-11-09"); // lundi → lui-même
+    expect(mondayOf("2026-11-15")).toBe("2026-11-09"); // dimanche → lundi d'avant
+  });
+
+  it("covers a two-week incident with two full Mon→Sun weeks", () => {
+    // L'exemple fondateur : incident 12-18 nov → semaines du 9 et du 16.
+    expect(weeksCovering("2026-11-12", "2026-11-18", season)).toEqual([
+      { startDate: "2026-11-09", endDate: "2026-11-15", monday: "2026-11-09" },
+      { startDate: "2026-11-16", endDate: "2026-11-22", monday: "2026-11-16" },
+    ]);
+  });
+
+  it("clamps the edge weeks to the season window", () => {
+    // Vacances d'été à cheval sur la fin de saison (14 juil) : la dernière
+    // semaine est rognée, les semaines entièrement hors saison sont omises.
+    const weeks = weeksCovering("2027-07-08", "2027-07-25", season);
+    expect(weeks).toEqual([
+      { startDate: "2027-07-05", endDate: "2027-07-11", monday: "2027-07-05" },
+      { startDate: "2027-07-12", endDate: "2027-07-14", monday: "2027-07-12" },
+    ]);
+  });
+
+  it("a single-week window yields exactly one week", () => {
+    expect(weeksCovering("2026-10-20", "2026-10-22", season)).toHaveLength(1);
   });
 });

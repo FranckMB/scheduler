@@ -14,6 +14,8 @@ export interface CalendarEntry {
   isDisruptive: boolean;
   periodType: CalendarEntryPeriodType | null;
   schoolHolidayId: string | null;
+  /** Semaine ENFANT d'une période mère (P2-5 E1) ; null = entrée racine. */
+  parentEntryId: string | null;
   status: CalendarEntryStatus;
   createdBy: string | null;
 }

@@ -74,8 +74,10 @@ final class CalendarEntryConflictsController extends AbstractController
 
         // Closed venues = active FACILITY constraints attached to this entry.
         /** @var list<Constraint> $facilityConstraints */
+        // P2-5 E1 : les datées d'une semaine ENFANT vivent sur sa période MÈRE
+        // (source unique : CalendarEntry::datedConstraintSourceId).
         $facilityConstraints = $this->entityManager->getRepository(Constraint::class)->findBy([
-            'calendarEntryId' => $entry->getId(),
+            'calendarEntryId' => $entry->datedConstraintSourceId(),
             'family' => ConstraintFamily::FACILITY,
             'isActive' => true,
         ]);

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
-import { addDays, todayISO } from "./lib/date";
+import { addDays, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -23,6 +23,7 @@ let schedulesData: { schedulePlanId: string }[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
@@ -58,6 +59,7 @@ const closure = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   isDisruptive: false,
   periodType: "closure",
   schoolHolidayId: null,
+  parentEntryId: null,
   status: "active",
   createdBy: null,
   ...overrides,
@@ -119,6 +121,68 @@ describe("RadarPanel", () => {
     expect(screen.queryByRole("button", { name: "Reprendre" })).not.toBeInTheDocument();
   });
 
+  // P2-5 E1 : une période DÉCOUPÉE porte une carte de COUVERTURE (chips par
+  // semaine), et sa carte classique disparaît. Semaines ALIGNÉES sur le vrai
+  // calendrier (mondayOf) : la carte calcule les slots via weeksCovering.
+  it("a split mother shows one coverage card with per-week chips, no classic closure card", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-15");
+    const w2s = addDays(w1s, 7);
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+      { id: "pl-w2", type: "CLOSURE", name: "S2", calendarEntryId: "w2", chosenScheduleId: null, teamSelectionInitialized: false },
+    ];
+    renderRadar({
+      entries: [
+        // Mère du jeudi S1 au mardi S2 → weeksCovering rend exactement 2 semaines.
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w2s, 1) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+        closure({ id: "w2", title: "S2", parentEntryId: "m1", startDate: w2s, endDate: addDays(w2s, 6) }),
+      ],
+    });
+    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    // Semaine validée → ✅ (Voir) ; à faire → Reprendre (adapt).
+    expect(screen.getByRole("button", { name: /✅/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /· à faire/ }));
+    // Une seule carte pour la mère : pas de ClosureRadarItem classique en plus.
+    expect(screen.queryByText(/à replacer/)).not.toBeInTheDocument();
+  });
+
+  // Une semaine DÉCOCHÉE au picker (ou perdue sur échec partiel) reste
+  // planifiable : chip « + créer » (dead-end de la revue #262 round 1).
+  it("a missing week shows a « + créer » chip on the coverage card", () => {
+    const w1s = mondayOf("2999-01-15");
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+    ];
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w1s, 8) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+        // Semaine 2 jamais créée — décochée au picker.
+      ],
+    });
+    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /\+ sem\. du/ })).toBeInTheDocument();
+  });
+
+  it("a fully covered split mother leaves the radar (to-do, not inventory)", () => {
+    const w1s = mondayOf("2999-01-15");
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+    ];
+    conflictsData = { conflicts: [], seasonPlanChosen: true };
+    renderRadar({
+      entries: [
+        // Mère entièrement DANS la semaine 1 → une seule semaine, couverte + validée.
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 1), endDate: addDays(w1s, 4) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+      ],
+    });
+    expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+  });
+
   it("asks for the school zone when unknown", () => {
     renderRadar({ zone: null });
     expect(screen.getByText("Zone scolaire à renseigner")).toBeInTheDocument();
@@ -130,7 +194,11 @@ describe("RadarPanel", () => {
   });
 
   it("offers to adapt an upcoming school holiday (never auto-applies)", async () => {
-    createHolidayMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.({ id: "created" }));
+    // L'objet créé porte ses DATES : requestAdapt lit created.startDate/endDate
+    // (weeksCovering) — un {id} nu ferait crasher .split sur undefined (CI #262).
+    createHolidayMutate.mockImplementation((_vars, opts) =>
+      opts?.onSuccess?.({ id: "created", kind: "period", periodType: "holiday", title: "Vacances de Noël", startDate: "2999-01-05", endDate: "2999-01-09", isDisruptive: false, schoolHolidayId: "h1", parentEntryId: null, status: "active", createdBy: null }),
+    );
     renderRadar({ holidays: [holiday] });
 
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
