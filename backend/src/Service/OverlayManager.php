@@ -126,12 +126,10 @@ final class OverlayManager
         foreach ($this->entityManager->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $scheduleId]) as $snapshot) {
             $this->entityManager->remove($snapshot);
         }
-        // Les métriques du solveur pendent aussi à la version. Avant la bascule ce
-        // chemin ne servait qu'aux overlays ; il supprime désormais les versions sœurs
-        // à CHAQUE validation, donc les oublier accumulerait des métriques nommant des
-        // plannings morts (et fausserait les agrégats superadmin).
-        foreach ($this->entityManager->getRepository(\App\Entity\SolverMetric::class)->findBy(['scheduleId' => $scheduleId]) as $metric) {
-            $this->entityManager->remove($metric);
-        }
+        // Les métriques du solveur (SolverMetric) ne sont VOLONTAIREMENT pas purgées :
+        // télémétrie append-only (décision fondateur 2026-07-18) — l'historique des
+        // tentatives est la stat d'usage superadmin, il survit à la suppression de la
+        // version (les dimensions d'analyse sont dénormalisées à la capture). Seule
+        // porte de sortie : l'effacement RGPD du club (ErasedClubPurger).
     }
 }

@@ -170,8 +170,10 @@ final class SchedulePlanProvisioner
         // rattrape que le cas null, jamais celui-là. Rendre true sur zéro ligne ferait
         // croire à l'appelant que la validation a eu lieu — or il supprime les versions
         // sœurs juste après : on les détruirait pour un pointeur jamais posé.
+        // first_chosen_at : la PREMIÈRE validation du plan, posée une fois (COALESCE) et
+        // jamais effacée — stat superadmin « temps de clôture » (création → 1re validation).
         $updated = $this->entityManager->getConnection()->executeStatement(
-            'UPDATE schedule_plan SET chosen_schedule_id = :sid, updated_at = now(), version = version + 1 WHERE id = :pid',
+            'UPDATE schedule_plan SET chosen_schedule_id = :sid, first_chosen_at = COALESCE(first_chosen_at, now()), updated_at = now(), version = version + 1 WHERE id = :pid',
             ['sid' => $schedule->getId(), 'pid' => $planId],
         );
 

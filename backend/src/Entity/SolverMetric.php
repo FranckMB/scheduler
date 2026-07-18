@@ -8,11 +8,21 @@ use App\Repository\SolverMetricRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
-/** Immutable technical telemetry captured for one schedule generation attempt. */
+/**
+ * Immutable technical telemetry captured for one schedule generation attempt.
+ *
+ * APPEND-ONLY (décision fondateur 2026-07-18) : l'historique des TENTATIVES est la
+ * vérité d'usage du produit — une métrique ne meurt NI avec sa version (validation
+ * supprime les sœurs, pas leur télémétrie) NI au reset de saison. Seule porte de
+ * sortie : l'effacement RGPD du club (ErasedClubPurger, delete par clubId).
+ * `scheduleId` peut donc nommer un planning supprimé — assumé, on ne joint plus :
+ * les dimensions d'analyse (planType, tailles) sont dénormalisées à la capture.
+ */
 #[ORM\Entity(repositoryClass: SolverMetricRepository::class)]
 #[ORM\Table(name: 'solver_metrics')]
 #[ORM\Index(name: 'idx_solver_metrics_club_created', columns: ['club_id', 'created_at'])]
 #[ORM\Index(name: 'idx_solver_metrics_schedule', columns: ['schedule_id'])]
+#[ORM\Index(name: 'idx_solver_metrics_plan_type_created', columns: ['plan_type', 'created_at'])]
 class SolverMetric implements TenantOwnedInterface
 {
     #[ORM\Id]
@@ -46,6 +56,20 @@ class SolverMetric implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 80, nullable: true)]
     private ?string $solverVersion;
 
+    /** Type du plan (SEASON/CLOSURE/HOLIDAY) dénormalisé à la capture — survit à la
+     *  suppression du plan/de la version. null = historique d'avant la colonne, ou
+     *  plan disparu au moment de la capture (best-effort, jamais bloquant). */
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $planType;
+
+    /** Équipes actives de la saison au moment de la tentative (taille du problème côté métier). */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $nbTeams;
+
+    /** Gymnases actifs de la saison au moment de la tentative. */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $nbVenues;
+
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $createdAt;
 
@@ -60,6 +84,9 @@ class SolverMetric implements TenantOwnedInterface
         ?int $score,
         ?string $solverVersion,
         ?DateTimeImmutable $createdAt = null,
+        ?string $planType = null,
+        ?int $nbTeams = null,
+        ?int $nbVenues = null,
     ) {
         $this->id = self::newUuid();
         $this->scheduleId = $scheduleId;
@@ -72,6 +99,9 @@ class SolverMetric implements TenantOwnedInterface
         $this->score = $score;
         $this->solverVersion = $solverVersion;
         $this->createdAt = $createdAt ?? new DateTimeImmutable;
+        $this->planType = $planType;
+        $this->nbTeams = $nbTeams;
+        $this->nbVenues = $nbVenues;
     }
 
     private static function newUuid(): string
@@ -143,5 +173,20 @@ class SolverMetric implements TenantOwnedInterface
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getPlanType(): ?string
+    {
+        return $this->planType;
+    }
+
+    public function getNbTeams(): ?int
+    {
+        return $this->nbTeams;
+    }
+
+    public function getNbVenues(): ?int
+    {
+        return $this->nbVenues;
     }
 }

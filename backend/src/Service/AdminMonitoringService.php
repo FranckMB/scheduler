@@ -17,7 +17,13 @@ final readonly class AdminMonitoringService
     /**
      * @return array{
      *     clubs: array{total: int, active7d: int, active30d: int, new7d: int, unsubscribed: int},
-     *     solver: array{windowDays: int, generations: int, completed: int, failed: int, infeasible: int, infeasibleRate: float, p50WallTimeMs: ?int, p95WallTimeMs: ?int, daily: list<array{date: string, generations: int, infeasible: int, p50WallTimeMs: ?int, p95WallTimeMs: ?int}>}
+     *     solver: array{windowDays: int, generations: int, completed: int, failed: int, infeasible: int, infeasibleRate: float, p50WallTimeMs: ?int, p95WallTimeMs: ?int, daily: list<array{date: string, generations: int, infeasible: int, p50WallTimeMs: ?int, p95WallTimeMs: ?int}>},
+     *     usage: array{
+     *         plansByType: list<array{type: string, total: int, validated: int}>,
+     *         timeToFirstValidation: array{season: array{count: int, p50Hours: ?int, p95Hours: ?int}, period: array{count: int, p50Hours: ?int, p95Hours: ?int}},
+     *         solverByPlanType: list<array{planType: string, generations: int, p50WallTimeMs: ?int, p95WallTimeMs: ?int}>,
+     *         clubSizes: list<array{bucket: string, clubs: int, medianVenues: ?int}>
+     *     }
      * }
      */
     public function overview(): array
@@ -55,9 +61,92 @@ final readonly class AdminMonitoringService
             ORDER BY day
             SQL);
 
+        // --- Usage (stats fondateur 2026-07-18) : « l'app est-elle utilisée, à quel volume ? »
+
+        // Plans par type + validés (chosen_schedule_id posé) — répond « combien de plans
+        // overlay/holidays » et « combien vont jusqu'à la validation ».
+        $planRows = $this->connection()->fetchAllAssociative(<<<'SQL'
+            SELECT type, COUNT(*) AS total, COUNT(*) FILTER (WHERE chosen_schedule_id IS NOT NULL) AS validated
+            FROM schedule_plan
+            GROUP BY type
+            ORDER BY type
+            SQL);
+
+        // Temps de clôture = création du plan → PREMIÈRE validation (first_chosen_at,
+        // posé une fois). SEASON (le calendrier de la saison) séparé des périodes.
+        $closeRows = $this->connection()->fetchAllAssociative(<<<'SQL'
+            SELECT
+                (type = 'SEASON') AS is_season,
+                COUNT(*) AS validated,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (first_chosen_at - created_at))) AS p50_seconds,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (first_chosen_at - created_at))) AS p95_seconds
+            FROM schedule_plan
+            WHERE first_chosen_at IS NOT NULL
+            GROUP BY (type = 'SEASON')
+            SQL);
+
+        // Charge solveur par type de plan (dimension dénormalisée à la capture,
+        // append-only — l'historique des TENTATIVES, versions supprimées incluses).
+        $solverTypeRows = $this->connection()->fetchAllAssociative(<<<'SQL'
+            SELECT
+                plan_type,
+                COUNT(*) AS generations,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY wall_time_ms) FILTER (WHERE wall_time_ms IS NOT NULL) AS p50,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY wall_time_ms) FILTER (WHERE wall_time_ms IS NOT NULL) AS p95
+            FROM solver_metrics
+            WHERE created_at >= NOW() - INTERVAL '30 days' AND plan_type IS NOT NULL
+            GROUP BY plan_type
+            ORDER BY plan_type
+            SQL);
+
+        // Profil du parc : tranches d'équipes actives (saison courante) + gymnases médians —
+        // « quelle taille de clubs utilise l'app ». Parc non désinscrit entier.
+        $sizeRows = $this->connection()->fetchAllAssociative(<<<'SQL'
+            WITH club_sizes AS (
+                SELECT
+                    c.id,
+                    COALESCE((SELECT COUNT(*) FROM team t WHERE t.season_id = cs.id AND t.is_active = TRUE), 0) AS teams,
+                    COALESCE((SELECT COUNT(*) FROM venue v WHERE v.season_id = cs.id AND v.is_active = TRUE), 0) AS venues
+                FROM club c
+                LEFT JOIN LATERAL (
+                    SELECT s.id
+                    FROM season s
+                    WHERE s.club_id = c.id
+                    ORDER BY (CURRENT_DATE BETWEEN s.start_date AND s.end_date) DESC, s.start_date DESC
+                    LIMIT 1
+                ) cs ON TRUE
+                WHERE c.unsubscribed_at IS NULL
+            )
+            SELECT
+                CASE
+                    WHEN teams = 0 THEN '0'
+                    WHEN teams <= 5 THEN '1-5'
+                    WHEN teams <= 10 THEN '6-10'
+                    WHEN teams <= 20 THEN '11-20'
+                    WHEN teams <= 40 THEN '21-40'
+                    ELSE '40+'
+                END AS bucket,
+                MIN(CASE WHEN teams = 0 THEN 0 WHEN teams <= 5 THEN 1 WHEN teams <= 10 THEN 2 WHEN teams <= 20 THEN 3 WHEN teams <= 40 THEN 4 ELSE 5 END) AS bucket_order,
+                COUNT(*) AS clubs,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY venues) AS median_venues
+            FROM club_sizes
+            GROUP BY 1
+            ORDER BY bucket_order
+            SQL);
+
         $clubs = false === $clubs ? [] : $clubs;
         $solver = false === $solver ? [] : $solver;
         $generations = $this->integer($solver, 'generations');
+
+        $closeByScope = ['season' => ['count' => 0, 'p50Hours' => null, 'p95Hours' => null], 'period' => ['count' => 0, 'p50Hours' => null, 'p95Hours' => null]];
+        foreach ($closeRows as $row) {
+            $scope = $this->boolean($row, 'is_season') ? 'season' : 'period';
+            $closeByScope[$scope] = [
+                'count' => $this->integer($row, 'validated'),
+                'p50Hours' => $this->secondsToHours($row, 'p50_seconds'),
+                'p95Hours' => $this->secondsToHours($row, 'p95_seconds'),
+            ];
+        }
 
         return [
             'clubs' => [
@@ -83,6 +172,25 @@ final readonly class AdminMonitoringService
                     'p50WallTimeMs' => $this->nullableInteger($row, 'p50'),
                     'p95WallTimeMs' => $this->nullableInteger($row, 'p95'),
                 ], $dailyRows),
+            ],
+            'usage' => [
+                'plansByType' => array_map(fn (array $row): array => [
+                    'type' => (string) $row['type'],
+                    'total' => $this->integer($row, 'total'),
+                    'validated' => $this->integer($row, 'validated'),
+                ], $planRows),
+                'timeToFirstValidation' => $closeByScope,
+                'solverByPlanType' => array_map(fn (array $row): array => [
+                    'planType' => (string) $row['plan_type'],
+                    'generations' => $this->integer($row, 'generations'),
+                    'p50WallTimeMs' => $this->nullableInteger($row, 'p50'),
+                    'p95WallTimeMs' => $this->nullableInteger($row, 'p95'),
+                ], $solverTypeRows),
+                'clubSizes' => array_map(fn (array $row): array => [
+                    'bucket' => (string) $row['bucket'],
+                    'clubs' => $this->integer($row, 'clubs'),
+                    'medianVenues' => $this->nullableInteger($row, 'median_venues'),
+                ], $sizeRows),
             ],
         ];
     }
@@ -254,5 +362,19 @@ final readonly class AdminMonitoringService
     private function rate(int $count, int $total): float
     {
         return 0 === $total ? 0.0 : round($count / $total, 4);
+    }
+
+    /** @param array<string, mixed> $row */
+    private function boolean(array $row, string $key): bool
+    {
+        return filter_var($row[$key] ?? false, \FILTER_VALIDATE_BOOL);
+    }
+
+    /** @param array<string, mixed> $row Percentile en secondes → heures arrondies (lecture humaine). */
+    private function secondsToHours(array $row, string $key): ?int
+    {
+        $value = $row[$key] ?? null;
+
+        return null === $value ? null : (int) round(((float) $value) / 3600);
     }
 }

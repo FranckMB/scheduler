@@ -60,6 +60,72 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertSame(ScheduleStatus::COMPLETED, $reloaded?->getStatus());
     }
 
+    /**
+     * NR SA2-stats (§7.1 planning lifecycle) — LA TÉLÉMÉTRIE EST APPEND-ONLY (décision
+     * fondateur 2026-07-18) : valider supprime les versions sœurs (inv. 1) mais JAMAIS
+     * leurs métriques solveur — l'historique des tentatives est la stat d'usage
+     * superadmin. Avant ce lot, purgeArtifacts les emportait : les agrégats se
+     * réécrivaient rétroactivement à chaque validation.
+     */
+    public function testValidationKeepsTheSiblingsSolverTelemetry(): void
+    {
+        [$user, $club, $season] = $this->seed('VAL11');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        // Une tentative de génération par version (comme la prod : une ligne par attempt).
+        $m1 = new \App\Entity\SolverMetric($v1->getId(), $club->getId(), 'COMPLETED', 1200, null, null, null, 9000, 'v1', null, 'SEASON', 12, 3);
+        $m2 = new \App\Entity\SolverMetric($v2->getId(), $club->getId(), 'COMPLETED', 900, null, null, null, 9100, 'v1', null, 'SEASON', 12, 3);
+        $this->em->persist($m1);
+        $this->em->persist($m2);
+        $this->em->flush();
+
+        $this->client->loginUser($user);
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate");
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'la version sœur est supprimée (inv. 1)');
+        self::assertNotNull($this->em->getRepository(\App\Entity\SolverMetric::class)->find($m1->getId()), 'la métrique de la sœur SURVIT (append-only) même si sa version est morte');
+        self::assertNotNull($this->em->getRepository(\App\Entity\SolverMetric::class)->find($m2->getId()));
+    }
+
+    /**
+     * NR SA2-stats — `first_chosen_at` = la PREMIÈRE validation, posée une fois et
+     * STABLE : rouvrir puis revalider (même une autre version) ne la déplace pas.
+     * C'est la stat « temps de clôture » (création → 1re validation).
+     */
+    public function testFirstChosenAtIsSetOnceAndSurvivesReopenRevalidate(): void
+    {
+        [$user, $club, $season] = $this->seed('VAL12');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class);
+        $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt->create($user)];
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/validate", [], [], $auth);
+        self::assertResponseIsSuccessful();
+
+        $this->scopeGucToClub($club->getId());
+        $firstChosenAt = $this->em->getConnection()->fetchOne(
+            'SELECT first_chosen_at FROM schedule_plan WHERE id = :pid',
+            ['pid' => $v1->getSchedulePlanId()],
+        );
+        self::assertIsString($firstChosenAt, 'la 1re validation pose first_chosen_at');
+
+        // Rouvrir puis revalider une AUTRE version : le pointeur bouge, PAS first_chosen_at.
+        $this->client->request('POST', "/api/schedules/{$v1->getId()}/reopen", [], [], $auth);
+        self::assertResponseIsSuccessful();
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], $auth);
+        self::assertResponseIsSuccessful();
+
+        $after = $this->em->getConnection()->fetchOne(
+            'SELECT first_chosen_at FROM schedule_plan WHERE id = :pid',
+            ['pid' => $v2->getSchedulePlanId()],
+        );
+        self::assertSame($firstChosenAt, $after, 'first_chosen_at est posé UNE fois — stable à la réouverture/revalidation');
+    }
+
     public function testTheChosenVersionSurfacesOnMe(): void
     {
         [$user, , $season] = $this->seed('VAL5');

@@ -43,6 +43,16 @@ export interface AdminOverviewResponse {
       p95WallTimeMs: number | null;
     }>;
   };
+  /** Stats d'usage (SA2-stats) : plans par type, temps de clôture, charge par type, tailles de clubs. */
+  usage: {
+    plansByType: Array<{ type: string; total: number; validated: number }>;
+    timeToFirstValidation: {
+      season: { count: number; p50Hours: number | null; p95Hours: number | null };
+      period: { count: number; p50Hours: number | null; p95Hours: number | null };
+    };
+    solverByPlanType: Array<{ planType: string; generations: number; p50WallTimeMs: number | null; p95WallTimeMs: number | null }>;
+    clubSizes: Array<{ bucket: string; clubs: number; medianVenues: number | null }>;
+  };
 }
 
 type HealthStatus = "up" | "down" | "unknown";
