@@ -82,9 +82,11 @@ final class CalendarEntryConflictsController extends AbstractController
             'family' => ConstraintFamily::FACILITY,
             'isActive' => true,
         ]);
-        $venueIds = array_values(array_unique(array_filter(
-            array_map(static fn (Constraint $c): ?string => $c->getScopeTargetId(), $facilityConstraints),
-        )));
+        // P2-5 5b : les DATES fermées par gymnase (incident ∩ fenêtre). `venueIds` = les
+        // gymnases réellement fermés DANS cette fenêtre — un gymnase dont l'incident tombe
+        // hors de la période n'est pas listé (sinon le chip « gymnase fermé » mentirait).
+        $closedDatesByVenue = VenueClosureDays::closedDatesByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+        $venueIds = array_keys($closedDatesByVenue);
 
         if ([] === $venueIds) {
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => $planChosen]);
@@ -113,21 +115,22 @@ final class CalendarEntryConflictsController extends AbstractController
 
         // Concrete dates of the window, indexed by ISO weekday (1=Mon..7=Sun) —
         // ScheduleSlotTemplate.dayOfWeek uses the same ISO convention.
+        // P2-5 5b : une séance récurrente ne compte QUE ses occurrences fermées
+        // ($closedDatesByVenue, calculé plus haut) : gym fermé le seul jeudi 05-07, la
+        // séance du jeudi ne liste que 05-07 (pas 05-14/05-21 des semaines ouvertes) —
+        // plus de conflit fantôme.
         $datesByWeekday = $this->windowDatesByWeekday($entry);
-        // P2-5 5b : granularité JOUR — un gymnase n'est en conflit que les jours où il
-        // est RÉELLEMENT fermé (incident ∩ fenêtre). Une séance un jour ouvert du gym
-        // fermé (fermé jeu-dim, séance lundi) n'est plus comptée : le radar « N séances
-        // touchées » devient exact. Fallback tous-jours si le config n'a pas de dates.
-        $closedWeekdaysByVenue = VenueClosureDays::closedWeekdaysByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
 
         $conflicts = [];
         foreach ($slots as $slot) {
-            if (!isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {
-                continue; // le gymnase est OUVERT ce jour-là : pas un conflit
-            }
-            $dates = $datesByWeekday[$slot->getDayOfWeek()] ?? [];
+            $closedDates = $closedDatesByVenue[$slot->getVenueId()] ?? [];
+            // Occurrences du créneau (jour ISO → dates de la fenêtre) ∩ dates fermées.
+            $dates = array_values(array_filter(
+                $datesByWeekday[$slot->getDayOfWeek()] ?? [],
+                static fn (string $date): bool => isset($closedDates[$date]),
+            ));
             if ([] === $dates) {
-                continue;
+                continue; // le gymnase est ouvert toutes les occurrences de ce créneau
             }
             $conflicts[] = [
                 'slotTemplateId' => $slot->getId(),
