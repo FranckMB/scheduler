@@ -1,0 +1,10 @@
+# Sentry — capture d'ERREURS uniquement (pas d'APM/tracing : la perf solveur vit
+# dans solver_metrics). DSN vide = SDK inactif : tout est câblé dès maintenant,
+# activé le jour où le compte SaaS existe en posant SENTRY_DSN (INF-01).
+# Le bundle capture par défaut les exceptions HTTP, console ET les échecs
+# Messenger (register_error_listener) — exactement le périmètre voulu.
+sentry:
+    dsn: '%env(SENTRY_DSN)%'
+    options:
+        environment: '%kernel.environment%'
+        traces_sample_rate: 0

@@ -45,6 +45,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("engine")
 
+# Sentry ERROR capture only (no APM/tracing — solver perf lives in solver_metrics).
+# Empty DSN = disabled no-op init: wired now, activated by setting ENGINE_SENTRY_DSN.
+# Initialised BEFORE the app so the FastAPI integration hooks unhandled exceptions.
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment, traces_sample_rate=0.0)
+
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 

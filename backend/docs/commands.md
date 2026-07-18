@@ -48,6 +48,8 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:clubs:reset-quota` | SA4 : remet `generationCountSeason` à 0 pour `--club=<id>` (déblocage quota Découverte) — action support, aussi déclenchable depuis la console admin |
 | `app:clubs:reset-season` | SA4 : vide la SAISON COURANTE de `--club=<id>` (ligne Season et club gardés — retour au wizard) ; `--dry-run` annonce la saison résolue — miroir CLI de `ResetSeasonController` |
 | `app:health:alert` | Sondes santé + fraîcheur des référentiels → email aux superadmins actifs sur transition rouge/verte (anti-spam `admin_alert_state`) — **auto, toutes les 10 min** |
+| `app:db:backup` | `pg_dump -Fc` PILOTÉ PAR L'ACTIVITÉ (skip si rien n'a bougé), rétention 14, hook off-site `BACKUP_SYNC_COMMAND` ; `--force` avant toute migration risquée — **auto, quotidien à 01:00** (runbook `docs/ops/backup-restore.md`) |
+| `app:db:restore-check` | Restaure le dernier dump dans une base JETABLE et la vérifie (≥ 20 tables) — la preuve qu'un backup existe ; `--file` pour cibler |
 
 ## Commandes Doctrine utiles (rappels RLS)
 

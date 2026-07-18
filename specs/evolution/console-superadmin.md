@@ -128,7 +128,7 @@ y compris sur les tentatives refusées.
 
 ## 5. Prérequis amont (hors console, mais bloquants pour sa valeur)
 
-- **Observabilité** (Sentry, health-checks, backups PostgreSQL) : aujourd'hui **absents** (prod-readiness). La console les *affiche*, ne les remplace pas.
+- **Observabilité** ✅ **livrée (2026-07-18)** : Sentry câblé dans les 3 zones (DSN-vide-inactif — activation : `docs/ops/backup-restore.md` §5) ; health-checks livrés (SA2 + alerting) ; **backups `pg_dump` pilotés par l'activité** (`app:db:backup`, rétention 14, `restore-check`, ligne board + alerte `freshness:db-backup`, runbook `docs/ops/backup-restore.md`). Reste côté OPS (hors code) : activer les snapshots hébergeur + poser les DSN Sentry + `BACKUP_SYNC_COMMAND` off-site à la mise en prod.
 - **Persistance `solver_metrics` + audit trail** : = SA1 (sans quoi SA2 est vide).
 
 ## 6. Questions ouvertes (à trancher au `/plan` de chaque lot)

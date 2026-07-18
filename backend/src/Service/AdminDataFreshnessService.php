@@ -24,9 +24,14 @@ final readonly class AdminDataFreshnessService
     /** Référentiel FFBB : rafraîchi au fil des créations de clubs — une saison + marge. */
     private const FFBB_STALE_AFTER_DAYS = 400;
 
+    /** Backup piloté par l'activité : périmé si de l'activité reste non couverte > 26 h. */
+    private const BACKUP_STALE_AFTER_HOURS = 26;
+
     public function __construct(
         private ManagerRegistry $registry,
         private ClockInterface $clock,
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%kernel.project_dir%/var/backups')]
+        private string $backupDir,
     ) {}
 
     /**
@@ -38,6 +43,47 @@ final readonly class AdminDataFreshnessService
             $this->fromImport('school-holidays', 'Vacances scolaires', 'import-school-holidays', 'school_holiday_period'),
             $this->fromImport('public-holidays', 'Jours fériés', 'import-public-holidays', 'public_holiday'),
             $this->fromTables('ffbb-directory', 'Ligues & comités FFBB', 'fetched_at', ['ffbb_league', 'ffbb_committee']),
+            $this->backupRow(),
+        ];
+    }
+
+    /**
+     * Backup PILOTÉ PAR L'ACTIVITÉ : périmé s'il existe de l'activité PLUS RÉCENTE que le
+     * dernier dump ET que ce dump a plus de 26 h (une base dormante n'alerte jamais —
+     * décision fondateur 2026-07-18). Jamais de dump MAIS de l'activité → périmé.
+     * L'évaluateur d'alertes ramasse la ligne tel quel (freshness:db-backup → email).
+     *
+     * @return array{key: string, label: string, lastUpdatedAt: ?string, staleAfterDays: int, stale: bool}
+     */
+    private function backupRow(): array
+    {
+        $lastDump = null;
+        foreach (glob(rtrim($this->backupDir, '/') . '/clubscheduler-*.dump') ?: [] as $file) {
+            $mtime = filemtime($file);
+            if (false !== $mtime && (null === $lastDump || $mtime > $lastDump)) {
+                $lastDump = $mtime;
+            }
+        }
+        $lastDumpAt = null === $lastDump ? null : new DateTimeImmutable('@' . $lastDump);
+
+        $activity = $this->connection()->fetchOne(
+            'SELECT GREATEST(
+                (SELECT MAX(last_activity_at) FROM club),
+                (SELECT MAX(created_at) FROM solver_metrics),
+                (SELECT MAX(occurred_at) FROM audit_log)
+            )',
+        );
+        $lastActivityAt = \is_string($activity) ? new DateTimeImmutable($activity) : null;
+
+        $uncovered = null !== $lastActivityAt && (null === $lastDumpAt || $lastActivityAt > $lastDumpAt);
+        $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', self::BACKUP_STALE_AFTER_HOURS)));
+
+        return [
+            'key' => 'db-backup',
+            'label' => 'Sauvegarde base de données',
+            'lastUpdatedAt' => $lastDumpAt?->format(\DATE_ATOM),
+            'staleAfterDays' => 1,
+            'stale' => $stale,
         ];
     }
 
