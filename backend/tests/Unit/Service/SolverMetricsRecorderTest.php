@@ -8,8 +8,11 @@ use App\Entity\Schedule;
 use App\Entity\SolverMetric;
 use App\Enum\ScheduleStatus;
 use App\Service\SolverMetricsRecorder;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class SolverMetricsRecorderTest extends TestCase
 {
@@ -18,10 +21,12 @@ final class SolverMetricsRecorderTest extends TestCase
         $schedule = (new Schedule)
             ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
             ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
             ->setName('metrics')
             ->setStatus(ScheduleStatus::COMPLETED)
             ->setScore(742);
-        $entityManager = $this->createMock(EntityManagerInterface::class);
+        // Comptes DIFFÉRENCIÉS par entité : un swap Team/Venue dans le recorder doit rougir.
+        $entityManager = $this->em(planType: 'CLOSURE', teamCount: 12, venueCount: 3);
         $entityManager->expects(self::once())->method('persist')->with(self::callback(
             static function (SolverMetric $metric): bool {
                 self::assertSame('COMPLETED', $metric->getStatus());
@@ -31,6 +36,10 @@ final class SolverMetricsRecorderTest extends TestCase
                 self::assertSame(3, $metric->getNbConflicts());
                 self::assertSame(742, $metric->getScore());
                 self::assertSame('solver-1', $metric->getSolverVersion());
+                // SA2-stats : dimensions dénormalisées à la capture (append-only).
+                self::assertSame('CLOSURE', $metric->getPlanType());
+                self::assertSame(12, $metric->getNbTeams());
+                self::assertSame(3, $metric->getNbVenues());
 
                 return true;
             },
@@ -51,9 +60,10 @@ final class SolverMetricsRecorderTest extends TestCase
         $schedule = (new Schedule)
             ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
             ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
             ->setName('infeasible metrics')
             ->setStatus(ScheduleStatus::FAILED);
-        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager = $this->em(planType: 'SEASON', teamCount: 0, venueCount: 0);
         $entityManager->expects(self::once())->method('persist')->with(self::callback(
             static function (SolverMetric $metric): bool {
                 self::assertSame('INFEASIBLE', $metric->getStatus());
@@ -63,5 +73,53 @@ final class SolverMetricsRecorderTest extends TestCase
         ));
 
         new SolverMetricsRecorder($entityManager)->record($schedule, ['status' => 'infeasible']);
+    }
+
+    public function testCaptureIsBestEffortWhenDimensionsCannotBeResolved(): void
+    {
+        // La capture ne doit JAMAIS faire échouer la génération : plan disparu /
+        // lecture en échec → dimensions null, la métrique s'écrit quand même.
+        $schedule = (new Schedule)
+            ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+            ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+            ->setName('vanished plan')
+            ->setStatus(ScheduleStatus::COMPLETED);
+        $connection = $this->createMock(Connection::class);
+        $connection->method('fetchOne')->willThrowException(new RuntimeException('plan vanished'));
+        $repository = $this->createMock(EntityRepository::class);
+        $repository->method('count')->willThrowException(new RuntimeException('db down'));
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $entityManager->method('getRepository')->willReturn($repository);
+        $entityManager->expects(self::once())->method('persist')->with(self::callback(
+            static function (SolverMetric $metric): bool {
+                self::assertNull($metric->getPlanType());
+                self::assertNull($metric->getNbTeams());
+                self::assertNull($metric->getNbVenues());
+
+                return true;
+            },
+        ));
+
+        new SolverMetricsRecorder($entityManager)->record($schedule);
+    }
+
+    /** @return EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject */
+    private function em(string $planType, int $teamCount, int $venueCount): EntityManagerInterface
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->method('fetchOne')->willReturn($planType);
+        $teams = $this->createMock(EntityRepository::class);
+        $teams->method('count')->willReturn($teamCount);
+        $venues = $this->createMock(EntityRepository::class);
+        $venues->method('count')->willReturn($venueCount);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getConnection')->willReturn($connection);
+        $entityManager->method('getRepository')->willReturnCallback(
+            static fn (string $class) => \App\Entity\Team::class === $class ? $teams : $venues,
+        );
+
+        return $entityManager;
     }
 }

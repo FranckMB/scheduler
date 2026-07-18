@@ -84,6 +84,15 @@ class SchedulePlan implements TenantOwnedInterface
     private ?string $chosenScheduleId = null;
 
     /**
+     * Instant de la PREMIÈRE validation du plan (stat superadmin « temps de
+     * clôture » : création → 1re validation, décision fondateur 2026-07-18).
+     * Posé UNE fois par choose() (COALESCE en SQL), jamais effacé — une
+     * réouverture/revalidation ne le touche pas. null = jamais validé.
+     */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $firstChosenAt = null;
+
+    /**
      * Monotonic version counter (ADR-0002 lot B1). Never derived from
      * MAX(versionNumber): validating a plan DELETES the non-chosen versions, so a
      * MAX-based number would be reused (a deleted V3 then regenerated as V3
@@ -253,6 +262,11 @@ class SchedulePlan implements TenantOwnedInterface
         $this->chosenScheduleId = $chosenScheduleId;
 
         return $this;
+    }
+
+    public function getFirstChosenAt(): ?DateTimeImmutable
+    {
+        return $this->firstChosenAt;
     }
 
     private function newUuid(): string

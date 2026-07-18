@@ -38,6 +38,26 @@ const overview: AdminOverviewResponse = {
       { date: "2026-07-16", generations: 28, infeasible: 3, p50WallTimeMs: 900, p95WallTimeMs: 2600 },
     ],
   },
+  usage: {
+    plansByType: [
+      { type: "SEASON", total: 18, validated: 11 },
+      { type: "CLOSURE", total: 6, validated: 4 },
+      { type: "HOLIDAY", total: 9, validated: 5 },
+    ],
+    timeToFirstValidation: {
+      // Minutes (SA2-stats round 1) : 36 h · 320 h→13 j · 25 min (le cas « clôture rapide » que l'arrondi heures effaçait).
+      season: { count: 11, p50Minutes: 36 * 60, p95Minutes: 320 * 60 },
+      period: { count: 9, p50Minutes: 25, p95Minutes: 30 * 60 },
+    },
+    solverByPlanType: [
+      { planType: "SEASON", generations: 30, p50WallTimeMs: 900, p95WallTimeMs: 2600 },
+      { planType: "CLOSURE", generations: 12, p50WallTimeMs: 400, p95WallTimeMs: 1100 },
+    ],
+    clubSizes: [
+      { bucket: "1-5", clubs: 8, medianVenues: 1 },
+      { bucket: "11-20", clubs: 5, medianVenues: 3 },
+    ],
+  },
 };
 
 const health: AdminHealthResponse = {
@@ -155,6 +175,35 @@ describe("AdminDashboardPage", () => {
     expect(mockHealth).toHaveBeenCalledOnce();
     expect(mockJobs).toHaveBeenCalledOnce();
     expect(mockClubs).toHaveBeenCalledWith(1, 25, "");
+  });
+
+  it("renders the usage stats: plans by type, time-to-close and club sizes (SA2-stats)", async () => {
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("Plans, clôtures et tailles de clubs")).toBeInTheDocument();
+    // Plans par type (libellés FR — « Saison » apparaît aussi dans la carte solveur) + « dont validés ».
+    expect(screen.getAllByText("Saison").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Vacances")).toBeInTheDocument();
+    expect(screen.getByText(/dont 11 validés/)).toBeInTheDocument();
+    // Temps de clôture : création → 1re validation (36 h médiane saison ; P95 320 h → « 13 j » ;
+    // une clôture de période en 25 min s'affiche en minutes, plus jamais « 0 h »).
+    expect(screen.getByText("36 h")).toBeInTheDocument();
+    expect(screen.getByText("13 j")).toBeInTheDocument();
+    expect(screen.getByText("25 min")).toBeInTheDocument();
+    expect(screen.getByText(/11 saisons · 9 périodes clôturées/)).toBeInTheDocument();
+    // Tailles de clubs : tranches + médiane gymnases.
+    expect(screen.getByRole("columnheader", { name: "Gymnases (médiane)" })).toBeInTheDocument();
+    expect(screen.getByText("11-20")).toBeInTheDocument();
+  });
+
+  it("shows the usage panel as unavailable (never crashes) when the backend predates the usage block", async () => {
+    // Rollback backend / décalage de déploiement : l'ancien overview n'a pas `usage`.
+    const legacyOverview: AdminOverviewResponse = { clubs: overview.clubs, solver: overview.solver };
+    mockOverview.mockReset().mockResolvedValue(legacyOverview);
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("Les statistiques d’usage sont indisponibles.")).toBeInTheDocument();
+    expect(screen.queryByText("Plans, clôtures et tailles de clubs")).not.toBeInTheDocument();
   });
 
   it("searches and paginates through the clubs API", async () => {

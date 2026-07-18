@@ -80,6 +80,7 @@ export function AdminDashboardPage() {
       </section>
 
       <OverviewSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
+      <UsageSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
       <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
       <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
 
@@ -160,6 +161,111 @@ function OverviewSection({ data, loading, error, retry }: DataSectionProps<Admin
           </div>
         </article>
       </div>
+    </section>
+  );
+}
+
+/** Libellés FR des types de plan (ADR-0002) + le bucket télémétrie UNKNOWN (historique pré-dimension / plan disparu à la capture). */
+const PLAN_TYPE_LABELS: Record<string, string> = { SEASON: "Saison", CLOSURE: "Fermeture", HOLIDAY: "Vacances", UNKNOWN: "Inconnu (historique)" };
+
+const planTypeLabel = (type: string): string => PLAN_TYPE_LABELS[type] ?? type;
+
+const formatMinutes = (minutes: number | null): string => {
+  if (null === minutes) return "—";
+  if (minutes < 60) return `${integerFormatter.format(minutes)} min`;
+  if (minutes < 48 * 60) return `${integerFormatter.format(Math.round(minutes / 60))} h`;
+  return `${integerFormatter.format(Math.round(minutes / 1440))} j`;
+};
+
+/**
+ * Stats d'usage (SA2-stats) : plans par type (dont validés), temps de clôture
+ * (création → 1re validation), charge solveur par type, profil des tailles de clubs.
+ * Lecture seule — répond « l'app est-elle utilisée, à quel volume ? ».
+ */
+function UsageSection({ data, loading, error, retry }: DataSectionProps<AdminOverviewResponse>) {
+  if (loading) return <PanelLoading label="Chargement de l’usage" />;
+  // `usage` absent = backend antérieur au lot (rollback / décalage de déploiement) :
+  // indisponibilité affichée, jamais un crash de rendu.
+  if (error || !data?.usage) return <PanelError label="Les statistiques d’usage sont indisponibles." retry={retry} />;
+
+  const { usage } = data;
+
+  return (
+    <section aria-labelledby="usage-heading" className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Usage produit</p>
+        <h2 id="usage-heading" className="mt-2 text-xl font-semibold text-white">Plans, clôtures et tailles de clubs</h2>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <article className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+          <p className="text-sm font-medium text-white">Plans par type</p>
+          <p className="mt-1 text-xs text-slate-500">Parc actuel — un reset ou un effacement retire ses plans</p>
+          <dl className="mt-5 space-y-4">
+            {usage.plansByType.length === 0 ? <p className="text-sm text-slate-500">Aucun plan.</p> : null}
+            {usage.plansByType.map((row) => (
+              <div key={row.type} className="flex items-baseline justify-between gap-3">
+                <dt className="text-sm text-slate-400">{planTypeLabel(row.type)}</dt>
+                <dd className="text-sm text-white">
+                  {integerFormatter.format(row.total)}
+                  <span className="ml-2 text-xs text-slate-500">dont {integerFormatter.format(row.validated)} validé{row.validated > 1 ? "s" : ""}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </article>
+        <article className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+          <p className="text-sm font-medium text-white">Temps de clôture</p>
+          <p className="mt-1 text-xs text-slate-500">Création du plan → première validation</p>
+          <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-6">
+            <SmallMetric label="Saison · médiane" value={formatMinutes(usage.timeToFirstValidation.season.p50Minutes)} />
+            <SmallMetric label="Saison · P95" value={formatMinutes(usage.timeToFirstValidation.season.p95Minutes)} />
+            <SmallMetric label="Périodes · médiane" value={formatMinutes(usage.timeToFirstValidation.period.p50Minutes)} />
+            <SmallMetric label="Périodes · P95" value={formatMinutes(usage.timeToFirstValidation.period.p95Minutes)} />
+          </dl>
+          <div className="mt-6 border-t border-white/10 pt-4 text-xs text-slate-500">
+            {integerFormatter.format(usage.timeToFirstValidation.season.count)} saison{usage.timeToFirstValidation.season.count > 1 ? "s" : ""} · {integerFormatter.format(usage.timeToFirstValidation.period.count)} période{usage.timeToFirstValidation.period.count > 1 ? "s" : ""} clôturée{usage.timeToFirstValidation.period.count > 1 ? "s" : ""}
+          </div>
+        </article>
+        <article className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+          <p className="text-sm font-medium text-white">Solveur par type · 30 j</p>
+          <dl className="mt-5 space-y-4">
+            {usage.solverByPlanType.length === 0 ? <p className="text-sm text-slate-500">Aucune génération sur la fenêtre.</p> : null}
+            {usage.solverByPlanType.map((row) => (
+              <div key={row.planType} className="flex items-baseline justify-between gap-3">
+                <dt className="text-sm text-slate-400">{planTypeLabel(row.planType)}</dt>
+                <dd className="text-sm text-white">
+                  {integerFormatter.format(row.generations)}
+                  <span className="ml-2 text-xs text-slate-500">méd. {formatDuration(row.p50WallTimeMs)} · P95 {formatDuration(row.p95WallTimeMs)}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </article>
+      </div>
+      <article className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+        <p className="text-sm font-medium text-white">Tailles de clubs</p>
+        <p className="mt-1 text-xs text-slate-500">Équipes actives de la saison courante, parc non désabonné</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[24rem] text-left text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wide text-slate-500">
+                <th className="py-2 pr-4 font-medium">Équipes</th>
+                <th className="py-2 pr-4 font-medium">Clubs</th>
+                <th className="py-2 font-medium">Gymnases (médiane)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.clubSizes.map((row) => (
+                <tr key={row.bucket} className="border-t border-white/10 text-slate-300">
+                  <td className="py-2 pr-4">{row.bucket}</td>
+                  <td className="py-2 pr-4 text-white">{integerFormatter.format(row.clubs)}</td>
+                  <td className="py-2">{null === row.medianVenues ? "—" : integerFormatter.format(row.medianVenues)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
     </section>
   );
 }
