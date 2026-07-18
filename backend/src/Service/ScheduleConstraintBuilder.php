@@ -197,12 +197,15 @@ final class ScheduleConstraintBuilder
         $schedulePlanId = $schedule->getSchedulePlanId();
 
         // P2-5 E1 : une semaine ENFANT hérite les contraintes datées de sa période
-        // MÈRE (source unique : CalendarEntry::datedConstraintSourceId). La fenêtre
-        // de l'enfant (semaine pleine) borne le plan ; l'expansion venue_closed reste
-        // AVEUGLE AUX DATES en 5a — le gymnase est traité fermé sur TOUTE la semaine,
-        // même si l'incident n'en couvre qu'une partie (sur-contraint, jamais
-        // sous-contraint). Le clipping aux jours réellement fermés = lot 5b.
+        // MÈRE (source unique : CalendarEntry::datedConstraintSourceId).
         $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
+
+        // P2-5 5b — granularité JOUR des fermetures : les jours de semaine où chaque
+        // gymnase est réellement fermé dans CE plan (incident ∩ fenêtre du plan). Le
+        // gymnase perd ses créneaux ces jours-là (ci-dessous) — pas de créneau ⇒ pas
+        // de variable ⇒ le solveur ne peut pas l'y placer ; il PEUT les autres jours.
+        // Remplace le forbid tous-jours (l'engine forbidden_assignments est day-blind).
+        $closedWeekdaysByVenue = VenueClosureDays::closedWeekdaysByVenue($dated, $entry->getStartDate(), $entry->getEndDate());
 
         // Period-editable structure: sparse per-team overrides for THIS period. Loaded
         // BEFORE the constraint match — the reprise default follows the team selection
@@ -238,8 +241,8 @@ final class ScheduleConstraintBuilder
 
         // Period-editable structure: the overlay's slots are ADDITIVE — the still-valid
         // SEASONAL slots (calendarEntryId NULL) plus this period's OWN slots (a gym lent
-        // for the window, calendarEntryId = entry). Fermetures already remove a seasonal
-        // gym via the CLOSURE expansion below.
+        // for the window, calendarEntryId = entry). P2-5 5b : un gymnase fermé perd ses
+        // créneaux sur ses jours FERMÉS uniquement (day-précis) — le reste passe.
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
             $slots = array_merge(
@@ -247,6 +250,9 @@ final class ScheduleConstraintBuilder
                 $this->venueTrainingSlotRepository->findBy(['schedulePlanId' => $schedulePlanId]),
             );
             foreach ($slots as $row) {
+                if (isset($closedWeekdaysByVenue[$row->getVenueId()][$row->getDayOfWeek()])) {
+                    continue; // gymnase fermé ce jour-là : créneau retiré du payload
+                }
                 $availabilitiesByVenue[$row->getVenueId()][] = $row;
             }
         }
@@ -279,15 +285,10 @@ final class ScheduleConstraintBuilder
         $this->currentAvailabilitiesByVenue = [];
         $this->currentSessionOverrides = [];
 
-        // Unconditional: the match above throws on every other period type, so CLOSURE and
-        // HOLIDAY are the only ones that reach this line — guarding on "either of the two"
-        // is a tautology. A new period type gains an arm in that match and MUST decide there
-        // whether its dated venue closures need expanding (the engine only ever consumes
-        // `forbiddenVenueId`, never `config.type=venue_closed`).
-        $payload['constraints'] = array_merge(
-            $payload['constraints'],
-            $this->expandClosedVenues($dated, $teams),
-        );
+        // P2-5 5b : les gymnases fermés sont retirés de l'availability day-précisément
+        // (ci-dessus) — le forbid tous-jours `expandClosedVenues` est supprimé (l'engine
+        // forbidden_assignments était day-blind, il fermait le gymnase TOUTE la semaine
+        // même si l'incident n'en couvrait qu'une partie).
 
         // Drop any SERIALIZED TEAM row targeting a team deactivated for the period — an
         // original TEAM constraint, OR a CLUB/tag constraint expanded per-team during
@@ -440,46 +441,6 @@ final class ScheduleConstraintBuilder
             $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
             static fn (Constraint $c): bool => \array_key_exists($c->getId(), $overrides) ? $overrides[$c->getId()] : $keepByDefault($c),
         ));
-    }
-
-    /**
-     * Expand each closed venue (scopeTargetId of the entry's active FACILITY
-     * dated constraints — same convention as CalendarEntryConflictsController)
-     * into per-team FACILITY HARD `forbiddenVenueId` constraints the engine
-     * honors (parse_v2_constraints → forbidden_assignments).
-     *
-     * @param array<Constraint> $dated
-     * @param array<Team>       $teams
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function expandClosedVenues(array $dated, array $teams): array
-    {
-        $closedVenueIds = [];
-        foreach ($dated as $constraint) {
-            if (ConstraintFamily::FACILITY === $constraint->getFamily() && $constraint->getIsActive() && null !== $constraint->getScopeTargetId()) {
-                $closedVenueIds[$constraint->getScopeTargetId()] = true;
-            }
-        }
-
-        $expanded = [];
-        foreach (array_keys($closedVenueIds) as $venueId) {
-            foreach ($teams as $team) {
-                $expanded[] = [
-                    'id' => \sprintf('overlay-closed:%s:%s', $venueId, $team->getId()),
-                    'scope' => ConstraintScope::TEAM->value,
-                    'scopeTargetId' => $team->getId(),
-                    'family' => ConstraintFamily::FACILITY->value,
-                    'ruleType' => ConstraintRuleType::HARD->value,
-                    'name' => 'Salle fermée (période)',
-                    'config' => ['forbiddenVenueId' => $venueId],
-                    'sortOrder' => 0,
-                    'isActive' => true,
-                ];
-            }
-        }
-
-        return $expanded;
     }
 
     /**

@@ -55,10 +55,31 @@ final class OverlayGenerationTest extends KernelTestCase
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-    public function testClosureOverlaySnapshotCarriesForbiddenVenueAndSkipsBaseline(): void
+    public function testClosureOverlaySnapshotRemovesClosedVenueSlotsAndSkipsBaseline(): void
     {
         [$em, $club, $season, $entry] = $this->seedClosureOverlay('ov-gen');
-        $teamIds = array_map(static fn (Team $t): string => $t->getId(), $em->getRepository(Team::class)->findBy(['clubId' => $club->getId()]));
+
+        // P2-5 5b : le gym fermé (toute la fenêtre — config sans dates) perd ses
+        // créneaux du snapshot gelé. Un venue + créneau saisonnier pour le vérifier.
+        $venue = new \App\Entity\Venue;
+        $venue->setId(self::VENUE_CLOSED);
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName('Gym fermé');
+        $venue->setCanSplit(false);
+        $venue->setSource('manual');
+        $em->persist($venue);
+        $slot = new \App\Entity\VenueTrainingSlot;
+        $slot->setClubId($club->getId());
+        $slot->setSeasonId($season->getId());
+        $slot->setVenueId(self::VENUE_CLOSED);
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $slot->setCapacity(1);
+        $slot->setSchedulePlanId(null);
+        $em->persist($slot);
+        $em->flush();
 
         $schedule = new Schedule;
         $schedule->setClubId($club->getId());
@@ -84,17 +105,14 @@ final class OverlayGenerationTest extends KernelTestCase
         self::assertInstanceOf(Schedule::class, $reloaded);
         self::assertSame(ScheduleStatus::COMPLETED, $reloaded->getStatus());
 
-        // The frozen snapshot carries a forbiddenVenueId constraint per team.
-        $constraints = $reloaded->getSnapshotData()['constraints'] ?? [];
-        $forbiddenTeams = [];
-        foreach ($constraints as $c) {
-            if (self::VENUE_CLOSED === ($c['config']['forbiddenVenueId'] ?? null)) {
-                $forbiddenTeams[] = $c['scopeTargetId'];
-            }
-        }
-        foreach ($teamIds as $teamId) {
-            self::assertContains($teamId, $forbiddenTeams, 'every team must be forbidden from the closed venue');
-        }
+        // 5b : le snapshot gelé ne porte plus de forbiddenVenueId (mécanisme supprimé)…
+        $snapshot = $reloaded->getSnapshotData();
+        $forbidden = array_filter($snapshot['constraints'] ?? [], static fn (array $c): bool => isset($c['config']['forbiddenVenueId']));
+        self::assertCount(0, $forbidden, 'le forbid tous-jours est remplacé par le retrait de créneaux');
+        // …et le gym fermé n'a plus aucun créneau dans le snapshot.
+        $closedVenue = array_values(array_filter($snapshot['venues'] ?? [], static fn (array $v): bool => self::VENUE_CLOSED === $v['id']));
+        self::assertNotEmpty($closedVenue, 'le gym fermé reste listé (sans créneau)');
+        self::assertSame([], $closedVenue[0]['trainingSlots'], 'ses créneaux sont retirés du payload gelé');
 
         // An overlay lives in the PERIOD's plan — it must never end up pointed at
         // by the SEASON plan (inv. 2: nothing points automatically anyway).
