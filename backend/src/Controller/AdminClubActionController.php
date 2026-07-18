@@ -32,6 +32,8 @@ use Throwable;
 #[Route('/api/admin')]
 final readonly class AdminClubActionController
 {
+    private const UUID_PATTERN = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/';
+
     public function __construct(
         private AdminActionCatalog $catalog,
         private AdminJobExecutorInterface $executor,
@@ -53,9 +55,11 @@ final readonly class AdminClubActionController
         ], $this->catalog->all())]);
     }
 
-    // requirements clubId : un segment non-UUID doit être un 404 du routeur, jamais un
-    // 22P02 Postgres (500) dans le lookup d'existence (revue SA4, finding 6).
-    #[Route('/clubs/{clubId}/actions/{key}', requirements: ['clubId' => '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'], methods: ['POST'])]
+    // PAS de requirements de route sur clubId : un requirement ferait 404 AU ROUTEUR,
+    // AVANT le firewall admin — un probe non authentifié apprendrait la forme attendue
+    // et la tentative ne serait ni 401 ni tracée. La forme est validée EN controller,
+    // après les gardes session/CSRF (revue SA4 round 2).
+    #[Route('/clubs/{clubId}/actions/{key}', methods: ['POST'])]
     public function run(string $clubId, string $key, Request $request): JsonResponse
     {
         // Contexte d'audit posé AVANT toute garde : même une tentative REFUSÉE
@@ -78,6 +82,13 @@ final readonly class AdminClubActionController
             return new JsonResponse(['error' => 'Support action not found.'], 404);
         }
 
+        // Forme UUID validée ICI (après session+CSRF, avant le SQL) : un segment
+        // malformé doit être un 404 propre, jamais un 22P02 Postgres (500) — et la
+        // tentative est déjà tracée par le contexte d'audit posé en tête.
+        if (1 !== preg_match(self::UUID_PATTERN, $clubId)) {
+            return new JsonResponse(['error' => 'Club not found.'], 404);
+        }
+
         // Le club cible doit exister (connexion admin — la surface est cross-tenant
         // par conception). 404 AVANT toute exécution : une action sur un id fantôme
         // ne doit ni tourner ni laisser d'historique.
@@ -89,17 +100,19 @@ final readonly class AdminClubActionController
         $request->attributes->set('_admin_audit_actor_id', $admin->getId());
 
         // Définition ÉPHÉMÈRE : hors catalogue des jobs → jamais schedulée (et sa
-        // cadence manual() lèverait si elle atteignait le scheduler). Verrou/historique
-        // sur lockKey() — IDENTIQUE à la clé du job planifié quand la commande est
-        // partagée (purge-seasons), pour que geste manuel et cron se sérialisent.
+        // cadence manual() lèverait si elle atteignait le scheduler). HISTORIQUE sous
+        // `action:{key}` (jamais mélangé au latestRun du panneau jobs) ; VERROU sur
+        // lockKey() — partagé avec le job planifié quand la commande l'est
+        // (purge-seasons) : geste manuel et cron se sérialisent sans se masquer.
         // Arguments = catalogue (fixes) + le seul --club runtime (validé ci-dessus).
         $definition = new AdminJobDefinition(
-            $action->lockKey(),
+            'action:' . $action->key,
             $action->label,
             $action->command,
             AdminJobSchedule::manual(),
             [...$action->arguments, '--club' => $clubId],
             manualTriggerAllowed: true,
+            lockKey: $action->lockKey(),
         );
 
         try {

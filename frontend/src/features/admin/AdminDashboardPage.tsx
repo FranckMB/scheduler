@@ -519,8 +519,11 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
   const [confirmName, setConfirmName] = useState("");
 
   // trim SYMÉTRIQUE : un nom de club stocké avec un espace de bord resterait
-  // inconfirmable sinon (revue SA4, finding 5).
-  const confirmBlocked = null !== selected && selected.dangerous && confirmName.trim() !== club.name.trim();
+  // inconfirmable sinon (revue SA4, finding 5). Un nom VIDE après trim reste
+  // INCONFIRMABLE (fail-closed) : sinon un champ vide validerait le destructif
+  // sur un club au nom blanc (round 2) — bloquer vaut mieux que contourner.
+  const normalizedClubName = club.name.trim();
+  const confirmBlocked = null !== selected && selected.dangerous && ("" === normalizedClubName || confirmName.trim() !== normalizedClubName);
 
   const execute = () => {
     if (!selected || confirmBlocked || run.isPending) return;

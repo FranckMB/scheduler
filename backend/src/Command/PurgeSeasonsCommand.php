@@ -12,6 +12,7 @@ use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -44,6 +45,7 @@ final class PurgeSeasonsCommand extends Command
         private readonly SeasonResolver $seasonResolver,
         private readonly SeasonDataPurger $seasonDataPurger,
         private readonly AuditTrail $auditTrail,
+        private readonly ClockInterface $clock,
     ) {
         parent::__construct();
     }
@@ -72,6 +74,10 @@ final class PurgeSeasonsCommand extends Command
 
             return Command::FAILURE;
         }
+        // Sans --date : « aujourd'hui » vient de l'HORLOGE (simulateur compris), pas du mur —
+        // sinon l'action support SA4 (--no-grace, geste destructif) résoudrait la rétention
+        // N-1 sur une autre saison que celle que la console affiche (revue SA4 round 2).
+        $today ??= $this->clock->now();
 
         $clubFilter = $input->getOption('club');
         $repository = $this->entityManager->getRepository(Club::class);
@@ -99,7 +105,7 @@ final class PurgeSeasonsCommand extends Command
         return $this->hadFailure ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private function purgeClub(string $clubId, ?DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io, bool $noGrace = false): int
+    private function purgeClub(string $clubId, DateTimeImmutable $today, bool $dryRun, SymfonyStyle $io, bool $noGrace): int
     {
         $this->tenantConnectionContext->setClubId($clubId);
 
@@ -114,8 +120,7 @@ final class PurgeSeasonsCommand extends Command
         // préavis. On laisse 30 j après le DÉBUT de la saison courante avant de
         // purger, le temps qu'un gestionnaire consulte/exporte l'historique.
         // --no-grace (SA4) : un geste support explicite saute cette fenêtre.
-        $effectiveToday = $today ?? new DateTimeImmutable;
-        if (!$noGrace && $current->getStartDate() > $effectiveToday->modify('-30 days')) {
+        if (!$noGrace && $current->getStartDate() > $today->modify('-30 days')) {
             return 0;
         }
 

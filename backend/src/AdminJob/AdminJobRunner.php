@@ -16,7 +16,9 @@ final readonly class AdminJobRunner
     /** @param callable(): int $execute */
     public function run(AdminJobDefinition $definition, string $source, ?string $superAdminId, callable $execute, ?DateTimeImmutable $scheduledFor = null): int
     {
-        if (!$this->store->tryAcquire($definition->key)) {
+        // Verrou sur la clé EFFECTIVE (peut être partagée avec un job planifié — SA4),
+        // historique sous `key` (toujours propre à la définition, jamais mélangé).
+        if (!$this->store->tryAcquire($definition->effectiveLockKey())) {
             throw new AdminJobAlreadyRunning(\sprintf('Job "%s" is already running.', $definition->key));
         }
 
@@ -34,7 +36,7 @@ final readonly class AdminJobRunner
 
             return $exitCode;
         } finally {
-            $this->store->release($definition->key);
+            $this->store->release($definition->effectiveLockKey());
         }
     }
 }

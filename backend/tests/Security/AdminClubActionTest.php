@@ -147,24 +147,8 @@ final class AdminClubActionTest extends WebTestCase
 
     public function testResetSeasonCommandResolvesTheCurrentSeasonAndDryRunDeletesNothing(): void
     {
-        // Seed via l'EM RUNTIME (pas la connexion admin) : la commande lit tout par la
-        // porte runtime (club + seasons sous RLS/GUC) — sous le wrapper transactionnel
-        // des tests, seule la même connexion voit ses propres écritures non commitées.
+        [$clubId, $seasonId] = $this->seedRuntimeClubWithCurrentSeason('Club reset SA4');
         $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
-        $club = (new \App\Entity\Club)->setName('Club reset SA4')->setSlug('sa4-reset-' . strtolower(substr(md5(uniqid('', true)), 0, 8)))
-            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
-        $em->persist($club);
-        $em->flush();
-        $clubId = $club->getId();
-        $this->scopeGucToClub($clubId);
-        // Une saison COURANTE (contient aujourd'hui, règle SeasonResolver).
-        $season = (new \App\Entity\Season)->setClubId($clubId)->setName('SA4')
-            ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
-            ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
-            ->setStatus('active');
-        $em->persist($season);
-        $em->flush();
-        $seasonId = $season->getId();
 
         $application = new Application(self::$kernel);
         $dryRun = new CommandTester($application->find('app:clubs:reset-season'));
@@ -184,25 +168,13 @@ final class AdminClubActionTest extends WebTestCase
     {
         // Le chemin DESTRUCTIF réel (pas seulement le dry-run) : la structure part,
         // la ligne Season et le club survivent (revue SA4, finding 8).
+        [$clubId, $seasonId] = $this->seedRuntimeClubWithCurrentSeason('Club wipe SA4');
         $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
-        $club = (new \App\Entity\Club)->setName('Club wipe SA4')->setSlug('sa4-wipe-' . strtolower(substr(md5(uniqid('', true)), 0, 8)))
-            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
-        $em->persist($club);
-        $em->flush();
-        $clubId = $club->getId();
-        $this->scopeGucToClub($clubId);
-        $season = (new \App\Entity\Season)->setClubId($clubId)->setName('SA4-wipe')
-            ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
-            ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
-            ->setStatus('active');
-        $em->persist($season);
-        $em->flush();
-        $team = (new \App\Entity\Team)->setClubId($clubId)->setSeasonId($season->getId())
+        $team = (new \App\Entity\Team)->setClubId($clubId)->setSeasonId($seasonId)
             ->setSportCategoryId('33333333-3333-3333-3333-333333333333')->setPriorityTierId(1)
             ->setName('SM1')->setSessionsPerWeek(1)->setIsActive(true);
         $em->persist($team);
         $em->flush();
-        $seasonId = $season->getId();
         $teamId = $team->getId();
 
         $application = new Application(self::$kernel);
@@ -256,6 +228,32 @@ final class AdminClubActionTest extends WebTestCase
             $this->admin()->executeStatement('DELETE FROM super_admin WHERE id = :id', ['id' => $this->adminId]);
         }
         parent::tearDown();
+    }
+
+    /**
+     * Seed via l'EM RUNTIME (pas la connexion admin) : les commandes reset-season lisent
+     * tout par la porte runtime (club + seasons sous RLS/GUC) — sous le wrapper
+     * transactionnel des tests, seule la même connexion voit ses écritures non commitées.
+     * La saison créée est COURANTE (contient aujourd'hui, règle SeasonResolver).
+     *
+     * @return array{0: string, 1: string} clubId, seasonId
+     */
+    private function seedRuntimeClubWithCurrentSeason(string $name): array
+    {
+        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
+        $club = (new \App\Entity\Club)->setName($name)->setSlug('sa4-' . strtolower(substr(md5(uniqid('', true)), 0, 10)))
+            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
+        $em->persist($club);
+        $em->flush();
+        $this->scopeGucToClub($club->getId());
+        $season = (new \App\Entity\Season)->setClubId($club->getId())->setName('SA4')
+            ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
+            ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
+            ->setStatus('active');
+        $em->persist($season);
+        $em->flush();
+
+        return [$club->getId(), $season->getId()];
     }
 
     private function seedClub(string $name, int $generationCount = 0): string
