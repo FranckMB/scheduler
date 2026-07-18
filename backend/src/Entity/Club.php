@@ -62,6 +62,14 @@ class Club
     #[ORM\Column(type: 'string', length: 64)]
     private string $timezone = 'Europe/Paris';
 
+    // Sport du club (retour fondateur 2026-07-18 : le club sait son sport). Référence
+    // l'entité `Sport` (déjà le modèle, via SportCategory) — posé au seed depuis le
+    // sport basketball. Nullable : les clubs d'avant la migration sont backfillés
+    // depuis leurs SportCategory, un club sans catégorie reste null. Aucune logique
+    // multi-sport ouverte (roadmap : « attendre une vraie demande »).
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $sportId = null;
+
     #[ORM\Column(type: 'string', length: 10)]
     private string $locale = 'fr';
 
@@ -331,6 +339,18 @@ class Club
     public function setTimezone(string $timezone): self
     {
         $this->timezone = $timezone;
+
+        return $this;
+    }
+
+    public function getSportId(): ?string
+    {
+        return $this->sportId;
+    }
+
+    public function setSportId(?string $sportId): self
+    {
+        $this->sportId = $sportId;
 
         return $this;
     }

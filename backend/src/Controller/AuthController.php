@@ -666,6 +666,10 @@ final class AuthController extends AbstractController
             $sport->setIsActive(true);
             $this->entityManager->persist($sport);
         }
+        // Le club connaît son sport de première main (retour fondateur 2026-07-18) —
+        // basket, seul sport aujourd'hui. Au 2e sport : threader le choix
+        // register → EmailVerificationToken → ici (patron de $intentClubName).
+        $club->setSportId($sport->getId());
 
         $categories = BasketballCategoryCatalog::categories();
         foreach ($categories as $categoryData) {

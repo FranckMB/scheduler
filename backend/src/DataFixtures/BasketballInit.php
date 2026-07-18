@@ -135,6 +135,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             $sport->setIsActive(true);
             $manager->persist($sport);
         }
+        // Le club connaît son sport de première main (comme le register).
+        $club->setSportId($sport->getId());
 
         // --- Categories (ungendered age brackets — see BasketballCategoryCatalog) ---
         $categories = BasketballCategoryCatalog::categories();
@@ -1034,6 +1036,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $manager->persist($sport);
                 $manager->flush();
             }
+            $club->setSportId($sport->getId());
 
             $categories = BasketballCategoryCatalog::categories();
             foreach ($categories as $categoryData) {

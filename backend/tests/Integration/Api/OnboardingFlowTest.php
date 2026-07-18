@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Api;
 
 use App\Tests\VerifiesRegistration;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -40,6 +42,15 @@ final class OnboardingFlowTest extends WebTestCase
         self::assertCount(0, $this->get('/api/venues')['member']);
         $me = $this->get('/api/me');
         self::assertFalse($me['club']['onboardingCompleted']);
+
+        // NR (retour fondateur 2026-07-18) : un club neuf connaît son sport de
+        // première main — basket, le sport de ses catégories. Lu via la connexion
+        // admin (club porte du RLS ; l'admin bypasse). Axe auth & memberships.
+        $admin = self::getContainer()->get(ManagerRegistry::class)->getConnection('admin');
+        \assert($admin instanceof Connection);
+        $clubSportId = $admin->fetchOne('SELECT sport_id FROM club WHERE id = ?', [$me['club']['id']]);
+        self::assertNotNull($clubSportId, 'une inscription neuve pose le sport du club');
+        self::assertSame($admin->fetchOne('SELECT id FROM sport WHERE slug = \'basketball\''), $clubSportId, 'le sport du club neuf est basketball');
 
         // Just-subscribed state: exactly ONE season, current, writable (not
         // read-only), and no validated socle yet (the cockpit gate sends the
