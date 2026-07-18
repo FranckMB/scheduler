@@ -11,15 +11,48 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SeasonAccessGuard;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProcessor<Constraint, ConstraintInput, ConstraintResource>
  */
 class ConstraintStateProcessor extends AbstractStateProcessor
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+    }
+
     protected function getEntityClass(): string
     {
         return Constraint::class;
+    }
+
+    /**
+     * F2 : une datée `venue_closed` naît APRÈS l'entrée de fermeture (2 POST côté front) ;
+     * le plan CLOSURE est donc minté avec un nom générique. Dès que le gymnase est connu,
+     * on recale le nom du (des) plan(s) de cette fermeture — best-effort, jamais bloquant.
+     */
+    protected function afterPersist(object $entity): void
+    {
+        if (!$entity instanceof Constraint
+            || ConstraintFamily::FACILITY !== $entity->getFamily()
+            || null === $entity->getCalendarEntryId()
+            || 'venue_closed' !== ($entity->getConfig()['type'] ?? null)) {
+            return;
+        }
+        $this->schedulePlanProvisioner->refreshClosurePlanName($entity->getCalendarEntryId());
     }
 
     /**

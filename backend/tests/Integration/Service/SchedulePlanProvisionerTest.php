@@ -228,22 +228,68 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
-     * NR E6 (axe planning lifecycle §7.1 — identité du plan). Le plan de FERMETURE porte
-     * le nom-réponse « Ajustement {gymnase} du … au … », le gymnase venant de la datée
-     * venue_closed (pas de `entry.title`).
+     * NR E6 + F2 (axe planning lifecycle §7.1 — identité du plan). En PROD la datée venue_closed
+     * naît APRÈS l'entrée : le plan CLOSURE est minté avec un nom générique, puis recalé quand le
+     * gymnase est connu. Une autre datée FACILITY (forced) ne doit pas être prise (F5).
      */
-    public function testClosurePlanIsNamedAfterTheClosedVenueAndWindow(): void
+    public function testClosurePlanIsNamedGenericAtBirthThenRefreshedWhenTheVenueIsKnown(): void
     {
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
         $entry = $this->makeClosureEntry($clubId, $season->getId());
-        $this->seedClosedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros');
 
         $this->provisioner->provisionPeriodPlan($entry->getId());
         $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame('Ajustement gymnase du 20/10/2025 au 26/10/2025', $plan->getName(), 'nom générique tant que le gymnase est inconnu');
+
+        $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Mauvais Gymnase', 'forced_venue'); // F5 : ne doit pas être pris
+        $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros', 'venue_closed');
+        $this->provisioner->refreshClosurePlanName($entry->getId());
+
+        $this->em->refresh($plan);
+        self::assertSame('Ajustement Gymnase Barros du 20/10/2025 au 26/10/2025', $plan->getName());
+    }
+
+    /**
+     * NR F2/inv. 12 — le recalage ne touche QUE les noms restés génériques : un plan déjà
+     * renommé par le gestionnaire n'est jamais réécrit.
+     */
+    public function testRefreshDoesNotOverwriteAManagerRenamedClosurePlan(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId());
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        $plan->setName('Mon nom à moi');
+        $this->em->flush();
+
+        $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros', 'venue_closed');
+        $this->provisioner->refreshClosurePlanName($entry->getId());
+
+        $this->em->refresh($plan);
+        self::assertSame('Mon nom à moi', $plan->getName(), 'inv. 12 : un nom renommé ne se fait pas écraser par le recalage');
+    }
+
+    /**
+     * NR F4 — un plan de semaine ENFANT (holiday) ne porte pas school_holiday_id ; le nom
+     * remonte le label de la MÈRE, sinon la semaine perdrait l'identité des vacances.
+     */
+    public function testHolidayWeekChildPlanInheritsTheHolidayLabelFromItsMother(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $holiday = $this->seedSchoolHoliday('Vacances de la Toussaint');
+        $mother = $this->makeHolidayEntry($clubId, $season->getId(), $holiday->getId());
+        $child = $this->makeHolidayWeekChild($clubId, $season->getId(), $mother->getId());
+
+        $this->provisioner->provisionPeriodPlan($child->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $child->getId()]);
 
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        self::assertSame('Ajustement Gymnase Barros du 20/10/2025 au 26/10/2025', $plan->getName());
+        self::assertSame('Planning de vacances de la Toussaint du 20/10/2025 au 26/10/2025', $plan->getName());
     }
 
     /**
@@ -277,7 +323,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         return '00000000-0000-4000-8000-000000000000';
     }
 
-    private function seedClosedVenueConstraint(string $clubId, string $seasonId, string $entryId, string $venueName): void
+    private function seedVenueConstraint(string $clubId, string $seasonId, string $entryId, string $venueName, string $type): void
     {
         $venue = new Venue;
         $venue->setClubId($clubId);
@@ -293,12 +339,31 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $constraint->setScopeTargetId($venue->getId());
         $constraint->setFamily(ConstraintFamily::FACILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setName('Salle fermée');
-        $constraint->setConfig(['type' => 'venue_closed']);
+        $constraint->setName('venue_closed' === $type ? 'Salle fermée' : 'Gymnase forcé');
+        $constraint->setConfig(['type' => $type]);
         $constraint->setCalendarEntryId($entryId);
         $constraint->setIsActive(true);
         $this->em->persist($constraint);
         $this->em->flush();
+    }
+
+    private function makeHolidayWeekChild(string $clubId, string $seasonId, string $parentEntryId): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($clubId);
+        $entry->setSeasonId($seasonId);
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setTitle('Semaine 1');
+        $entry->setStartDate(new DateTimeImmutable('2025-10-20'));
+        $entry->setEndDate(new DateTimeImmutable('2025-10-26'));
+        $entry->setIsDisruptive(false);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setParentEntryId($parentEntryId); // enfant : PAS de schoolHolidayId (comme le front)
+        $entry->setStatus(CalendarEntryStatus::ACTIVE);
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry;
     }
 
     private function seedSchoolHoliday(string $label): SchoolHolidayPeriod

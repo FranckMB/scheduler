@@ -176,6 +176,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
         $this->entityManager->persist($entity);
         $this->entityManager->flush();
+        $this->afterPersist($entity);
 
         return $this->mapEntityToOutput($entity);
     }
@@ -211,6 +212,7 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
         $this->updateEntityFromInput($entity, $input);
         $this->entityManager->flush();
+        $this->afterPersist($entity);
 
         return $this->mapEntityToOutput($entity);
     }
@@ -251,4 +253,11 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
     /** Purge the logical children of $entity before it is removed. No-op unless overridden. */
     protected function cascadeBeforeDelete(object $entity): void {}
+
+    /**
+     * Hook post-flush (POST/PUT) — no-op par défaut. Permet à un processor de réagir à un
+     * effet de bord une fois l'entité persistée (ex. recaler un nom dérivé d'une donnée qui
+     * arrive dans une requête voisine). Ne jamais y placer de logique métier obligatoire.
+     */
+    protected function afterPersist(object $entity): void {}
 }

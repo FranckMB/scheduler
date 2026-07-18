@@ -189,6 +189,29 @@ describe("PeriodTeams — default team selection (E3) + toggles", () => {
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
+  it("reprise: garde les rangs S+A par RANG même quand le Fanion est vide (pas par position)", () => {
+    // Aucune équipe Fanion (rang S/1) ; A (t2) + B (t3) occupés. Un slice() positionnel des
+    // groupes garderait A ET B (groups=[A,B]) ; le fix garde par RANG → A actif, B en pause.
+    entryState.data = { periodType: "holiday" };
+    teamsState.data = [T2, T3];
+    tiersState.data = [
+      { id: 1, label: "S", name: "Fanion", color: null },
+      { id: 2, label: "A", name: "Importante", color: null },
+      { id: 3, label: "B", name: "Loisir", color: null },
+    ];
+    render(<PeriodTeams calendarEntryId="fresh-holiday-no-fanion" />);
+    expect(createOverride).toHaveBeenCalledWith({ schedulePlanId: "plan-1", teamId: "t3", isActive: false });
+    expect(createOverride).toHaveBeenCalledTimes(1); // t2 (rang A) reste actif
+  });
+
+  it("fermeture: une équipe hors des rangs chargés (data drift) reste active — jamais désactivée", () => {
+    entryState.data = { periodType: "closure" };
+    const orphan = { ...T2, id: "torphan", priorityTierId: 9 }; // tier absent du set chargé
+    teamsState.data = [T1, orphan];
+    render(<PeriodTeams calendarEntryId="fresh-closure-orphan" />);
+    expect(createOverride).not.toHaveBeenCalled();
+  });
+
   it("« Tout le club » activates every team", async () => {
     overridesState.data = [{ id: "o2", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
     render(<PeriodTeams calendarEntryId="e1" />);

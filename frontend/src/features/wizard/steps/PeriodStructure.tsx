@@ -125,17 +125,19 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
       return;
     }
     claimPeriodSeed(calendarEntryId);
-    // Fermeture : tout le club actif → aucun retrait. Reprise : garder les 2 premiers rangs.
-    const keepActiveTierIds = new Set((isClosure ? groups : groups.slice(0, 2)).map((g) => g.tier?.id));
-    const toDeactivate = teams.filter((t) => !keepActiveTierIds.has(t.priorityTierId));
+    // Fermeture (structure verrouillée) : tout le club reste actif → aucun retrait d'office.
+    // Reprise : garder les 2 premiers RANGS (S+A) par RANG, pas par occupation — un club sans
+    // Fanion ne doit pas voir un rang inférieur promu par un slice() positionnel des groupes
+    // (les rangs vides sont absents de `groups`). Les rangs sont ordonnés par id (1=S…5=D).
+    const keepRankIds = new Set([...tiers].sort((a, b) => a.id - b.id).slice(0, 2).map((t) => t.id));
+    const toDeactivate = isClosure ? [] : teams.filter((t) => !keepRankIds.has(t.priorityTierId));
     if (0 === toDeactivate.length) {
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async default-selection writes settle
     setBusy(true);
     void Promise.allSettled(toDeactivate.map((t) => create.mutateAsync({ schedulePlanId: plan.id, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- groups/isClosure derive from teams+tiers+entry already in deps; listing them would re-fire on every render
-  }, [isLoading, planLoading, plan, entry, isClosure, teams, overrides, topTierId, calendarEntryId, create]);
+  }, [isLoading, planLoading, plan, entry, isClosure, teams, tiers, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
