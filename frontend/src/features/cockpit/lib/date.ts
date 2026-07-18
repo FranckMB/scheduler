@@ -69,3 +69,19 @@ export function daysUntil(from: string, to: string): number {
   const b = Date.parse(`${to}T00:00:00`);
   return Math.round((b - a) / 86_400_000);
 }
+
+/**
+ * Intersect an ISO [start, end] range with the season window; null when disjoint.
+ * Une période de calendrier vit DANS sa saison (un planning couvre une saison) :
+ * les vacances d'été chevauchent la frontière — on n'écrit jamais leurs jours
+ * hors-saison dans le calendrier de la saison courante (revue #260 round 1).
+ */
+export function clampRangeToSeason(
+  start: string,
+  end: string,
+  season: { startDate: string; endDate: string },
+): { startDate: string; endDate: string } | null {
+  const s = start > season.startDate ? start : season.startDate;
+  const e = end < season.endDate ? end : season.endDate;
+  return s <= e ? { startDate: s, endDate: e } : null;
+}

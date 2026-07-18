@@ -14,11 +14,15 @@ const IN_FLIGHT: Schedule["status"][] = ["PENDING", "GENERATING"];
 /**
  * List of the club's schedules. While any schedule is mid-generation, poll so the
  * grid reflects PENDING → GENERATING → COMPLETED without a Mercure subscriber.
+ * `enabled: false` for consumers that only need the list conditionally (e.g. the
+ * wizard's period-abandon guard) — avoids fetching/polling from pages that never
+ * read the data.
  */
-export function useSchedules() {
+export function useSchedules(enabled = true) {
   return useQuery({
     queryKey: ["schedules"],
     queryFn: planningApi.listSchedules,
+    enabled,
     staleTime: 30_000,
     refetchInterval: (query) => ((query.state.data ?? []).some((s) => IN_FLIGHT.includes(s.status)) ? 2500 : false),
   });

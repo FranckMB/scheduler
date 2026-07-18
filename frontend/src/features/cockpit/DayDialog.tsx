@@ -11,7 +11,9 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
-import { todayISO } from "./lib/date";
+import { useWorkingSeason } from "@/features/auth/queries";
+
+import { clampRangeToSeason, todayISO } from "./lib/date";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
 import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry } from "./queries";
 
@@ -163,6 +165,11 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const createHoliday = useCreateHolidayPeriod();
+  // Clamp saison (même règle que le radar) : une période vit dans sa saison ;
+  // les vacances à cheval (été) ne créent que leur part en-saison. null = vacance
+  // entièrement hors saison, ou saison pas encore chargée → pas de création.
+  const workingSeason = useWorkingSeason();
+  const clamped = null === workingSeason ? null : clampRangeToSeason(holiday.startDate, holiday.endDate, workingSeason);
 
   const entry = entries.find((e) => e.schoolHolidayId === holiday.id) ?? null;
   // ADR-0002 lot D-b : « overlay généré » = plan validé (chosenScheduleId), dérivé du plan.
@@ -207,14 +214,17 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <Button
             variant="outline"
             size="sm"
-            disabled={createHoliday.isPending}
+            disabled={createHoliday.isPending || null === clamped}
             onClick={async () => {
+              if (null === clamped) {
+                return;
+              }
               // mutateAsync (not a mutate-scoped onSuccess): the navigation must
               // fire even if the modal is dismissed mid-POST — otherwise the period
               // IS created but the wizard never opens, leaving an orphan entry.
               // The 409/error is surfaced by the global mutation-cache net (queryClient.ts).
               try {
-                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: holiday.startDate, endDate: holiday.endDate });
+                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: clamped.startDate, endDate: clamped.endDate });
                 adapt(created.id);
               } catch {
                 /* surfaced by the global mutation-cache net */

@@ -8,11 +8,12 @@ import type { Schedule } from "@/features/planning/api";
 const setSelectedScheduleId = vi.fn();
 const jumpTo = vi.fn();
 const startPeriodMode = vi.fn();
+const exitPeriodMode = vi.fn();
 const navigate = vi.fn();
 const run = vi.fn();
 
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
-vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode }) } }));
+vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode, exitPeriodMode }) } }));
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }) }));
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
 vi.mock("./queries", () => ({ useSchedulePlans: () => ({ data: [{ id: "p1", calendarEntryId: "entry-1", chosenScheduleId: null }, { id: "p2", calendarEntryId: "entry-2", chosenScheduleId: null }] }) }));
@@ -25,6 +26,7 @@ beforeEach(() => {
   setSelectedScheduleId.mockClear();
   jumpTo.mockClear();
   startPeriodMode.mockClear();
+  exitPeriodMode.mockClear();
   navigate.mockClear();
   run.mockClear();
 });
@@ -91,9 +93,11 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
-  it("eye on an in-progress SEASON planning opens the wizard's generation step", async () => {
+  it("eye on an in-progress SEASON planning opens the wizard's generation step, resetting a stale period mode", async () => {
     open([plan({ id: "v1", status: "COMPLETED" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
+    // Un mode période persisté générerait le plan de PÉRIODE — reset obligatoire.
+    expect(exitPeriodMode).toHaveBeenCalled();
     expect(jumpTo).toHaveBeenCalledWith("generate");
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });

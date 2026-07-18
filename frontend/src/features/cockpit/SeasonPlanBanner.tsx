@@ -44,6 +44,9 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
       navigate("/planning");
       return;
     }
+    // Même racine que la modale : un mode période persisté ferait générer le
+    // plan de PÉRIODE à la place du socle — reset avant d'ouvrir la génération.
+    useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");
   };

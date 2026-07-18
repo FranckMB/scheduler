@@ -98,6 +98,10 @@ export function SeasonSchedulesModal({ schedules, onClose }: SeasonSchedulesModa
       navigate("/planning");
       return;
     }
+    // Le mode période est PERSISTÉ (localStorage) : sans reset, « reprendre le
+    // planning de saison » rouvrirait le wizard période et générerait une version
+    // du plan de PÉRIODE — mauvaise cible silencieuse (revue #260 round 1).
+    useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");
   };

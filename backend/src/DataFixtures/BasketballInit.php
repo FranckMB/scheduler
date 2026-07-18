@@ -895,7 +895,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             // SM2
             ['team' => $sm2, 'venue' => 'vJdr', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            //SF2
+            // SF2
             ['team' => $sf2, 'venue' => 'vJdr', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
             // SF1
             ['team' => $sf1, 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],

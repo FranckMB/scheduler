@@ -3,8 +3,11 @@ import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeft
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router-dom";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry, useDeleteEntry, useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { listSchedules } from "@/features/planning/api";
 import { useSchedules } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -89,12 +92,18 @@ export function WizardPage() {
   const recapValidation = useStepValidation("recap");
   const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
 
+  // « On part » — lu par le prédicat du blocker au moment de la navigation (les
+  // valeurs de render y sont STALE : react-router enregistre le prédicat en
+  // useEffect, donc une nav déclenchée dans le même cycle voit l'ancien état).
+  const leavingRef = useRef(false);
+
   // The period mode is persisted (localStorage). If its entry was deleted in the
   // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).
   // The query is meta.silent404 — this toast is the only, explicit, feedback.
   useEffect(() => {
     if (periodMode && periodEntryError instanceof HTTPError && 404 === periodEntryError.response.status) {
       toast.error("Cette période n'existe plus — retour à l'accueil.");
+      leavingRef.current = true;
       exitPeriodMode();
       navigate("/");
     }
@@ -153,22 +162,37 @@ export function WizardPage() {
   // vacances. Quand le plan de la période n'a AUCUNE version, quitter (bouton ou
   // navigation SPA) propose de retirer la période. Fail-closed : donnée plan/versions
   // pas encore chargée → on ne propose PAS la suppression (jamais de delete sur
-  // donnée inconnue — même règle que DayDialog).
-  const periodPlan = useSchedulePlanForEntry(periodMode ? calendarEntryId : null);
-  const wizardSchedules = useSchedules();
-  const periodPlanId = periodPlan.data?.id ?? null;
+  // donnée inconnue — même règle que DayDialog). Le cache sert à ARMER le dialogue ;
+  // la décision destructive, elle, se prend sur une lecture FRAÎCHE (confirmAbandon).
+  const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
+  const periodPlanId = periodAnchor.planId;
+  const wizardSchedules = useSchedules(periodMode);
   const periodPlanEmpty =
     periodMode
-    && undefined !== periodPlan.data
-    && undefined !== wizardSchedules.data
+    && periodAnchor.ready
     && null !== periodPlanId
+    && undefined !== wizardSchedules.data
     && !wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
   const deleteEntry = useDeleteEntry();
+  const queryClient = useQueryClient();
   const [quitAsked, setQuitAsked] = useState(false);
-  const blocker = useBlocker(({ nextLocation }) => periodMode && periodPlanEmpty && "/wizard" !== nextLocation.pathname);
+  // Latest-value : le prédicat est enregistré en useEffect par react-router — au
+  // moment d'une navigation il closure sur le render PRÉCÉDENT. Les refs portent
+  // l'état courant (armé ? en train de partir ?) sans dépendre du cycle de render :
+  // sans elles, le navigate() post-confirmation est re-bloqué et le dialogue
+  // se ré-ouvre après coup (revue #260 round 1).
+  const guardArmedRef = useRef(false);
+  useEffect(() => {
+    // Post-commit, comme l'enregistrement du prédicat par react-router : la ref est
+    // à jour avant toute navigation utilisateur.
+    guardArmedRef.current = periodMode && periodPlanEmpty;
+  });
+  const abandoningRef = useRef(false);
+  const blocker = useBlocker(({ nextLocation }) => guardArmedRef.current && !leavingRef.current && "/wizard" !== nextLocation.pathname);
   const abandonOpen = quitAsked || "blocked" === blocker.state;
 
   const finishQuit = () => {
+    leavingRef.current = true;
     exitPeriodMode();
     navigate("/");
   };
@@ -179,20 +203,46 @@ export function WizardPage() {
     }
     finishQuit();
   };
-  const confirmAbandon = () => {
+  const confirmAbandon = async () => {
+    if (abandoningRef.current) {
+      return;
+    }
+    abandoningRef.current = true;
     const entryId = calendarEntryId;
+    const planId = periodPlanId;
+    // Re-vérification FRAÎCHE avant le geste destructif : le cache ["schedules"]
+    // peut être en retard d'une génération lancée à l'instant (l'invalidation ne
+    // part qu'au onSuccess du launch) — supprimer sur cette foi détruirait la
+    // version en vol via la cascade serveur. Fetch muet → on ne supprime PAS.
+    let stillEmpty = false;
+    try {
+      const fresh = await queryClient.fetchQuery({ queryKey: ["schedules"], queryFn: listSchedules, staleTime: 0 });
+      stillEmpty = null !== planId && !fresh.some((s) => s.schedulePlanId === planId);
+    } catch {
+      // Fetch muet → stillEmpty reste false : on ne supprime jamais sur donnée inconnue.
+    }
     // Sortir du mode période AVANT le delete : ça désactive useCalendarEntry
     // (sinon son 404 post-suppression déclenche le toast « n'existe plus »).
+    leavingRef.current = true;
     exitPeriodMode();
-    if (null !== entryId) {
-      deleteEntry.mutate(entryId, { onSuccess: () => toast.success("Période retirée du calendrier") });
-    }
     setQuitAsked(false);
+    if (stillEmpty && null !== entryId) {
+      // .then/.catch sur la promesse (pas un callback mutate()) : ils survivent au
+      // démontage du wizard — le toast de succès arrive, et un échec est toasté
+      // par le filet global MutationCache.onError (useDeleteEntry n'a pas d'onError).
+      deleteEntry
+        .mutateAsync(entryId)
+        .then(() => toast.success("Période retirée du calendrier"))
+        .catch(() => { /* toasté par le filet global (queryClient.ts) */ });
+    } else if (!stillEmpty) {
+      toast.success("Une génération existe pour cette période — elle est conservée.");
+    }
     if ("blocked" === blocker.state) {
       blocker.proceed();
     } else {
       navigate("/");
     }
+    abandoningRef.current = false;
   };
   const keepPeriod = () => {
     setQuitAsked(false);
@@ -226,7 +276,7 @@ export function WizardPage() {
         description="Aucun planning n'a été généré pour cette période : elle sera retirée du calendrier. Vous pourrez la recréer via « Adapter »."
         confirmLabel="Retirer la période"
         cancelLabel="Rester sur l'ajustement"
-        onConfirm={confirmAbandon}
+        onConfirm={() => void confirmAbandon()}
         onCancel={keepPeriod}
       />
       <div className="flex flex-col gap-6 md:flex-row">
