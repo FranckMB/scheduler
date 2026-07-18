@@ -526,10 +526,15 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * E6 / correctif F2 : recale le nom des plans de FERMETURE une fois la datée `venue_closed`
-     * connue (elle naît après l'entrée, 2 POST). Ne recale QUE les noms encore AUTO — un
-     * renommage gestionnaire (inv. 12) ne suit pas le gabarit et n'est jamais écrasé. Recaler
-     * même un auto DÉJÀ résolu couvre le RE-CIBLAGE du gymnase (Gym A → Gym B).
+     * E6 / correctif F2 : recale le nom d'un plan de FERMETURE une fois la datée `venue_closed`
+     * connue (elle naît après l'entrée, 2 POST). Le nom n'est recalé QUE tant qu'il vaut ENCORE
+     * le générique de naissance (« Ajustement gymnase du … au … ») — comparé à l'octet près, pas
+     * par gabarit : dès qu'il est résolu OU renommé par le gestionnaire (inv. 12), il est figé.
+     *
+     * Conséquence assumée : re-cibler le gymnase d'UNE MÊME fermeture ne renomme pas (le nom est
+     * gelé à la 1re résolution) — un vrai changement de gymnase se fait en créant une nouvelle
+     * fermeture (nouvelle entrée → nouveau plan, correctement nommé). Ce compromis protège inv. 12
+     * de façon absolue : aucune heuristique de nom ne peut confondre un renommage avec un auto.
      *
      * Best-effort côté appelant (ConstraintStateProcessor l'entoure d'un try/catch) : un nom est
      * cosmétique et ne doit jamais faire échouer l'écriture de la contrainte, déjà committée.
@@ -543,28 +548,26 @@ final class SchedulePlanProvisioner
 
         // Le plan de la fermeture (mère) ET ceux de ses semaines enfants.
         $rows = $this->entityManager->getConnection()->fetchAllAssociative(
-            'SELECT p.id AS pid, p.name AS name, e.start_date, e.end_date FROM schedule_plan p '
+            'SELECT p.id AS pid, e.start_date, e.end_date FROM schedule_plan p '
             . 'JOIN calendar_entry e ON e.id = p.calendar_entry_id '
             . 'WHERE p.type = \'CLOSURE\' AND (e.id = :src OR e.parent_entry_id = :src)',
             ['src' => $sourceEntryId],
         );
         foreach ($rows as $r) {
-            $current = (string) $r['name'];
-            // Un nom AUTO suit toujours « Ajustement … du jj/mm/aaaa au jj/mm/aaaa » (générique OU
-            // gymnase résolu). Un renommage gestionnaire ne colle pas à ce gabarit → protégé.
-            if (1 !== preg_match('#^Ajustement .+ du \d{2}/\d{2}/\d{4} au \d{2}/\d{2}/\d{4}$#u', $current)) {
-                continue;
-            }
-            $newName = $this->closurePlanName($venue, new DateTimeImmutable((string) $r['start_date']), new DateTimeImmutable((string) $r['end_date']));
-            if ($newName === $current) {
-                continue; // déjà à jour (gymnase inchangé)
-            }
-            // UPDATE brut : esquive le season_filter (le plan peut vivre dans une autre saison que
-            // l'active — cf. le reste du provisioner), bump `version` à la main (pas de flush ORM →
-            // pas d'OptimisticLock), et reste étanche (RLS scope par club).
+            $start = new DateTimeImmutable((string) $r['start_date']);
+            $end = new DateTimeImmutable((string) $r['end_date']);
+            // Compare-and-set ATOMIQUE sur le nom générique : ne recale QUE si le nom est encore
+            // exactement celui de naissance. Un renommage concurrent (chemin ORM) fait 0 ligne —
+            // pas de TOCTOU, pas de lost update. UPDATE brut : esquive le season_filter (le plan
+            // peut vivre hors saison active), bump `version` à la main (pas de flush ORM → pas
+            // d'OptimisticLock), étanche (RLS scope par club).
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE schedule_plan SET name = :name, updated_at = now(), version = version + 1 WHERE id = :id',
-                ['name' => $newName, 'id' => (string) $r['pid']],
+                'UPDATE schedule_plan SET name = :name, updated_at = now(), version = version + 1 WHERE id = :id AND name = :generic',
+                [
+                    'name' => $this->closurePlanName($venue, $start, $end),
+                    'id' => (string) $r['pid'],
+                    'generic' => $this->closurePlanName(null, $start, $end),
+                ],
             );
         }
     }
@@ -809,16 +812,18 @@ final class SchedulePlanProvisioner
     }
 
     /**
-     * Nom du gymnase fermé = scopeTargetId de la datée `venue_closed`. Filtré sur le TYPE
-     * (F5 : FACILITY couvre aussi forced/preferred/forbidden Venue — un autre FACILITY daté
-     * ne doit pas être pris) ; `created_at` pour un choix déterministe s'il y en a plusieurs.
+     * Nom du gymnase fermé = scopeTargetId de la datée `venue_closed`. Filtré STRICTEMENT sur
+     * `config.type = 'venue_closed'` (R3-D : FACILITY couvre aussi forced/preferred/forbidden
+     * Venue — un type absent ou autre ne doit JAMAIS fournir un gymnase pour le nom ; en cas de
+     * doute on garde le nom générique plutôt qu'un mauvais gymnase). `created_at` pour un choix
+     * déterministe s'il y en a plusieurs.
      */
     private function closedVenueName(string $sourceEntryId): ?string
     {
         $name = $this->entityManager->getConnection()->fetchOne(
             'SELECT v.name FROM venue v JOIN "constraint" c ON c.scope_target_id = v.id '
             . 'WHERE c.calendar_entry_id = :eid AND c.family = :fam AND c.is_active = true '
-            . 'AND (c.config->>\'type\' = \'venue_closed\' OR c.config->>\'type\' IS NULL) '
+            . 'AND c.config->>\'type\' = \'venue_closed\' '
             . 'ORDER BY c.created_at ASC LIMIT 1',
             ['eid' => $sourceEntryId, 'fam' => ConstraintFamily::FACILITY->value],
         );
@@ -828,7 +833,11 @@ final class SchedulePlanProvisioner
 
     private function closurePlanName(?string $venue, DateTimeImmutable $start, DateTimeImmutable $end): string
     {
-        return mb_substr('Ajustement ' . ($venue ?? 'gymnase') . ' ' . $this->windowSuffix($start, $end), 0, 180);
+        // R3-B : tronquer le GYMNASE (pas la phrase entière) — le suffixe daté doit TOUJOURS
+        // survivre à la limite de 180 (SchedulePlan.name), sinon le nom ne serait plus comparable
+        // au générique et le compare-and-set ne recalerait plus jamais. « Ajustement » (11) +
+        // gymnase (≤140) + espace (1) + suffixe (~27) ≤ 179.
+        return 'Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' ' . $this->windowSuffix($start, $end);
     }
 
     private function windowSuffix(DateTimeImmutable $start, DateTimeImmutable $end): string

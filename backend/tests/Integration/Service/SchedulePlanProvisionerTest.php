@@ -252,8 +252,9 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
     }
 
     /**
-     * NR F2/inv. 12 — le recalage ne touche QUE les noms restés génériques : un plan déjà
-     * renommé par le gestionnaire n'est jamais réécrit.
+     * NR F2/inv. 12 (R3-A) — le recalage ne touche QUE le générique de naissance (compare-and-set
+     * à l'octet près). Un renommage gestionnaire — MÊME s'il ressemble au nom auto « Ajustement …
+     * du … au … » — n'est jamais écrasé (la vieille regex de gabarit le faisait, à tort).
      */
     public function testRefreshDoesNotOverwriteAManagerRenamedClosurePlan(): void
     {
@@ -263,21 +264,23 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $this->provisioner->provisionPeriodPlan($entry->getId());
         $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        $plan->setName('Mon nom à moi');
+        // Renommage qui ÉPOUSE le gabarit auto — piège de la regex du round 2.
+        $plan->setName('Ajustement Salle Léo du 20/10/2025 au 26/10/2025');
         $this->em->flush();
 
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
 
         $this->em->refresh($plan);
-        self::assertSame('Mon nom à moi', $plan->getName(), 'inv. 12 : un nom renommé ne se fait pas écraser par le recalage');
+        self::assertSame('Ajustement Salle Léo du 20/10/2025 au 26/10/2025', $plan->getName(), 'inv. 12 : un nom renommé (même en forme de gabarit) n\'est jamais écrasé');
     }
 
     /**
-     * NR R2-B — re-cibler la fermeture (Gym A → Gym B) recale le nom AUTO : un nom auto déjà
-     * résolu n'est pas figé, seul un renommage gestionnaire l'est.
+     * NR R3 — le nom est GELÉ à la 1re résolution (compare-and-set sur le générique). Re-cibler
+     * le gymnase d'une MÊME fermeture ne renomme donc pas : compromis assumé qui protège inv. 12
+     * de façon absolue (un vrai changement de gymnase = nouvelle fermeture → nouveau plan nommé).
      */
-    public function testRefreshRetargetsWhenTheClosedVenueChanges(): void
+    public function testRefreshFreezesTheNameOnceResolvedEvenIfTheVenueIsRetargeted(): void
     {
         $clubId = $this->seedClub();
         $season = $this->makeSeason($clubId);
@@ -291,13 +294,13 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $this->em->refresh($plan);
         self::assertSame('Ajustement Gymnase A du 20/10/2025 au 26/10/2025', $plan->getName());
 
-        // Re-ciblage : Gym A retiré (inactif), Gym B posé — le nom AUTO suit.
+        // Re-ciblage sur la même entrée : le nom résolu est gelé (ce n'est plus le générique).
         $closureA->setIsActive(false);
         $this->em->flush();
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase B', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
         $this->em->refresh($plan);
-        self::assertSame('Ajustement Gymnase B du 20/10/2025 au 26/10/2025', $plan->getName());
+        self::assertSame('Ajustement Gymnase A du 20/10/2025 au 26/10/2025', $plan->getName(), 'nom gelé à la 1re résolution — re-ciblage = nouvelle fermeture');
     }
 
     /**
