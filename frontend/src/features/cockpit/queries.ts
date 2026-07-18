@@ -1,4 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { HTTPError } from "ky";
 
 import { createConstraint } from "@/features/wizard/api";
 import { errorMessage } from "@/shared/lib/errorMessage";
@@ -230,30 +231,46 @@ export function useCreateHolidayPeriod() {
 /**
  * P2-5 E1 — découpe une période mère en SEMAINES : une entrée ENFANT par semaine
  * cochée (parentEntryId), type hérité, titre E6 (« {mère} — semaine du {lundi} »).
- * Chaque enfant naît avec son plan (rail 1 entrée = 1 plan). Séquentiel : un échec
- * au milieu laisse les enfants déjà créés (visibles, reprenables ou supprimables) —
- * le toast d'erreur global signale l'échec, pas de rollback silencieux.
+ * Chaque enfant naît avec son plan (rail 1 entrée = 1 plan).
+ *
+ * Reprenable (revue #262 round 1) : un 422 « déjà découpée/chevauche » est SAUTÉ
+ * (la semaine existe — un retry après échec partiel ne meurt plus dessus) ; une
+ * autre erreur est collectée et relevée seulement si RIEN n'a été créé. Invalidation
+ * en onSettled : même un échec partiel rafraîchit le cache (les enfants créés
+ * apparaissent, les chips « à créer » listent les manquantes).
  */
 export function useCreateWeekChildren() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: { mother: CalendarEntry; weeks: { startDate: string; endDate: string; monday: string }[] }) => {
       const created: CalendarEntry[] = [];
+      let firstHardError: unknown = null;
       for (const week of payload.weeks) {
-        created.push(
-          await cockpitApi.createCalendarEntry({
-            kind: "period",
-            periodType: payload.mother.periodType,
-            title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`,
-            startDate: week.startDate,
-            endDate: week.endDate,
-            parentEntryId: payload.mother.id,
-          }),
-        );
+        try {
+          created.push(
+            await cockpitApi.createCalendarEntry({
+              kind: "period",
+              periodType: payload.mother.periodType,
+              title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`,
+              startDate: week.startDate,
+              endDate: week.endDate,
+              parentEntryId: payload.mother.id,
+            }),
+          );
+        } catch (error) {
+          const status = error instanceof HTTPError ? error.response.status : null;
+          if (422 === status) {
+            continue; // semaine déjà découpée — l'état visé existe, on poursuit
+          }
+          firstHardError = firstHardError ?? error;
+        }
+      }
+      if (null !== firstHardError && 0 === created.length) {
+        throw firstHardError;
       }
       return created;
     },
-    onSuccess: () => invalidateEntries(queryClient),
+    onSettled: () => invalidateEntries(queryClient),
   });
 }
 

@@ -82,6 +82,18 @@ final class WeekChildEntryTest extends WebTestCase
         $this->postWeekChildExpecting(422, $user, $childId, 'closure', 'Petit-enfant interdit', '2026-11-09', '2026-11-15');
     }
 
+    public function testAChildWindowMustTouchTheMotherAndNotOverlapASibling(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        $motherId = $this->postPeriod($user, 'closure', 'Travaux', '2026-11-12', '2026-11-18');
+        $this->postWeekChild($user, $motherId, 'closure', 'Semaine 1', '2026-11-09', '2026-11-15');
+
+        // Hors de la fenêtre mère → 422 (elle hériterait les datées sans raison).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Hors mère', '2026-12-07', '2026-12-13');
+        // Chevauche la semaine 1 (même partiellement) → 422, pas seulement le même lundi.
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Chevauche', '2026-11-10', '2026-11-16');
+    }
+
     public function testABlockGeneratedMotherRefusesWeekSplitting(): void
     {
         [$user, $club, $season] = $this->createClubWithSeason();

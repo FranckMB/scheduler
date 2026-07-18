@@ -116,12 +116,32 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // d'impact tant que le plan n'est pas validé (revue #260 round 1).
   const inProgressEntries = roots.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
 
-  // Mères découpées à COUVRIR : au moins une semaine sans version validée (le radar
-  // est une to-do — tout validé, la carte s'efface). Tenues hors cap et hors filtre
-  // « à venir » : une couverture incomplète reste à traiter jusqu'au bout.
+  // Mères découpées à COUVRIR : une semaine existante non validée OU une semaine
+  // MANQUANTE (décochée au picker, échec partiel — revue #262 : sans chip « à
+  // créer », une semaine décochée devenait à jamais implanifiable). Visible tant
+  // que la DERNIÈRE fenêtre (mère ou enfants — une semaine pleine déborde la
+  // mère) n'est pas passée ; tout couvert → la carte s'efface (to-do).
+  const motherWeekSlots = (m: CalendarEntry): { week: WeekWindow; child: CalendarEntry | null }[] => {
+    const children = childrenByParent.get(m.id) ?? [];
+    if (null === workingSeason) {
+      // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
+      return children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c }));
+    }
+    return weeksCovering(m.startDate, m.endDate, workingSeason).map((week) => ({
+      week,
+      child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null,
+    }));
+  };
   const splitMothers = roots.filter((e) => {
     const children = childrenByParent.get(e.id);
-    return undefined !== children && e.endDate >= today && children.some((c) => !activeByEntry.has(c.id));
+    if (undefined === children) {
+      return false;
+    }
+    const lastEnd = children.reduce((mx, c) => (c.endDate > mx ? c.endDate : mx), e.endDate);
+    if (lastEnd < today) {
+      return false;
+    }
+    return motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id));
   });
 
   // Adapter une période longue = choisir ses semaines — sauf déjà découpée (chips)
@@ -132,7 +152,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     const planId = (plans ?? []).find((p) => p.calendarEntryId === entry.id)?.id ?? null;
     const blockGenerated = null !== planId && plansWithVersions.has(planId);
     const longPeriod = daysUntil(entry.startDate, entry.endDate) + 1 > 7;
-    if (longPeriod && !childrenByParent.has(entry.id) && !blockGenerated && null !== workingSeason) {
+    // schedules pas résolus → « bloc généré ? » est INCONNU : offrir le picker
+    // ferait 422 chaque semaine (fail-open, revue #262) — on adapte direct.
+    if (longPeriod && !childrenByParent.has(entry.id) && !schedulesUnresolved && !blockGenerated && null !== workingSeason) {
       setPickerFor(entry);
       return;
     }
@@ -260,19 +282,38 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ))}
 
       {/* Couverture d'une période DÉCOUPÉE (P2-5 E1) : l'état par semaine, d'un
-          coup d'œil — validée → Voir, sinon → Reprendre. Visible tant qu'une
-          semaine n'est pas couverte. */}
+          coup d'œil — validée → Voir, en cours/à faire → Reprendre, MANQUANTE
+          (décochée, échec partiel) → « + créer » (le dead-end de la revue #262).
+          Visible tant qu'une semaine n'est pas couverte. */}
       {splitMothers.map((m) => {
-        const children = [...(childrenByParent.get(m.id) ?? [])].sort((a, b) => a.startDate.localeCompare(b.startDate));
-        const covered = children.filter((c) => activeByEntry.has(c.id)).length;
+        const slots = motherWeekSlots(m);
+        const covered = slots.filter(({ child }) => null !== child && activeByEntry.has(child.id)).length;
         return (
-          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={`${covered}/${children.length} semaine${children.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}`}>
-            {children.map((c) => {
-              const activeId = activeByEntry.get(c.id) ?? null;
-              const wip = inProgressEntryIds.has(c.id);
+          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={`${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}`}>
+            {slots.map(({ week, child }) => {
+              if (null === child) {
+                return (
+                  <Button
+                    key={`new-${week.monday}`}
+                    variant="outline"
+                    size="sm"
+                    disabled={createWeekChildren.isPending}
+                    onClick={() =>
+                      createWeekChildren.mutate(
+                        { mother: m, weeks: [week] },
+                        { onSuccess: (created) => created[0] && adapt(created[0].id) },
+                      )
+                    }
+                  >
+                    {`+ sem. du ${frDateShort(week.startDate)}`}
+                  </Button>
+                );
+              }
+              const activeId = activeByEntry.get(child.id) ?? null;
+              const wip = inProgressEntryIds.has(child.id);
               return (
-                <Button key={c.id} variant={null !== activeId ? "ghost" : "outline"} size="sm" onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(c.id))}>
-                  {`sem. du ${frDateShort(c.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
+                <Button key={child.id} variant={null !== activeId ? "ghost" : "outline"} size="sm" onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(child.id))}>
+                  {`sem. du ${frDateShort(child.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
                 </Button>
               );
             })}

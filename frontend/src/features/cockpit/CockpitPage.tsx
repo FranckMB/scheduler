@@ -68,9 +68,11 @@ export function CockpitPage() {
       ) : null}
       <SeasonPlanBanner schedules={schedules} socleValidated={socleValidated} loading={schedulesLoading} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        {/* P2-5 E1 : la bande calendrier ne montre que les entrées RACINES — les
-            semaines enfants sont accessibles via leur mère (DayDialog / radar). */}
-        <MonthCalendar year={cursor.year} month={cursor.month} entries={entries.filter((e) => null === e.parentEntryId)} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
+        {/* P2-5 E1 : mères ET semaines enfants s'affichent — une semaine pleine
+            DÉBORDE sa mère (queue/tête hors incident), la filtrer laisserait ces
+            jours sans marqueur ni accès (revue #262 round 1). Le calendrier
+            empile les entrées chevauchantes comme avant. */}
+        <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
         <RadarPanel
           entries={radarEntries}
           holidays={radarHolidays}

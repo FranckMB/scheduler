@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
-import { addDays, todayISO } from "./lib/date";
+import { addDays, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -122,37 +122,61 @@ describe("RadarPanel", () => {
   });
 
   // P2-5 E1 : une période DÉCOUPÉE porte une carte de COUVERTURE (chips par
-  // semaine), et sa carte classique disparaît.
+  // semaine), et sa carte classique disparaît. Semaines ALIGNÉES sur le vrai
+  // calendrier (mondayOf) : la carte calcule les slots via weeksCovering.
   it("a split mother shows one coverage card with per-week chips, no classic closure card", async () => {
     const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-15");
+    const w2s = addDays(w1s, 7);
     plansData = [
       { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
       { id: "pl-w2", type: "CLOSURE", name: "S2", calendarEntryId: "w2", chosenScheduleId: null, teamSelectionInitialized: false },
     ];
     renderRadar({
       entries: [
-        closure({ id: "m1", title: "Barros en travaux", startDate: FUTURE, endDate: FUTURE_END }),
-        closure({ id: "w1", title: "Barros — semaine 1", parentEntryId: "m1", startDate: "2999-01-04", endDate: "2999-01-10" }),
-        closure({ id: "w2", title: "Barros — semaine 2", parentEntryId: "m1", startDate: "2999-01-11", endDate: "2999-01-17" }),
+        // Mère du jeudi S1 au mardi S2 → weeksCovering rend exactement 2 semaines.
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w2s, 1) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+        closure({ id: "w2", title: "S2", parentEntryId: "m1", startDate: w2s, endDate: addDays(w2s, 6) }),
       ],
     });
     expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
     // Semaine validée → ✅ (Voir) ; à faire → Reprendre (adapt).
-    expect(screen.getByRole("button", { name: /sem\. du 4 janv\. 2999 ✅/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /sem\. du 11 janv\. 2999 · à faire/ }));
+    expect(screen.getByRole("button", { name: /✅/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /· à faire/ }));
     // Une seule carte pour la mère : pas de ClosureRadarItem classique en plus.
     expect(screen.queryByText(/à replacer/)).not.toBeInTheDocument();
   });
 
+  // Une semaine DÉCOCHÉE au picker (ou perdue sur échec partiel) reste
+  // planifiable : chip « + créer » (dead-end de la revue #262 round 1).
+  it("a missing week shows a « + créer » chip on the coverage card", () => {
+    const w1s = mondayOf("2999-01-15");
+    plansData = [
+      { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+    ];
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w1s, 8) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+        // Semaine 2 jamais créée — décochée au picker.
+      ],
+    });
+    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /\+ sem\. du/ })).toBeInTheDocument();
+  });
+
   it("a fully covered split mother leaves the radar (to-do, not inventory)", () => {
+    const w1s = mondayOf("2999-01-15");
     plansData = [
       { id: "pl-w1", type: "CLOSURE", name: "S1", calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
     ];
     conflictsData = { conflicts: [], seasonPlanChosen: true };
     renderRadar({
       entries: [
-        closure({ id: "m1", title: "Barros en travaux", startDate: FUTURE, endDate: FUTURE_END }),
-        closure({ id: "w1", title: "Barros — semaine 1", parentEntryId: "m1", startDate: "2999-01-04", endDate: "2999-01-10" }),
+        // Mère entièrement DANS la semaine 1 → une seule semaine, couverte + validée.
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 1), endDate: addDays(w1s, 4) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
       ],
     });
     expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();

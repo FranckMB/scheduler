@@ -186,6 +186,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const chosenOfChild = (childId: string): string | null => (allPlans ?? []).find((p) => p.calendarEntryId === childId)?.chosenScheduleId ?? null;
   // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
   const schedulesQuery = useSchedules();
+  const schedulesResolved = undefined !== schedulesQuery.data;
   const blockGenerated = undefined !== plan.data && null !== plan.data && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.data?.id);
   const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
   const createWeekChildren = useCreateWeekChildren();
@@ -201,9 +202,11 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     navigate("/planning");
   };
   // Même règle que le radar : période longue → choix des semaines ; sinon direct.
+  // schedules pas résolus → « bloc généré ? » inconnu : adapter direct (fail-open
+  // du picker = 422 chaque semaine, revue #262).
   const requestAdapt = (target: CalendarEntry) => {
     const longPeriod = daysUntil(target.startDate, target.endDate) + 1 > 7;
-    if (longPeriod && 0 === weekChildren.length && !blockGenerated && null !== workingSeason) {
+    if (longPeriod && 0 === weekChildren.length && schedulesResolved && !blockGenerated && null !== workingSeason) {
       setPickerFor(target);
       return;
     }
@@ -239,13 +242,38 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           retour fondateur 2026-07-18, P2-5 E2 : l'exclusion `ete` est levée). */}
       {null !== entry && weekChildren.length > 0 ? (
         // P2-5 E1 — période DÉCOUPÉE : la couverture par semaine, même lecture
-        // que la carte radar (validée → Voir, sinon → Reprendre).
+        // que la carte radar (validée → Voir, sinon → Reprendre, MANQUANTE → +
+        // créer — une semaine décochée reste planifiable, revue #262).
         <div className="flex flex-wrap justify-end gap-1">
-          {weekChildren.map((c) => {
-            const chosen = chosenOfChild(c.id);
+          {(null === workingSeason
+            ? weekChildren.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c as CalendarEntry | null }))
+            : weeksCovering(entry.startDate, entry.endDate, workingSeason).map((week) => ({
+              week,
+              child: weekChildren.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null,
+            }))
+          ).map(({ week, child }) => {
+            if (null === child) {
+              return (
+                <Button
+                  key={`new-${week.monday}`}
+                  variant="outline"
+                  size="sm"
+                  disabled={createWeekChildren.isPending}
+                  onClick={() =>
+                    createWeekChildren.mutate(
+                      { mother: entry, weeks: [week] },
+                      { onSuccess: (created) => created[0] && adapt(created[0].id) },
+                    )
+                  }
+                >
+                  {`+ sem. du ${frDateShort(week.startDate)}`}
+                </Button>
+              );
+            }
+            const chosen = chosenOfChild(child.id);
             return (
-              <Button key={c.id} variant={null !== chosen ? "ghost" : "outline"} size="sm" onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(c.id))}>
-                {`sem. du ${frDateShort(c.startDate)} ${null !== chosen ? "✅" : "· à faire"}`}
+              <Button key={child.id} variant={null !== chosen ? "ghost" : "outline"} size="sm" onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}>
+                {`sem. du ${frDateShort(child.startDate)} ${null !== chosen ? "✅" : "· à faire"}`}
               </Button>
             );
           })}

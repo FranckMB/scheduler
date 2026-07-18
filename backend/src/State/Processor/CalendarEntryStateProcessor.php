@@ -273,13 +273,22 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         if (null !== $parentPlanId && $this->planHasVersions($parentPlanId)) {
             throw new UnprocessableEntityHttpException('Cette période a déjà été adaptée d’un bloc : supprimez d’abord ses versions pour la découper en semaines.');
         }
-        // Anti-doublon (double-clic, re-découpage) : une semaine par lundi et par mère.
-        $duplicate = $this->entityManager->getConnection()->fetchOne(
-            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :pid AND start_date = :start LIMIT 1',
-            ['pid' => $parent->getId(), 'start' => (string) $input->startDate],
+        // La FENÊTRE de l'enfant doit toucher celle de la mère : une semaine que
+        // l'événement ne couvre pas hériterait ses contraintes datées sans raison.
+        $childStart = (string) $input->startDate;
+        $childEnd = (string) $input->endDate;
+        if ($childEnd < $parent->getStartDate()->format('Y-m-d') || $childStart > $parent->getEndDate()->format('Y-m-d')) {
+            throw new UnprocessableEntityHttpException('La semaine ne recouvre pas la période mère.');
+        }
+        // Anti-CHEVAUCHEMENT entre semaines d'une même mère (pas seulement le même
+        // lundi) : deux plans de semaine qui se recouvrent = deux overlays actifs
+        // possibles sur les mêmes jours, sans vainqueur défini (revue #262 round 1).
+        $overlap = $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :pid AND start_date <= :end AND end_date >= :start LIMIT 1',
+            ['pid' => $parent->getId(), 'start' => $childStart, 'end' => $childEnd],
         );
-        if (false !== $duplicate) {
-            throw new UnprocessableEntityHttpException('Cette semaine est déjà découpée pour cette période.');
+        if (false !== $overlap) {
+            throw new UnprocessableEntityHttpException('Cette semaine chevauche une semaine déjà découpée pour cette période.');
         }
     }
 
@@ -316,7 +325,12 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // P2-5 E1 : supprimer une MÈRE emporte ses semaines enfants — chacune par la
         // même cascade complète (plan + versions + réglages + reminders). Récursion
         // bornée par construction : un enfant n'est jamais parent (garde au POST).
+        // Verrou du plan-scope AVANT l'énumération : le POST d'un enfant concurrent
+        // tient le même verrou — énumérer avant laisserait survivre son enfant en
+        // orphelin au plan fantôme (TOCTOU, revue #262 round 1). Ré-entrant : les
+        // étapes plus bas le reprennent sans coût.
         if (\is_string($id) && '' !== $id) {
+            $this->schedulePlanProvisioner->lockPlanScope($id);
             foreach ($this->entityManager->getRepository(CalendarEntry::class)->findBy(['parentEntryId' => $id]) as $child) {
                 if (null === $clubId || $child->getClubId() === $clubId) {
                     $this->deleteEntryAndCascade(['id' => $child->getId()], $clubId);

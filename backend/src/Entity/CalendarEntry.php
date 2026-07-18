@@ -238,6 +238,16 @@ class CalendarEntry implements TenantOwnedInterface
         return $this->parentEntryId;
     }
 
+    /**
+     * P2-5 E1 — SOURCE UNIQUE de la règle d'héritage : les contraintes datées d'une
+     * semaine ENFANT vivent sur sa période MÈRE (le venue_closed décrit l'incident,
+     * pas la réponse). Entrée racine → elle-même.
+     */
+    public function datedConstraintSourceId(): string
+    {
+        return $this->parentEntryId ?? $this->id;
+    }
+
     public function setParentEntryId(?string $parentEntryId): self
     {
         $this->parentEntryId = $parentEntryId;
