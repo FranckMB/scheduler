@@ -32,7 +32,8 @@ use Symfony\Component\Mime\Email;
 )]
 final class HealthAlertCommand extends Command
 {
-    private const FROM_ADDRESS = 'ClubScheduler <no-reply@clubscheduler.fr>';
+    /** Même domaine expéditeur que tous les mails de l'app (SPF/DKIM alignés). */
+    private const FROM_ADDRESS = 'ClubScheduler <no-reply@clubscheduler.app>';
 
     public function __construct(
         private readonly AdminHealthService $healthService,
@@ -54,7 +55,11 @@ final class HealthAlertCommand extends Command
         $solver = $this->solverLast24h();
 
         $alerts = $this->evaluator->evaluate($health, $freshness, $solver);
-        $diff = $this->stateStore->transition($alerts);
+        // DEUX temps (revue #257) : preview (aucune écriture) → ENVOI → commit. Si le
+        // mailer lève, rien n'est commité : le job est marqué failed (visible au panneau)
+        // et le prochain tick RE-TENTE l'envoi — une panne SMTP transitoire ne peut pas
+        // avaler définitivement l'alerte d'un incident.
+        $diff = $this->stateStore->preview($alerts);
 
         if ([] === $diff['fired'] && [] === $diff['recovered']) {
             $io->writeln(\sprintf('No transition (%d check(s) currently firing).', \count($alerts)));
@@ -63,24 +68,28 @@ final class HealthAlertCommand extends Command
         }
 
         $recipients = $this->recipients();
-        if ([] === $recipients) {
-            // Pas de destinataire ≠ échec du check : l'état est déjà posé, on le signale.
+        if ([] !== $recipients) {
+            // UN SEUL email combiné (🔴 nouvelles + 🟢 rétablies) : un envoi, une
+            // atomicité naturelle — pas de fenêtre « fired parti, recovered perdu ».
+            $sections = [];
+            if ([] !== $diff['fired']) {
+                $sections[] = "Nouvelles alertes :\n" . implode("\n", array_map(static fn (array $alert): string => '• ' . $alert['message'], $diff['fired']));
+            }
+            if ([] !== $diff['recovered']) {
+                $sections[] = "De nouveau au vert :\n" . implode("\n", array_map(static fn (string $key): string => '• ' . $key, $diff['recovered']));
+            }
+            $subject = [] !== $diff['fired']
+                ? \sprintf('🔴 ClubScheduler — %d alerte(s)', \count($diff['fired']))
+                : \sprintf('🟢 ClubScheduler — %d check(s) rétabli(s)', \count($diff['recovered']));
+            $this->send($recipients, $subject, implode("\n\n", $sections));
+            $io->writeln(\sprintf('Transition email sent (%d fired, %d recovered).', \count($diff['fired']), \count($diff['recovered'])));
+        } else {
+            // Pas de destinataire : rien à envoyer — on committe quand même (l'état doit
+            // refléter la réalité, sinon la transition serait re-signalée à chaque tick).
             $io->warning('Alert transitions detected but no enabled superadmin to notify.');
-
-            return Command::SUCCESS;
         }
 
-        if ([] !== $diff['fired']) {
-            $lines = array_map(static fn (array $alert): string => '• ' . $alert['message'], $diff['fired']);
-            $this->send($recipients, \sprintf('🔴 ClubScheduler — %d alerte(s)', \count($diff['fired'])), implode("\n", $lines));
-            $io->writeln(\sprintf('Alert email sent (%d check(s) newly firing).', \count($diff['fired'])));
-        }
-
-        if ([] !== $diff['recovered']) {
-            $lines = array_map(static fn (string $key): string => '• ' . $key, $diff['recovered']);
-            $this->send($recipients, \sprintf('🟢 ClubScheduler — %d check(s) rétabli(s)', \count($diff['recovered'])), "De nouveau au vert :\n" . implode("\n", $lines));
-            $io->writeln(\sprintf('Recovery email sent (%d check(s) back to ok).', \count($diff['recovered'])));
-        }
+        $this->stateStore->commit($alerts);
 
         return Command::SUCCESS;
     }

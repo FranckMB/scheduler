@@ -35,32 +35,46 @@ final readonly class AdminDataFreshnessService
     public function referentials(): array
     {
         return [
-            $this->fromJobRun('school-holidays', 'Vacances scolaires', 'import-school-holidays'),
-            $this->fromJobRun('public-holidays', 'Jours fériés', 'import-public-holidays'),
-            $this->fromTables('ffbb-directory', 'Ligues & comités FFBB', ['ffbb_league', 'ffbb_committee']),
+            $this->fromImport('school-holidays', 'Vacances scolaires', 'import-school-holidays', 'school_holiday_period'),
+            $this->fromImport('public-holidays', 'Jours fériés', 'import-public-holidays', 'public_holiday'),
+            $this->fromTables('ffbb-directory', 'Ligues & comités FFBB', 'fetched_at', ['ffbb_league', 'ffbb_committee']),
         ];
     }
 
-    /** @return array{key: string, label: string, lastUpdatedAt: ?string, staleAfterDays: int, stale: bool} */
-    private function fromJobRun(string $key, string $label, string $jobKey): array
+    /**
+     * DOUBLE signal (revue #257, finding 3) : le dernier run RÉUSSI du job planifié
+     * (admin_job_run) OU la dernière ÉCRITURE de données (created_at de la table) —
+     * le plus récent des deux. Un import lancé en CLI direct (documenté dans
+     * commands.md) n'écrit pas de ligne admin_job_run mais crée des lignes de
+     * données : sans ce second signal, le board resterait « Périmé » après un
+     * import parfaitement réussi. (Limite assumée : un import direct qui ne crée
+     * AUCUNE ligne nouvelle ne rafraîchit pas le signal.).
+     *
+     * @return array{key: string, label: string, lastUpdatedAt: ?string, staleAfterDays: int, stale: bool}
+     */
+    private function fromImport(string $key, string $label, string $jobKey, string $dataTable): array
     {
-        $last = $this->connection()->fetchOne(
+        $lastRun = $this->connection()->fetchOne(
             'SELECT MAX(finished_at) FROM admin_job_run WHERE job_key = :job_key AND status = \'succeeded\'',
             ['job_key' => $jobKey],
         );
+        // Table du catalogue fermé ci-dessus — jamais un nom venu d'une entrée.
+        $lastData = $this->connection()->fetchOne(\sprintf('SELECT MAX(created_at) FROM %s', $dataTable));
 
-        return $this->row($key, $label, \is_string($last) ? $last : null, self::IMPORT_STALE_AFTER_DAYS);
+        $candidates = array_filter([$lastRun, $lastData], static fn (mixed $value): bool => \is_string($value));
+
+        return $this->row($key, $label, [] === $candidates ? null : max($candidates), self::IMPORT_STALE_AFTER_DAYS);
     }
 
     /** @param list<string> $tables
      * @return array{key: string, label: string, lastUpdatedAt: ?string, staleAfterDays: int, stale: bool} */
-    private function fromTables(string $key, string $label, array $tables): array
+    private function fromTables(string $key, string $label, string $timestampColumn, array $tables): array
     {
         $latest = null;
         foreach ($tables as $table) {
-            // Tables du catalogue fermé ci-dessus — jamais un nom venu d'une entrée.
+            // Tables/colonne du catalogue fermé ci-dessus — jamais un nom venu d'une entrée.
             // `fetched_at` = l'instant du dernier fetch FFBB (FfbbClubPopulator).
-            $value = $this->connection()->fetchOne(\sprintf('SELECT MAX(fetched_at) FROM %s', $table));
+            $value = $this->connection()->fetchOne(\sprintf('SELECT MAX(%s) FROM %s', $timestampColumn, $table));
             if (\is_string($value) && (null === $latest || $value > $latest)) {
                 $latest = $value;
             }

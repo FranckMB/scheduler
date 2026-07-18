@@ -45,7 +45,7 @@ export function AdminDashboardPage() {
   const jobs = useAdminJobs();
   const freshness = useAdminFreshness();
   const clubs = useAdminClubs(page, CLUBS_PER_PAGE, query);
-  const refreshing = overview.isFetching || health.isFetching || jobs.isFetching || clubs.isFetching;
+  const refreshing = overview.isFetching || health.isFetching || jobs.isFetching || clubs.isFetching || freshness.isFetching;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

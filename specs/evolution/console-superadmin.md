@@ -116,9 +116,12 @@ y compris sur les tentatives refusées.
   Anti-spam par état (`admin_alert_state`, ok→firing = 1 email, firing→firing = silence,
   firing→ok = email de rétablissement). Évaluation pure testée (`HealthAlertEvaluator`).
 - **Data-freshness board** ✅ **livré (2026-07-18)** : `GET /api/admin/freshness` + section console —
-  vacances scolaires / jours fériés (dernier import réussi, périmé > 100 j) et ligues/comités FFBB
-  (`fetched_at`, périmé > 400 j) ; « jamais importé » = périmé (fail-visible). Le job d'alerte
-  surveille la même liste : l'import auto mort en silence emaile.
+  vacances scolaires / jours fériés (dernier import réussi OU dernière écriture de données, le plus
+  récent — un import CLI direct compte ; périmé > 100 j) et ligues/comités FFBB (`fetched_at`,
+  périmé > 400 j) ; « jamais importé » = périmé (fail-visible). Le job d'alerte surveille la même
+  liste : l'import auto mort en silence emaile. **Hors board (assumé)** : la fiche club FFBB
+  (logo, contacts) est rafraîchie PAR CLUB (création + refresh manuel SA4/lot C), pas un
+  référentiel global — sa fraîcheur par-club viendrait avec un batch de rattrapage (à cadrer, §3).
 - **Kill switch génération** (mode maintenance) : suspendre globalement les générations pendant un incident.
 - **Coûts d'infra projetés à N clubs** : extrapolation charge solveur / ressources.
 - **Audit viewer** : qui a fait quoi — en particulier les actions **superadmin** elles-mêmes.

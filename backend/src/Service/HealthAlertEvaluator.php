@@ -14,8 +14,8 @@ namespace App\Service;
  */
 final readonly class HealthAlertEvaluator
 {
-    /** Miroir du seuil d'avertissement du dashboard (AdminHealthService). */
-    private const BACKLOG_THRESHOLD = 100;
+    /** Filet si le payload santé ne porte pas son seuil (backlogWarningThreshold). */
+    private const BACKLOG_THRESHOLD_FALLBACK = 100;
 
     /** INFEASIBLE : > 50 % sur 24 h, avec un PLANCHER de volume — jamais d'alerte à vide. */
     private const INFEASIBLE_RATE_THRESHOLD = 0.5;
@@ -32,18 +32,31 @@ final readonly class HealthAlertEvaluator
     {
         $alerts = [];
 
+        // Services : alerte sur 'down' UNIQUEMENT. 'unknown' = indéterminé, pas un
+        // incident — Mercure sans env configurée ou le heartbeat worker expiré pendant
+        // un déploiement enverraient sinon un faux rouge (+ faux vert 10 min après) à
+        // chaque deploy, et le dashboard affiche le même 'unknown' en neutre (revue
+        // #257, finding 2 : mêmes sémantiques pour le même signal).
         $services = \is_array($health['services'] ?? null) ? $health['services'] : [];
         foreach (['database', 'redis', 'engine', 'mercure', 'worker'] as $service) {
             $status = \is_array($services[$service] ?? null) ? ($services[$service]['status'] ?? 'unknown') : 'unknown';
-            if ('up' !== $status) {
-                $alerts[] = ['key' => 'service:' . $service, 'message' => \sprintf('Service « %s » indisponible (statut : %s).', $service, \is_string($status) ? $status : 'unknown')];
+            if ('down' === $status) {
+                $alerts[] = ['key' => 'service:' . $service, 'message' => \sprintf('Service « %s » indisponible.', $service)];
             }
         }
 
         $messenger = \is_array($health['messenger'] ?? null) ? $health['messenger'] : [];
+        // Exception messenger : sa file ILLISIBLE (status unknown, compteurs null) est
+        // significative — les générations peuvent s'empiler sans qu'aucun compteur ne le
+        // dise. Alerter, sinon c'est le trou de silence du composant central (finding 1).
+        if ('unknown' === ($messenger['status'] ?? 'unknown')) {
+            $alerts[] = ['key' => 'messenger-status', 'message' => 'File Messenger illisible (transports injoignables) — l\'état des générations est invisible.'];
+        }
+        // Seuil lu du payload santé (source unique, dashboard et alerte alignés — finding 8).
+        $threshold = \is_int($messenger['backlogWarningThreshold'] ?? null) ? $messenger['backlogWarningThreshold'] : self::BACKLOG_THRESHOLD_FALLBACK;
         $backlog = \is_int($messenger['backlog'] ?? null) ? $messenger['backlog'] : 0;
-        if ($backlog > self::BACKLOG_THRESHOLD) {
-            $alerts[] = ['key' => 'messenger-backlog', 'message' => \sprintf('File Messenger en retard : %d messages en attente (seuil %d) — les générations s\'empilent.', $backlog, self::BACKLOG_THRESHOLD)];
+        if ($backlog > $threshold) {
+            $alerts[] = ['key' => 'messenger-backlog', 'message' => \sprintf('File Messenger en retard : %d messages en attente (seuil %d) — les générations s\'empilent.', $backlog, $threshold)];
         }
         $failed = \is_int($messenger['failed'] ?? null) ? $messenger['failed'] : 0;
         if ($failed > 0) {
