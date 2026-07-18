@@ -62,11 +62,14 @@ class SolverMetric implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $planType;
 
-    /** Équipes actives de la saison au moment de la tentative (taille du problème côté métier). */
+    /** Équipes actives de la SAISON au moment de la tentative — la TAILLE DU CLUB
+     *  (stat fondateur), PAS la taille du sous-problème résolu : un overlay de
+     *  période ne solve qu'un sous-ensemble d'équipes, et porte quand même le
+     *  compte saison. Pour la taille du problème solveur, voir nbVariables. */
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $nbTeams;
 
-    /** Gymnases actifs de la saison au moment de la tentative. */
+    /** Gymnases actifs de la saison au moment de la tentative (taille du club, idem nbTeams). */
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $nbVenues;
 

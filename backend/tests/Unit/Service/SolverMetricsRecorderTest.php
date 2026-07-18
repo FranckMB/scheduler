@@ -25,7 +25,8 @@ final class SolverMetricsRecorderTest extends TestCase
             ->setName('metrics')
             ->setStatus(ScheduleStatus::COMPLETED)
             ->setScore(742);
-        $entityManager = $this->em(planType: 'CLOSURE', activeCount: 12);
+        // Comptes DIFFÉRENCIÉS par entité : un swap Team/Venue dans le recorder doit rougir.
+        $entityManager = $this->em(planType: 'CLOSURE', teamCount: 12, venueCount: 3);
         $entityManager->expects(self::once())->method('persist')->with(self::callback(
             static function (SolverMetric $metric): bool {
                 self::assertSame('COMPLETED', $metric->getStatus());
@@ -38,7 +39,7 @@ final class SolverMetricsRecorderTest extends TestCase
                 // SA2-stats : dimensions dénormalisées à la capture (append-only).
                 self::assertSame('CLOSURE', $metric->getPlanType());
                 self::assertSame(12, $metric->getNbTeams());
-                self::assertSame(12, $metric->getNbVenues());
+                self::assertSame(3, $metric->getNbVenues());
 
                 return true;
             },
@@ -62,7 +63,7 @@ final class SolverMetricsRecorderTest extends TestCase
             ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
             ->setName('infeasible metrics')
             ->setStatus(ScheduleStatus::FAILED);
-        $entityManager = $this->em(planType: 'SEASON', activeCount: 0);
+        $entityManager = $this->em(planType: 'SEASON', teamCount: 0, venueCount: 0);
         $entityManager->expects(self::once())->method('persist')->with(self::callback(
             static function (SolverMetric $metric): bool {
                 self::assertSame('INFEASIBLE', $metric->getStatus());
@@ -105,15 +106,19 @@ final class SolverMetricsRecorderTest extends TestCase
     }
 
     /** @return EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject */
-    private function em(string $planType, int $activeCount): EntityManagerInterface
+    private function em(string $planType, int $teamCount, int $venueCount): EntityManagerInterface
     {
         $connection = $this->createMock(Connection::class);
         $connection->method('fetchOne')->willReturn($planType);
-        $repository = $this->createMock(EntityRepository::class);
-        $repository->method('count')->willReturn($activeCount);
+        $teams = $this->createMock(EntityRepository::class);
+        $teams->method('count')->willReturn($teamCount);
+        $venues = $this->createMock(EntityRepository::class);
+        $venues->method('count')->willReturn($venueCount);
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getConnection')->willReturn($connection);
-        $entityManager->method('getRepository')->willReturn($repository);
+        $entityManager->method('getRepository')->willReturnCallback(
+            static fn (string $class) => \App\Entity\Team::class === $class ? $teams : $venues,
+        );
 
         return $entityManager;
     }

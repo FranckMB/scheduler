@@ -165,15 +165,16 @@ function OverviewSection({ data, loading, error, retry }: DataSectionProps<Admin
   );
 }
 
-/** Libellés FR des types de plan (ADR-0002). */
-const PLAN_TYPE_LABELS: Record<string, string> = { SEASON: "Saison", CLOSURE: "Fermeture", HOLIDAY: "Vacances" };
+/** Libellés FR des types de plan (ADR-0002) + le bucket télémétrie UNKNOWN (historique pré-dimension / plan disparu à la capture). */
+const PLAN_TYPE_LABELS: Record<string, string> = { SEASON: "Saison", CLOSURE: "Fermeture", HOLIDAY: "Vacances", UNKNOWN: "Inconnu (historique)" };
 
 const planTypeLabel = (type: string): string => PLAN_TYPE_LABELS[type] ?? type;
 
-const formatHours = (hours: number | null): string => {
-  if (null === hours) return "—";
-  if (hours < 48) return `${integerFormatter.format(hours)} h`;
-  return `${integerFormatter.format(Math.round(hours / 24))} j`;
+const formatMinutes = (minutes: number | null): string => {
+  if (null === minutes) return "—";
+  if (minutes < 60) return `${integerFormatter.format(minutes)} min`;
+  if (minutes < 48 * 60) return `${integerFormatter.format(Math.round(minutes / 60))} h`;
+  return `${integerFormatter.format(Math.round(minutes / 1440))} j`;
 };
 
 /**
@@ -183,7 +184,9 @@ const formatHours = (hours: number | null): string => {
  */
 function UsageSection({ data, loading, error, retry }: DataSectionProps<AdminOverviewResponse>) {
   if (loading) return <PanelLoading label="Chargement de l’usage" />;
-  if (error || !data) return <PanelError label="Les statistiques d’usage sont indisponibles." retry={retry} />;
+  // `usage` absent = backend antérieur au lot (rollback / décalage de déploiement) :
+  // indisponibilité affichée, jamais un crash de rendu.
+  if (error || !data?.usage) return <PanelError label="Les statistiques d’usage sont indisponibles." retry={retry} />;
 
   const { usage } = data;
 
@@ -196,6 +199,7 @@ function UsageSection({ data, loading, error, retry }: DataSectionProps<AdminOve
       <div className="grid gap-4 lg:grid-cols-3">
         <article className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
           <p className="text-sm font-medium text-white">Plans par type</p>
+          <p className="mt-1 text-xs text-slate-500">Parc actuel — un reset ou un effacement retire ses plans</p>
           <dl className="mt-5 space-y-4">
             {usage.plansByType.length === 0 ? <p className="text-sm text-slate-500">Aucun plan.</p> : null}
             {usage.plansByType.map((row) => (
@@ -213,10 +217,10 @@ function UsageSection({ data, loading, error, retry }: DataSectionProps<AdminOve
           <p className="text-sm font-medium text-white">Temps de clôture</p>
           <p className="mt-1 text-xs text-slate-500">Création du plan → première validation</p>
           <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-6">
-            <SmallMetric label="Saison · médiane" value={formatHours(usage.timeToFirstValidation.season.p50Hours)} />
-            <SmallMetric label="Saison · P95" value={formatHours(usage.timeToFirstValidation.season.p95Hours)} />
-            <SmallMetric label="Périodes · médiane" value={formatHours(usage.timeToFirstValidation.period.p50Hours)} />
-            <SmallMetric label="Périodes · P95" value={formatHours(usage.timeToFirstValidation.period.p95Hours)} />
+            <SmallMetric label="Saison · médiane" value={formatMinutes(usage.timeToFirstValidation.season.p50Minutes)} />
+            <SmallMetric label="Saison · P95" value={formatMinutes(usage.timeToFirstValidation.season.p95Minutes)} />
+            <SmallMetric label="Périodes · médiane" value={formatMinutes(usage.timeToFirstValidation.period.p50Minutes)} />
+            <SmallMetric label="Périodes · P95" value={formatMinutes(usage.timeToFirstValidation.period.p95Minutes)} />
           </dl>
           <div className="mt-6 border-t border-white/10 pt-4 text-xs text-slate-500">
             {integerFormatter.format(usage.timeToFirstValidation.season.count)} saison{usage.timeToFirstValidation.season.count > 1 ? "s" : ""} · {integerFormatter.format(usage.timeToFirstValidation.period.count)} période{usage.timeToFirstValidation.period.count > 1 ? "s" : ""} clôturée{usage.timeToFirstValidation.period.count > 1 ? "s" : ""}

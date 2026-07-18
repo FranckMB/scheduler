@@ -45,8 +45,9 @@ const overview: AdminOverviewResponse = {
       { type: "HOLIDAY", total: 9, validated: 5 },
     ],
     timeToFirstValidation: {
-      season: { count: 11, p50Hours: 36, p95Hours: 320 },
-      period: { count: 9, p50Hours: 6, p95Hours: 30 },
+      // Minutes (SA2-stats round 1) : 36 h · 320 h→13 j · 25 min (le cas « clôture rapide » que l'arrondi heures effaçait).
+      season: { count: 11, p50Minutes: 36 * 60, p95Minutes: 320 * 60 },
+      period: { count: 9, p50Minutes: 25, p95Minutes: 30 * 60 },
     },
     solverByPlanType: [
       { planType: "SEASON", generations: 30, p50WallTimeMs: 900, p95WallTimeMs: 2600 },
@@ -184,13 +185,25 @@ describe("AdminDashboardPage", () => {
     expect(screen.getAllByText("Saison").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Vacances")).toBeInTheDocument();
     expect(screen.getByText(/dont 11 validés/)).toBeInTheDocument();
-    // Temps de clôture : création → 1re validation (36 h médiane saison ; P95 320 h → « 13 j »).
+    // Temps de clôture : création → 1re validation (36 h médiane saison ; P95 320 h → « 13 j » ;
+    // une clôture de période en 25 min s'affiche en minutes, plus jamais « 0 h »).
     expect(screen.getByText("36 h")).toBeInTheDocument();
     expect(screen.getByText("13 j")).toBeInTheDocument();
+    expect(screen.getByText("25 min")).toBeInTheDocument();
     expect(screen.getByText(/11 saisons · 9 périodes clôturées/)).toBeInTheDocument();
     // Tailles de clubs : tranches + médiane gymnases.
     expect(screen.getByRole("columnheader", { name: "Gymnases (médiane)" })).toBeInTheDocument();
     expect(screen.getByText("11-20")).toBeInTheDocument();
+  });
+
+  it("shows the usage panel as unavailable (never crashes) when the backend predates the usage block", async () => {
+    // Rollback backend / décalage de déploiement : l'ancien overview n'a pas `usage`.
+    const legacyOverview: AdminOverviewResponse = { clubs: overview.clubs, solver: overview.solver };
+    mockOverview.mockReset().mockResolvedValue(legacyOverview);
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("Les statistiques d’usage sont indisponibles.")).toBeInTheDocument();
+    expect(screen.queryByText("Plans, clôtures et tailles de clubs")).not.toBeInTheDocument();
   });
 
   it("searches and paginates through the clubs API", async () => {
