@@ -9,6 +9,7 @@ use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Enum\SchedulePlanType;
 use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
@@ -236,6 +237,51 @@ final class SchedulePlanProvisioner
         );
 
         return \is_string($chosen) ? $chosen : null;
+    }
+
+    /**
+     * La version CHOISIE du plan d'une PÉRIODE (ADR-0002) — l'overlay validé de
+     * l'entrée. null = plan non validé (espace de travail) : on n'expose alors
+     * aucune version active (le cockpit route vers « Ajuster »). Miroir période de
+     * {@see chosenOfSeasonPlan} ; source unique depuis le drop de overlayScheduleId.
+     */
+    public function chosenOfPeriodPlan(string $calendarEntryId): ?string
+    {
+        $chosen = $this->entityManager->getConnection()->fetchOne(
+            'SELECT chosen_schedule_id FROM schedule_plan WHERE calendar_entry_id = :eid',
+            ['eid' => $calendarEntryId],
+        );
+
+        return \is_string($chosen) ? $chosen : null;
+    }
+
+    /**
+     * Les versions choisies des plans de plusieurs périodes, en UNE requête — évite le
+     * N+1 de {@see chosenOfPeriodPlan} en boucle (radar des matchs). Seuls les plans
+     * VALIDÉS (chosenScheduleId non-null) apparaissent ; les autres sont absents de la carte.
+     *
+     * @param list<string> $calendarEntryIds
+     *
+     * @return array<string, string> calendarEntryId => chosenScheduleId
+     */
+    public function chosenByPeriodPlans(array $calendarEntryIds): array
+    {
+        if ([] === $calendarEntryIds) {
+            return [];
+        }
+
+        $rows = $this->entityManager->getConnection()->fetchAllAssociative(
+            'SELECT calendar_entry_id, chosen_schedule_id FROM schedule_plan WHERE calendar_entry_id IN (:ids) AND chosen_schedule_id IS NOT NULL',
+            ['ids' => $calendarEntryIds],
+            ['ids' => ArrayParameterType::STRING],
+        );
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row['calendar_entry_id']] = (string) $row['chosen_schedule_id'];
+        }
+
+        return $map;
     }
 
     /** Cette version est-elle celle que pointe son plan ? (= « validée ») */

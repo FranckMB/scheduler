@@ -12,6 +12,7 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -44,10 +45,11 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         $this->em->clear();
         $this->scopeGucToClub($f['clubId']);
 
-        // The ended period's two overlay versions are gone; its pointer cleared.
+        // The ended period's two overlay versions are gone; even the one the plan pointed at
+        // (lot D-b : la version active est dérivée, la purge emporte TOUTES les versions).
         self::assertNull($this->em->getRepository(Schedule::class)->find($f['endedV1']));
         self::assertNull($this->em->getRepository(Schedule::class)->find($f['endedV2']));
-        self::assertNull($this->em->getRepository(CalendarEntry::class)->find($f['endedEntry'])?->getOverlayScheduleId());
+        self::assertNull(self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($f['endedEntry']), 'le plan de la période échue ne pointe plus aucune version');
         // The upcoming period's overlay and the season plan survive.
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($f['upcomingOverlay']));
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($f['seasonPlan']));
@@ -116,9 +118,9 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         // passée — inv. 10 : le plan meurt avec son entrée).
         $endedV1 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::COMPLETED);
         $endedV2 = $this->overlay($club, $season, $endedEntry, ScheduleStatus::COMPLETED);
-        $endedEntry->setOverlayScheduleId($endedV2->getId());
+        $this->choosePlanVersion($endedV2); // V2 validée = pointée par le plan de la période
         $upcomingOverlay = $this->overlay($club, $season, $upcomingEntry, ScheduleStatus::COMPLETED);
-        $upcomingEntry->setOverlayScheduleId($upcomingOverlay->getId());
+        $this->choosePlanVersion($upcomingOverlay);
         $seasonPlan = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Plan')->setStatus(ScheduleStatus::COMPLETED);
         // lot D : un plan SEASON aussi porte schedule_plan_id (NOT NULL) — linkSeededSchedule(null)
         // résout le plan SEASON de la saison, le pose AVANT de persister, numérote et flush.

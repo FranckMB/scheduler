@@ -34,8 +34,12 @@ final class CalendarEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * Period entries of the season that carry a generated overlay (palier B) —
-     * the ones a baseline reopen would destroy.
+     * Period entries of the season whose secondary plan is VALIDATED (its plan points at
+     * a chosen version) — the real secondary plannings a baseline reopen would destroy
+     * (ADR-0002 inv. 14). « A un overlay » se dérive du plan (schedule_plan.chosenScheduleId),
+     * plus d'un pointeur sur l'entrée (lot D-b) : un brouillon non validé n'est pas un
+     * planning secondaire « réel » (modèle binaire — seule une version validée est montrée),
+     * on n'en avertit donc pas ; sa purge éventuelle est un nettoyage d'espace de travail.
      *
      * @return list<CalendarEntry>
      */
@@ -44,16 +48,11 @@ final class CalendarEntryRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('e')
             ->andWhere('e.clubId = :clubId')
             ->andWhere('e.seasonId = :seasonId')
-            ->andWhere('e.overlayScheduleId IS NOT NULL')
+            ->andWhere('EXISTS (SELECT p.id FROM App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id AND p.chosenScheduleId IS NOT NULL)')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
             ->getQuery()
             ->getResult();
-    }
-
-    public function findOneByOverlayScheduleId(string $scheduleId): ?CalendarEntry
-    {
-        return $this->findOneBy(['overlayScheduleId' => $scheduleId]);
     }
 
     /**
@@ -116,7 +115,10 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->andWhere('e.seasonId = :seasonId')
             ->andWhere('e.kind = :kind')
             ->andWhere('e.status = :status')
-            ->andWhere('e.overlayScheduleId IS NULL')
+            // ADR-0002 lot D-b : « pas encore d'overlay » = le plan de période n'a AUCUNE
+            // version (schedule_plan.calendarEntryId → schedule.schedulePlanId), plus un
+            // pointeur sur l'entrée. Le rappel s'arrête dès la 1re génération, comme avant.
+            ->andWhere('NOT EXISTS (SELECT s.id FROM App\Entity\Schedule s, App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id AND s.schedulePlanId = p.id)')
             // Only overlay-capable period types: reminding about a cutoff/custom/
             // mutualisation period would CTA into a 422 (overlay creation refuses
             // them) — a cutoff means "no training", there is no plan to prepare.

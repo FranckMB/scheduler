@@ -120,7 +120,8 @@ final class ReopenScheduleTest extends WebTestCase
         self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($slotId));
         $reloadedEntry = $this->em->getRepository(CalendarEntry::class)->find($entry->getId());
         self::assertNotNull($reloadedEntry);
-        self::assertNull($reloadedEntry->getOverlayScheduleId());
+        // lot D-b : l'overlay supprimé → le plan de la période ne pointe plus rien (dérivé).
+        self::assertNull(self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()));
         self::assertNotNull($this->em->getRepository(Constraint::class)->find($datedId), 'dated constraint is kept (period stays signalée)');
     }
 
@@ -286,7 +287,6 @@ final class ReopenScheduleTest extends WebTestCase
         $entry->setTitle($title);
         $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
         $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
-        $entry->setOverlayScheduleId($overlay->getId());
         $this->em->persist($entry);
         $this->em->flush();
         // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : le
@@ -318,6 +318,13 @@ final class ReopenScheduleTest extends WebTestCase
         $dated->setRuleType(ConstraintRuleType::HARD);
         $dated->setCalendarEntryId($entry->getId());
         $this->em->persist($dated);
+        $this->em->flush();
+
+        // lot D-b : le confirm reopen ne compte que les plans secondaires RÉELS (validés).
+        // On valide donc l'overlay — le plan de la période POINTE cette version.
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        $provisioner->linkSchedule($overlay);
+        $provisioner->choose($overlay);
         $this->em->flush();
 
         return [$entry, $overlay->getId(), $slot->getId(), $dated->getId()];

@@ -23,7 +23,6 @@ const EVENT = {
   periodType: null,
   schoolHolidayId: null,
   status: "active",
-  overlayScheduleId: null,
   createdBy: null,
 };
 

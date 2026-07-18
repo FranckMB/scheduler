@@ -62,9 +62,13 @@ export function GenerateStep() {
 
   // Leaving mid-generation loses the local scheduleId; on return, re-adopt the
   // period's in-flight overlay instead of offering a concurrent second launch.
-  const overlaySchedule = periodMode ? (schedules.find((s) => s.id === periodEntry?.overlayScheduleId) ?? null) : null;
+  // ADR-0002 lot D-b : la version en vol d'une période se dérive de SON PLAN
+  // (schedulePlanId), plus d'un pointeur sur l'entrée. Rien à reprendre → « Générer »
+  // crée une version neuve (modèle versions : on n'écrase jamais une version, a
+  // fortiori une version validée qui est en lecture seule).
+  const overlaySchedule = periodMode ? (schedules.find((s) => s.schedulePlanId === periodPlanId && IN_FLIGHT.includes(s.status)) ?? null) : null;
   useEffect(() => {
-    if (periodMode && null === scheduleId && overlaySchedule && IN_FLIGHT.includes(overlaySchedule.status)) {
+    if (periodMode && null === scheduleId && overlaySchedule) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot resume of an in-flight overlay
       setScheduleId(overlaySchedule.id);
     }
@@ -127,7 +131,9 @@ export function GenerateStep() {
           ? {
               name: periodEntry?.title ?? "Plan de période",
               schedulePlanId: periodPlanId ?? undefined,
-              existingScheduleId: periodEntry?.overlayScheduleId ?? undefined,
+              // Reprendre la version en vol (anti-double-lancement) ; sinon créer une
+              // version neuve sous le plan (lot D-b — plus de pointeur overlay sur l'entrée).
+              existingScheduleId: overlaySchedule?.id ?? undefined,
             }
           : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
       );

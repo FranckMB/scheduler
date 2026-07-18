@@ -2,7 +2,7 @@ import { CalendarOff, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useVenues } from "@/features/planning/queries";
+import { useSchedules, useVenues } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -14,7 +14,7 @@ import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { todayISO } from "./lib/date";
 import { isAdaptableHoliday } from "./lib/holidays";
 import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
-import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry } from "./queries";
+import { useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry } from "./queries";
 
 type Mode = "list" | "event" | "closure" | "cutoff";
 
@@ -46,7 +46,28 @@ export function DayDialog({ iso, entries, holiday, publicHoliday, onClose }: Day
 
 function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entries: CalendarEntry[]; holiday?: SchoolHoliday; publicHoliday?: PublicHoliday; onCreate: (m: Mode) => void; onClose: () => void }) {
   const deleteEntry = useDeleteEntry();
+  const schedulesQuery = useSchedules();
   const [toDelete, setToDelete] = useState<CalendarEntry | null>(null);
+  // Décision fondateur (2026-07-18) : supprimer une période supprime son PLAN, donc TOUTES
+  // ses versions liées — le gestionnaire doit en valider la PORTÉE. On avertit fort dès que
+  // le plan porte ≥ 1 version (brouillon inclus : la cascade les emporte), pas seulement une
+  // version validée. « Porte des versions » se dérive du plan de la période (schedulePlanId),
+  // plus d'un pointeur sur l'entrée (lot D-b). Un plan vide (aucune version) ne perd rien → bénin.
+  const planQuery = useSchedulePlanForEntry(toDelete?.id ?? null);
+  const toDeletePlanId = planQuery.data?.id ?? null;
+  // Restreint aux types OVERLAYABLES : seuls closure/holiday portent un plan (inv. 9) —
+  // cutoff/mutualisation/custom et les événements n'en ont jamais, donc aucune cascade à
+  // annoncer (les avertir serait un faux positif alarmant).
+  const overlayCapable = "closure" === toDelete?.periodType || "holiday" === toDelete?.periodType;
+  // Fail-closed sur l'absence de DONNÉE (pas le statut) : le dialogue s'ouvre avant que le
+  // plan/les versions répondent. On n'affiche le message bénin que si on A la donnée des deux
+  // requêtes — sinon un delete confirmé pendant le chargement/1er échec afficherait « rien à
+  // perdre » puis emporterait le plan et ses versions. Clé sur `data`, PAS sur isSuccess :
+  // TanStack bascule en error sur un refetch d'arrière-plan tout en gardant la donnée périmée
+  // — s'y fier sur-avertirait un plan vide après un simple blip. (usePeriodAnchor n'expose pas
+  // cet état → lecture directe des deux requêtes ici.)
+  const versionsResolved = undefined !== planQuery.data && undefined !== schedulesQuery.data;
+  const toDeleteHasVersions = overlayCapable && (!versionsResolved || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId)));
 
   const confirmDelete = () => {
     if (!toDelete) return;
@@ -97,12 +118,12 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
         open={toDelete !== null}
         title={`Supprimer « ${toDelete?.title ?? ""} » ?`}
         description={
-          toDelete?.overlayScheduleId
-            ? "Cette période a un plan de période généré : il sera supprimé aussi (à refaire si besoin)."
+          toDeleteHasVersions
+            ? "Supprimer cette période supprime aussi son plan et toutes ses versions générées. À refaire si besoin."
             : "Cette entrée sera retirée du calendrier."
         }
         confirmLabel="Supprimer"
-        destructive={Boolean(toDelete?.overlayScheduleId)}
+        destructive={toDeleteHasVersions}
         onConfirm={confirmDelete}
         onCancel={() => setToDelete(null)}
       />
@@ -145,6 +166,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const createHoliday = useCreateHolidayPeriod();
 
   const entry = entries.find((e) => e.schoolHolidayId === holiday.id) ?? null;
+  // ADR-0002 lot D-b : « overlay généré » = plan validé (chosenScheduleId), dérivé du plan.
+  const plan = useSchedulePlanForEntry(entry?.id ?? null);
+  const activeId = plan.data?.chosenScheduleId ?? null;
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -169,9 +193,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           "Adapter" (create/replay) is only offered for adaptable holidays: summer
           (ete) is off-season, a schedule spans one season, so nothing to build —
           same rule as the radar (isAdaptableHoliday, single source of truth). */}
-      {entry?.overlayScheduleId ? (
+      {null !== activeId ? (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
+          <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
             Voir le planning
           </Button>
         </div>

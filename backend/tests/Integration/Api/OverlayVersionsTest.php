@@ -52,9 +52,9 @@ final class OverlayVersionsTest extends WebTestCase
 
         $v1 = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
         $v2 = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
-        $entry->setOverlayScheduleId($v1->getId()); // V1 active initially
+        $this->choosePlanVersion($v1); // V1 validée (active) au départ — lot D-b : « active » = pointeur du plan
         $otherOverlay = $this->overlay($club, $season, $otherEntry, ScheduleStatus::COMPLETED);
-        $otherEntry->setOverlayScheduleId($otherOverlay->getId());
+        $this->choosePlanVersion($otherOverlay);
         // A SEASON plan version must not be touched by an overlay validation.
         $seasonPlan = $this->seasonPlan($club, $season, ScheduleStatus::COMPLETED);
         $this->em->flush();
@@ -63,28 +63,30 @@ final class OverlayVersionsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
         // The period's plan points at V2, which becomes the active overlay; V1 —
         // the version it no longer points at — is deleted (inv. 1).
         self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'the unchosen sibling version is deleted');
-        self::assertSame($v2->getId(), $this->em->getRepository(CalendarEntry::class)->find($entry->getId())?->getOverlayScheduleId());
+        self::assertSame($v2->getId(), $provisioner->chosenOfPeriodPlan($entry->getId()), 'la version validée devient la version active de la période');
         // The OTHER period's overlay is untouched — each period owns its own plan.
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($otherOverlay->getId()));
-        self::assertSame($otherOverlay->getId(), $this->em->getRepository(CalendarEntry::class)->find($otherEntry->getId())?->getOverlayScheduleId());
+        self::assertSame($otherOverlay->getId(), $provisioner->chosenOfPeriodPlan($otherEntry->getId()));
         // The season plan is untouched, and its pointer did NOT move.
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($seasonPlan->getId()));
         self::assertSame($baseline->getId(), $this->chosenPlanVersion($season), 'validating an overlay must not move the season plan pointer');
     }
 
-    public function testCreatingAVersionKeepsAUsableActiveOverlay(): void
+    public function testCreatingAVersionKeepsTheValidatedOverlayActive(): void
     {
         [$user, $club, $season] = $this->seed('OVV4');
         $entry = $this->period($club, $season, 'P');
         $v1 = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
-        $entry->setOverlayScheduleId($v1->getId());
+        $this->choosePlanVersion($v1); // V1 validée = active
         $this->em->flush();
 
-        // Creating a new version must NOT strand the good V1 as active (it stays
-        // shown while the new draft solves; validation flips the pointer later).
+        // Creating a new version must NOT un-validate the good V1 (it stays shown
+        // while the new draft solves; validating V2 flips the pointer later). lot D-b :
+        // « active » = plan.chosenScheduleId, que la création ne touche jamais.
         $this->client->request('POST', '/api/schedules', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user),
             'HTTP_X-Club-Id' => $club->getId(),
@@ -95,7 +97,7 @@ final class OverlayVersionsTest extends WebTestCase
         self::assertNotSame($v1->getId(), $v2);
 
         $this->em->clear();
-        self::assertSame($v1->getId(), $this->em->getRepository(CalendarEntry::class)->find($entry->getId())?->getOverlayScheduleId(), 'a usable active overlay is kept while the new draft solves');
+        self::assertSame($v1->getId(), self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()), 'la version validée reste active pendant que le nouveau brouillon se résout');
     }
 
     public function testInFlightSiblingOverlayBlocksValidation(): void
@@ -120,14 +122,14 @@ final class OverlayVersionsTest extends WebTestCase
         $chosen = $this->overlay($club, $season, $entry, ScheduleStatus::COMPLETED);
         $this->em->flush();
         $this->choosePlanVersion($chosen);
-        $entry->setOverlayScheduleId($chosen->getId());
-        $this->em->flush();
 
         $this->post($user, $club, "/api/schedules/{$chosen->getId()}/reopen");
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
         self::assertSame(ScheduleStatus::COMPLETED, $this->em->getRepository(Schedule::class)->find($chosen->getId())?->getStatus(), 'la version survit : rouvrir lâche le pointeur, pas le travail');
+        // Rouvrir dépointe le plan de la période : plus de version active (on ajuste).
+        self::assertNull(self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()), 'rouvrir dépointe le plan de la période');
         self::assertSame($baseline->getId(), $this->chosenPlanVersion($season), 'rouvrir un plan secondaire ne touche pas au plan de la saison');
     }
 

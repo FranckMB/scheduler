@@ -63,9 +63,6 @@ class CalendarEntryResource
     public string $status = '';
 
     #[Groups(['read'])]
-    public ?string $overlayScheduleId = null;
-
-    #[Groups(['read'])]
     public ?string $createdBy = null;
 
     public static function fromEntity(CalendarEntry $entity): self
@@ -83,7 +80,6 @@ class CalendarEntryResource
         $dto->periodType = $entity->getPeriodType()?->value;
         $dto->schoolHolidayId = $entity->getSchoolHolidayId();
         $dto->status = $entity->getStatus()->value;
-        $dto->overlayScheduleId = $entity->getOverlayScheduleId();
         $dto->createdBy = $entity->getCreatedBy();
 
         return $dto;

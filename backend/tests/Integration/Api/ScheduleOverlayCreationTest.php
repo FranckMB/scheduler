@@ -27,9 +27,11 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
  * Creating a period overlay via POST /api/schedules with schedulePlanId (ADR-0002 C4 —
- * the body names the PERIOD's plan, not the calendar entry): the server resolves the
- * entry from the plan, stamps the inverse link, and guards the target (422 on an
- * unknown/foreign plan). Entry types that carry no plan (event/cutoff) cannot be named.
+ * the body names the PERIOD's plan, not the calendar entry): the server links the version
+ * to that plan and guards the target (422 on an unknown/foreign plan). Entry types that
+ * carry no plan (event/cutoff) cannot be named. lot D-b : la création NE rend PAS la version
+ * active — « active » = plan.chosenScheduleId, posé à la validation seule (on ne montre
+ * jamais une version non validée).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -47,7 +49,7 @@ final class ScheduleOverlayCreationTest extends WebTestCase
 
     private JWTTokenManagerInterface $jwt;
 
-    public function testCreateOverlayLinksEntry(): void
+    public function testCreateOverlayLinksToThePlanButIsNotActiveUntilValidated(): void
     {
         [$user, $club, $season] = $this->seed('OV1');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
@@ -59,13 +61,14 @@ final class ScheduleOverlayCreationTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(201);
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame($planId, $data['schedulePlanId']);
+        self::assertSame($planId, $data['schedulePlanId'], 'la version se rattache au plan de la période');
 
-        // Read the entry back through the API (real read path) → inverse link set.
-        $this->client->request('GET', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
-        self::assertResponseIsSuccessful();
-        $entryData = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame($data['id'], $entryData['overlayScheduleId'], 'server must stamp the inverse link');
+        // lot D-b : la version créée n'est PAS active — « active » = plan.chosenScheduleId,
+        // posé à la validation seule. Rien n'est montré tant que rien n'est validé.
+        self::assertNull(
+            self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()),
+            'une version fraîchement créée n’est pas montrée (plan non validé → on ajuste)',
+        );
     }
 
     public function testHolidayOverlayAllowed(): void
@@ -77,10 +80,11 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
-    public function testSecondOverlayCreatesNewActiveVersion(): void
+    public function testSecondOverlayCreatesAnotherVersionNoneActiveUntilValidated(): void
     {
-        // planning-versions: a period may carry several overlay versions; the
-        // second is allowed and becomes the ACTIVE overlay (no more 422).
+        // planning-versions: a period may carry several overlay versions; the second
+        // is allowed (no more 422). lot D-b : ni l'une ni l'autre n'est active tant
+        // qu'aucune n'est validée — « active » = plan.chosenScheduleId.
         [$user, $club, $season] = $this->seed('OV3');
         $entry = $this->period($club, $season, CalendarEntryPeriodType::CLOSURE);
         $planId = $this->planIdOf($entry);
@@ -94,10 +98,11 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         $v2 = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
         self::assertNotSame($v1, $v2);
 
-        // The newest version is the active overlay of the period.
-        $this->client->request('GET', "/api/calendar_entries/{$entry->getId()}", [], [], $this->authHeaders($user, $club));
-        $entryData = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame($v2, $entryData['overlayScheduleId'], 'the newest version is the active overlay');
+        // Deux versions coexistent sous le plan, aucune n'est montrée (rien de validé).
+        self::assertNull(
+            self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()),
+            'deux versions non validées → aucune version active (on ajuste)',
+        );
     }
 
     public function testEventEntryCarriesNoPlanSoCannotBeOverlaid(): void

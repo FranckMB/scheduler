@@ -4,13 +4,19 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CalendarEntry, SchoolHoliday } from "./api";
+import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
 import { addDays, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
 let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
 let conflictsPending = false;
+// ADR-0002 lot D-b : le radar dérive « version active » du plan de la période
+// (chosenScheduleId), plus d'un pointeur sur l'entrée.
+// undefined = plans pas encore résolus (aucune donnée). Le fail-closed du radar clé sur la
+// PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
+// affichable).
+let plansData: SchedulePlan[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
@@ -18,7 +24,18 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
+  useSchedulePlans: () => ({ data: plansData }),
 }));
+
+/** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
+const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): SchedulePlan => ({
+  id: `pl-${calendarEntryId}`,
+  type: "CLOSURE",
+  name: "Plan",
+  calendarEntryId,
+  chosenScheduleId,
+  teamSelectionInitialized: false,
+});
 
 const FUTURE = "2999-01-05";
 const FUTURE_END = "2999-01-18";
@@ -35,7 +52,6 @@ const closure = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   periodType: "closure",
   schoolHolidayId: null,
   status: "active",
-  overlayScheduleId: null,
   createdBy: null,
   ...overrides,
 });
@@ -56,6 +72,7 @@ describe("RadarPanel", () => {
     createHolidayMutate.mockReset();
     conflictsData = undefined;
     conflictsPending = false;
+    plansData = [];
   });
 
   it("asks for the school zone when unknown", () => {
@@ -137,10 +154,34 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Rien à l'horizon. Tout roule.")).toBeInTheDocument();
   });
 
-  it("switches to consult/adjust once the overlay exists", () => {
-    renderRadar({ entries: [closure({ overlayScheduleId: "ov1" })] });
+  it("fail-closed: while plans are unresolved (no data yet), neither flashes the all-clear nor offers a misleading 'Adapter'", () => {
+    // État d'une période INCONNU tant qu'on n'a pas les plans (1er chargement, ou 1er échec sans
+    // donnée) : ne pas dire « tout roule » (masquerait une fermeture validée) ni proposer
+    // « Adapter » (régénérerait un plan validé).
+    plansData = undefined;
+    renderRadar({ entries: [closure({ title: "Gymnase fermé" })] });
 
-    expect(screen.getByText("Planning secondaire généré")).toBeInTheDocument();
+    expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voir le planning" })).not.toBeInTheDocument();
+  });
+
+  it("keeps rendering stale plans after a background refetch error (keys on data presence, not query status)", () => {
+    // TanStack passe en error sur un refetch d'arrière-plan tout en gardant la donnée : le radar
+    // ne doit PAS disparaître — la donnée présente reste affichable (« Voir le planning »).
+    plansData = [validatedPlan("c1", "ov1")];
+    renderRadar({ entries: [closure({})] });
+
+    expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+  });
+
+  it("switches to consult/adjust once the plan is validated", () => {
+    // ADR-0002 lot D-b : « l'overlay existe » = le plan de la période est VALIDÉ.
+    plansData = [validatedPlan("c1", "ov1")];
+    renderRadar({ entries: [closure({})] });
+
+    expect(screen.getByText("Planning secondaire validé")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Voir le planning" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ajuster" })).toBeInTheDocument();
   });

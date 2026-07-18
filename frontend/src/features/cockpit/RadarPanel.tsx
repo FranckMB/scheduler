@@ -6,7 +6,7 @@ import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
-import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList } from "./queries";
+import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
 import { daysUntil, frDateShort, todayISO } from "./lib/date";
 
 /** Public holidays further out than this are noise, not a to-do. */
@@ -40,6 +40,25 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     navigate("/planning");
   };
 
+  // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
+  // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
+  // mappé par entrée, plutôt qu'un hook par carte (règles des hooks dans la liste).
+  // Fail-closed sur l'absence de DONNÉE : sans les plans, l'état d'une période est INCONNU —
+  // on ne décide ni « à traiter » ni « tout roule », et on n'affiche aucun CTA qui pousserait à
+  // régénérer un plan déjà validé (même philosophie que closureImpactsPending). Clé sur `data`,
+  // PAS sur isSuccess : TanStack bascule en error sur un refetch d'arrière-plan tout en gardant
+  // la donnée périmée — s'y fier ferait DISPARAÎTRE tout le radar sur un simple blip, alors qu'on
+  // a des plans valides à afficher. Un 1er chargement en échec (aucune donnée) reste fail-closed.
+  const plansQuery = useSchedulePlans();
+  const plans = plansQuery.data;
+  const plansUnresolved = undefined === plans;
+  const activeByEntry = new Map<string, string>();
+  for (const p of plans ?? []) {
+    if (null !== p.calendarEntryId && null !== p.chosenScheduleId) {
+      activeByEntry.set(p.calendarEntryId, p.chosenScheduleId);
+    }
+  }
+
   // The radar is a TO-DO list: entries the manager explicitly dismissed
   // (status=ignored) must not resurface (the calendar still shows them).
   const active = entries.filter((e) => e.status !== "ignored");
@@ -70,8 +89,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // seule laisserait le panneau vide SANS son « Rien à l'horizon »).
   const closureImpacts = useEntryConflictsList(closures.map((e) => e.id));
   const visibleClosures = closures.filter((entry, i) => {
-    if (null !== entry.overlayScheduleId) {
-      return true; // un planning secondaire existe : cette semaine EST différente
+    if (activeByEntry.has(entry.id)) {
+      return true; // un planning secondaire VALIDÉ existe : cette semaine EST différente
     }
     const impact = closureImpacts[i];
     if (impact?.isPending) {
@@ -102,6 +121,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     disruptiveEvents.length === 0 &&
     visibleClosures.length === 0 &&
     !closureImpactsPending &&
+    !plansUnresolved &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
@@ -122,10 +142,14 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
       {upcomingHolidays.map((h) => {
         const entry = entryByHoliday.get(h.id);
+        const activeId = entry ? (activeByEntry.get(entry.id) ?? null) : null;
+        // Entrée matérialisée mais plans encore en vol : validée ou non, on ne sait PAS —
+        // on n'offre donc ni « Voir » ni « Adapter » (adapter à tort régénère un plan validé).
+        const stateUnknown = undefined !== entry && plansUnresolved;
         return (
-          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${entry?.overlayScheduleId ? "planning généré" : "pas de planning"}`}>
-            {entry?.overlayScheduleId ? (
-              <Button variant="outline" size="sm" onClick={() => viewOverlay(entry.overlayScheduleId as string)}>
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${null !== activeId ? "planning validé" : stateUnknown ? "chargement…" : "pas de planning"}`}>
+            {stateUnknown ? null : null !== activeId ? (
+              <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
                 Voir le planning
               </Button>
             ) : entry ? (
@@ -155,9 +179,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         <RadarCard key={e.id} icon={<PartyPopper className="size-4 text-accent" />} title={e.title} detail={`Le ${frDateShort(e.startDate)} · pas d'entraînement`} />
       ))}
 
-      {visibleClosures.map((e) => (
-        <ClosureRadarItem key={e.id} entry={e} onAdapt={() => adapt(e.id)} onView={() => e.overlayScheduleId && viewOverlay(e.overlayScheduleId)} />
-      ))}
+      {/* Fermetures : tenues tant que les plans chargent (Voir/Adapter dépend de l'état du plan). */}
+      {plansUnresolved
+        ? null
+        : visibleClosures.map((e) => {
+            const activeId = activeByEntry.get(e.id) ?? null;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} onAdapt={() => adapt(e.id)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+          })}
 
       {cutoffs.map((e) => (
         <RadarCard
@@ -177,10 +205,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   );
 }
 
-function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; onAdapt: () => void; onView: () => void }) {
+function ClosureRadarItem({ entry, activeScheduleId, onAdapt, onView }: { entry: CalendarEntry; activeScheduleId: string | null; onAdapt: () => void; onView: () => void }) {
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
-  const hasOverlay = null !== entry.overlayScheduleId;
+  // ADR-0002 lot D-b : « a un overlay » = le plan de la période est VALIDÉ (chosenScheduleId).
+  const hasOverlay = null !== activeScheduleId;
   // Le plan de la saison existe mais ne pointe aucune version : il est INCOMPLET,
   // et le serveur n'a donc aucun calendrier à comparer. Dire « aucun impact » serait
   // un mensonge rassurant — le gestionnaire n'adapterait pas une fermeture qui, en
@@ -196,7 +225,7 @@ function ClosureRadarItem({ entry, onAdapt, onView }: { entry: CalendarEntry; on
   // visibleClosures) : pas de branche « rien à signaler » ici, elle ne serait
   // jamais rendue — et l'écrire laisserait croire que le radar inventorie.
   const detail = hasOverlay
-    ? "Planning secondaire généré"
+    ? "Planning secondaire validé"
     : impactUnknown
       ? "Impact non évalué · réessayez"
       : planIncomplete

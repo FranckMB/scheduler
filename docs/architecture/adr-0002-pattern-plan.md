@@ -384,22 +384,25 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     ≥ 1 en base) et **lève** si le plan disparaît (au lieu de laisser un orphelin). Coût assumé :
     ~26 fichiers de seeds re-passés en **link-avant-persist** (le `NOT NULL` refuse un INSERT sans
     plan, indépendamment du type PHP).
-  - **Reste D-b** : drop `CalendarEntry.overlayScheduleId` (pointeur inverse « version active de la
-    période »). **Décision fondateur (2026-07-18)** : ce pointeur est un **vestige du palier B**
-    (avant le Plan) redondant avec le modèle ; « période → version active » se dérive de son plan.
-    Sémantique cible **binaire** : plan **validé** (`chosenScheduleId` non-null) → on **MONTRE** la
-    version choisie (consultation) ; plan **non validé** → on **AJUSTE** (wizard), on ne montre
-    **jamais** une version non validée. Changement de comportement cockpit (aujourd'hui le pointeur
-    est posé dès la création). Cross-stack (entité/OverlayManager + cockpit front + tests).
+  - **D-b livré (PR4, 2026-07-18) — CLÔT L'ADR-0002** : `CalendarEntry.overlayScheduleId` **supprimé**
+    (champ + colonne droppée). **Décision fondateur (2026-07-18)** : ce pointeur était un **vestige du
+    palier B** (avant le Plan) redondant avec le modèle ; « période → version active » se dérive
+    désormais de son plan, **binaire** : plan **validé** (`chosenScheduleId` non-null) → on **MONTRE**
+    la version choisie (consultation) ; plan **non validé** → on **AJUSTE** (wizard), on ne montre
+    **jamais** une version non validée. Changement de comportement cockpit assumé (avant, le pointeur
+    était posé dès la création — une version non validée s'affichait). Source unique côté back :
+    `SchedulePlanProvisioner::chosenOfPeriodPlan(entryId)` (miroir période de `chosenOfSeasonPlan`).
+    `OverlayManager` **simplifié** (plus de clear/promote/pointeur inverse). Le confirm-delete
+    (`findWithOverlayByClubSeason`) ne compte que les plans secondaires **validés** (réels). Cross-stack :
+    entité + migration + 4 controllers + OverlayManager + repo + resource + processor ; cockpit
+    (RadarPanel/DayDialog dérivent de `chosenScheduleId`) + wizard (GenerateStep dérive la version à
+    reprendre de `schedulePlanId`). NR (`ScheduleSocleFromPlanTest`) : période validée expose la
+    version choisie / non validée n'expose rien ; colonne absente du schéma.
   - La ★ (`liveContextScheduleId`) **reste par décision** (inv. 17) — c'est l'auto-pointeur qui est
     mort, pas la ★.
-  - **Dette C4-PR1 à solder ici (code-review)** : depuis que `OverlayManager::deleteOverlayForEntry`
-    et le `--dry-run` de `PurgeOverlaysCommand` collectent les versions d'une période PAR son plan
-    (`schedulePlanId`), un overlay **legacy non lié** (`schedulePlanId` null, non pointé) n'est plus
-    ramassé — il ne peut plus exister depuis le backfill du lot A et la naissance liée (C1), mais un
-    orphelin résiduel (reset concurrent, note B1) survivrait à la purge de sa période. La purge des
-    orphelins du lot D l'emporte de toute façon ; à faire ici, **avant** le `NOT NULL`, pour que
-    `deleteOverlayForEntry` et son aperçu redeviennent exhaustifs sans lecteur `calendarEntryId`.
+  - **Dette C4-PR1 soldée en D-a** : la purge des orphelins du lot D-a (`NOT NULL`) emporte tout overlay
+    legacy non lié (`schedulePlanId` null) ; `deleteOverlayForEntry` et l'aperçu de `PurgeOverlaysCommand`
+    collectent exclusivement par `schedulePlanId`, redevenus exhaustifs sans lecteur `calendarEntryId`.
 
 ### Note de nommage (résolution de collision)
 

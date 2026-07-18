@@ -19,7 +19,7 @@ export function useCalendarEntry(id: string | null) {
   return useQuery({
     // Under the "calendar-entries" prefix so the shared invalidation (creation,
     // overlay generation, reopen) also refreshes the detail — a singular key
-    // kept a stale overlayScheduleId for 30s after generating an overlay.
+    // kept a stale plan pointer (chosenScheduleId) for 30s after validating.
     queryKey: ["calendar-entries", "detail", id],
     queryFn: () => cockpitApi.getCalendarEntry(id as string),
     enabled: null !== id,
@@ -47,6 +47,19 @@ export function useSchedulePlanForEntry(calendarEntryId: string | null) {
     queryKey: ["calendar-entries", "plan", calendarEntryId],
     queryFn: () => cockpitApi.getSchedulePlanForEntry(calendarEntryId as string),
     enabled: null !== calendarEntryId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Tous les plans de la saison — le radar y lit, PAR PÉRIODE, la « version active »
+ * (chosenScheduleId, ADR-0002 lot D-b). Sous le préfixe "calendar-entries" pour que
+ * l'invalidation partagée (génération d'overlay, validation, reopen) le rafraîchisse.
+ */
+export function useSchedulePlans() {
+  return useQuery({
+    queryKey: ["calendar-entries", "plans"],
+    queryFn: () => cockpitApi.getAllSchedulePlans(),
     staleTime: 30_000,
   });
 }

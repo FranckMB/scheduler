@@ -85,7 +85,6 @@ final class ReopenScheduleController extends AbstractController implements Seaso
                             'overlays' => array_map(static fn (CalendarEntry $e): array => [
                                 'entryId' => $e->getId(),
                                 'title' => $e->getTitle(),
-                                'overlayScheduleId' => $e->getOverlayScheduleId(),
                             ], $overlays),
                         ], Response::HTTP_CONFLICT);
                     }
