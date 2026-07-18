@@ -84,10 +84,12 @@ final class FfbbClubPopulator
         // Le NOM du club : FFBB fait autorité (décision fondateur 2026-07-18) — le
         // nom saisi au register n'est qu'un fallback ; dès que la fédération répond,
         // c'est SON nom qui prend la place (register ET re-import). Null-check inline
-        // (setName n'accepte pas null, contrairement aux autres setters).
+        // (setName n'accepte pas null, contrairement aux autres setters). Tronqué à
+        // 180 (Club.name) : un nom FFBB plus long ferait échouer le flush et perdrait
+        // AUSSI adresse/logo/coordonnées posés dans le même flush (revue #261 round 1).
         $ffbbName = $this->str($hit['nom'] ?? null);
         if (null !== $ffbbName) {
-            $club->setName($ffbbName);
+            $club->setName(mb_substr($ffbbName, 0, 180));
         }
         $this->setIfPresent($this->str($hit['adresse'] ?? null), $club->setAddress(...));
         $this->setIfPresent($this->postalCode($hit), $club->setPostalCode(...));

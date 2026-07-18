@@ -18,8 +18,11 @@ import { useRegister } from "./queries";
 // retour immédiat au blur ; le serveur reste l'autorité.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Sports proposés. Basket seul aujourd'hui — les autres sont annoncés, désactivés
- *  (préparés au flux ; aucune logique multi-sport, cf. Club.sportId basket au seed). */
+/** Sports proposés. Basket seul aujourd'hui — les autres sont ANNONCÉS, désactivés.
+ *  Le sport n'est pas encore un vrai choix (basket est posé côté serveur, cf.
+ *  Club.sportId au seed) : l'écran affiche le sport du club, il ne toggle pas.
+ *  Quand un 2e sport sera threadé (payload → token → createClub), rendre la
+ *  sélection interactive ici. */
 const SPORTS: { id: string; label: string; icon: string; enabled: boolean }[] = [
   { id: "basketball", label: "Basketball", icon: "🏀", enabled: true },
   { id: "handball", label: "Handball", icon: "🤾", enabled: false },
@@ -32,7 +35,6 @@ export function RegisterPage() {
   // Le sport n'est PAS envoyé au serveur : le seul choix est basket, que createClub
   // pose côté serveur. Au 2e sport, le threader (payload → token → createClub).
   const [step, setStep] = useState<"sport" | "details">("sport");
-  const [sport, setSport] = useState("basketball");
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", confirm: "", ara: "", club_name: "" });
   const [consent, setConsent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -92,19 +94,20 @@ export function RegisterPage() {
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-3 gap-3">
             {SPORTS.map((s) => (
+              // Affichage (pas un toggle) : basket est sélectionné, les autres sont
+              // annoncés. Boutons désactivés — aucun n'est cliquable tant que basket
+              // est le seul sport câblé de bout en bout.
               <button
                 key={s.id}
                 type="button"
-                disabled={!s.enabled}
-                aria-pressed={sport === s.id}
-                onClick={() => setSport(s.id)}
+                disabled
+                aria-pressed={s.enabled}
                 className={cn(
-                  "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-sm transition",
-                  sport === s.id ? "border-accent bg-accent/10 font-medium" : "border-border hover:bg-muted",
-                  s.enabled ? "" : "cursor-not-allowed opacity-40",
+                  "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-sm",
+                  s.enabled ? "border-accent bg-accent/10 font-medium" : "cursor-not-allowed border-border opacity-40",
                 )}
               >
-                {sport === s.id ? <Check aria-hidden className="absolute right-1.5 top-1.5 size-3.5 text-accent" /> : null}
+                {s.enabled ? <Check aria-hidden className="absolute right-1.5 top-1.5 size-3.5 text-accent" /> : null}
                 <span aria-hidden className="text-2xl leading-none">{s.icon}</span>
                 <span>{s.label}</span>
                 {s.enabled ? null : <span className="text-[10px] text-muted-foreground">bientôt</span>}
@@ -185,7 +188,10 @@ export function RegisterPage() {
           <Button type="button" variant="outline" onClick={() => setStep("sport")}>
             Précédent
           </Button>
-          <Button type="submit" className="flex-1" disabled={register.isPending}>
+          {/* Désarmé tant que le mdp n'est pas valide OU non confirmé (comme reset
+              /profil) : sinon un clic avec confirmation vide ne fait RIEN et lit
+              comme une page cassée (revue #261 round 1). */}
+          <Button type="submit" className="flex-1" disabled={register.isPending || !isPasswordValid(form.password) || form.password !== form.confirm}>
             {register.isPending ? <Spinner className="size-4" /> : null}
             Créer le compte
           </Button>

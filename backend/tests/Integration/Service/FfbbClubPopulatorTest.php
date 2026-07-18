@@ -94,6 +94,20 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertNull($this->em->getRepository(Club::class)->find($club->getId())?->getAddress());
     }
 
+    public function testOversizedFfbbNameIsTruncatedNotFlushKilling(): void
+    {
+        // NR (revue #261 round 1) : un nom FFBB > 180 (Club.name) tronqué, jamais
+        // laissé casser le flush — sinon adresse/logo/coordonnées partent avec.
+        $club = $this->seedClub(self::CLUB_CODE);
+        $longName = str_repeat('A', 250);
+        $populator = $this->buildPopulator(clubHit: ['code' => self::CLUB_CODE, 'nom' => $longName, 'adresse' => '5 RUE EMILE DUNIERE']);
+
+        self::assertTrue($populator->populate($club));
+        $reloaded = $this->em->getRepository(Club::class)->find($club->getId());
+        self::assertSame(180, mb_strlen((string) $reloaded?->getName()), 'FFBB name capped to the column length');
+        self::assertSame('5 RUE EMILE DUNIERE', $reloaded?->getAddress(), 'other FFBB fields still applied');
+    }
+
     public function testNoExactCodeMatchDoesNotApplyStrangerData(): void
     {
         // Meilisearch is typo-tolerant: a search may return a neighbour with a
