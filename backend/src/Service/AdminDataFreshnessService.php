@@ -24,12 +24,10 @@ final readonly class AdminDataFreshnessService
     /** Référentiel FFBB : rafraîchi au fil des créations de clubs — une saison + marge. */
     private const FFBB_STALE_AFTER_DAYS = 400;
 
-    /** Backup piloté par l'activité : périmé si de l'activité reste non couverte > 26 h. */
-    private const BACKUP_STALE_AFTER_HOURS = 26;
-
     public function __construct(
         private ManagerRegistry $registry,
         private ClockInterface $clock,
+        private BackupCoverage $backupCoverage,
         #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%kernel.project_dir%/var/backups')]
         private string $backupDir,
     ) {}
@@ -57,26 +55,14 @@ final readonly class AdminDataFreshnessService
      */
     private function backupRow(): array
     {
-        $lastDump = null;
-        foreach (glob(rtrim($this->backupDir, '/') . '/clubscheduler-*.dump') ?: [] as $file) {
-            $mtime = filemtime($file);
-            if (false !== $mtime && (null === $lastDump || $mtime > $lastDump)) {
-                $lastDump = $mtime;
-            }
-        }
-        $lastDumpAt = null === $lastDump ? null : new DateTimeImmutable('@' . $lastDump);
+        // MÊME règle de couverture que la commande (BackupCoverage, source unique —
+        // revue #258 : la version locale divergeait d'une seconde de tolérance et
+        // produisait un rouge permanent sur le cas d'arrondi TIMESTAMP(0)).
+        $lastDumpAt = $this->backupCoverage->latestDumpTime($this->backupDir);
+        $lastActivityAt = $this->backupCoverage->latestActivity();
 
-        $activity = $this->connection()->fetchOne(
-            'SELECT GREATEST(
-                (SELECT MAX(last_activity_at) FROM club),
-                (SELECT MAX(created_at) FROM solver_metrics),
-                (SELECT MAX(occurred_at) FROM audit_log)
-            )',
-        );
-        $lastActivityAt = \is_string($activity) ? new DateTimeImmutable($activity) : null;
-
-        $uncovered = null !== $lastActivityAt && (null === $lastDumpAt || $lastActivityAt > $lastDumpAt);
-        $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', self::BACKUP_STALE_AFTER_HOURS)));
+        $uncovered = !$this->backupCoverage->covers($lastDumpAt, $lastActivityAt);
+        $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', BackupCoverage::STALE_AFTER_HOURS)));
 
         return [
             'key' => 'db-backup',

@@ -60,6 +60,25 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         self::assertCount(14, $this->dumps(), 'la rétention garde les 14 dumps les plus récents');
     }
 
+    public function testBootstrapDumpsADataBearingBaseWithoutActivitySignal(): void
+    {
+        // Revue #258, finding 3 : une base qui CONTIENT des données mais sans aucun
+        // signal d'activité (déploiement existant, audit purgé, jamais de login depuis
+        // la colonne) doit recevoir un PREMIER dump — « aucun signal » ≠ « rien à protéger ».
+        $this->seedActivity(withActivity: false);
+        $application = new Application(self::$kernel);
+
+        $bootstrap = new CommandTester($application->find('app:db:backup'));
+        self::assertSame(Command::SUCCESS, $bootstrap->execute(['--dir' => $this->dir]), $bootstrap->getDisplay());
+        self::assertStringContainsString('bootstrap', $bootstrap->getDisplay());
+        self::assertCount(1, $this->dumps(), 'le bootstrap protège une base à données sans signal');
+
+        // Un dump existe désormais et toujours aucun signal → skip normal.
+        $second = new CommandTester($application->find('app:db:backup'));
+        self::assertSame(Command::SUCCESS, $second->execute(['--dir' => $this->dir]));
+        self::assertCount(1, $this->dumps());
+    }
+
     public function testRestoreCheckProvesTheLatestDumpIsRestorable(): void
     {
         $this->seedActivity();
@@ -81,8 +100,9 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         $this->seedActivity();
         $registry = self::getContainer()->get(ManagerRegistry::class);
         $clock = self::getContainer()->get(ClockInterface::class);
-        \assert($registry instanceof ManagerRegistry && $clock instanceof ClockInterface);
-        $service = new AdminDataFreshnessService($registry, $clock, $this->dir);
+        $coverage = self::getContainer()->get(\App\Service\BackupCoverage::class);
+        \assert($registry instanceof ManagerRegistry && $clock instanceof ClockInterface && $coverage instanceof \App\Service\BackupCoverage);
+        $service = new AdminDataFreshnessService($registry, $clock, $coverage, $this->dir);
 
         // Activité mais AUCUN dump → périmé (fail-visible).
         self::assertTrue($this->backupRow($service)['stale'], 'de l\'activité jamais sauvegardée doit être rouge');
@@ -132,13 +152,14 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         return glob($this->dir . '/clubscheduler-*.dump') ?: [];
     }
 
-    /** L'activité = un club avec last_activity_at récent (le signal réel du produit). */
-    private function seedActivity(): void
+    /** L'activité = un club avec last_activity_at récent ; withActivity: false = club à
+     *  données SANS signal (bootstrap). */
+    private function seedActivity(bool $withActivity = true): void
     {
         $clubId = Uuid::v4()->toRfc4122();
         $this->clubIds[] = $clubId;
         $this->admin()->executeStatement(
-            'INSERT INTO club (id, version, created_at, updated_at, name, slug, generation_count_season, timezone, locale, onboarding_completed, last_activity_at) VALUES (:id, 1, NOW(), NOW(), :name, :slug, 0, :tz, :locale, FALSE, NOW())',
+            'INSERT INTO club (id, version, created_at, updated_at, name, slug, generation_count_season, timezone, locale, onboarding_completed, last_activity_at) VALUES (:id, 1, NOW(), NOW(), :name, :slug, 0, :tz, :locale, FALSE, ' . ($withActivity ? 'NOW()' : 'NULL') . ')',
             ['id' => $clubId, 'name' => 'Club backup', 'slug' => 'bkp-' . strtolower(substr(md5(uniqid('', true)), 0, 10)), 'tz' => 'Europe/Paris', 'locale' => 'fr'],
         );
     }

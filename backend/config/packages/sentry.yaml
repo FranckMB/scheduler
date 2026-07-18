@@ -3,8 +3,10 @@
 # activé le jour où le compte SaaS existe en posant SENTRY_DSN (INF-01).
 # Le bundle capture par défaut les exceptions HTTP, console ET les échecs
 # Messenger (register_error_listener) — exactement le périmètre voulu.
+# `sentryDsn:` (SentryDsnEnvVarProcessor) : un DSN MALFORMÉ devient null + log ERROR
+# au lieu de faire 500 toutes les requêtes — l'observabilité ne tombe jamais le backend.
 sentry:
-    dsn: '%env(SENTRY_DSN)%'
+    dsn: '%env(sentryDsn:SENTRY_DSN)%'
     options:
         environment: '%kernel.environment%'
         traces_sample_rate: 0

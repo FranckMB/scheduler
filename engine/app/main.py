@@ -48,10 +48,15 @@ logger = logging.getLogger("engine")
 # Sentry ERROR capture only (no APM/tracing — solver perf lives in solver_metrics).
 # Empty DSN = disabled no-op init: wired now, activated by setting ENGINE_SENTRY_DSN.
 # Initialised BEFORE the app so the FastAPI integration hooks unhandled exceptions.
+# NEVER let observability take the solver down: a malformed DSN (BadDsn at init)
+# degrades to a logged warning, the engine boots without Sentry (#258 review).
 if settings.sentry_dsn:
-    import sentry_sdk
+    try:
+        import sentry_sdk
 
-    sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment, traces_sample_rate=0.0)
+        sentry_sdk.init(dsn=settings.sentry_dsn, environment=settings.environment, traces_sample_rate=0.0)
+    except Exception as sentry_error:  # noqa: BLE001 — any init failure must not kill the engine
+        logger.warning("Sentry init failed (engine runs WITHOUT error capture): %s", sentry_error)
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 

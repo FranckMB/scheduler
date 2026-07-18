@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\BackupCoverage;
 use DateTimeImmutable;
-use Doctrine\DBAL\Connection;
-use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -24,10 +23,17 @@ use Throwable;
  * quotidien de fait. RPO réel : au pire la journée d'activité en cours, quelle
  * que soit la saison. Rétention : les 14 dumps les plus récents.
  *
- * Ceci est la couche « restauration fine » (corruption logique, migration ratée,
- * mauvais club purgé) — la couche « disque mort » est le snapshot de l'hébergeur
- * (checklist docs/ops/backup-restore.md). Hook off-site optionnel via
- * BACKUP_SYNC_COMMAND (rclone/rsync au choix de l'op), jamais bloquant.
+ * Robustesse (revue #258) :
+ * - écriture vers un `.part` puis RENAME atomique — un pg_dump interrompu (timeout,
+ *   kill) ne peut JAMAIS devenir « le dernier dump » et supprimer les suivants ;
+ * - le mtime du dump est posé au DÉBUT du snapshot (pg_dump photographie au start,
+ *   pas à la fin) — une écriture pendant un dump long reste détectée comme non couverte ;
+ * - BOOTSTRAP : une base qui contient des données mais aucun signal d'activité
+ *   (déploiement existant, audit purgé) reçoit un premier dump quand même.
+ *
+ * Ceci est la couche « restauration fine » — la couche « disque mort » est le
+ * snapshot de l'hébergeur (docs/ops/backup-restore.md). Hook off-site optionnel
+ * via BACKUP_SYNC_COMMAND, jamais bloquant.
  */
 #[AsCommand(
     name: 'app:db:backup',
@@ -38,7 +44,7 @@ final class DatabaseBackupCommand extends Command
     private const RETENTION = 14;
 
     public function __construct(
-        private readonly ManagerRegistry $registry,
+        private readonly BackupCoverage $coverage,
         #[Autowire('%kernel.project_dir%/var/backups')]
         private readonly string $defaultBackupDir,
         #[Autowire('%env(default::BACKUP_SYNC_COMMAND)%')]
@@ -57,53 +63,78 @@ final class DatabaseBackupCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $dirOption = $input->getOption('dir');
-        $dir = \is_string($dirOption) && '' !== $dirOption ? $dirOption : $this->defaultBackupDir;
+        $dir = \is_string($dirOption) && '' !== $dirOption ? rtrim($dirOption, '/') : $this->defaultBackupDir;
         if (!is_dir($dir) && !mkdir($dir, 0o775, true) && !is_dir($dir)) {
             $io->error(\sprintf('Cannot create backup directory %s.', $dir));
 
             return Command::FAILURE;
         }
 
-        $lastDumpAt = $this->latestDumpTime($dir);
-        $lastActivityAt = $this->latestActivity();
-        $io->writeln(\sprintf('activity=%s lastDump=%s', $lastActivityAt?->format('Y-m-d H:i:s.u') ?? 'none', $lastDumpAt?->format('Y-m-d H:i:s.u') ?? 'none'), OutputInterface::VERBOSITY_VERBOSE);
+        $lastDumpAt = $this->coverage->latestDumpTime($dir);
+        $lastActivityAt = $this->coverage->latestActivity();
+        $io->writeln(\sprintf('activity=%s lastDump=%s', $lastActivityAt?->format('Y-m-d H:i:s') ?? 'none', $lastDumpAt?->format('Y-m-d H:i:s') ?? 'none'), OutputInterface::VERBOSITY_VERBOSE);
 
         if (!(bool) $input->getOption('force')) {
             if (null === $lastActivityAt) {
-                $io->writeln('No activity at all — nothing to protect, skipping.');
+                // BOOTSTRAP (revue #258, finding 3) : aucun signal d'activité ne veut pas
+                // dire base vide — un déploiement existant (colonne d'activité récente,
+                // audit purgé) porte des données. S'il n'existe AUCUN dump et que la base
+                // a des données : premier dump quand même. Sinon : vraiment rien à protéger.
+                if (null === $lastDumpAt && $this->coverage->hasAnyData()) {
+                    $io->writeln('No activity signal but the database holds data and no dump exists — bootstrap dump.');
+                } else {
+                    $io->writeln('No activity at all — nothing to protect, skipping.');
 
-                return Command::SUCCESS;
-            }
-            // Tolérance d'UNE seconde : les colonnes d'activité sont TIMESTAMP(0) — Postgres
-            // ARRONDIT à la seconde (07.884 → 08) quand filemtime TRONQUE (07.88 → 07). Sans
-            // marge, une activité contenue DANS le dump paraît postérieure et re-dumpe en
-            // boucle. Une vraie activité > 1 s après le dump reste détectée.
-            if (null !== $lastDumpAt && (int) $lastDumpAt->format('U') + 1 >= (int) $lastActivityAt->format('U')) {
-                $io->writeln(\sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt->format('Y-m-d H:i')));
+                    return Command::SUCCESS;
+                }
+            } elseif ($this->coverage->covers($lastDumpAt, $lastActivityAt)) {
+                $io->writeln(\sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt?->format('Y-m-d H:i') ?? '?'));
 
                 return Command::SUCCESS;
             }
         }
 
-        // Microsecondes dans le nom : deux dumps dans la même seconde (--force enchaîné,
-        // tests) ne doivent jamais s'écraser. L'ordre lexical reste l'ordre chronologique.
-        $file = \sprintf('%s/clubscheduler-%s.dump', rtrim($dir, '/'), new DateTimeImmutable()->format('Ymd-His-u'));
-        $process = new Process(
-            ['pg_dump', '--format=custom', '--file', $file, '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), $this->env('POSTGRES_DB', 'clubscheduler')],
-            env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
-            timeout: 600,
-        );
-        $process->run();
-        if (!$process->isSuccessful()) {
-            @unlink($file);
-            // stderr de pg_dump : diagnostic sans secret (PGPASSWORD passe par l'env, pas argv).
-            $io->error('pg_dump failed: ' . trim($process->getErrorOutput()));
+        // T0 = DÉBUT du snapshot : pg_dump photographie la base au start. Le mtime final
+        // est posé à T0 pour que toute écriture PENDANT le dump reste « non couverte ».
+        $snapshotStart = new DateTimeImmutable;
+        $final = \sprintf('%s/clubscheduler-%s.dump', $dir, $snapshotStart->format('Ymd-His-u'));
+        // Écriture en .part puis rename : un dump interrompu (timeout/kill) ne matche
+        // jamais le glob *.dump — il ne peut pas masquer les backups suivants.
+        $partial = $final . '.part';
+
+        try {
+            $process = new Process(
+                ['pg_dump', '--format=custom', '--file', $partial, '--host', $this->env('POSTGRES_HOST', 'postgres'), '--port', $this->env('POSTGRES_PORT', '5432'), '--username', $this->env('POSTGRES_USER', 'clubscheduler'), $this->env('POSTGRES_DB', 'clubscheduler')],
+                env: ['PGPASSWORD' => $this->env('POSTGRES_PASSWORD', '')],
+                timeout: 600,
+            );
+            $process->run();
+            if (!$process->isSuccessful()) {
+                // stderr de pg_dump : diagnostic sans secret (PGPASSWORD passe par l'env, pas argv).
+                $io->error('pg_dump failed: ' . trim($process->getErrorOutput()));
+
+                return Command::FAILURE;
+            }
+        } catch (Throwable $e) {
+            // Timeout (ProcessTimedOutException) ou toute autre interruption : le .part
+            // est purgé, jamais promu — le job est marqué failed, visible au panneau.
+            $io->error('pg_dump interrupted: ' . $e->getMessage());
 
             return Command::FAILURE;
+        } finally {
+            if (is_file($partial) && !is_file($final)) {
+                // Succès → promotion atomique + mtime = début du snapshot ; échec → purge.
+                if (isset($process) && $process->isSuccessful()) {
+                    rename($partial, $final);
+                    touch($final, (int) $snapshotStart->format('U'));
+                } else {
+                    @unlink($partial);
+                }
+            }
         }
 
-        $size = filesize($file);
-        $io->success(\sprintf('Dump written: %s (%s).', basename($file), false === $size ? '?' : $this->humanSize($size)));
+        $size = filesize($final);
+        $io->success(\sprintf('Dump written: %s (%s).', basename($final), false === $size ? '?' : $this->humanSize($size)));
 
         $this->applyRetention($dir, $io);
         $this->runSyncHook($io);
@@ -111,40 +142,9 @@ final class DatabaseBackupCommand extends Command
         return Command::SUCCESS;
     }
 
-    /**
-     * Le signal « quelque chose a bougé » : activité authentifiée (Club.lastActivityAt,
-     * déjà alimenté), tentatives solveur (append-only) et gestes audités. Connexion
-     * admin : lecture cross-tenant sans GUC.
-     */
-    private function latestActivity(): ?DateTimeImmutable
-    {
-        $value = $this->admin()->fetchOne(
-            'SELECT GREATEST(
-                (SELECT MAX(last_activity_at) FROM club),
-                (SELECT MAX(created_at) FROM solver_metrics),
-                (SELECT MAX(occurred_at) FROM audit_log)
-            )',
-        );
-
-        return \is_string($value) ? new DateTimeImmutable($value) : null;
-    }
-
-    private function latestDumpTime(string $dir): ?DateTimeImmutable
-    {
-        $latest = null;
-        foreach (glob(rtrim($dir, '/') . '/clubscheduler-*.dump') ?: [] as $file) {
-            $mtime = filemtime($file);
-            if (false !== $mtime && (null === $latest || $mtime > $latest)) {
-                $latest = $mtime;
-            }
-        }
-
-        return null === $latest ? null : new DateTimeImmutable('@' . $latest);
-    }
-
     private function applyRetention(string $dir, SymfonyStyle $io): void
     {
-        $files = glob(rtrim($dir, '/') . '/clubscheduler-*.dump') ?: [];
+        $files = glob($dir . '/clubscheduler-*.dump') ?: [];
         // Le nom porte l'horodatage → l'ordre lexical EST l'ordre chronologique.
         sort($files);
         $excess = \count($files) - self::RETENTION;
@@ -154,7 +154,7 @@ final class DatabaseBackupCommand extends Command
         }
     }
 
-    /** Off-site optionnel : commande shell de l'op (rclone/rsync). Échec = WARNING, jamais un échec du dump. */
+    /** Off-site optionnel : commande shell posée par l'OP dans l'env (jamais une entrée requête). Échec = WARNING, jamais un échec du dump. */
     private function runSyncHook(SymfonyStyle $io): void
     {
         if (null === $this->syncCommand || '' === $this->syncCommand) {
@@ -184,13 +184,5 @@ final class DatabaseBackupCommand extends Command
     private function humanSize(int $bytes): string
     {
         return $bytes >= 1_048_576 ? \sprintf('%.1f MiB', $bytes / 1_048_576) : \sprintf('%.1f KiB', $bytes / 1024);
-    }
-
-    private function admin(): Connection
-    {
-        $connection = $this->registry->getConnection('admin');
-        \assert($connection instanceof Connection);
-
-        return $connection;
     }
 }

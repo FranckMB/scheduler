@@ -69,9 +69,14 @@ final readonly class HealthAlertEvaluator
         }
 
         foreach ($freshness as $referential) {
-            if ($referential['stale']) {
-                $alerts[] = ['key' => 'freshness:' . $referential['key'], 'message' => \sprintf('Référentiel « %s » périmé (dernière mise à jour : %s, seuil %d j) — l\'import automatique est peut-être mort en silence.', $referential['label'], $referential['lastUpdatedAt'] ?? 'jamais', $referential['staleAfterDays'])];
+            if (!$referential['stale']) {
+                continue;
             }
+            // Message dédié pour la sauvegarde : « import mort » serait trompeur — ici
+            // c'est de l'ACTIVITÉ CLUB non couverte par un dump (revue #258, finding 6).
+            $alerts[] = 'db-backup' === $referential['key']
+                ? ['key' => 'freshness:db-backup', 'message' => \sprintf('Sauvegarde base de données en retard : de l\'activité club n\'est couverte par aucun dump depuis plus de 26 h (dernier dump : %s) — vérifier le job db-backup (app:db:backup).', $referential['lastUpdatedAt'] ?? 'jamais')]
+                : ['key' => 'freshness:' . $referential['key'], 'message' => \sprintf('Référentiel « %s » périmé (dernière mise à jour : %s, seuil %d j) — l\'import automatique est peut-être mort en silence.', $referential['label'], $referential['lastUpdatedAt'] ?? 'jamais', $referential['staleAfterDays'])];
         }
 
         return $alerts;

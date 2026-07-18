@@ -77,6 +77,18 @@ final class HealthAlertEvaluatorTest extends TestCase
         self::assertStringContainsString('Jours fériés', $alerts[0]['message']);
     }
 
+    public function testStaleBackupGetsItsDedicatedMessageNotTheImportOne(): void
+    {
+        // « Import mort » serait trompeur pour la sauvegarde : c'est de l'activité club
+        // non couverte par un dump (revue #258, finding 6).
+        $freshness = [['key' => 'db-backup', 'label' => 'Sauvegarde base de données', 'lastUpdatedAt' => null, 'staleAfterDays' => 1, 'stale' => true]];
+
+        $alerts = $this->evaluator->evaluate($this->healthyHealth(), $freshness, ['generations24h' => 0, 'infeasible24h' => 0]);
+        self::assertSame(['freshness:db-backup'], array_column($alerts, 'key'));
+        self::assertStringContainsString('app:db:backup', $alerts[0]['message']);
+        self::assertStringNotContainsString('import automatique', $alerts[0]['message']);
+    }
+
     protected function setUp(): void
     {
         $this->evaluator = new HealthAlertEvaluator;

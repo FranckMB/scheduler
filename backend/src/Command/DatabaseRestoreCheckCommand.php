@@ -12,6 +12,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 /**
  * « Un backup jamais restauré n'existe pas » : restaure le dump le plus récent
@@ -83,7 +84,14 @@ final class DatabaseRestoreCheckCommand extends Command
 
             return Command::SUCCESS;
         } finally {
-            $this->maintenance(\sprintf('DROP DATABASE IF EXISTS %s', $database));
+            // Un DROP qui échoue (connexion résiduelle après un pg_restore tué) ne doit
+            // JAMAIS masquer l'erreur d'origine du bloc try — warning et on continue :
+            // la base jetable qui fuit est visible et se re-droppe à la main.
+            try {
+                $this->maintenance(\sprintf('DROP DATABASE IF EXISTS %s', $database));
+            } catch (Throwable $e) {
+                $io->warning(\sprintf('Could not drop throwaway database %s (drop it manually): %s', $database, $e->getMessage()));
+            }
         }
     }
 
