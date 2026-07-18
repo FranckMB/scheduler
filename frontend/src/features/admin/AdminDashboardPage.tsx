@@ -27,8 +27,8 @@ import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { AdminAction, AdminClub, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { useAdminActions, useAdminClubs, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
+import type { AdminAction, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { useAdminActions, useAdminClubs, useAdminFreshness, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -43,6 +43,7 @@ export function AdminDashboardPage() {
   const overview = useAdminOverview();
   const health = useAdminHealth();
   const jobs = useAdminJobs();
+  const freshness = useAdminFreshness();
   const clubs = useAdminClubs(page, CLUBS_PER_PAGE, query);
   const refreshing = overview.isFetching || health.isFetching || jobs.isFetching || clubs.isFetching;
 
@@ -53,7 +54,7 @@ export function AdminDashboardPage() {
   }
 
   function refreshAll() {
-    void Promise.all([overview.refetch(), health.refetch(), jobs.refetch(), clubs.refetch()]);
+    void Promise.all([overview.refetch(), health.refetch(), jobs.refetch(), clubs.refetch(), freshness.refetch()]);
   }
 
   return (
@@ -84,6 +85,7 @@ export function AdminDashboardPage() {
       <UsageSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
       <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
       <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
+      <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
 
       <section aria-labelledby="clubs-heading" className="space-y-4">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -447,6 +449,41 @@ function JobStatus({ status }: { status: AdminJobStatus | null }) {
   const running = status === "running";
   const Icon = successful ? CheckCircle2 : status === "failed" ? AlertTriangle : History;
   return <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", successful ? "text-emerald-300" : running ? "text-cyan-300" : status === "failed" ? "text-amber-300" : "text-slate-400")}><Icon className="size-3.5" aria-hidden="true" />{labels[status]}</span>;
+}
+
+/**
+ * Data-freshness board : « mes données de référence sont-elles à jour ? ». Rend
+ * VISIBLE l'import automatique mort en silence — un référentiel jamais importé ou
+ * trop vieux s'affiche « Périmé » (le job d'alerte emaile en parallèle).
+ */
+function FreshnessSection({ data, loading, error, retry }: DataSectionProps<AdminFreshnessResponse>) {
+  if (loading) return <PanelLoading label="Chargement de la fraîcheur des données" />;
+  if (error || !data) return <PanelError label="La fraîcheur des données est indisponible." retry={retry} />;
+
+  return (
+    <section aria-labelledby="freshness-heading" className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Données de référence</p>
+        <h2 id="freshness-heading" className="mt-2 text-xl font-semibold text-white">Fraîcheur des données</h2>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {data.items.map((item) => (
+          <article key={item.key} className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-white">{item.label}</p>
+              <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold", item.stale ? "bg-amber-400/15 text-amber-300" : "bg-emerald-400/15 text-emerald-300")}>
+                {item.stale ? "Périmé" : "À jour"}
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              {item.lastUpdatedAt ? `Dernière mise à jour : ${formatDate(item.lastUpdatedAt)}` : "Jamais importé"}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-600">Seuil : {integerFormatter.format(item.staleAfterDays)} jours</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }: {

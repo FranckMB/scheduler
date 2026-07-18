@@ -39,6 +39,7 @@ final class AdminJobCatalog
     {
         return [
             new AdminJobDefinition('reconcile-stuck-schedules', 'Réconciliation des générations bloquées', 'app:schedules:reconcile-stuck', AdminJobSchedule::everyTenMinutes(), ['--older-than' => 60]),
+            new AdminJobDefinition('health-alerts', 'Alertes santé & fraîcheur', 'app:health:alert', AdminJobSchedule::everyTenMinutes()),
             new AdminJobDefinition('period-reminders', 'Rappels de périodes', 'app:periods:remind', AdminJobSchedule::daily(8)),
             new AdminJobDefinition('transition-reminders', 'Rappels de transition de saison', 'app:seasons:remind-transition', AdminJobSchedule::daily(8)),
             new AdminJobDefinition('purge-unverified-users', 'Purge des comptes non vérifiés', 'app:users:purge-unverified', AdminJobSchedule::daily(2)),

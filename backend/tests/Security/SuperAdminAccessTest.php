@@ -56,6 +56,9 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/jobs', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
 
+        $this->client->request('GET', '/api/admin/freshness', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
         $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
     }
@@ -159,9 +162,11 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/jobs');
         self::assertResponseIsSuccessful();
         $jobs = $this->responseBody()['items'];
-        self::assertCount(10, $jobs);
+        self::assertCount(11, $jobs);
         $jobsByKey = array_column($jobs, null, 'key');
         self::assertSame('every_10_minutes', $jobsByKey['reconcile-stuck-schedules']['cadence']);
+        self::assertSame('every_10_minutes', $jobsByKey['health-alerts']['cadence']);
+        self::assertFalse($jobsByKey['health-alerts']['manualTriggerAllowed']);
         self::assertSame('daily', $jobsByKey['period-reminders']['cadence']);
         self::assertNotEmpty($jobsByKey['period-reminders']['nextRunAt']);
         self::assertSame($latestId, $jobsByKey['period-reminders']['latestRun']['id']);

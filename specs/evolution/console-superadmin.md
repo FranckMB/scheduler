@@ -110,8 +110,15 @@ y compris sur les tentatives refusées.
 
 - **Clubs « chauds » pour la vente** : quota Découverte épuisé **+** activité récente → liste de prospects (conversion Découverte→payant). *Business.*
 - **Rétention par cohorte** : % de clubs encore actifs N semaines après inscription.
-- **Alerting** : backlog Messenger, taux d'INFEASIBLE qui grimpe, engine down → notification (email/Slack).
-- **Data-freshness board** : date de dernière MAJ des vacances / ligues / comités / clubs FFBB → **signale le périmé** (rend le besoin « mise à jour auto » visible et redevable).
+- **Alerting** ✅ **livré (2026-07-18)** : job `health-alerts` (10 min, catalogue SA3) — sondes du
+  dashboard + backlog Messenger (> 100) + file d'échec (> 0) + taux INFEASIBLE (> 50 % sur 24 h,
+  plancher 5 générations) + référentiels périmés → **email aux superadmins actifs** (zéro config).
+  Anti-spam par état (`admin_alert_state`, ok→firing = 1 email, firing→firing = silence,
+  firing→ok = email de rétablissement). Évaluation pure testée (`HealthAlertEvaluator`).
+- **Data-freshness board** ✅ **livré (2026-07-18)** : `GET /api/admin/freshness` + section console —
+  vacances scolaires / jours fériés (dernier import réussi, périmé > 100 j) et ligues/comités FFBB
+  (`fetched_at`, périmé > 400 j) ; « jamais importé » = périmé (fail-visible). Le job d'alerte
+  surveille la même liste : l'import auto mort en silence emaile.
 - **Kill switch génération** (mode maintenance) : suspendre globalement les générations pendant un incident.
 - **Coûts d'infra projetés à N clubs** : extrapolation charge solveur / ressources.
 - **Audit viewer** : qui a fait quoi — en particulier les actions **superadmin** elles-mêmes.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\AdminJob\AdminJobMonitoringService;
+use App\Service\AdminDataFreshnessService;
 use App\Service\AdminHealthService;
 use App\Service\AdminMonitoringService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -18,12 +19,20 @@ final readonly class AdminMonitoringController
         private AdminMonitoringService $monitoring,
         private AdminHealthService $health,
         private AdminJobMonitoringService $jobs,
+        private AdminDataFreshnessService $freshness,
     ) {}
 
     #[Route('/health', methods: ['GET'])]
     public function health(): JsonResponse
     {
         return new JsonResponse($this->health->health());
+    }
+
+    /** Data-freshness board : « mes données de référence sont-elles à jour ? » (lecture seule). */
+    #[Route('/freshness', methods: ['GET'])]
+    public function freshness(): JsonResponse
+    {
+        return new JsonResponse(['items' => $this->freshness->referentials()]);
     }
 
     #[Route('/overview', methods: ['GET'])]

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAdminActions, getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminClubAction, runAdminJob } from "./api";
+import { getAdminActions, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -61,6 +61,15 @@ export function useRunAdminJob() {
       return runAdminJob(key, csrfToken);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-jobs"] }),
+  });
+}
+
+/** Data-freshness board — l'âge des référentiels bouge lentement : refetch 5 min. */
+export function useAdminFreshness() {
+  return useQuery({
+    queryKey: ["admin-freshness"],
+    queryFn: getAdminFreshness,
+    refetchInterval: 5 * 60_000,
   });
 }
 

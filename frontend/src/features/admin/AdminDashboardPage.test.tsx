@@ -5,8 +5,8 @@ import { axe } from "vitest-axe";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { AdminActionsResponse, AdminClubsResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
-import { getAdminActions, getAdminClubs, getAdminHealth, getAdminJobs, getAdminOverview, runAdminClubAction, runAdminJob } from "./api";
+import type { AdminActionsResponse, AdminClubsResponse, AdminFreshnessResponse, AdminHealthResponse, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import { getAdminActions, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminOverview, runAdminClubAction, runAdminJob } from "./api";
 import { AdminDashboardPage } from "./AdminDashboardPage";
 import { useAdminStore } from "./store";
 
@@ -21,6 +21,7 @@ vi.mock("./api", async (importOriginal) => {
     runAdminJob: vi.fn(),
     getAdminActions: vi.fn(),
     runAdminClubAction: vi.fn(),
+    getAdminFreshness: vi.fn(),
   };
 });
 
@@ -153,6 +154,15 @@ const actions: AdminActionsResponse = {
   ],
 };
 
+// Data-freshness : un référentiel à jour, un périmé (badge), un jamais importé.
+const freshness: AdminFreshnessResponse = {
+  items: [
+    { key: "school-holidays", label: "Vacances scolaires", lastUpdatedAt: "2026-07-01T04:00:00+00:00", staleAfterDays: 100, stale: false },
+    { key: "public-holidays", label: "Jours fériés", lastUpdatedAt: "2026-01-02T04:30:00+00:00", staleAfterDays: 100, stale: true },
+    { key: "ffbb-directory", label: "Ligues & comités FFBB", lastUpdatedAt: null, staleAfterDays: 400, stale: true },
+  ],
+};
+
 const mockOverview = vi.mocked(getAdminOverview);
 const mockHealth = vi.mocked(getAdminHealth);
 const mockJobs = vi.mocked(getAdminJobs);
@@ -160,6 +170,7 @@ const mockClubs = vi.mocked(getAdminClubs);
 const mockRunJob = vi.mocked(runAdminJob);
 const mockActions = vi.mocked(getAdminActions);
 const mockRunClubAction = vi.mocked(runAdminClubAction);
+const mockFreshness = vi.mocked(getAdminFreshness);
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
@@ -170,6 +181,7 @@ describe("AdminDashboardPage", () => {
     mockRunJob.mockReset().mockResolvedValue({ key: "import-school-holidays", status: "succeeded", exitCode: 0 });
     mockActions.mockReset().mockResolvedValue(actions);
     mockRunClubAction.mockReset().mockResolvedValue({ key: "reset-generation-quota", clubId: "club-1", status: "succeeded", exitCode: 0 });
+    mockFreshness.mockReset().mockResolvedValue(freshness);
     useAdminStore.setState({ identity: { id: "admin-1", email: "ops@example.test" }, csrfToken: "csrf-123" });
   });
 
@@ -218,6 +230,17 @@ describe("AdminDashboardPage", () => {
 
     expect(await screen.findByText("Les statistiques d’usage sont indisponibles.")).toBeInTheDocument();
     expect(screen.queryByText("Plans, clôtures et tailles de clubs")).not.toBeInTheDocument();
+  });
+
+  it("renders the data-freshness board: up-to-date, stale and never-imported referentials", async () => {
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("Fraîcheur des données")).toBeInTheDocument();
+    expect(screen.getByText("Vacances scolaires")).toBeInTheDocument();
+    expect(screen.getByText("À jour")).toBeInTheDocument();
+    // Deux référentiels périmés (dont un jamais importé — fail-visible).
+    expect(screen.getAllByText("Périmé")).toHaveLength(2);
+    expect(screen.getByText("Jamais importé")).toBeInTheDocument();
   });
 
   it("runs a non-dangerous support action from the club row after a simple confirm (SA4)", async () => {
