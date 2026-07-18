@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     contract_version: str = Field(default="2.0")
     environment: str = Field(default="dev")
     log_level: str = Field(default="info")
+    # Sentry error capture (ENGINE_SENTRY_DSN). Empty = SDK disabled (no-op init):
+    # everything is wired now, activated the day the SaaS account exists.
+    sentry_dsn: str = Field(default="")
     # Max solves running concurrently across all clubs. 1 preserves the current
     # de-facto serialisation (the event loop no longer blocks — see build_schedule
     # running _solve in a worker thread) while keeping CPU contention bounded.

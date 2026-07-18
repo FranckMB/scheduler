@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
@@ -22,8 +23,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // No Sentry yet (INF-01) — log to the console so the trace is recoverable.
+    // Console d'abord (trace récupérable même sans DSN), puis Sentry — no-op si le
+    // SDK n'est pas initialisé (INF-01 : câblé, activé par VITE_SENTRY_DSN).
     console.error("Unhandled render error:", error, info.componentStack);
+    Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } });
   }
 
   render(): ReactNode {

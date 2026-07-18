@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -6,6 +7,13 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { Providers } from "@/app/providers";
 import { readPersistedThemeMode } from "@/shared/stores/themeStore";
 import "@/index.css";
+
+// Sentry ERREURS uniquement (pas d'APM/replay — quota free tier préservé). DSN
+// absent = init sautée, SDK inerte : tout est câblé, activé le jour où le compte
+// existe en posant VITE_SENTRY_DSN au build (INF-01).
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, environment: import.meta.env.MODE, tracesSampleRate: 0 });
+}
 
 // Apply the persisted theme class BEFORE React's first paint. Without this the
 // tree renders in the light default, then useApplyTheme flips `.dark` in an

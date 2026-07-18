@@ -42,6 +42,17 @@ RUN apt-get update \
     && echo "max_execution_time = 0" >> /usr/local/etc/php/conf.d/zz-memory.ini \
     && rm -rf /var/lib/apt/lists/*
 
+# Client PostgreSQL 16 (pg_dump/pg_restore/psql) pour app:db:backup / restore-check :
+# le client Debian par défaut est en 15 et pg_dump refuse un serveur plus récent —
+# on prend la version EXACTE du serveur (postgres:16) via le dépôt PGDG officiel.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gnupg lsb-release \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN usermod -u ${UID} www-data && groupmod -g ${GID} www-data
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

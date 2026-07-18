@@ -27,6 +27,9 @@ final readonly class AdminDataFreshnessService
     public function __construct(
         private ManagerRegistry $registry,
         private ClockInterface $clock,
+        private BackupCoverage $backupCoverage,
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%kernel.project_dir%/var/backups')]
+        private string $backupDir,
     ) {}
 
     /**
@@ -38,6 +41,39 @@ final readonly class AdminDataFreshnessService
             $this->fromImport('school-holidays', 'Vacances scolaires', 'import-school-holidays', 'school_holiday_period'),
             $this->fromImport('public-holidays', 'Jours fériés', 'import-public-holidays', 'public_holiday'),
             $this->fromTables('ffbb-directory', 'Ligues & comités FFBB', 'fetched_at', ['ffbb_league', 'ffbb_committee']),
+            $this->backupRow(),
+        ];
+    }
+
+    /**
+     * Backup PILOTÉ PAR L'ACTIVITÉ : périmé s'il existe de l'activité PLUS RÉCENTE que le
+     * dernier dump ET que ce dump a plus de 26 h (une base dormante n'alerte jamais —
+     * décision fondateur 2026-07-18). Jamais de dump MAIS de l'activité → périmé.
+     * L'évaluateur d'alertes ramasse la ligne tel quel (freshness:db-backup → email).
+     *
+     * @return array{key: string, label: string, lastUpdatedAt: ?string, staleAfterDays: int, stale: bool}
+     */
+    private function backupRow(): array
+    {
+        // MÊME règle de couverture que la commande (BackupCoverage, source unique —
+        // revue #258 : la version locale divergeait d'une seconde de tolérance et
+        // produisait un rouge permanent sur le cas d'arrondi TIMESTAMP(0)).
+        $lastDumpAt = $this->backupCoverage->latestDumpTime($this->backupDir);
+        $lastActivityAt = $this->backupCoverage->latestActivity();
+
+        // Non couvert = activité plus récente que le dump OU bootstrap dû (données
+        // sans signal, aucun dump, cron cassé) — les DEUX règles vivent dans
+        // BackupCoverage, source unique avec la commande.
+        $uncovered = !$this->backupCoverage->covers($lastDumpAt, $lastActivityAt)
+            || $this->backupCoverage->bootstrapNeeded($lastDumpAt, $lastActivityAt);
+        $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', BackupCoverage::STALE_AFTER_HOURS)));
+
+        return [
+            'key' => 'db-backup',
+            'label' => 'Sauvegarde base de données',
+            'lastUpdatedAt' => $lastDumpAt?->format(\DATE_ATOM),
+            'staleAfterDays' => 1,
+            'stale' => $stale,
         ];
     }
 

@@ -162,7 +162,7 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/jobs');
         self::assertResponseIsSuccessful();
         $jobs = $this->responseBody()['items'];
-        self::assertCount(11, $jobs);
+        self::assertCount(12, $jobs);
         $jobsByKey = array_column($jobs, null, 'key');
         self::assertSame('every_10_minutes', $jobsByKey['reconcile-stuck-schedules']['cadence']);
         self::assertSame('every_10_minutes', $jobsByKey['health-alerts']['cadence']);
