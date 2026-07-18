@@ -36,7 +36,7 @@ Livré : persistance `solver_metrics` à chaque tentative de génération (statu
 ### SA2 — Console read-only (monitoring) *(🟢 lecture seule)*
 - **Livré côté API** : parc global, activité 7/30 jours, nouveaux/semaine, charge solveur
   sur 30 jours et liste paginée/recherchable des clubs avec saison, volumétrie et métriques.
-- **Livré côté API santé** : engine, heartbeat worker, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries du jour). Sentry reste hors périmètre tant qu'il n'est pas branché.
+- **Livré côté API santé** : engine, heartbeat worker, Redis, DB, Mercure ; **file Messenger** (backlog, échecs, retries du jour). Sentry câblé dans les 3 zones depuis le lot observabilité (2026-07-18, cf. l.131) — DSN-vide-inactif, hors périmètre de CE panneau (capture d'erreurs, pas une sonde santé).
 - **Livré côté React** : vue `/admin` des agrégats parc/solveur, sondes et files,
   recherche/pagination des clubs, rafraîchissement périodique et états partiels erreur/vide.
   L'écran ne contient aucune mutation.
