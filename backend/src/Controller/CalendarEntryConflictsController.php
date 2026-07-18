@@ -11,6 +11,7 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
+use App\Service\VenueClosureDays;
 use DateInterval;
 use DatePeriod;
 use Doctrine\ORM\EntityManagerInterface;
@@ -113,9 +114,17 @@ final class CalendarEntryConflictsController extends AbstractController
         // Concrete dates of the window, indexed by ISO weekday (1=Mon..7=Sun) —
         // ScheduleSlotTemplate.dayOfWeek uses the same ISO convention.
         $datesByWeekday = $this->windowDatesByWeekday($entry);
+        // P2-5 5b : granularité JOUR — un gymnase n'est en conflit que les jours où il
+        // est RÉELLEMENT fermé (incident ∩ fenêtre). Une séance un jour ouvert du gym
+        // fermé (fermé jeu-dim, séance lundi) n'est plus comptée : le radar « N séances
+        // touchées » devient exact. Fallback tous-jours si le config n'a pas de dates.
+        $closedWeekdaysByVenue = VenueClosureDays::closedWeekdaysByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
 
         $conflicts = [];
         foreach ($slots as $slot) {
+            if (!isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {
+                continue; // le gymnase est OUVERT ce jour-là : pas un conflit
+            }
             $dates = $datesByWeekday[$slot->getDayOfWeek()] ?? [];
             if ([] === $dates) {
                 continue;

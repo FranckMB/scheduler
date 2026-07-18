@@ -49,70 +49,75 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
     private ScheduleConstraintBuilder $builder;
 
-    public function testClosureOverlayExpandsForbiddenVenuePerTeam(): void
+    public function testClosureOverlayRemovesTheClosedVenueSlots(): void
     {
+        // P2-5 5b : un gymnase fermé sur TOUTE la fenêtre (closure Mon→Sun, config
+        // sans dates → fallback tous-jours) perd TOUS ses créneaux du payload — plus
+        // de forbiddenVenueId (l'engine ne le voit pas ; il ne peut simplement pas
+        // l'utiliser, faute de créneau). Le forbid tous-jours est supprimé.
         [$club, $season] = $this->seed();
-        $teamA = $this->team($club, $season, 'U11');
-        $teamB = $this->team($club, $season, 'U13');
+        $this->team($club, $season, 'U11');
+        $this->team($club, $season, 'U13');
         $this->permanentConstraint($club, $season);
         $entry = $this->closurePeriod($club, $season);
         $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym fermé');
+        $this->datedClosedVenueConstraint($club, $season, $entry);
+        $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 1); // lundi
+        $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 4); // jeudi
         $this->em->flush();
 
         $payload = $this->builder->buildForOverlay($schedule, $entry);
 
-        $forbidden = array_values(array_filter(
-            $payload['constraints'],
-            static fn (array $c): bool => ($c['config']['forbiddenVenueId'] ?? null) === self::VENUE_CLOSED,
-        ));
-        $forbiddenTeams = array_map(static fn (array $c): string => $c['scopeTargetId'], $forbidden);
+        // Plus AUCUN forbiddenVenueId (mécanisme supprimé).
+        $forbidden = array_filter($payload['constraints'], static fn (array $c): bool => isset($c['config']['forbiddenVenueId']));
+        self::assertCount(0, $forbidden, 'le forbid tous-jours est remplacé par le retrait de créneaux');
+        // Fenêtre entière fermée → le gym n'a plus aucun créneau.
+        self::assertSame([], $this->closedVenueWeekdays($schedule, $entry), 'un gym fermé toute la semaine perd tous ses créneaux');
 
-        // One forbiddenVenueId constraint per team × closed venue.
-        self::assertContains($teamA->getId(), $forbiddenTeams);
-        self::assertContains($teamB->getId(), $forbiddenTeams);
-        self::assertCount(2, $forbidden);
-        foreach ($forbidden as $c) {
-            self::assertSame('FACILITY', $c['family']);
-            self::assertSame('HARD', $c['ruleType']);
-            self::assertSame('TEAM', $c['scope']);
-        }
-
-        // Permanent constraint still present (closure is additive).
+        // Closure additive : la permanente reste.
         $names = array_map(static fn (array $c): string => $c['name'] ?? '', $payload['constraints']);
         self::assertContains('Contrainte permanente', $names);
     }
 
-    public function testHolidayOverlayExpandsForbiddenVenuePerTeam(): void
+    public function testWeekClosureRemovesSlotsOnClosedDaysOnly(): void
     {
+        // P2-5 5b — LE cœur : fermeture datée jeudi→dimanche sur une semaine pleine
+        // lun→dim. Le gym GARDE ses créneaux lun/mar/mer (ouvert), PERD jeu/ven/sam/dim.
         [$club, $season] = $this->seed();
-        $teamA = $this->team($club, $season, 'U11');
-        $teamB = $this->team($club, $season, 'U13');
+        $this->team($club, $season, 'U11');
+        // Semaine Mon 2026-05-04 → Sun 2026-05-10 ; incident Thu 05-07 → Sun 05-10.
+        // Entrée SANS la datée auto de closurePeriod (elle serait sans dates = tous-jours).
+        $entry = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym fermé jeu-dim');
+        $this->datedClosedVenueConstraintDated($club, $season, $entry, '2026-05-07', '2026-05-10');
+        foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
+            $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
+        }
+        $this->em->flush();
+
+        $kept = $this->closedVenueWeekdays($schedule, $entry);
+        sort($kept);
+        self::assertSame([1, 2, 3], $kept, 'le gym reste ouvert lun-mer (hors incident), fermé jeu-dim');
+    }
+
+    public function testHolidayOverlayRemovesTheClosedVenueSlots(): void
+    {
+        // Même mécanisme côté reprise (holiday) : le gym fermé perd ses créneaux.
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
         $this->permanentConstraint($club, $season);
         $entry = $this->holidayPeriod($club, $season);
         $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym fermé');
         $this->datedClosedVenueConstraint($club, $season, $entry);
+        $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 2);
         $this->em->flush();
 
-        $payload = $this->builder->buildForOverlay($schedule, $entry);
-
-        // Reprise inherits the CLUB permanent (smart default = kept) and expands the
-        // dated closed venue the same way as a closure so the engine receives forbiddenVenueId.
-        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $payload['constraints']);
+        $names = array_map(static fn (array $c): string => $c['name'] ?? '', $this->builder->buildForOverlay($schedule, $entry)['constraints']);
         self::assertContains('Contrainte permanente', $names, 'a CLUB permanent is inherited in a reprise');
-        $forbidden = array_values(array_filter(
-            $payload['constraints'],
-            static fn (array $c): bool => ($c['config']['forbiddenVenueId'] ?? null) === self::VENUE_CLOSED,
-        ));
-        $forbiddenTeams = array_map(static fn (array $c): string => $c['scopeTargetId'], $forbidden);
-
-        self::assertContains($teamA->getId(), $forbiddenTeams);
-        self::assertContains($teamB->getId(), $forbiddenTeams);
-        self::assertCount(2, $forbidden);
-        foreach ($forbidden as $c) {
-            self::assertSame('FACILITY', $c['family']);
-            self::assertSame('HARD', $c['ruleType']);
-            self::assertSame('TEAM', $c['scope']);
-        }
+        self::assertSame([], $this->closedVenueWeekdays($schedule, $entry), 'le gym fermé n’a plus de créneau côté reprise');
     }
 
     public function testOverlayBuildDoesNotWriteBaseCache(): void
@@ -424,18 +429,31 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     }
 
     /** $schedulePlanId : null = créneau saisonnier (base) ; set = prêté à ce plan (lot C3). */
-    private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId): void
+    private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): void
     {
         $slot = new \App\Entity\VenueTrainingSlot;
         $slot->setClubId($club->getId());
         $slot->setSeasonId($season->getId());
         $slot->setVenueId($venueId);
-        $slot->setDayOfWeek(1);
+        $slot->setDayOfWeek($dayOfWeek);
         $slot->setStartTime(new DateTimeImmutable('18:00'));
         $slot->setDurationMinutes(90);
         $slot->setCapacity(1);
         $slot->setSchedulePlanId($schedulePlanId);
         $this->em->persist($slot);
+    }
+
+    /** Créneaux (jours ISO) du gymnase VENUE_CLOSED effectivement présents dans le payload overlay. */
+    private function closedVenueWeekdays(Schedule $schedule, CalendarEntry $entry): array
+    {
+        $payload = $this->builder->buildForOverlay($schedule, $entry);
+        foreach ($payload['venues'] as $venue) {
+            if (self::VENUE_CLOSED === $venue['id']) {
+                return array_map(static fn (array $s): int => $s['dayOfWeek'], $venue['trainingSlots']);
+            }
+        }
+
+        return [];
     }
 
     private function datedClosedVenueConstraint(Club $club, Season $season, CalendarEntry $entry): Constraint
@@ -453,6 +471,38 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->persist($constraint);
 
         return $constraint;
+    }
+
+    /** Closure SANS contrainte datée auto — pour piloter la fenêtre datée à la main (5b). */
+    private function bareClosurePeriod(Club $club, Season $season, string $start, string $end): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gym fermé (fenêtre pilotée)');
+        $entry->setStartDate(new DateTimeImmutable($start));
+        $entry->setEndDate(new DateTimeImmutable($end));
+        $this->em->persist($entry);
+
+        return $entry;
+    }
+
+    /** venue_closed AVEC dates (l'incident réel) — pour la granularité jour 5b. */
+    private function datedClosedVenueConstraintDated(Club $club, Season $season, CalendarEntry $entry, string $start, string $end): void
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($club->getId());
+        $constraint->setSeasonId($season->getId());
+        $constraint->setCalendarEntryId($entry->getId());
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId(self::VENUE_CLOSED);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setName('Salle fermée');
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $start, 'endDate' => $end]);
+        $this->em->persist($constraint);
     }
 
     private function slot(Schedule $schedule, string $venueId): void

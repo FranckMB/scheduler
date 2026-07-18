@@ -45,6 +45,7 @@ final class CalendarEntryConflictsTest extends WebTestCase
     private const TEAM_TUE = '33333333-3333-4333-8333-333333333332';
     private const TEAM_WED = '33333333-3333-4333-8333-333333333333';
     private const TEAM_Y = '33333333-3333-4333-8333-333333333334';
+    private const TEAM_THU = '33333333-3333-4333-8333-333333333335';
 
     private EntityManagerInterface $em;
 
@@ -101,6 +102,28 @@ final class CalendarEntryConflictsTest extends WebTestCase
 
         self::assertCount(1, $data['conflicts']);
         self::assertSame(1, $data['conflicts'][0]['dayOfWeek']);
+    }
+
+    public function testClosedDaysAreDayPrecise(): void
+    {
+        // P2-5 5b : le gymnase n'est fermé QUE les jours de son incident (config dates),
+        // pas toute la fenêtre de l'entrée. Fenêtre = semaine pleine lun→dim ; incident
+        // jeu→dim. Une séance le LUNDI (gym ouvert) ne compte pas ; le JEUDI oui.
+        [$user, $club, $season] = $this->seed('CF5');
+        $schedule = $this->baseline($club, $season);
+        $this->slot($club, $season, $schedule, self::VENUE_X, 1, self::TEAM_MON); // lundi (ouvert)
+        $this->slot($club, $season, $schedule, self::VENUE_X, 4, self::TEAM_THU); // jeudi (fermé)
+        $this->em->flush();
+
+        // Entrée = semaine Mon 05-04 → Sun 05-10 ; incident config Thu 05-07 → Sun 05-10.
+        $entry = $this->closureWithIncident($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10', '2026-05-07', '2026-05-10');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertCount(1, $data['conflicts'], 'seul le jour réellement fermé compte');
+        self::assertSame(4, $data['conflicts'][0]['dayOfWeek'], 'jeudi (dans l’incident), pas lundi');
     }
 
     public function testWithoutAChosenSeasonPlanTheRadarSaysSoInsteadOfZero(): void
@@ -228,6 +251,36 @@ final class CalendarEntryConflictsTest extends WebTestCase
         $constraint->setFamily(ConstraintFamily::FACILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
         $constraint->setCalendarEntryId($entry->getId());
+        $this->em->persist($constraint);
+
+        $this->em->flush();
+
+        return $entry;
+    }
+
+    /** Closure dont l'incident (config dates) est PLUS ÉTROIT que la fenêtre de l'entrée (5b). */
+    private function closureWithIncident(Club $club, Season $season, string $venueId, string $entryStart, string $entryEnd, string $incidentStart, string $incidentEnd): CalendarEntry
+    {
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $entry->setTitle('Gym fermé (incident daté)');
+        $entry->setStartDate(new DateTimeImmutable($entryStart));
+        $entry->setEndDate(new DateTimeImmutable($entryEnd));
+        $this->em->persist($entry);
+
+        $constraint = new Constraint;
+        $constraint->setClubId($club->getId());
+        $constraint->setSeasonId($season->getId());
+        $constraint->setName('Venue closed');
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId($venueId);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setCalendarEntryId($entry->getId());
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $incidentStart, 'endDate' => $incidentEnd]);
         $this->em->persist($constraint);
 
         $this->em->flush();
