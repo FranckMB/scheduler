@@ -2,7 +2,7 @@ import { Download, Eye, Loader2, Pencil, Star } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/features/auth/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { type ExportFormat, useScheduleExport } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
@@ -11,6 +11,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { useSchedulePlans } from "./queries";
 import type { CalendarEntry } from "./api";
+import { DeletePlanningButton } from "./DeletePlanningButton";
 import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
@@ -80,6 +81,17 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
   const { data: plans } = useSchedulePlans();
   const entryByPlan = new Map((plans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.id, p.calendarEntryId as string]));
   const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null, plans ?? [], entries, schedulesResolved);
+  // Suppression d'un planning SECONDAIRE : jamais le socle, jamais en saison archivée
+  // (409 SeasonReadonly — revue B2 F2), jamais une version en vol (la cascade
+  // emporterait le solve en cours). Entrée de calendrier de son plan comme cible.
+  const workingSeason = useWorkingSeason();
+  const isReadonly = true === workingSeason?.isReadonly;
+  const deletableEntryId = (row: PlanningRow): string | null => {
+    if (!row.isOverlay || isReadonly || "PENDING" === row.status || "GENERATING" === row.status || null === row.schedulePlanId) {
+      return null;
+    }
+    return entryByPlan.get(row.schedulePlanId) ?? null;
+  };
 
   // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a
@@ -140,6 +152,8 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
                     <CompactExport scheduleId={row.id} label={row.label} />
                   </>
                 )}
+                {/* Suppression : plannings SECONDAIRES uniquement (jamais le socle). */}
+                {deletableEntryId(row) ? <DeletePlanningButton calendarEntryId={deletableEntryId(row) as string} title={row.label} iconOnly /> : null}
               </div>
             </li>
           );

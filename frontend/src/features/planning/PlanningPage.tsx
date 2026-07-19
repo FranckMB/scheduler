@@ -7,6 +7,8 @@ import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/quer
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
+import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
+import { useSchedulePlans } from "@/features/cockpit/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -191,6 +193,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   };
 
   const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
+  // Suppression d'un planning SECONDAIRE (overlay) depuis l'en-tête (retour fondateur
+  // 2026-07-19) : l'entrée de calendrier de son plan (jamais pour le socle SEASON).
+  const { data: allSchedulePlans } = useSchedulePlans();
+  const overlayDeleteEntryId =
+    null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) && null !== selectedSchedule.schedulePlanId
+      ? ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId)?.calendarEntryId ?? null)
+      : null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -329,6 +338,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.seasonPlan?.name ?? "")}>
                 <Pencil className="size-4" />
               </Button>
+            ) : null}
+            {/* Supprimer : plannings SECONDAIRES uniquement (jamais le socle), et
+                jamais pendant une génération en vol (la cascade emporterait la version
+                en cours de solve — revue B2 F3) → retour cockpit. */}
+            {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
+              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
         )}
