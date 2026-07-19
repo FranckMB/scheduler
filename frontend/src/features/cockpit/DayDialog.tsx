@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
+import type { CalendarEntry, PublicHoliday, SchedulePlan, SchoolHoliday } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
 import { clampRangeToSeason, frDateShort, periodAdjustWeeks, todayISO, weeksCovering } from "./lib/date";
@@ -63,8 +63,15 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   const socleValidated = useSocleValidated();
   const lockTitle = seasonLockTitle(socleValidated);
   // Index construits UNE fois (revue B1 F5) : plan par entrée + plans portant une
-  // version — plutôt qu'un .find/.some par ligne rendue.
-  const planByEntry = new Map((allPlans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.calendarEntryId as string, p]));
+  // version — plutôt qu'un .find/.some par ligne rendue. PREMIER-gagne sur un
+  // calendarEntryId dupliqué (revue dette F1 : même sémantique que l'ancien .find ;
+  // l'invariant ADR-0002 « 1 entrée = 1 plan » rend le cas théorique).
+  const planByEntry = new Map<string, SchedulePlan>();
+  for (const p of allPlans ?? []) {
+    if (null !== p.calendarEntryId && !planByEntry.has(p.calendarEntryId)) {
+      planByEntry.set(p.calendarEntryId, p);
+    }
+  }
   const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
   const adjust = (entryId: string) => {
     startPeriodMode(entryId);
@@ -251,7 +258,15 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const childrenResolved = null === entry || undefined !== childrenQuery.data;
   const weekChildren = (childrenQuery.data ?? []).filter((e) => e.parentEntryId === (entry?.id ?? "")).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const { data: allPlans } = useSchedulePlans();
-  const chosenOfChild = (childId: string): string | null => (allPlans ?? []).find((p) => p.calendarEntryId === childId)?.chosenScheduleId ?? null;
+  // Index une fois (revue dette F2, même règle que DayList) : version validée par
+  // entrée-enfant — plutôt qu'un .find par chip de semaine rendu. Premier-gagne.
+  const chosenByEntry = new Map<string, string | null>();
+  for (const p of allPlans ?? []) {
+    if (null !== p.calendarEntryId && !chosenByEntry.has(p.calendarEntryId)) {
+      chosenByEntry.set(p.calendarEntryId, p.chosenScheduleId);
+    }
+  }
+  const chosenOfChild = (childId: string): string | null => chosenByEntry.get(childId) ?? null;
   // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
   const schedulesQuery = useSchedules();
   const schedulesResolved = undefined !== schedulesQuery.data;
