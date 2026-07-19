@@ -9,6 +9,11 @@ import { addDays, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
+const createHolidayMutateAsync = vi.fn();
+const createWeekChildrenMutate = vi.fn();
+// #5 gating : socle (plan de saison) validé par défaut — les tests d'ajustement
+// existants cliquent « Adapter ». Un test dédié le passe à null.
+let meData: { seasonPlan: { chosenScheduleId: string | null } } = { seasonPlan: { chosenScheduleId: "s-season" } };
 let conflictsData: { conflicts: { dates: string[] }[]; seasonPlanChosen?: boolean } | undefined;
 let conflictsPending = false;
 // ADR-0002 lot D-b : le radar dérive « version active » du plan de la période
@@ -22,8 +27,8 @@ let plansData: SchedulePlan[] | undefined = [];
 let schedulesData: { schedulePlanId: string }[] | undefined = [];
 
 vi.mock("./queries", () => ({
-  useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, isPending: false }),
-  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: createWeekChildrenMutate, isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
@@ -33,7 +38,10 @@ vi.mock("./queries", () => ({
 vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
-vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ id: "sn1", name: "2998-2999", startDate: "2998-08-01", endDate: "2999-07-31", isCurrent: true, isReadonly: false }) }));
+vi.mock("@/features/auth/queries", () => ({
+  useWorkingSeason: () => ({ id: "sn1", name: "2998-2999", startDate: "2998-08-01", endDate: "2999-07-31", isCurrent: true, isReadonly: false }),
+  useMe: () => ({ data: meData }),
+}));
 
 /** Un plan de période VALIDÉ (chosenScheduleId non-null) pour l'entrée donnée. */
 const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): SchedulePlan => ({
@@ -79,6 +87,9 @@ function renderRadar(props: Partial<Parameters<typeof RadarPanel>[0]> = {}) {
 describe("RadarPanel", () => {
   beforeEach(() => {
     createHolidayMutate.mockReset();
+    createHolidayMutateAsync.mockReset();
+    createWeekChildrenMutate.mockReset();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
@@ -193,22 +204,50 @@ describe("RadarPanel", () => {
     expect(screen.queryByText("Zone scolaire à renseigner")).not.toBeInTheDocument();
   });
 
-  it("offers to adapt an upcoming school holiday (never auto-applies)", async () => {
-    // L'objet créé porte ses DATES : requestAdapt lit created.startDate/endDate
-    // (weeksCovering) — un {id} nu ferait crasher .split sur undefined (CI #262).
-    createHolidayMutate.mockImplementation((_vars, opts) =>
-      opts?.onSuccess?.({ id: "created", kind: "period", periodType: "holiday", title: "Vacances de Noël", startDate: "2999-01-05", endDate: "2999-01-09", isDisruptive: false, schoolHolidayId: "h1", parentEntryId: null, status: "active", createdBy: null }),
-    );
+  // NR #1 (retour fondateur 2026-07-19) : adapter une vacance MULTI-SEMAINES ouvre
+  // le picker SANS matérialiser la mère — annuler ne doit laisser AUCUN événement
+  // fantôme. La mère naît seulement à la confirmation des semaines.
+  it("a multi-week holiday opens the week picker WITHOUT creating any entry, and cancelling leaves nothing", async () => {
+    const user = userEvent.setup();
+    // FUTURE → FUTURE_END (5 → 18 janv.) couvre plusieurs semaines calendaires.
     renderRadar({ holidays: [holiday] });
 
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
     expect(screen.getByText(/pas de planning/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
-    expect(createHolidayMutate).toHaveBeenCalledWith(
-      { schoolHolidayId: "h1", label: "Vacances de Noël", startDate: FUTURE, endDate: FUTURE_END },
-      expect.anything(),
-    );
+    await user.click(screen.getByRole("button", { name: "Adapter" }));
+    // Le picker s'ouvre…
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    // …mais RIEN n'a été créé (ni mère, ni semaines).
+    expect(createHolidayMutate).not.toHaveBeenCalled();
+    expect(createHolidayMutateAsync).not.toHaveBeenCalled();
+    expect(createWeekChildrenMutate).not.toHaveBeenCalled();
+
+    // Annuler → toujours rien.
+    await user.click(screen.getByRole("button", { name: /fermer/i }));
+    expect(createHolidayMutateAsync).not.toHaveBeenCalled();
+    expect(createWeekChildrenMutate).not.toHaveBeenCalled();
+  });
+
+  it("a single-week holiday materialises the period then adapts directly (no picker)", async () => {
+    const user = userEvent.setup();
+    const mon = mondayOf("2999-01-15");
+    // Lundi → mercredi : une seule semaine calendaire → pas de picker.
+    const oneWeek: SchoolHoliday = { id: "h2", label: "Pont", holidayType: "noel", startDate: mon, endDate: addDays(mon, 2), schoolYear: "2998-2999" };
+    renderRadar({ holidays: [oneWeek] });
+
+    await user.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
+    expect(createHolidayMutate).toHaveBeenCalledWith({ schoolHolidayId: "h2", label: "Pont", startDate: mon, endDate: addDays(mon, 2) }, expect.anything());
+  });
+
+  // NR #5 : plan de saison non validé → encart rouge + ajustements désactivés.
+  it("blocks adjustments and shows a red banner while the season plan is not validated", () => {
+    meData = { seasonPlan: { chosenScheduleId: null } };
+    renderRadar({ holidays: [holiday] });
+
+    expect(screen.getByText("Planning de la saison à valider")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeDisabled();
   });
 
   it("counts the sessions to replace on a closure without overlay", () => {

@@ -7,6 +7,17 @@ import type { CalendarEntry, SchoolHoliday } from "../api";
  * entry title / an aria-label at the call site.
  */
 
+/**
+ * La « mère » d'une période vacances : l'entrée qui matérialise une vacance
+ * scolaire (schoolHolidayId) SANS parent. C'est un ANCRAGE technique (plans et
+ * semaines-enfants s'y rattachent), pas un événement à part entière — la vacance
+ * scolaire EST déjà l'événement (surlignage amber). On la masque donc des
+ * marqueurs du calendrier et de la liste supprimable de la modale jour (retour
+ * fondateur : « pas d'événement fantôme, les vacances sont déjà un événement »).
+ * Les semaines-enfants n'ont pas de schoolHolidayId, les fermetures non plus.
+ */
+export const isHolidayAnchor = (e: CalendarEntry): boolean => null === e.parentEntryId && null !== e.schoolHolidayId;
+
 /** Emoji marker for a calendar entry (event / period). */
 export const entryIcon = (e: CalendarEntry): string => {
   if (e.kind === "period") {

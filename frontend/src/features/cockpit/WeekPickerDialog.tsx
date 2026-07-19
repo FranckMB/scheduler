@@ -4,11 +4,14 @@ import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 
-import type { CalendarEntry } from "./api";
 import { frDateShort, isWithin, type WeekWindow } from "./lib/date";
 
 interface WeekPickerDialogProps {
-  mother: CalendarEntry;
+  /** Libellé de la période mère (matérialisée OU vacance pas encore créée — P2-5 E1). */
+  title: string;
+  /** Fenêtre de la mère (pour marquer les semaines « hors événement »). */
+  startDate: string;
+  endDate: string;
   /** Semaines lun→dim couvrant la fenêtre de la mère, clampées à la saison (weeksCovering). */
   weeks: WeekWindow[];
   busy: boolean;
@@ -26,7 +29,7 @@ interface WeekPickerDialogProps {
  * (toutes ici, par construction de weeksCovering). Le chemin « d'un bloc » reste
  * offert (décision fondateur — période courte ou gestionnaire pressé).
  */
-export function WeekPickerDialog({ mother, weeks, busy, onPickWeeks, onAdaptWhole, onClose }: WeekPickerDialogProps) {
+export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPickWeeks, onAdaptWhole, onClose }: WeekPickerDialogProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set(weeks.map((w) => w.monday)));
 
   const toggle = (monday: string) =>
@@ -45,11 +48,11 @@ export function WeekPickerDialog({ mother, weeks, busy, onPickWeeks, onAdaptWhol
   return (
     <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose} className="max-w-md">
       <p className="mt-2 text-sm text-muted-foreground">
-        « {mother.title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.
+        « {title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.
       </p>
       <ul className="mt-4 space-y-2">
         {weeks.map((week) => {
-          const touched = isWithin(mother.startDate, week.startDate, week.endDate) || isWithin(week.startDate, mother.startDate, mother.endDate);
+          const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
           return (
             <li key={week.monday}>
               <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">

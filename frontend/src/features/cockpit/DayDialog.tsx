@@ -11,12 +11,12 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/features/auth/queries";
 
 import { clampRangeToSeason, frDateShort, todayISO, weeksCovering } from "./lib/date";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
-import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
-import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateHolidayPeriod, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
+import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor } from "./lib/markers";
+import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
 type Mode = "list" | "event" | "closure" | "cutoff";
@@ -78,6 +78,11 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
     setToDelete(null);
   };
 
+  // La mère vacances est un ancrage invisible (la vacance scolaire EST l'événement,
+  // portée par HolidayBlock) : jamais listée comme entrée supprimable. Ses
+  // semaines-enfants et les autres entrées restent supprimables.
+  const deletable = entries.filter((e) => !isHolidayAnchor(e));
+
   return (
     <div className="space-y-4">
       {publicHoliday ? (
@@ -91,9 +96,9 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
 
       {holiday ? <HolidayBlock holiday={holiday} entries={entries} onClose={onClose} /> : null}
 
-      {entries.length > 0 ? (
+      {deletable.length > 0 ? (
         <ul className="space-y-2">
-          {entries.map((entry) => (
+          {deletable.map((entry) => (
             <li key={entry.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
               <span className="flex items-center gap-2">
                 {/* Same emoji marker as the month calendar (decorative → aria-hidden;
@@ -166,7 +171,11 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const navigate = useNavigate();
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const createHoliday = useCreateHolidayPeriod();
+  // Gating (#5) : tant que le plan de la SAISON n'est pas validé (chosenScheduleId),
+  // on ne peut pas créer de planning secondaire — les ajustements sont désactivés.
+  const { data: me } = useMe();
+  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
+  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
   // Clamp saison (même règle que le radar) : une période vit dans sa saison ;
   // les vacances à cheval (été) ne créent que leur part en-saison. null = vacance
   // entièrement hors saison, ou saison pas encore chargée → pas de création.
@@ -208,8 +217,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     navigate("/planning");
   };
   // Flux de découpage partagé avec le radar ; ici, plusieurs semaines créées →
-  // referme le DayDialog (le radar reprend le relais via ses cartes).
-  const { pickerFor, setPickerFor, createWeekChildren, pickWeeks, createOneWeek } = useWeekAdapt(adapt, onClose);
+  // referme le DayDialog (le radar reprend le relais via ses cartes). Le chemin
+  // `pending` matérialise la mère vacances SEULEMENT à la confirmation du picker.
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt, onClose);
   // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
   // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
   // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →
@@ -252,7 +262,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
                   key={`new-${week.monday}`}
                   variant="outline"
                   size="sm"
-                  disabled={createWeekChildren.isPending}
+                  disabled={createWeekChildren.isPending || !socleValidated}
+                  title={lockTitle}
                   onClick={() => createOneWeek(entry, week)}
                 >
                   {`+ sem. du ${frDateShort(week.startDate)}`}
@@ -260,8 +271,16 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
               );
             }
             const chosen = chosenOfChild(child.id);
+            // « Voir » (semaine validée) reste actif — lecture seule, sans gating.
             return (
-              <Button key={child.id} variant={null !== chosen ? "ghost" : "outline"} size="sm" onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}>
+              <Button
+                key={child.id}
+                variant={null !== chosen ? "ghost" : "outline"}
+                size="sm"
+                disabled={null === chosen && !socleValidated}
+                title={null === chosen ? lockTitle : undefined}
+                onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}
+              >
                 {`sem. du ${frDateShort(child.startDate)} ${null !== chosen ? "✅" : "· à faire"}`}
               </Button>
             );
@@ -275,7 +294,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         </div>
       ) : entry ? (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => requestAdapt(entry)}>
+          <Button variant="outline" size="sm" disabled={!socleValidated} title={lockTitle} onClick={() => requestAdapt(entry)}>
             Adapter
           </Button>
         </div>
@@ -290,19 +309,27 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           <Button
             variant="outline"
             size="sm"
-            disabled={createHoliday.isPending || null === clamped}
+            disabled={createHoliday.isPending || null === clamped || !socleValidated}
+            title={lockTitle}
             onClick={async () => {
               if (null === clamped) {
                 return;
               }
-              // mutateAsync (not a mutate-scoped onSuccess): the navigation must
-              // fire even if the modal is dismissed mid-POST — otherwise the period
-              // IS created but the wizard never opens, leaving an orphan entry.
-              // The 409/error is surfaced by the global mutation-cache net (queryClient.ts).
+              const pending = { schoolHolidayId: holiday.id, label: holiday.label, startDate: clamped.startDate, endDate: clamped.endDate };
+              // Vacances couvrant PLUSIEURS semaines → choix des semaines SANS rien
+              // créer (la mère naît à la confirmation — retour fondateur : annuler
+              // ne doit laisser aucun événement fantôme).
+              const multiWeek = null !== workingSeason && weeksCovering(clamped.startDate, clamped.endDate, workingSeason).length > 1;
+              if (multiWeek) {
+                openPendingPicker(pending);
+                return;
+              }
+              // 1 seule semaine (pas de picker, donc pas de fantôme possible) :
+              // création + wizard direct. mutateAsync : la navigation part même si
+              // la modale se referme pendant le POST. Erreur → filet global.
               try {
-                const created = await createHoliday.mutateAsync({ schoolHolidayId: holiday.id, label: holiday.label, startDate: clamped.startDate, endDate: clamped.endDate });
-                // Vacances longues → choix des semaines (P2-5 E1) ; courtes → direct.
-                requestAdapt(created);
+                const created = await createHoliday.mutateAsync(pending);
+                adapt(created.id);
               } catch {
                 /* surfaced by the global mutation-cache net */
               }
@@ -313,9 +340,26 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         </div>
       )}
 
+      {/* Vacance PAS encore matérialisée : picker sur une mère synthétique (aucune
+          création tant que non confirmé). */}
+      {null !== pendingHoliday && null !== workingSeason ? (
+        <WeekPickerDialog
+          title={pendingHoliday.label}
+          startDate={pendingHoliday.startDate}
+          endDate={pendingHoliday.endDate}
+          weeks={weeksCovering(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason)}
+          busy={createHoliday.isPending || createWeekChildren.isPending}
+          onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
+          onAdaptWhole={() => adaptWholePending(pendingHoliday)}
+          onClose={() => setPendingHoliday(null)}
+        />
+      ) : null}
+
       {null !== pickerFor && null !== workingSeason ? (
         <WeekPickerDialog
-          mother={pickerFor}
+          title={pickerFor.title}
+          startDate={pickerFor.startDate}
+          endDate={pickerFor.endDate}
           weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}

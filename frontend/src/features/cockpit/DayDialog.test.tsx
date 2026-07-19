@@ -31,12 +31,14 @@ let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
 // fail-closed. Le code clé sur la PRÉSENCE de `data`, pas sur le statut (une donnée périmée
 // après un refetch en échec reste exploitable).
 let queriesNoData = false;
+// #5 gating : socle (plan de saison) validé par défaut ; un test dédié le passe à null.
+let meData: { seasonPlan: { chosenScheduleId: string | null } } = { seasonPlan: { chosenScheduleId: "s-season" } };
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
-  useCreateHolidayPeriod: () => ({ mutateAsync: holidayMutateAsync, isPending: false }),
+  useCreateHolidayPeriod: () => ({ mutate: vi.fn(), mutateAsync: holidayMutateAsync, isPending: false }),
   useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
@@ -55,7 +57,10 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknow
 // Partiel : clampRangeToSeason (clamp saison des créations, revue #260) reste le vrai.
 vi.mock("./lib/date", async (orig) => ({ ...(await orig<typeof import("./lib/date")>()), todayISO: () => "2026-05-12" }));
 // Saison de travail couvrant les dates de test : le clamp laisse créer.
-vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-08-01", endDate: "2026-07-31", isCurrent: true, isReadonly: false }) }));
+vi.mock("@/features/auth/queries", () => ({
+  useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-08-01", endDate: "2026-07-31", isCurrent: true, isReadonly: false }),
+  useMe: () => ({ data: meData }),
+}));
 
 const entry = (overrides: Partial<CalendarEntry>): CalendarEntry => ({
   id: "e1",
@@ -91,6 +96,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     cutoffMutate.mockReset();
     closureMutate.mockReset();
     holidayMutateAsync.mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
@@ -281,6 +287,7 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     navigate.mockClear();
     startPeriodMode.mockClear();
     setSelectedScheduleId.mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
@@ -294,22 +301,23 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
   });
 
   // item 1 + 3: a school holiday shows info AND the "Adapter" entry point.
-  // P2-5 E1 : ces vacances couvrent PLUSIEURS semaines calendaires → « Adapter »
-  // crée la période mère puis ouvre le CHOIX DES SEMAINES (plus d'adapt direct).
-  it("shows the school-holiday info + « Adapter » opens the week picker on a multi-week holiday", async () => {
+  // NR #1 (retour fondateur 2026-07-19) : ces vacances couvrent PLUSIEURS semaines
+  // → « Adapter » ouvre le CHOIX DES SEMAINES SANS matérialiser la mère (annuler ne
+  // doit laisser aucun événement fantôme). La mère naît à la confirmation.
+  it("shows the school-holiday info + « Adapter » opens the week picker WITHOUT creating anything on a multi-week holiday", async () => {
     renderDialog([], { holiday: schoolHoliday() });
     expect(screen.getByText("Vacances")).toBeInTheDocument();
     expect(screen.getByText(/Vacances de Noël/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
-    // mutateAsync (no mutate-scoped options) so the wizard navigation survives a dismiss.
-    expect(holidayMutateAsync).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" });
-    // …AND once it resolves, the WEEK PICKER opens for the created period.
-    await waitFor(() => expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument());
+    // Le picker s'ouvre immédiatement — AUCUNE création tant que non confirmé.
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(holidayMutateAsync).not.toHaveBeenCalled();
     expect(startPeriodMode).not.toHaveBeenCalled();
-    // Le chemin « d'un bloc » reste offert et mène au wizard sur la mère.
+    // Le chemin « d'un bloc » matérialise ALORS la mère puis mène au wizard.
     await userEvent.click(screen.getByRole("button", { name: /d'un bloc/i }));
-    expect(startPeriodMode).toHaveBeenCalledWith("created-hol");
+    expect(holidayMutateAsync).toHaveBeenCalledWith({ schoolHolidayId: "sh1", label: "Vacances de Noël", startDate: "2026-05-10", endDate: "2026-05-20" });
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("created-hol"));
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 
@@ -366,5 +374,25 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     renderDialog([], { holiday: schoolHoliday({ id: "sh-out", label: "Vacances lointaines", startDate: "2027-10-01", endDate: "2027-10-15" }) });
     expect(screen.getByText(/Hors de la saison en cours/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+  });
+
+  // NR #1 : la mère vacances est un ANCRAGE invisible — jamais listée comme entrée
+  // supprimable (la vacance scolaire EST déjà l'événement). Les autres entrées, si.
+  it("never lists the holiday mother as a deletable entry (invisible anchor, not a phantom event)", () => {
+    const mother = entry({ id: "hm", kind: "period", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20" });
+    const other = entry({ id: "ev", title: "AG du club" });
+    renderDialog([mother, other], { holiday: schoolHoliday() });
+
+    expect(screen.queryByRole("button", { name: /Supprimer Vacances de Noël/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Supprimer AG du club" })).toBeInTheDocument();
+    expect(screen.getByText("Vacances")).toBeInTheDocument();
+  });
+
+  // NR #5 : plan de saison non validé → l'ajustement d'une vacance est désactivé.
+  it("disables « Adapter » while the season plan is not validated (#5)", () => {
+    meData = { seasonPlan: { chosenScheduleId: null } };
+    renderDialog([], { holiday: schoolHoliday() });
+
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeDisabled();
   });
 });
