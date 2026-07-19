@@ -153,7 +153,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
                   </>
                 )}
                 {/* Suppression : plannings SECONDAIRES uniquement (jamais le socle). */}
-                {deletableEntryId(row) ? <DeletePlanningButton calendarEntryId={deletableEntryId(row) as string} title={row.label} iconOnly /> : null}
+                {deletableEntryId(row) ? <DeletePlanningButton calendarEntryId={deletableEntryId(row) as string} schedulePlanId={row.schedulePlanId} title={row.label} iconOnly /> : null}
               </div>
             </li>
           );

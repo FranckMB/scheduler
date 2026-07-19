@@ -343,7 +343,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 jamais pendant une génération en vol (la cascade emporterait la version
                 en cours de solve — revue B2 F3) → retour cockpit. */}
             {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
-              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
+              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
         )}
