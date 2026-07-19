@@ -11,6 +11,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { useSchedulePlans } from "./queries";
 import type { CalendarEntry } from "./api";
+import { DeletePlanningButton } from "./DeletePlanningButton";
 import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
@@ -80,6 +81,8 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
   const { data: plans } = useSchedulePlans();
   const entryByPlan = new Map((plans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.id, p.calendarEntryId as string]));
   const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null, plans ?? [], entries, schedulesResolved);
+  // Entrée de calendrier d'un planning SECONDAIRE (jamais le socle) → cible de suppression.
+  const overlayEntryId = (row: PlanningRow): string | null => (row.isOverlay && null !== row.schedulePlanId ? (entryByPlan.get(row.schedulePlanId) ?? null) : null);
 
   // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a
@@ -140,6 +143,8 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
                     <CompactExport scheduleId={row.id} label={row.label} />
                   </>
                 )}
+                {/* Suppression : plannings SECONDAIRES uniquement (jamais le socle). */}
+                {overlayEntryId(row) ? <DeletePlanningButton calendarEntryId={overlayEntryId(row) as string} title={row.label} iconOnly /> : null}
               </div>
             </li>
           );
