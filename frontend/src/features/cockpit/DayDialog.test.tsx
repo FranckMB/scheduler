@@ -388,6 +388,17 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(screen.getByText("Vacances")).toBeInTheDocument();
   });
 
+  // Revue F2 : sur un jour de vacances « bloc » dont la seule entrée est la mère
+  // (masquée), la liste supprimable est vide — mais « Rien ce jour-là » NE doit PAS
+  // s'afficher sous le bloc vacances (ce serait se contredire).
+  it("never shows the « rien ce jour-là » message on a holiday day whose only entry is the hidden mother", () => {
+    const mother = entry({ id: "hm", kind: "period", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20" });
+    renderDialog([mother], { holiday: schoolHoliday() });
+
+    expect(screen.queryByText(/Rien ce jour-là/)).not.toBeInTheDocument();
+    expect(screen.getByText("Vacances")).toBeInTheDocument();
+  });
+
   // NR #5 : plan de saison non validé → l'ajustement d'une vacance est désactivé.
   it("disables « Adapter » while the season plan is not validated (#5)", () => {
     meData = { seasonPlan: { chosenScheduleId: null } };

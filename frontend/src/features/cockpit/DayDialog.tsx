@@ -118,9 +118,15 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
             </li>
           ))}
         </ul>
-      ) : (
+      ) : null}
+
+      {/* « Rien ce jour-là » NE s'affiche PAS sous un jour de vacances : la mère
+          holiday est masquée de la liste supprimable (ancrage invisible), donc
+          `deletable` peut être vide alors que le bloc vacances ci-dessus tient la
+          journée — dire « la semaine type tourne normalement » se contredirait. */}
+      {deletable.length === 0 && !holiday ? (
         <p className="text-sm text-muted-foreground">Rien ce jour-là — la semaine type tourne normalement.</p>
-      )}
+      ) : null}
 
       <ConfirmDialog
         open={toDelete !== null}

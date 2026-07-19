@@ -298,9 +298,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ) : null}
 
       {/* Plannings EN COURS d'abord : l'action la plus pressante, jamais cachée. */}
+      {/* Le gating (#5) bloque la CRÉATION d'un secondaire, pas la REPRISE d'un
+          travail déjà commencé : « Reprendre » un planning en cours reste actif même
+          si la saison est rouverte — sinon on figerait un travail à moitié fait. */}
       {inProgressEntries.map((e) => (
         <RadarCard key={`wip-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning en cours — à finaliser">
-          <Button variant="outline" size="sm" disabled={!socleValidated} title={lockTitle} onClick={() => adapt(e.id)}>
+          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
             Reprendre
           </Button>
         </RadarCard>
@@ -309,7 +312,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {/* Semaine dont la MÈRE est sortie de la fenêtre radar : sa seule surface. */}
       {orphanWeekChildren.map((e) => (
         <RadarCard key={`orphan-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning de semaine à finaliser">
-          <Button variant="outline" size="sm" disabled={!socleValidated} title={lockTitle} onClick={() => adapt(e.id)}>
+          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
             Reprendre
           </Button>
         </RadarCard>
@@ -343,14 +346,16 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
               }
               const activeId = activeByEntry.get(child.id) ?? null;
               const wip = inProgressEntryIds.has(child.id);
-              // « Voir » (semaine validée) reste actif — lecture seule, sans gating.
+              // Gating uniquement sur une semaine À CRÉER/DÉMARRER (« à faire ») :
+              // « Voir » (validée) et « en cours » (reprise) restent actifs.
+              const chipLocked = null === activeId && !wip && !socleValidated;
               return (
                 <Button
                   key={child.id}
                   variant={null !== activeId ? "ghost" : "outline"}
                   size="sm"
-                  disabled={null === activeId && !socleValidated}
-                  title={null === activeId ? lockTitle : undefined}
+                  disabled={chipLocked}
+                  title={chipLocked ? lockTitle : undefined}
                   onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(child.id))}
                 >
                   {`sem. du ${frDateShort(child.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
@@ -415,7 +420,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         ? null
         : visibleClosures.map((e) => {
             const activeId = activeByEntry.get(e.id) ?? null;
-            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} adaptDisabled={!socleValidated} adaptTitle={lockTitle} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} seasonUnvalidated={!socleValidated} adaptTitle={lockTitle} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
           })}
 
       {cutoffs.map((e) => (
@@ -467,7 +472,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   );
 }
 
-function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, adaptDisabled = false, adaptTitle, onAdapt, onView }: { entry: CalendarEntry; activeScheduleId: string | null; inProgress?: boolean; adaptDisabled?: boolean; adaptTitle?: string; onAdapt: () => void; onView: () => void }) {
+function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, seasonUnvalidated = false, adaptTitle, onAdapt, onView }: { entry: CalendarEntry; activeScheduleId: string | null; inProgress?: boolean; seasonUnvalidated?: boolean; adaptTitle?: string; onAdapt: () => void; onView: () => void }) {
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
   // ADR-0002 lot D-b : « a un overlay » = le plan de la période est VALIDÉ (chosenScheduleId).
@@ -508,12 +513,16 @@ function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, adaptDi
           <Button variant="outline" size="sm" onClick={onView}>
             Voir le planning
           </Button>
-          <Button variant="ghost" size="sm" disabled={adaptDisabled} title={adaptTitle} onClick={onAdapt}>
+          {/* Overlay validé → « Ajuster » retouche un secondaire existant (pas une
+              création) : jamais bloqué par le gating saison. */}
+          <Button variant="ghost" size="sm" onClick={onAdapt}>
             Ajuster
           </Button>
         </>
       ) : (
-        <Button variant="outline" size="sm" disabled={adaptDisabled} title={adaptTitle} onClick={onAdapt}>
+        // Gating seulement sur une fermeture À DÉMARRER (« Adapter ») ; « Reprendre »
+        // (travail en cours) reste actif même si la saison est rouverte.
+        <Button variant="outline" size="sm" disabled={!inProgress && seasonUnvalidated} title={!inProgress ? adaptTitle : undefined} onClick={onAdapt}>
           {inProgress ? "Reprendre" : "Adapter"}
         </Button>
       )}

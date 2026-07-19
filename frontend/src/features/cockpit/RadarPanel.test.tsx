@@ -110,6 +110,20 @@ describe("RadarPanel", () => {
     await user.click(screen.getByRole("button", { name: "Reprendre" }));
   });
 
+  // NR #5 / revue F3 : le gating bloque la CRÉATION, pas la REPRISE. « Reprendre » un
+  // planning EN COURS reste actif même quand le plan de saison n'est pas validé
+  // (sinon on figerait un travail commencé si la saison est rouverte).
+  it("keeps « Reprendre » enabled on an in-progress planning even when the season plan is not validated", () => {
+    meData = { seasonPlan: { chosenScheduleId: null } };
+    const started = new Date();
+    started.setDate(started.getDate() - 2);
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ schedulePlanId: "pl-h1" }];
+    renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: started.toISOString().slice(0, 10), endDate: addDays(todayISO(), 3) })] });
+
+    expect(screen.getByRole("button", { name: "Reprendre" })).toBeEnabled();
+  });
+
   it("a CLOSURE with an in-progress plan keeps its rich impact card (sessions count) with « Reprendre »", () => {
     // La carte générique gommerait le détail des séances touchées (revue #260) :
     // la fermeture garde ClosureRadarItem, marquée « en cours », CTA Reprendre.
