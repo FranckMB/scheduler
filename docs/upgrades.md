@@ -5,6 +5,42 @@
 > l'upgrade apporte, et ce qu'il a fallu adapter chez nous. But : comprendre les mises à jour,
 > pas les subir. Ordre antichronologique.
 
+## 2026-07-19 — lot Dependabot (7 PRs : 6 mergées, 1 bloquée)
+
+### doctrine/doctrine-migrations-bundle 3.7 → 4.0 (backend, majeur)
+**C'est quoi** : le bundle Symfony qui pilote les **migrations de base de données** — les scripts
+versionnés qui font évoluer le schéma PostgreSQL (`make migration-diff` / `migration-migrate`).
+**Ça apporte** : compatibilité avec les versions récentes de Doctrine ORM/DBAL (déjà passées en 3/4
+le 11 juillet), pérennité — le bundle 3 ne recevra plus de correctifs. Rester dans le train évite
+d'accumuler l'écart.
+**Adapté chez nous** : **rien** — la config de migrations était déjà compatible, CI verte
+(blocking-tests + PHPStan + migrations) au premier tour.
+
+### Groupe composer backend ×7 — API Platform 4.3.17, outils
+**C'est quoi** : patchs du framework HTTP/API (API Platform) et des dépendances associées.
+**Ça apporte** : correctifs de bugs/sécu en amont, dans les fourchettes existantes (lockfile).
+**Adapté chez nous** : rien.
+
+### @types/node 24 → 26 · jsdom 27 → 29 · groupe frontend-npm ×4 (frontend, dev-only)
+**C'est quoi** : outillage de dev/test frontend — `@types/node` (types Node pour TypeScript),
+`jsdom` (DOM simulé pour les tests unitaires Vitest), + un groupe (Storybook & co, lockfile).
+**Ça apporte** : types et environnement de test à jour, correctifs. Aucun impact runtime (dev-only).
+**Adapté chez nous** : rien — 521 tests verts, `tsc` + `eslint` + `vite build` OK.
+
+### actions/setup-node 6 → 7 (CI, GitHub Actions)
+**C'est quoi** : l'action GitHub qui installe Node.js dans les jobs de CI.
+**Ça apporte** : compatibilité avec les runners récents ; inputs (`node-version`, `cache`) inchangés.
+**Adapté chez nous** : rien (bump de référence ×3 dans `ci.yml`).
+
+### ⛔ typescript 6.0 → 7.0 (frontend) — NON mergée, laissée ouverte (#223)
+**C'est quoi** : le compilateur TypeScript.
+**Pourquoi bloquée** : TS 7 supprime l'option `baseUrl` (migration triviale, faite localement),
+mais surtout **`typescript-eslint` plafonne à `typescript >=4.8.4 <6.1.0`** (dernière version
+publiée 8.64.0) — sous TS 7, `@typescript-eslint/typescript-estree` crashe (`Cannot read 'Cjs'`) et
+**tout le lint est cassé**. Aucune version de `typescript-eslint` compatible TS 7 n'existe encore.
+**À faire** : rouvrir quand `typescript-eslint` supportera TS 7 (bump coordonné TS + typescript-eslint).
+Diagnostic laissé en commentaire sur la PR #223.
+
 ## 2026-07-11 — lot Dependabot complet (9 PRs)
 
 ### doctrine/doctrine-bundle 2.18 → 3.2 + DBAL 3 → 4 (backend) — le gros morceau
