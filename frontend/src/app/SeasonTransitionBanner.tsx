@@ -31,8 +31,9 @@ export function SeasonTransitionBanner({ today = new Date() }: { today?: Date })
   // divergence). Ancrée sur AUJOURD'HUI (nudge un club dormant avant chaque pivot) ;
   // bannière = à partir du 15 mai. La deadline affichée est la borne réelle (fin de
   // saison), plus le 15 juillet codé en dur (revue D F2).
-  const { canPrepare, deadline } = seasonPrepWindow(localIso(today), seasons, "05-15");
-  if (!canPrepare) {
+  const { inWindow, successorExists, deadline } = seasonPrepWindow(localIso(today), seasons, "05-15");
+  // La bannière (nag) se masque hors fenêtre ET quand un successeur existe déjà.
+  if (!inWindow || successorExists) {
     return null;
   }
 

@@ -223,9 +223,9 @@ describe("SeasonSelector", () => {
     expect(screen.getByText("Préparer la saison suivante…")).toBeInTheDocument();
   });
 
-  // Revue D F4 : même en fenêtre, si un successeur existe déjà, l'item est masqué
-  // (sinon clic → 409). Aligné sur la bannière.
-  it("hides « Préparer la saison suivante » when a successor season already exists", async () => {
+  // Le menu reste cliquable même si un successeur existe déjà (préparer 2× réutilise
+  // le brouillon via un 409 gracieux — flux conçu, e2e). Seule la BANNIÈRE se masque.
+  it("still shows « Préparer la saison suivante » in-window even when a successor exists", async () => {
     meData = {
       currentSeasonId: "s2627",
       seasons: [
@@ -235,6 +235,6 @@ describe("SeasonSelector", () => {
     };
     renderSelector(day("2027-06-01")); // dans la fenêtre de la saison 2026-2027
     await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
-    expect(screen.queryByText("Préparer la saison suivante…")).not.toBeInTheDocument();
+    expect(screen.getByText("Préparer la saison suivante…")).toBeInTheDocument();
   });
 });

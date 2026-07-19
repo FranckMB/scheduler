@@ -28,13 +28,18 @@ interface SeasonBounds {
  * successeur existe déjà. Clamp anti-fenêtre-inversée : une saison qui finit AVANT
  * l'ouverture retombe sur le pivot (sinon aucune fenêtre → aucun nudge).
  *
+ * `inWindow` = dans la plage de dates ; `successorExists` = un N+1 est déjà préparé.
+ * Le MENU d'action reste cliquable sur `inWindow` seul (préparer 2× réutilise
+ * gracieusement le brouillon existant via un 409 serveur — flux conçu, e2e) ; la
+ * BANNIÈRE (nag) se masque en plus quand `successorExists`.
+ *
  * @param fromMonthDay borne basse « MM-JJ » (menu = "05-01", bannière = "05-15").
  */
 export function seasonPrepWindow(
   todayIso: string,
   seasons: SeasonBounds[],
   fromMonthDay: string,
-): { canPrepare: boolean; deadline: string } {
+): { inWindow: boolean; successorExists: boolean; deadline: string } {
   const anchorYear = seasonYearOf(todayIso);
   const pivotYear = anchorYear + 1;
   const pivotEnd = `${pivotYear}-07-15`;
@@ -43,8 +48,8 @@ export function seasonPrepWindow(
   const seasonEnd = null !== current && seasonYearOf(current.startDate) === anchorYear ? current.endDate : pivotEnd;
   const opensAt = `${pivotYear}-${fromMonthDay}`;
   const deadline = seasonEnd < opensAt ? pivotEnd : seasonEnd;
-  const canPrepare = !successorExists && todayIso >= opensAt && todayIso <= deadline;
-  return { canPrepare, deadline };
+  const inWindow = todayIso >= opensAt && todayIso <= deadline;
+  return { inWindow, successorExists, deadline };
 }
 
 /** « 15 juillet » — jour + mois FR d'une date ISO, pour le libellé de deadline. */
