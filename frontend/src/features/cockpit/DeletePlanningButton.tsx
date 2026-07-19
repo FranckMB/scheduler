@@ -11,6 +11,8 @@ import { useDeleteEntry, useSchedulePlanForEntry } from "./queries";
 interface DeletePlanningButtonProps {
   /** Entrée de calendrier du planning secondaire à supprimer (closure / holiday). */
   calendarEntryId: string;
+  /** Plan de l'entrée, si l'appelant le connaît déjà — évite un refetch (revue B2 F6). */
+  schedulePlanId?: string | null;
   /** Libellé du planning (confirmation + aria). */
   title: string;
   /** Appelé APRÈS suppression réussie (ex. retour cockpit ; la modale se rafraîchit seule). */
@@ -31,16 +33,19 @@ interface DeletePlanningButtonProps {
  * versions. Le plan de SAISON n'est jamais passé ici (les appelants ne rendent le bouton que
  * pour un overlay).
  */
-export function DeletePlanningButton({ calendarEntryId, title, onDeleted, iconOnly = false, className }: DeletePlanningButtonProps) {
+export function DeletePlanningButton({ calendarEntryId, schedulePlanId, title, onDeleted, iconOnly = false, className }: DeletePlanningButtonProps) {
   const [confirming, setConfirming] = useState(false);
   const deleteEntry = useDeleteEntry();
   // « Porte des versions » = une Schedule pend au plan de l'entrée → l'alerte cascade doit
   // être forte. Fail-closed sur l'absence de donnée (plan/schedules pas résolus) : on avertit
   // tant qu'on ne SAIT pas, comme DayList (toDeleteHasVersions) — ne jamais sous-avertir.
-  const plan = useSchedulePlanForEntry(confirming ? calendarEntryId : null);
+  // Ne refetch le plan par entrée que si l'appelant ne l'a pas déjà fourni (revue B2 F6).
+  const providedPlanId = schedulePlanId ?? null;
+  const planQuery = useSchedulePlanForEntry(confirming && null === providedPlanId ? calendarEntryId : null);
   const { data: schedules } = useSchedules();
-  const planId = plan.data?.id ?? null;
-  const resolved = undefined !== plan.data && undefined !== schedules;
+  const planId = providedPlanId ?? planQuery.data?.id ?? null;
+  const planResolved = null !== providedPlanId || undefined !== planQuery.data;
+  const resolved = planResolved && undefined !== schedules;
   const hasVersions = !resolved || (null !== planId && (schedules ?? []).some((s) => s.schedulePlanId === planId));
 
   const confirmDelete = () => {

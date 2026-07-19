@@ -11,9 +11,10 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
-import { useMe, useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/features/auth/queries";
 
 import { clampRangeToSeason, frDateShort, periodAdjustWeeks, todayISO, weeksCovering } from "./lib/date";
+import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor } from "./lib/markers";
 import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
@@ -59,10 +60,12 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const { data: allPlans } = useSchedulePlans();
-  const { data: me } = useMe();
-  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
-  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
-  const planOfEntry = (entryId: string) => (allPlans ?? []).find((p) => p.calendarEntryId === entryId) ?? null;
+  const socleValidated = useSocleValidated();
+  const lockTitle = seasonLockTitle(socleValidated);
+  // Index construits UNE fois (revue B1 F5) : plan par entrée + plans portant une
+  // version — plutôt qu'un .find/.some par ligne rendue.
+  const planByEntry = new Map((allPlans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.calendarEntryId as string, p]));
+  const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
   const adjust = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -124,9 +127,9 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
             // Entrée porteuse d'un plan (fermeture / semaine de vacances) → AJUSTER
             // (pas de version validée) ou Consulter (validé). Les entrées sans plan
             // (événement, coupure) n'ont pas de CTA planning.
-            const plan = planOfEntry(entry.id);
+            const plan = planByEntry.get(entry.id) ?? null;
             const chosen = plan?.chosenScheduleId ?? null;
-            const planHasVersions = null !== plan && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.id);
+            const planHasVersions = null !== plan && plansWithVersions.has(plan.id);
             // Gating (#5/F3) : AJUSTER une fermeture PAS ENCORE commencée (0 version)
             // reste bloqué tant que la saison n'est pas validée ; reprendre un travail
             // déjà commencé (versions) ne l'est pas.
@@ -226,9 +229,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   // Gating (#5) : tant que le plan de la SAISON n'est pas validé (chosenScheduleId),
   // on ne peut pas créer de planning secondaire — les ajustements sont désactivés.
-  const { data: me } = useMe();
-  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
-  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
+  const socleValidated = useSocleValidated();
+  const lockTitle = seasonLockTitle(socleValidated);
   // Clamp saison (même règle que le radar) : une période vit dans sa saison ;
   // les vacances à cheval (été) ne créent que leur part en-saison. null = vacance
   // entièrement hors saison, ou saison pas encore chargée → pas de création.

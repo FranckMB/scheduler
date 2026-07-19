@@ -1,7 +1,7 @@
 import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { useMe, useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/features/auth/queries";
 import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
@@ -10,6 +10,7 @@ import { Button } from "@/shared/components/ui/button";
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
 import { clampRangeToSeason, daysUntil, frDateShort, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
@@ -36,9 +37,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // Gating (#5) : sans plan de SAISON validé (chosenScheduleId), aucun planning
   // secondaire — les boutons d'ajustement sont désactivés, un encart rouge invite
   // à finir la validation.
-  const { data: me } = useMe();
-  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
-  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
+  const socleValidated = useSocleValidated();
+  const lockTitle = seasonLockTitle(socleValidated);
   // Une période vit DANS sa saison : les dates de vacances sont clampées à la
   // fenêtre de saison avant création (l'été chevauche la frontière). Saison
   // inconnue (me en vol) → pas de création possible, fail-closed. Cache par
