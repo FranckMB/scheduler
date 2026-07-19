@@ -79,10 +79,12 @@ describe("SeasonTransitionBanner", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("still shows within the window up to the real endDate", () => {
+  it("still shows within the window up to the real endDate, with the real deadline in the copy", () => {
     meData = { role: "admin", seasons: [season({ endDate: "2026-06-30" })] };
     render(<SeasonTransitionBanner today={day("2026-06-25")} />);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    // Revue D F2 : la deadline affichée est la fin RÉELLE (30 juin), pas le 15 juillet.
+    expect(screen.getByRole("status")).toHaveTextContent("avant le 30 juin");
+    expect(screen.queryByText(/15 juillet/)).not.toBeInTheDocument();
   });
 
   it("nudges a dormant club before EVERY upcoming pivot (anchored on today)", () => {

@@ -222,4 +222,19 @@ describe("SeasonSelector", () => {
     await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
     expect(screen.getByText("Préparer la saison suivante…")).toBeInTheDocument();
   });
+
+  // Revue D F4 : même en fenêtre, si un successeur existe déjà, l'item est masqué
+  // (sinon clic → 409). Aligné sur la bannière.
+  it("hides « Préparer la saison suivante » when a successor season already exists", async () => {
+    meData = {
+      currentSeasonId: "s2627",
+      seasons: [
+        season({ id: "s2627", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-15" }),
+        season({ id: "s2728", name: "2027-2028", startDate: "2027-08-01", endDate: "2028-07-15", isCurrent: false }),
+      ],
+    };
+    renderSelector(day("2027-06-01")); // dans la fenêtre de la saison 2026-2027
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    expect(screen.queryByText("Préparer la saison suivante…")).not.toBeInTheDocument();
+  });
 });
