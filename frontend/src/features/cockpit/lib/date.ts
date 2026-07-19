@@ -118,3 +118,23 @@ export function weeksCovering(start: string, end: string, season: { startDate: s
   }
   return weeks;
 }
+
+/** La date `iso` tombe-t-elle Ven/Sam/Dim ? (mondayOffset : Lun=0 … Ven=4, Sam=5, Dim=6). */
+function startsLateInWeek(iso: string): boolean {
+  const [y, m, d] = iso.split("-").map(Number);
+  return mondayOffset(new Date(y, m - 1, d)) >= 4;
+}
+
+/**
+ * Les semaines à AJUSTER d'une période. Cas particulier VACANCES (holiday) démarrant
+ * Ven/Sam/Dim (retour fondateur 2026-07-19) : la semaine partielle de début n'a pas
+ * d'impact réel (les vacances tombent le soir venu → l'impact est sur les semaines
+ * SUIVANTES) — on l'écarte, l'ajustement commence au lundi suivant. Ex. Toussaint
+ * ven 16 oct → 1er nov : on propose les semaines du 19–25 et 26–01, pas le 12–18.
+ * Règle réservée aux vacances : fermetures/coupures gardent weeksCovering. La garde
+ * `length > 1` évite de renvoyer vide (un week-end de vacances isolé garde sa semaine).
+ */
+export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {
+  const weeks = weeksCovering(start, end, season);
+  return "holiday" === periodType && weeks.length > 1 && startsLateInWeek(start) ? weeks.slice(1) : weeks;
+}

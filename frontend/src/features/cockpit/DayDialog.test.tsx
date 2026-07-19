@@ -435,6 +435,19 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
+  // PR C : une vacance démarrant vendredi → le picker n'offre PAS la semaine partielle
+  // de début (impact réel = semaines suivantes). 2026-05-15 est un vendredi.
+  it("skips the partial start week in the picker for a Friday-starting holiday", async () => {
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-fri", label: "Toussaint", startDate: "2026-05-15", endDate: "2026-05-31" }) });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    // La semaine partielle du 11–17 mai (contenant le vendredi) n'est pas proposée.
+    expect(screen.queryByText(/Semaine du 11 mai/)).not.toBeInTheDocument();
+    // La 1ʳᵉ semaine offerte commence le lundi suivant (18 mai).
+    expect(screen.getByText(/Semaine du 18 mai/)).toBeInTheDocument();
+  });
+
   // B1 : après avoir choisi ≥2 semaines, le wizard s'ouvre sur la 1ʳᵉ semaine créée.
   it("opens the wizard on the FIRST created week after picking several weeks", async () => {
     weekChildrenMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: (r: { created: { id: string }[]; failedCount: number }) => void }) =>

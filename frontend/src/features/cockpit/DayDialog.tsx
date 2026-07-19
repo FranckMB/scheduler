@@ -13,7 +13,7 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { useMe, useWorkingSeason } from "@/features/auth/queries";
 
-import { clampRangeToSeason, frDateShort, todayISO, weeksCovering } from "./lib/date";
+import { clampRangeToSeason, frDateShort, periodAdjustWeeks, todayISO, weeksCovering } from "./lib/date";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor } from "./lib/markers";
 import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
@@ -304,7 +304,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         <div className="flex flex-wrap justify-end gap-1">
           {(null === workingSeason
             ? weekChildren.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c as CalendarEntry | null }))
-            : weeksCovering(entry.startDate, entry.endDate, workingSeason).map((week) => ({
+            : periodAdjustWeeks(entry.startDate, entry.endDate, workingSeason, "holiday").map((week) => ({
               week,
               child: weekChildren.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null,
             }))
@@ -400,7 +400,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           title={pendingHoliday.label}
           startDate={pendingHoliday.startDate}
           endDate={pendingHoliday.endDate}
-          weeks={weeksCovering(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason, "holiday")}
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
@@ -413,7 +413,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pickerFor.startDate, pickerFor.endDate, workingSeason, "holiday")}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {

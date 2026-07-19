@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addDays, mondayOf, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { addDays, mondayOf, periodAdjustWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -81,5 +81,35 @@ describe("weeksCovering (P2-5 E1 — la semaine est l'unité hors socle)", () =>
 
   it("a single-week window yields exactly one week", () => {
     expect(weeksCovering("2026-10-20", "2026-10-22", season)).toHaveLength(1);
+  });
+});
+
+describe("periodAdjustWeeks — vacances démarrant Ven/Sam/Dim (PR C)", () => {
+  const season = { startDate: "2026-08-01", endDate: "2027-07-14" };
+
+  it("écarte la semaine partielle de début d'une VACANCE démarrant vendredi", () => {
+    // Toussaint : vendredi 16 oct → 1er nov. weeksCovering = 12–18 / 19–25 / 26–01.
+    // L'impact réel est sur les semaines suivantes → on propose 19–25 et 26–01.
+    expect(periodAdjustWeeks("2026-10-16", "2026-11-01", season, "holiday")).toEqual([
+      { startDate: "2026-10-19", endDate: "2026-10-25", monday: "2026-10-19" },
+      { startDate: "2026-10-26", endDate: "2026-11-01", monday: "2026-10-26" },
+    ]);
+  });
+
+  it("ne change rien pour une vacance démarrant lundi", () => {
+    expect(periodAdjustWeeks("2026-10-19", "2026-11-01", season, "holiday")).toEqual(
+      weeksCovering("2026-10-19", "2026-11-01", season),
+    );
+  });
+
+  it("ne s'applique QU'aux vacances : une fermeture démarrant vendredi est inchangée", () => {
+    expect(periodAdjustWeeks("2026-10-16", "2026-11-01", season, "closure")).toEqual(
+      weeksCovering("2026-10-16", "2026-11-01", season),
+    );
+  });
+
+  it("garde la semaine unique d'une vacance week-end (jamais vide)", () => {
+    // Vendredi 16 → dimanche 18 : une seule semaine calendaire → conservée.
+    expect(periodAdjustWeeks("2026-10-16", "2026-10-18", season, "holiday")).toHaveLength(1);
   });
 });

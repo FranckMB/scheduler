@@ -9,7 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
@@ -138,7 +138,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
       return children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c }));
     }
-    return weeksCovering(m.startDate, m.endDate, workingSeason).map((week) => ({
+    return periodAdjustWeeks(m.startDate, m.endDate, workingSeason, m.periodType).map((week) => ({
       week,
       child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null,
     }));
@@ -460,7 +460,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pendingHoliday.label}
           startDate={pendingHoliday.startDate}
           endDate={pendingHoliday.endDate}
-          weeks={weeksCovering(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason, "holiday")}
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
@@ -473,7 +473,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType)}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {
