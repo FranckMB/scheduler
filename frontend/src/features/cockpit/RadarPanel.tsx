@@ -1,14 +1,14 @@
 import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/features/auth/queries";
 import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
-import { useCreateHolidayPeriod, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
+import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
 import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -33,7 +33,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const navigate = useNavigate();
   const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
-  const createHoliday = useCreateHolidayPeriod();
+  // Gating (#5) : sans plan de SAISON validé (chosenScheduleId), aucun planning
+  // secondaire — les boutons d'ajustement sont désactivés, un encart rouge invite
+  // à finir la validation.
+  const { data: me } = useMe();
+  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
+  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
   // Une période vit DANS sa saison : les dates de vacances sont clampées à la
   // fenêtre de saison avant création (l'été chevauche la frontière). Saison
   // inconnue (me en vol) → pas de création possible, fail-closed. Cache par
@@ -57,7 +62,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   };
 
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
-  const { pickerFor, setPickerFor, createWeekChildren, pickWeeks, createOneWeek } = useWeekAdapt(adapt);
+  // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
 
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
@@ -264,6 +270,25 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     <aside className="space-y-3 rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">À traiter</h2>
 
+      {/* Gating (#5) : plan de saison non validé → tout ajustement est bloqué. Encart
+          rouge en TÊTE, l'action la plus prioritaire : finir de valider la saison. */}
+      {!socleValidated ? (
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-destructive">Planning de la saison à valider</p>
+              <p className="text-xs text-muted-foreground">Validez le planning principal pour débloquer les ajustements.</p>
+            </div>
+          </div>
+          <div className="mt-2 flex justify-end">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/wizard">Valider le planning</Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {zone === null && !zoneLoading ? (
         <RadarCard icon={<MapPin className="size-4" />} title="Zone scolaire à renseigner" detail="Renseigne la zone pour voir les vacances.">
           <Button variant="outline" size="sm" asChild>
@@ -273,6 +298,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ) : null}
 
       {/* Plannings EN COURS d'abord : l'action la plus pressante, jamais cachée. */}
+      {/* Le gating (#5) bloque la CRÉATION d'un secondaire, pas la REPRISE d'un
+          travail déjà commencé : « Reprendre » un planning en cours reste actif même
+          si la saison est rouverte — sinon on figerait un travail à moitié fait. */}
       {inProgressEntries.map((e) => (
         <RadarCard key={`wip-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning en cours — à finaliser">
           <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
@@ -308,7 +336,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                     key={`new-${week.monday}`}
                     variant="outline"
                     size="sm"
-                    disabled={createWeekChildren.isPending}
+                    disabled={createWeekChildren.isPending || !socleValidated}
+                    title={lockTitle}
                     onClick={() => createOneWeek(m, week)}
                   >
                     {`+ sem. du ${frDateShort(week.startDate)}`}
@@ -317,8 +346,18 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
               }
               const activeId = activeByEntry.get(child.id) ?? null;
               const wip = inProgressEntryIds.has(child.id);
+              // Gating uniquement sur une semaine À CRÉER/DÉMARRER (« à faire ») :
+              // « Voir » (validée) et « en cours » (reprise) restent actifs.
+              const chipLocked = null === activeId && !wip && !socleValidated;
               return (
-                <Button key={child.id} variant={null !== activeId ? "ghost" : "outline"} size="sm" onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(child.id))}>
+                <Button
+                  key={child.id}
+                  variant={null !== activeId ? "ghost" : "outline"}
+                  size="sm"
+                  disabled={chipLocked}
+                  title={chipLocked ? lockTitle : undefined}
+                  onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(child.id))}
+                >
                   {`sem. du ${frDateShort(child.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
                 </Button>
               );
@@ -340,24 +379,29 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 Voir le planning
               </Button>
             ) : entry ? (
-              <Button variant="outline" size="sm" onClick={() => requestAdapt(entry)}>
+              <Button variant="outline" size="sm" disabled={!socleValidated} title={lockTitle} onClick={() => requestAdapt(entry)}>
                 Adapter
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                disabled={createHoliday.isPending || null === seasonClamp(h)}
+                disabled={createHoliday.isPending || null === seasonClamp(h) || !socleValidated}
+                title={lockTitle}
                 onClick={() => {
                   const range = seasonClamp(h);
                   if (null === range) {
                     return;
                   }
-                  createHoliday.mutate(
-                    { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate },
-                    // Vacances longues → choix des semaines (P2-5 E1) ; courtes → direct.
-                    { onSuccess: (created) => requestAdapt(created) },
-                  );
+                  const pending = { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate };
+                  // Vacances couvrant PLUSIEURS semaines → picker SANS création (la
+                  // mère naît à la confirmation) ; 1 semaine → création + wizard direct.
+                  const multiWeek = null !== workingSeason && weeksCovering(range.startDate, range.endDate, workingSeason).length > 1;
+                  if (multiWeek) {
+                    openPendingPicker(pending);
+                    return;
+                  }
+                  createHoliday.mutate(pending, { onSuccess: (created) => adapt(created.id) });
                 }}
               >
                 Adapter
@@ -376,7 +420,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         ? null
         : visibleClosures.map((e) => {
             const activeId = activeByEntry.get(e.id) ?? null;
-            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} seasonUnvalidated={!socleValidated} adaptTitle={lockTitle} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
           })}
 
       {cutoffs.map((e) => (
@@ -394,9 +438,26 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}
 
+      {/* Vacance PAS encore matérialisée : picker sur une mère synthétique (aucune
+          création tant que non confirmé — annuler ne laisse aucun fantôme). */}
+      {null !== pendingHoliday && null !== workingSeason ? (
+        <WeekPickerDialog
+          title={pendingHoliday.label}
+          startDate={pendingHoliday.startDate}
+          endDate={pendingHoliday.endDate}
+          weeks={weeksCovering(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason)}
+          busy={createHoliday.isPending || createWeekChildren.isPending}
+          onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
+          onAdaptWhole={() => adaptWholePending(pendingHoliday)}
+          onClose={() => setPendingHoliday(null)}
+        />
+      ) : null}
+
       {null !== pickerFor && null !== workingSeason ? (
         <WeekPickerDialog
-          mother={pickerFor}
+          title={pickerFor.title}
+          startDate={pickerFor.startDate}
+          endDate={pickerFor.endDate}
           weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
@@ -411,7 +472,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   );
 }
 
-function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, onAdapt, onView }: { entry: CalendarEntry; activeScheduleId: string | null; inProgress?: boolean; onAdapt: () => void; onView: () => void }) {
+function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, seasonUnvalidated = false, adaptTitle, onAdapt, onView }: { entry: CalendarEntry; activeScheduleId: string | null; inProgress?: boolean; seasonUnvalidated?: boolean; adaptTitle?: string; onAdapt: () => void; onView: () => void }) {
   const { data } = useEntryConflicts(entry.id);
   const count = data?.conflicts.reduce((sum, c) => sum + c.dates.length, 0) ?? 0;
   // ADR-0002 lot D-b : « a un overlay » = le plan de la période est VALIDÉ (chosenScheduleId).
@@ -452,12 +513,16 @@ function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, onAdapt
           <Button variant="outline" size="sm" onClick={onView}>
             Voir le planning
           </Button>
+          {/* Overlay validé → « Ajuster » retouche un secondaire existant (pas une
+              création) : jamais bloqué par le gating saison. */}
           <Button variant="ghost" size="sm" onClick={onAdapt}>
             Ajuster
           </Button>
         </>
       ) : (
-        <Button variant="outline" size="sm" onClick={onAdapt}>
+        // Gating seulement sur une fermeture À DÉMARRER (« Adapter ») ; « Reprendre »
+        // (travail en cours) reste actif même si la saison est rouverte.
+        <Button variant="outline" size="sm" disabled={!inProgress && seasonUnvalidated} title={!inProgress ? adaptTitle : undefined} onClick={onAdapt}>
           {inProgress ? "Reprendre" : "Adapter"}
         </Button>
       )}

@@ -6,7 +6,7 @@ import { cn } from "@/shared/lib/utils";
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
 import { DayDialog } from "./DayDialog";
 import { buildMonthGrid, isWithin, monthLabel, todayISO } from "./lib/date";
-import { entryIcon, entryLabel, holidayIcon } from "./lib/markers";
+import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor } from "./lib/markers";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -56,7 +56,10 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
 
       <div className="grid grid-cols-7 gap-1">
         {grid.map((cell) => {
-          const dayEntries = entriesOn(cell.iso);
+          // La mère vacances est un ancrage invisible (la vacance scolaire porte
+          // déjà le surlignage) : elle ne peint aucun marqueur ni libellé a11y.
+          // Elle reste dans entriesOn (passé à DayDialog → HolidayBlock la retrouve).
+          const dayEntries = entriesOn(cell.iso).filter((e) => !isHolidayAnchor(e));
           const holiday = holidayOn(cell.iso);
           const publicHoliday = publicHolidayOn(cell.iso);
           const isToday = cell.iso === today;
