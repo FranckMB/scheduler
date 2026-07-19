@@ -12,6 +12,7 @@ import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
+import { localIso, seasonYearOf } from "./seasonTransition";
 
 /**
  * Header season switcher (transition-de-saison P1). Shows the season the
@@ -20,7 +21,7 @@ import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
  * "Préparer la saison suivante" copies the current season's entries into a
  * fresh N+1 draft (confirmed first — structural club action).
  */
-export function SeasonSelector() {
+export function SeasonSelector({ today = new Date() }: { today?: Date } = {}) {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);
@@ -44,6 +45,15 @@ export function SeasonSelector() {
   const seasons = me?.seasons ?? [];
   const currentSeasonId = me?.currentSeasonId ?? null;
   const selected = seasons.find((s) => s.id === selectedSeasonId) ?? seasons.find((s) => s.id === currentSeasonId) ?? null;
+
+  // « Préparer la saison suivante » n'est proposé que de MAI (année 2) à la FIN de
+  // la saison courante (retour fondateur 2026-07-19 : trop tôt en pleine saison).
+  // Ancré sur la saison COURANTE (isCurrent), pas la saison consultée. year2 = 2ᵉ
+  // année de la saison (2026-2027 → 2027) via le pivot 15 juil.
+  const currentSeason = seasons.find((s) => s.isCurrent) ?? null;
+  const todayIso = localIso(today);
+  const canPrepareNextSeason =
+    null !== currentSeason && todayIso >= `${seasonYearOf(currentSeason.startDate) + 1}-05-01` && todayIso <= currentSeason.endDate;
 
   // Stale persisted selection (season purged / other club): reset to current.
   const staleSelection = null !== selectedSeasonId && seasons.length > 0 && !seasons.some((s) => s.id === selectedSeasonId);
@@ -137,9 +147,11 @@ export function SeasonSelector() {
             </MenuItem>
           );
         })}
-        <MenuItem icon={<CalendarPlus />} onSelect={openConfirm}>
-          Préparer la saison suivante…
-        </MenuItem>
+        {canPrepareNextSeason ? (
+          <MenuItem icon={<CalendarPlus />} onSelect={openConfirm}>
+            Préparer la saison suivante…
+          </MenuItem>
+        ) : null}
       </Menu>
 
       <ConfirmDialog

@@ -37,11 +37,16 @@ const season = (overrides: Partial<MeSeason>): MeSeason => ({
 
 let queryClient: QueryClient;
 
-function renderSelector() {
+/** Local-time date (mirrors the component's localIso, no UTC parse). */
+const day = (iso: string): Date => new Date(`${iso}T12:00:00`);
+
+// Par défaut on se place DANS la fenêtre où « Préparer la saison suivante » est
+// proposé (saison courante 2025-2026 → [1er mai 2026, 15 juil 2026]).
+function renderSelector(today: Date = day("2026-06-01")) {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SeasonSelector />
+      <SeasonSelector today={today} />
     </QueryClientProvider>,
   );
 }
@@ -186,5 +191,35 @@ describe("SeasonSelector", () => {
 
     resolve({ seasonId: "sD", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-15", counts: {} });
     await waitFor(() => expect(transitionMock).toHaveBeenCalledTimes(1));
+  });
+
+  // PR D (retour fondateur 2026-07-19) : « Préparer la saison suivante » n'est
+  // proposé qu'entre le 1er mai (année 2) et la fin de la saison courante.
+  it("hides « Préparer la saison suivante » before May 1 of the season's second year", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({})] }; // 2025-2026 → fenêtre [2026-05-01, 2026-07-15]
+    renderSelector(day("2026-04-15"));
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    expect(screen.queryByText("Préparer la saison suivante…")).not.toBeInTheDocument();
+  });
+
+  it("hides « Préparer la saison suivante » after the season has ended", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({})] };
+    renderSelector(day("2026-08-01")); // > endDate 2026-07-15
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    expect(screen.queryByText("Préparer la saison suivante…")).not.toBeInTheDocument();
+  });
+
+  it("hides « Préparer la saison suivante » mid-season (bug fondateur : 2026-2027 au 19 juil. 2026)", async () => {
+    meData = { currentSeasonId: "s2627", seasons: [season({ id: "s2627", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-15" })] };
+    renderSelector(day("2026-07-19"));
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    expect(screen.queryByText("Préparer la saison suivante…")).not.toBeInTheDocument();
+  });
+
+  it("shows « Préparer la saison suivante » inside the window", async () => {
+    meData = { currentSeasonId: "sN", seasons: [season({})] };
+    renderSelector(day("2026-06-01"));
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    expect(screen.getByText("Préparer la saison suivante…")).toBeInTheDocument();
   });
 });

@@ -71,6 +71,20 @@ describe("SeasonTransitionBanner", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  // PR D (retour fondateur 2026-07-19) : borne haute = FIN RÉELLE de la saison, pas
+  // le pivot fixe du 15 juillet. Une saison qui finit tôt masque la bannière dès sa fin.
+  it("hides once past the season's actual endDate, even before the July-15 pivot", () => {
+    meData = { role: "admin", seasons: [season({ endDate: "2026-06-30" })] };
+    render(<SeasonTransitionBanner today={day("2026-07-05")} />); // après le 30 juin, avant le 15 juil
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("still shows within the window up to the real endDate", () => {
+    meData = { role: "admin", seasons: [season({ endDate: "2026-06-30" })] };
+    render(<SeasonTransitionBanner today={day("2026-06-25")} />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
   it("nudges a dormant club before EVERY upcoming pivot (anchored on today)", () => {
     // Current season is 2025-2026, never transitioned; in June 2027 the window
     // of the NEXT pivot (2027-07-15) must still show the banner.

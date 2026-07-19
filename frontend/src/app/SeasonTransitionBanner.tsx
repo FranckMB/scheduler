@@ -2,12 +2,7 @@ import { CalendarPlus } from "lucide-react";
 
 import { useMe } from "@/features/auth/queries";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
-import { seasonYearOf } from "./seasonTransition";
-
-/** Local Y-m-d (never toISOString — the UTC shift can flip the day). */
-function localIso(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+import { localIso, seasonYearOf } from "./seasonTransition";
 
 /**
  * Permanent anticipation banner (transition P2-PR2): from May 15 until the
@@ -40,10 +35,14 @@ export function SeasonTransitionBanner({ today = new Date() }: { today?: Date })
     return null;
   }
 
-  // Window [May 15, July 15[ before the next pivot — the pivot day itself is
-  // out (the season has switched; N+1 resolution takes over).
+  // Fenêtre [15 mai, FIN de la saison courante] (retour fondateur 2026-07-19 :
+  // « jusqu'à la fin de la saison », plus le pivot fixe du 15 juillet). Borne haute
+  // = endDate réelle QUAND c'est bien la saison courante qui précède le pivot à
+  // venir ; sinon (club dormant, saison courante ancienne) on garde le pivot du 15
+  // juillet pour continuer à nudger avant CHAQUE pivot.
   const pivotYear = anchorYear + 1;
-  if (todayIso < `${pivotYear}-05-15` || todayIso >= `${pivotYear}-07-15`) {
+  const seasonEnd = seasonYearOf(current.startDate) === anchorYear ? current.endDate : `${pivotYear}-07-15`;
+  if (todayIso < `${pivotYear}-05-15` || todayIso > seasonEnd) {
     return null;
   }
 
