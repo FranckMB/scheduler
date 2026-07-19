@@ -306,25 +306,32 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ) : null}
 
       {/* Plannings EN COURS d'abord : l'action la plus pressante, jamais cachée. */}
-      {/* Le gating (#5) bloque la CRÉATION d'un secondaire, pas la REPRISE d'un
-          travail déjà commencé : « Reprendre » un planning en cours reste actif même
-          si la saison est rouverte — sinon on figerait un travail à moitié fait. */}
-      {inProgressEntries.map((e) => (
-        <RadarCard key={`wip-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning en cours — à finaliser">
-          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
-            Reprendre
-          </Button>
-        </RadarCard>
-      ))}
+      {/* Le gating (#5/F3) bloque le DÉMARRAGE d'un secondaire, pas la REPRISE d'un
+          travail déjà commencé (versions). Une carte « en cours » à ZÉRO version
+          (créée mais pas générée) est bloquée tant que la saison n'est pas validée ;
+          une carte avec versions reste reprenable même après une réouverture. */}
+      {inProgressEntries.map((e) => {
+        const locked = !socleValidated && !startedEntryIds.has(e.id);
+        return (
+          <RadarCard key={`wip-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning en cours — à finaliser">
+            <Button variant="outline" size="sm" disabled={locked} title={locked ? lockTitle : undefined} onClick={() => adapt(e.id)}>
+              Reprendre
+            </Button>
+          </RadarCard>
+        );
+      })}
 
       {/* Semaine dont la MÈRE est sortie de la fenêtre radar : sa seule surface. */}
-      {orphanWeekChildren.map((e) => (
-        <RadarCard key={`orphan-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning de semaine à finaliser">
-          <Button variant="outline" size="sm" onClick={() => adapt(e.id)}>
-            Reprendre
-          </Button>
-        </RadarCard>
-      ))}
+      {orphanWeekChildren.map((e) => {
+        const locked = !socleValidated && !startedEntryIds.has(e.id);
+        return (
+          <RadarCard key={`orphan-${e.id}`} icon={<Pencil className="size-4 text-accent" />} title={e.title} detail="Planning de semaine à finaliser">
+            <Button variant="outline" size="sm" disabled={locked} title={locked ? lockTitle : undefined} onClick={() => adapt(e.id)}>
+              Reprendre
+            </Button>
+          </RadarCard>
+        );
+      })}
 
       {/* Couverture d'une période DÉCOUPÉE (P2-5 E1) : l'état par semaine, d'un
           coup d'œil — validée → Voir, en cours/à faire → Reprendre, MANQUANTE

@@ -66,7 +66,7 @@ export function CockpitPage() {
           </span>
         </div>
       ) : null}
-      <SeasonPlanBanner schedules={schedules} socleValidated={socleValidated} loading={schedulesLoading} />
+      <SeasonPlanBanner schedules={schedules} socleValidated={socleValidated} loading={schedulesLoading} entries={radarEntries} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* P2-5 E1 : mères ET semaines enfants s'affichent — une semaine pleine
             DÉBORDE sa mère (queue/tête hors incident), la filtrer laisserait ces

@@ -49,6 +49,31 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
     expect(openRow).toMatchObject({ id: "pl-tou", label: "Vacances Toussaint — semaine du 20 oct.", isOpen: true, isOverlay: true, isChosen: false });
   });
 
+  // Revue B1 F3 : une mère de vacances DÉCOUPÉE porte encore un plan à 0 version,
+  // mais ses semaines-enfants tiennent l'affichage → pas de ligne fantôme.
+  it("does not emit a phantom row for a split holiday mother (its children carry the plannings)", () => {
+    const rows = seasonPlannings(
+      [s({ id: "v1", status: "COMPLETED" })],
+      null,
+      [sp({ id: "pl-mother", type: "HOLIDAY", name: "Vacances Toussaint", calendarEntryId: "m1" })],
+      [{ id: "w1", kind: "period", title: "S1", startDate: "", endDate: "", isDisruptive: false, periodType: "holiday", schoolHolidayId: null, parentEntryId: "m1", status: "active", createdBy: null }],
+    );
+    expect(rows.some((r) => r.schedulePlanId === "pl-mother")).toBe(false);
+  });
+
+  // Revue B1 F4 : sans schedules résolus, aucune ligne DRAFT (un overlay validé
+  // serait montré « en cours » à tort) — fail-closed.
+  it("emits no zero-version row while schedules are unresolved (fail-closed)", () => {
+    const rows = seasonPlannings(
+      [s({ id: "v1", status: "COMPLETED" })],
+      null,
+      [sp({ id: "pl-tou", type: "HOLIDAY", name: "Toussaint", calendarEntryId: "e-tou" })],
+      [],
+      false, // schedules pas résolus
+    );
+    expect(rows.some((r) => r.schedulePlanId === "pl-tou")).toBe(false);
+  });
+
   it("does not duplicate a period plan that already has a version, nor list the SEASON plan or an entry-less plan", () => {
     const rows = seasonPlannings(
       [s({ id: "o1", name: "Toussaint", planType: "CLOSURE", schedulePlanId: "pl-a", status: "COMPLETED", createdAt: "2026-07-03T10:00:00+00:00" })],

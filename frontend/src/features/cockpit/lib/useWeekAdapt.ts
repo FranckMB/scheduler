@@ -48,10 +48,13 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
 
   // Suite commune une fois les semaines créées (mère matérialisée OU fraîchement
   // née) : on ouvre le wizard sur la 1ʳᵉ semaine créée (retour fondateur
-  // 2026-07-19). ≥2 créées → toast qui rappelle où retrouver les autres.
+  // 2026-07-19). ≥2 créées → toast qui rappelle où retrouver les autres. En cas
+  // d'ÉCHEC PARTIEL (des semaines n'ont pas été créées), on NE navigue PAS : le
+  // gestionnaire doit lire le toast d'erreur et relancer les manquantes depuis la
+  // carte de couverture (revue B1 : naviguer emporterait l'avertissement).
   const finishChildren = (result: WeekChildrenResult): void => {
     announce(result);
-    if (0 === result.created.length) {
+    if (0 === result.created.length || result.failedCount > 0) {
       return;
     }
     if (result.created.length > 1) {

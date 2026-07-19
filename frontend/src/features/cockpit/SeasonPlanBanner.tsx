@@ -9,6 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 import { planRepresentative, visibleSeasonPlans } from "@/features/planning/lib/versions";
 
+import type { CalendarEntry } from "./api";
 import { useSchedulePlans } from "./queries";
 import { seasonPlanCounts } from "./seasonPlannings";
 
@@ -18,10 +19,12 @@ interface SeasonPlanBannerProps {
   socleValidated: boolean;
   /** Schedules query still in flight — don't flash "aucun planning principal". */
   loading?: boolean;
+  /** Entrées de calendrier — pour exclure une mère découpée des lignes 0 version (B1 F3). */
+  entries?: CalendarEntry[];
 }
 
 /** Top strip: the season's main plan at a glance + entry points to consult / edit / list all plans. */
-export function SeasonPlanBanner({ schedules, socleValidated, loading = false }: SeasonPlanBannerProps) {
+export function SeasonPlanBanner({ schedules, socleValidated, loading = false, entries = [] }: SeasonPlanBannerProps) {
   const navigate = useNavigate();
   const { data: me } = useMe();
   const [listOpen, setListOpen] = useState(false);
@@ -40,7 +43,7 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   // Inclut les plans de période SANS version générée (« en cours ») pour que le
   // compteur colle à « tous les plannings » (retour fondateur 2026-07-19).
   const { data: plans } = useSchedulePlans();
-  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules, plans ?? []);
+  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules, plans ?? [], entries, !loading);
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
   // wizard's generation step to finish/validate it.
@@ -89,7 +92,7 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
         </Button>
       </div>
 
-      {listOpen ? <SeasonSchedulesModal schedules={schedules} onClose={() => setListOpen(false)} /> : null}
+      {listOpen ? <SeasonSchedulesModal schedules={schedules} entries={entries} schedulesResolved={!loading} onClose={() => setListOpen(false)} /> : null}
     </div>
   );
 }

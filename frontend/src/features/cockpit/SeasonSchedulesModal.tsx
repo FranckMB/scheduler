@@ -10,10 +10,15 @@ import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { useSchedulePlans } from "./queries";
+import type { CalendarEntry } from "./api";
 import { type PlanningRow, seasonPlannings } from "./seasonPlannings";
 
 interface SeasonSchedulesModalProps {
   schedules: Schedule[];
+  /** Entrées de calendrier — pour exclure une mère découpée des lignes 0 version (B1 F3). */
+  entries?: CalendarEntry[];
+  /** Schedules résolus ? fail-closed sur les lignes 0 version (B1 F4). */
+  schedulesResolved?: boolean;
   onClose: () => void;
 }
 
@@ -66,7 +71,7 @@ function CompactExport({ scheduleId, label }: { scheduleId: string; label: strin
  * finish there; their export is hidden (nothing exportable) and the action is
  * « Reprendre » (founder feedback 2026-07-18).
  */
-export function SeasonSchedulesModal({ schedules, onClose }: SeasonSchedulesModalProps) {
+export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolved = true, onClose }: SeasonSchedulesModalProps) {
   const navigate = useNavigate();
   const { data: me } = useMe();
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
@@ -74,7 +79,7 @@ export function SeasonSchedulesModal({ schedules, onClose }: SeasonSchedulesModa
   // (le wizard mode période s'ancre sur l'ENTRÉE, pas sur le plan).
   const { data: plans } = useSchedulePlans();
   const entryByPlan = new Map((plans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.id, p.calendarEntryId as string]));
-  const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null, plans ?? []);
+  const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null, plans ?? [], entries, schedulesResolved);
 
   // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a

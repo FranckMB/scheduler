@@ -447,4 +447,19 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("wk-1"));
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });
+
+  // Revue B1 F2 : échec PARTIEL (des semaines n'ont pas été créées) → on NE navigue
+  // PAS (le gestionnaire doit lire le toast d'erreur, pas être emmené au wizard).
+  it("does NOT navigate to the wizard when some weeks failed to be created", async () => {
+    weekChildrenMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: (r: { created: { id: string }[]; failedCount: number }) => void }) =>
+      opts?.onSuccess?.({ created: [{ id: "wk-1" }], failedCount: 2 }),
+    );
+    renderDialog([], { holiday: schoolHoliday() });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Créer les/ }));
+    await waitFor(() => expect(weekChildrenMutate).toHaveBeenCalled());
+    expect(startPeriodMode).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalledWith("/wizard");
+  });
 });
