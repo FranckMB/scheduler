@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -85,7 +85,7 @@ jobs:
       # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
       # misfiled under devDependencies still ships to browsers), gated at high+ so an
       # unfixable low/moderate advisory doesn't block every unrelated PR.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -329,7 +329,7 @@ jobs:
       - name: Start messenger worker
         run: docker compose up -d --wait messenger-worker
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
