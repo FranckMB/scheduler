@@ -112,4 +112,14 @@ describe("periodAdjustWeeks — vacances démarrant Ven/Sam/Dim (PR C)", () => {
     // Vendredi 16 → dimanche 18 : une seule semaine calendaire → conservée.
     expect(periodAdjustWeeks("2026-10-16", "2026-10-18", season, "holiday")).toHaveLength(1);
   });
+
+  it("n'écarte PAS la 1ʳᵉ semaine si elle est rognée par le début de saison (revue C F3)", () => {
+    // Saison démarrant un vendredi (2026-08-07) ; vacance clampée à ce vendredi : la
+    // 1ʳᵉ semaine en-saison est partielle par CLAMP, pas parce que la vacance
+    // commence en fin de semaine → on la garde.
+    const boundarySeason = { startDate: "2026-08-07", endDate: "2027-07-14" };
+    expect(periodAdjustWeeks("2026-08-07", "2026-08-25", boundarySeason, "holiday")).toEqual(
+      weeksCovering("2026-08-07", "2026-08-25", boundarySeason),
+    );
+  });
 });

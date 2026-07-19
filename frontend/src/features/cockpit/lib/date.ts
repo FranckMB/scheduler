@@ -136,5 +136,11 @@ function startsLateInWeek(iso: string): boolean {
  */
 export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {
   const weeks = weeksCovering(start, end, season);
-  return "holiday" === periodType && weeks.length > 1 && startsLateInWeek(start) ? weeks.slice(1) : weeks;
+  // Garde `weeks[0].startDate === monday` (revue C F3) : on n'écarte QUE si la 1ʳᵉ
+  // semaine est PLEINE (lun→dim). Si la saison a rogné son début (vacance à cheval
+  // clampée à un début de saison qui tombe Ven/Sam/Dim), ce n'est pas le cas
+  // « la vacance commence en fin de semaine » du fondateur : on garde cette semaine
+  // en-saison réelle.
+  const dropFirst = "holiday" === periodType && weeks.length > 1 && startsLateInWeek(start) && weeks[0].startDate === weeks[0].monday;
+  return dropFirst ? weeks.slice(1) : weeks;
 }
