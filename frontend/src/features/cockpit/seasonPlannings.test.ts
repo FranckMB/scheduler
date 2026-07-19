@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { Schedule } from "@/features/planning/api";
 
+import type { SchedulePlan } from "./api";
 import { seasonPlannings } from "./seasonPlannings";
 
 const s = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
+
+const sp = (over: Partial<SchedulePlan>): SchedulePlan => ({ id: "pl", type: "HOLIDAY", name: "Plan", calendarEntryId: "e1", chosenScheduleId: null, teamSelectionInitialized: false, ...over });
 
 describe("seasonPlannings — open plannings & plan name (founder feedback 2026-07-18)", () => {
   it("labels the season row with the plan's real name when provided", () => {
@@ -32,5 +35,32 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "v1", isOpen: false });
+  });
+
+  // B1 (retour fondateur 2026-07-19) : un plan de période créé mais SANS aucune
+  // version générée doit rester visible (« en cours », à reprendre).
+  it("lists a period plan with ZERO generated version as an OPEN row keyed on the plan id", () => {
+    const rows = seasonPlannings(
+      [s({ id: "v1", status: "COMPLETED" })], // seulement le socle a des versions
+      null,
+      [sp({ id: "pl-tou", name: "Vacances Toussaint — semaine du 20 oct.", calendarEntryId: "e-tou", type: "HOLIDAY" })],
+    );
+    const openRow = rows.find((r) => r.schedulePlanId === "pl-tou");
+    expect(openRow).toMatchObject({ id: "pl-tou", label: "Vacances Toussaint — semaine du 20 oct.", isOpen: true, isOverlay: true, isChosen: false });
+  });
+
+  it("does not duplicate a period plan that already has a version, nor list the SEASON plan or an entry-less plan", () => {
+    const rows = seasonPlannings(
+      [s({ id: "o1", name: "Toussaint", planType: "CLOSURE", schedulePlanId: "pl-a", status: "COMPLETED", createdAt: "2026-07-03T10:00:00+00:00" })],
+      null,
+      [
+        sp({ id: "pl-a", type: "HOLIDAY", calendarEntryId: "e-a" }), // a déjà une version → pas de doublon
+        sp({ id: "pl-season", type: "SEASON", calendarEntryId: "e-s" }), // socle → ignoré
+        sp({ id: "pl-orphan", type: "CLOSURE", calendarEntryId: null }), // sans entrée → ignoré
+      ],
+    );
+    expect(rows.filter((r) => r.schedulePlanId === "pl-a")).toHaveLength(1);
+    expect(rows.some((r) => r.schedulePlanId === "pl-season")).toBe(false);
+    expect(rows.some((r) => r.schedulePlanId === "pl-orphan")).toBe(false);
   });
 });

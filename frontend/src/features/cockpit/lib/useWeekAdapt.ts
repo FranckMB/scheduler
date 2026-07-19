@@ -24,9 +24,11 @@ export interface PendingHoliday {
  *
  * Retour fondateur (2026-07-19) : adapter une VACANCE ne doit RIEN créer tant que
  * les semaines ne sont pas confirmées — la vacance scolaire est déjà l'événement,
- * on ne matérialise sa mère qu'à la confirmation du picker (chemin `pending`).
+ * on ne matérialise sa mère qu'à la confirmation du picker (chemin `pending`). Une
+ * fois les semaines créées, le wizard s'ouvre directement sur la 1ʳᵉ (on travaille
+ * tout de suite ; les autres semaines restent au radar / « tous les plannings »).
  */
-export function useWeekAdapt(adapt: (entryId: string) => void, afterMultiCreate?: () => void) {
+export function useWeekAdapt(adapt: (entryId: string) => void) {
   const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
   // Vacance PAS encore créée : le picker s'ouvre sur cette référence SANS
   // matérialiser la mère — annuler ne doit rien laisser. La mère naît à la
@@ -45,18 +47,17 @@ export function useWeekAdapt(adapt: (entryId: string) => void, afterMultiCreate?
   };
 
   // Suite commune une fois les semaines créées (mère matérialisée OU fraîchement
-  // née) : 1 seule sans échec → adapt direct ; plusieurs → toast + retour cockpit
-  // (les cartes de couverture prennent le relais).
+  // née) : on ouvre le wizard sur la 1ʳᵉ semaine créée (retour fondateur
+  // 2026-07-19). ≥2 créées → toast qui rappelle où retrouver les autres.
   const finishChildren = (result: WeekChildrenResult): void => {
     announce(result);
-    if (1 === result.created.length && 0 === result.failedCount) {
-      adapt(result.created[0].id);
+    if (0 === result.created.length) {
       return;
     }
     if (result.created.length > 1) {
-      toast.success(`${result.created.length} plannings de semaine créés — reprenez-les depuis le radar.`);
-      afterMultiCreate?.();
+      toast.success(`${result.created.length} plannings de semaine créés — le 1ᵉʳ est ouvert, les autres au radar.`);
     }
+    adapt(result.created[0].id);
   };
 
   // Semaines cochées d'une mère DÉJÀ matérialisée → création des plans.

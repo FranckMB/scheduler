@@ -51,6 +51,28 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   const deleteEntry = useDeleteEntry();
   const schedulesQuery = useSchedules();
   const [toDelete, setToDelete] = useState<CalendarEntry | null>(null);
+  // Plannings couvrant ce jour (retour fondateur 2026-07-19) : une entrée qui PORTE
+  // un plan (fermeture / semaine de vacances) devient accessible en AJUSTER (plan
+  // pas encore validé) / Consulter (validé) — plus seulement supprimable. Le plan
+  // se dérive de allPlans par calendarEntryId ; « en cours » = pas de chosenScheduleId.
+  const navigate = useNavigate();
+  const startPeriodMode = useWizardStore((s) => s.startPeriodMode);
+  const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
+  const { data: allPlans } = useSchedulePlans();
+  const { data: me } = useMe();
+  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
+  const lockTitle = socleValidated ? undefined : "Le planning de la saison n'est pas encore validé — validez-le pour ajuster.";
+  const planOfEntry = (entryId: string) => (allPlans ?? []).find((p) => p.calendarEntryId === entryId) ?? null;
+  const adjust = (entryId: string) => {
+    startPeriodMode(entryId);
+    onClose();
+    navigate("/wizard");
+  };
+  const consult = (scheduleId: string) => {
+    setSelectedScheduleId(scheduleId);
+    onClose();
+    navigate("/planning");
+  };
   // Décision fondateur (2026-07-18) : supprimer une période supprime son PLAN, donc TOUTES
   // ses versions liées — le gestionnaire doit en valider la PORTÉE. On avertit fort dès que
   // le plan porte ≥ 1 version (brouillon inclus : la cascade les emporte), pas seulement une
@@ -98,25 +120,50 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
 
       {deletable.length > 0 ? (
         <ul className="space-y-2">
-          {deletable.map((entry) => (
-            <li key={entry.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-              <span className="flex items-center gap-2">
-                {/* Same emoji marker as the month calendar (decorative → aria-hidden;
-                    the title/fallback text carries the meaning). */}
-                <span aria-hidden className="text-base leading-none">{entryIcon(entry)}</span>
-                <span>{entry.title || entryLabel(entry)}</span>
-              </span>
-              <button
-                type="button"
-                aria-label={`Supprimer ${entry.title}`}
-                className="rounded p-1 text-muted-foreground hover:text-destructive"
-                disabled={deleteEntry.isPending}
-                onClick={() => setToDelete(entry)}
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </li>
-          ))}
+          {deletable.map((entry) => {
+            // Entrée porteuse d'un plan (fermeture / semaine de vacances) → AJUSTER
+            // (pas de version validée) ou Consulter (validé). Les entrées sans plan
+            // (événement, coupure) n'ont pas de CTA planning.
+            const plan = planOfEntry(entry.id);
+            const chosen = plan?.chosenScheduleId ?? null;
+            const planHasVersions = null !== plan && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.id);
+            // Gating (#5/F3) : AJUSTER une fermeture PAS ENCORE commencée (0 version)
+            // reste bloqué tant que la saison n'est pas validée ; reprendre un travail
+            // déjà commencé (versions) ne l'est pas.
+            const adjustLocked = !socleValidated && !planHasVersions;
+            return (
+              <li key={entry.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* Same emoji marker as the month calendar (decorative → aria-hidden;
+                      the title/fallback text carries the meaning). */}
+                  <span aria-hidden className="text-base leading-none">{entryIcon(entry)}</span>
+                  <span className="truncate">{entry.title || entryLabel(entry)}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {null !== plan ? (
+                    null !== chosen ? (
+                      <Button variant="ghost" size="sm" onClick={() => consult(chosen)}>
+                        Consulter
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled={adjustLocked} title={adjustLocked ? lockTitle : undefined} onClick={() => adjust(entry.id)}>
+                        Ajuster
+                      </Button>
+                    )
+                  ) : null}
+                  <button
+                    type="button"
+                    aria-label={`Supprimer ${entry.title}`}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                    disabled={deleteEntry.isPending}
+                    onClick={() => setToDelete(entry)}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 
@@ -225,7 +272,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // Flux de découpage partagé avec le radar ; ici, plusieurs semaines créées →
   // referme le DayDialog (le radar reprend le relais via ses cartes). Le chemin
   // `pending` matérialise la mère vacances SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt, onClose);
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
   // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
   // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
   // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →

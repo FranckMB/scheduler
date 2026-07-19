@@ -99,25 +99,33 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   }
   const roots = active.filter((e) => null === e.parentEntryId);
 
-  // « Planning en cours » (retour fondateur 2026-07-18) : une période dont le plan a
-  // des VERSIONS mais pas de version validée = travail commencé, non fini — le
-  // gestionnaire a une action à faire. Ces cartes échappent au cap des vacances et
-  // au filtre « à venir » (visibles jusqu'à la fin de la période) : un planning en
-  // cours ne doit jamais disparaître du radar. Absence de donnée schedules →
-  // aucune carte (fail-closed, même règle que plansUnresolved).
+  // « Planning en cours » (retour fondateur 2026-07-18) : deux niveaux, à ne pas
+  // confondre.
+  // - `startedEntryIds` : plan AVEC versions, pas encore validé = travail COMMENCÉ.
+  //   Sert au libellé des chips (« en cours » vs « à faire ») et à l'état d'une
+  //   fermeture — le distinguer d'un plan à 0 version est le sens de ces libellés.
+  // - `pendingEntryIds` : plan existant sans version validée, versions OU NON
+  //   (retour fondateur 2026-07-19) — sert à la carte générique « en cours » : une
+  //   vacance ajustée « d'un bloc » mais PAS encore générée doit rester visible pour
+  //   être reprise. Ces cartes échappent au cap des vacances et au filtre « à venir ».
   const schedulesQuery = useSchedules();
   const schedulesUnresolved = undefined === schedulesQuery.data;
   const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
-  const inProgressEntryIds = new Set(
+  const startedEntryIds = new Set(
     (plans ?? [])
       .filter((p) => null !== p.calendarEntryId && null === p.chosenScheduleId && plansWithVersions.has(p.id))
+      .map((p) => p.calendarEntryId as string),
+  );
+  const pendingEntryIds = new Set(
+    (plans ?? [])
+      .filter((p) => null !== p.calendarEntryId && null === p.chosenScheduleId)
       .map((p) => p.calendarEntryId as string),
   );
   // Cartes génériques « en cours » : les périodes SANS carte riche (vacances & co).
   // Les fermetures gardent leur ClosureRadarItem (détail des séances touchées) —
   // le remplacer par une carte générique ferait disparaître l'avertissement
   // d'impact tant que le plan n'est pas validé (revue #260 round 1).
-  const inProgressEntries = roots.filter((e) => inProgressEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
+  const inProgressEntries = roots.filter((e) => pendingEntryIds.has(e.id) && "closure" !== e.periodType && !childrenByParent.has(e.id) && e.endDate >= today);
 
   // Mères découpées à COUVRIR : une semaine existante non validée OU une semaine
   // MANQUANTE (décochée au picker, échec partiel — revue #262 : sans chip « à
@@ -186,7 +194,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // Déjà affichée en carte « en cours » ou en carte de COUVERTURE — pas de doublon.
     .filter((h) => {
       const e = entryByHoliday.get(h.id);
-      return undefined === e || (!inProgressEntryIds.has(e.id) && !childrenByParent.has(e.id));
+      return undefined === e || (!pendingEntryIds.has(e.id) && !childrenByParent.has(e.id));
     })
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .slice(0, 3);
@@ -213,7 +221,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     if (activeByEntry.has(entry.id)) {
       return true; // un planning secondaire VALIDÉ existe : cette semaine EST différente
     }
-    if (inProgressEntryIds.has(entry.id)) {
+    if (startedEntryIds.has(entry.id)) {
       return true; // travail commencé, non validé : toujours à traiter (jamais masqué)
     }
     const impact = closureImpacts[i];
@@ -345,7 +353,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 );
               }
               const activeId = activeByEntry.get(child.id) ?? null;
-              const wip = inProgressEntryIds.has(child.id);
+              const wip = startedEntryIds.has(child.id);
               // Gating uniquement sur une semaine À CRÉER/DÉMARRER (« à faire ») :
               // « Voir » (validée) et « en cours » (reprise) restent actifs.
               const chipLocked = null === activeId && !wip && !socleValidated;
@@ -420,7 +428,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         ? null
         : visibleClosures.map((e) => {
             const activeId = activeByEntry.get(e.id) ?? null;
-            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={inProgressEntryIds.has(e.id)} seasonUnvalidated={!socleValidated} adaptTitle={lockTitle} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
+            return <ClosureRadarItem key={e.id} entry={e} activeScheduleId={activeId} inProgress={startedEntryIds.has(e.id)} seasonUnvalidated={!socleValidated} adaptTitle={lockTitle} onAdapt={() => requestAdapt(e)} onView={() => null !== activeId && viewOverlay(activeId)} />;
           })}
 
       {cutoffs.map((e) => (

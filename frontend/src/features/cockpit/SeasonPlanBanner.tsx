@@ -9,6 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 import { planRepresentative, visibleSeasonPlans } from "@/features/planning/lib/versions";
 
+import { useSchedulePlans } from "./queries";
 import { seasonPlanCounts } from "./seasonPlannings";
 
 interface SeasonPlanBannerProps {
@@ -36,7 +37,10 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false }:
   // include OPEN plannings (no finished version) — same rows as the modal —
   // and the subtitle names how many are still in progress so the number never
   // implies a ready secondary schedule (revue #260 round 2).
-  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules);
+  // Inclut les plans de période SANS version générée (« en cours ») pour que le
+  // compteur colle à « tous les plannings » (retour fondateur 2026-07-19).
+  const { data: plans } = useSchedulePlans();
+  const { total: planCount, overlays: overlayCount, openOverlays: openOverlayCount } = seasonPlanCounts(schedules, plans ?? []);
 
   // Validated (state 3) → consult the plan. Not yet (state 2) → back to the
   // wizard's generation step to finish/validate it.

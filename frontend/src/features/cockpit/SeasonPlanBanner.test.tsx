@@ -15,6 +15,7 @@ vi.mock("./SeasonSchedulesModal", () => ({
   ),
 }));
 vi.mock("./seasonPlannings", () => ({ seasonPlanCounts: () => ({ total: 2, overlays: 1, openOverlays: 0 }) }));
+vi.mock("./queries", () => ({ useSchedulePlans: () => ({ data: [] }) }));
 // Le bandeau lit le NOM du plan sur me.seasonPlan (retour fondateur 2026-07-18).
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
 

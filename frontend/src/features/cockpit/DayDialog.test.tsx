@@ -20,6 +20,9 @@ const holidayMutateAsync = vi.fn(() =>
 const navigate = vi.fn();
 const startPeriodMode = vi.fn();
 const setSelectedScheduleId = vi.fn();
+const weekChildrenMutate = vi.fn();
+// Plans couvrant le jour (B1) : DayList lit chosenScheduleId par calendarEntryId.
+let allPlansMock: { id: string; calendarEntryId: string | null; chosenScheduleId: string | null }[] = [];
 
 // ADR-0002 lot D-b : « overlay validé » (HolidayBlock « Voir le planning ») = plan de
 // période avec chosenScheduleId ; « porte des versions » (garde destructive de suppression)
@@ -39,12 +42,12 @@ vi.mock("./queries", () => ({
   useCreateVenueClosure: () => ({ mutate: closureMutate, isPending: false }),
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), mutateAsync: holidayMutateAsync, isPending: false }),
-  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: weekChildrenMutate, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
   // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests.
   useCalendarEntries: () => ({ data: [] }),
-  useSchedulePlans: () => ({ data: [] }),
+  useSchedulePlans: () => ({ data: allPlansMock }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
@@ -96,7 +99,9 @@ describe("DayDialog — deletion is always confirmed", () => {
     cutoffMutate.mockReset();
     closureMutate.mockReset();
     holidayMutateAsync.mockClear();
+    weekChildrenMutate.mockReset();
     meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    allPlansMock = [];
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
@@ -287,7 +292,9 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     navigate.mockClear();
     startPeriodMode.mockClear();
     setSelectedScheduleId.mockClear();
+    weekChildrenMutate.mockReset();
     meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    allPlansMock = [];
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
@@ -405,5 +412,39 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     renderDialog([], { holiday: schoolHoliday() });
 
     expect(screen.getByRole("button", { name: "Adapter" })).toBeDisabled();
+  });
+
+  // B1 (retour fondateur 2026-07-19) : clic-jour → les plannings couvrants (fermeture
+  // + semaine de vacances) sont accessibles en AJUSTER (en cours) / Consulter (validé).
+  it("lists the day's covering plannings (closure + holiday week) with AJUSTER / Consulter", async () => {
+    allPlansMock = [
+      { id: "pl-cl", calendarEntryId: "cl1", chosenScheduleId: null }, // fermeture en cours → Ajuster
+      { id: "pl-w1", calendarEntryId: "w1", chosenScheduleId: "sched-9" }, // semaine validée → Consulter
+    ];
+    renderDialog([
+      entry({ id: "cl1", kind: "period", periodType: "closure", title: "Gym fermé" }),
+      entry({ id: "w1", kind: "period", periodType: "holiday", parentEntryId: "m1", title: "Toussaint S1" }),
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajuster" }));
+    expect(startPeriodMode).toHaveBeenCalledWith("cl1");
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+
+    await userEvent.click(screen.getByRole("button", { name: "Consulter" }));
+    expect(setSelectedScheduleId).toHaveBeenCalledWith("sched-9");
+    expect(navigate).toHaveBeenCalledWith("/planning");
+  });
+
+  // B1 : après avoir choisi ≥2 semaines, le wizard s'ouvre sur la 1ʳᵉ semaine créée.
+  it("opens the wizard on the FIRST created week after picking several weeks", async () => {
+    weekChildrenMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: (r: { created: { id: string }[]; failedCount: number }) => void }) =>
+      opts?.onSuccess?.({ created: [{ id: "wk-1" }, { id: "wk-2" }], failedCount: 0 }),
+    );
+    renderDialog([], { holiday: schoolHoliday() }); // vacances multi-semaines
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" })); // ouvre le picker (pending)
+    await userEvent.click(screen.getByRole("button", { name: /^Créer les/ })); // confirme les semaines cochées
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("wk-1"));
+    expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 });

@@ -74,7 +74,7 @@ export function SeasonSchedulesModal({ schedules, onClose }: SeasonSchedulesModa
   // (le wizard mode période s'ancre sur l'ENTRÉE, pas sur le plan).
   const { data: plans } = useSchedulePlans();
   const entryByPlan = new Map((plans ?? []).filter((p) => null !== p.calendarEntryId).map((p) => [p.id, p.calendarEntryId as string]));
-  const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null);
+  const rows = seasonPlannings(schedules, me?.seasonPlan?.name ?? null, plans ?? []);
 
   // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
   // plan is a finished plan → open it read-only on the planning page. Only a

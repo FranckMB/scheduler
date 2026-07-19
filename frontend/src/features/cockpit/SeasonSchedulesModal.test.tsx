@@ -12,11 +12,19 @@ const exitPeriodMode = vi.fn();
 const navigate = vi.fn();
 const run = vi.fn();
 
+// Plans (entryByPlan + lignes 0 version B1). p1/p2 sans `type` → pas de ligne
+// parasite pour les tests existants ; un test dédié y injecte un plan HOLIDAY.
+const DEFAULT_PLANS = [
+  { id: "p1", calendarEntryId: "entry-1", chosenScheduleId: null },
+  { id: "p2", calendarEntryId: "entry-2", chosenScheduleId: null },
+];
+let plansMock: { id: string; type?: string; name?: string; calendarEntryId: string | null; chosenScheduleId: string | null }[] = DEFAULT_PLANS;
+
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode, exitPeriodMode }) } }));
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }) }));
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
-vi.mock("./queries", () => ({ useSchedulePlans: () => ({ data: [{ id: "p1", calendarEntryId: "entry-1", chosenScheduleId: null }, { id: "p2", calendarEntryId: "entry-2", chosenScheduleId: null }] }) }));
+vi.mock("./queries", () => ({ useSchedulePlans: () => ({ data: plansMock }) }));
 vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
 
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
@@ -29,6 +37,7 @@ beforeEach(() => {
   exitPeriodMode.mockClear();
   navigate.mockClear();
   run.mockClear();
+  plansMock = DEFAULT_PLANS;
 });
 
 const plan = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
@@ -111,6 +120,19 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
     expect(navigate).toHaveBeenCalledWith("/planning");
     expect(jumpTo).not.toHaveBeenCalled();
+  });
+
+  // B1 (retour fondateur 2026-07-19) : un plan de période créé mais SANS version
+  // générée est listé « en cours » avec Reprendre (navigue en mode période).
+  it("lists a period plan with ZERO version as an OPEN « Reprendre » row and resumes it in period mode", async () => {
+    plansMock = [...DEFAULT_PLANS, { id: "pl-tou", type: "HOLIDAY", name: "Vacances Toussaint — S1", calendarEntryId: "entry-tou", chosenScheduleId: null }];
+    // Aucune version pour pl-tou : le socle seul a des versions.
+    open([plan({ id: "v1", status: "COMPLETED" })]);
+
+    expect(screen.getByText("Vacances Toussaint — S1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reprendre Vacances Toussaint — S1" }));
+    expect(startPeriodMode).toHaveBeenCalledWith("entry-tou");
+    expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 
   it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {
