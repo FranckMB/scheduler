@@ -7,6 +7,18 @@ async function registerClub(page: import("@playwright/test").Page): Promise<void
   await registerAndVerify(page, { email: `season-${ara}@e2e.fr`, ara, firstName: "Sonia", lastName: "Saison", clubName: "E2E Saison Club" });
 }
 
+// « Préparer la saison suivante » n'est proposé que du 1er mai (année 2) à la fin de
+// la saison courante (P2-5 D). On fige l'horloge NAVIGATEUR au 1er juin de l'année 2
+// de la saison courante (dérivée du pivot 15 juil, comme côté serveur) pour être
+// DANS la fenêtre — le serveur, lui, garde sa vraie date (le flux de transition est
+// indépendant de l'horloge client).
+test.beforeEach(async ({ page }) => {
+  const now = new Date();
+  const pivotPassed = now.getMonth() > 6 || (6 === now.getMonth() && now.getDate() >= 15);
+  const seasonYear = pivotPassed ? now.getFullYear() : now.getFullYear() - 1;
+  await page.clock.setFixedTime(new Date(Date.UTC(seasonYear + 1, 5, 1, 12, 0, 0)));
+});
+
 test("just subscribed: one season, no next-season draft yet, work-loop gate", async ({ page }) => {
   await registerClub(page);
 
@@ -19,7 +31,7 @@ test("just subscribed: one season, no next-season draft yet, work-loop gate", as
   // Exactly one season, marked "en cours", and no draft yet.
   await expect(page.getByRole("menuitem", { name: /· en cours/i })).toHaveCount(1);
   await expect(page.getByRole("menuitem", { name: /· brouillon/i })).toHaveCount(0);
-  // The next-season action is available from day one.
+  // Dans la fenêtre de préparation (horloge figée par le beforeEach), l'action est proposée.
   await expect(page.getByRole("menuitem", { name: /Préparer la saison suivante/i })).toBeVisible();
 });
 
