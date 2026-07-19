@@ -435,6 +435,31 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
+  // PR C : une vacance démarrant vendredi → le picker n'offre PAS la semaine partielle
+  // de début (impact réel = semaines suivantes). 2026-05-15 est un vendredi.
+  it("skips the partial start week in the picker for a Friday-starting holiday", async () => {
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-fri", label: "Toussaint", startDate: "2026-05-15", endDate: "2026-05-31" }) });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    // La semaine partielle du 11–17 mai (contenant le vendredi) n'est pas proposée.
+    expect(screen.queryByText(/Semaine du 11 mai/)).not.toBeInTheDocument();
+    // La 1ʳᵉ semaine offerte commence le lundi suivant (18 mai).
+    expect(screen.getByText(/Semaine du 18 mai/)).toBeInTheDocument();
+  });
+
+  // Revue C F2 : une vacance démarrant vendredi qui, une fois la semaine partielle
+  // écartée, ne laisse qu'UNE semaine → pas de picker à une seule option : adapt direct.
+  it("adapts directly (no picker) when a Friday holiday leaves a single week after skipping the partial start", async () => {
+    holidayMutateAsync.mockResolvedValueOnce({ id: "hol-1w", kind: "period", periodType: "holiday", title: "Court", startDate: "2026-05-15", endDate: "2026-05-20", isDisruptive: false, schoolHolidayId: "sh-1w", parentEntryId: null, status: "active", createdBy: null });
+    // Ven 15 → mer 20 mai : weeksCovering = 11–17 + 18–24 (2), mais periodAdjustWeeks = 18–24 (1).
+    renderDialog([], { holiday: schoolHoliday({ id: "sh-1w", label: "Court", startDate: "2026-05-15", endDate: "2026-05-20" }) });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("hol-1w"));
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
+  });
+
   // B1 : après avoir choisi ≥2 semaines, le wizard s'ouvre sur la 1ʳᵉ semaine créée.
   it("opens the wizard on the FIRST created week after picking several weeks", async () => {
     weekChildrenMutate.mockImplementation((_payload: unknown, opts?: { onSuccess?: (r: { created: { id: string }[]; failedCount: number }) => void }) =>

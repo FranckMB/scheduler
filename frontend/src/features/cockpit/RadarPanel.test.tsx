@@ -170,6 +170,25 @@ describe("RadarPanel", () => {
     expect(screen.queryByRole("button", { name: "Reprendre" })).not.toBeInTheDocument();
   });
 
+  // Revue C F1 : une vacance démarrant vendredi écarte sa semaine partielle de
+  // début — MAIS un enfant DÉJÀ créé sur cette semaine (données existantes / adapt
+  // d'un bloc) doit rester visible/gérable (filet #262), jamais disparaître.
+  it("keeps an existing week-child on a holiday's skipped partial first week visible in the coverage card", () => {
+    const w1s = mondayOf("2999-01-15"); // lundi
+    const w2s = addDays(w1s, 7);
+    const friday = addDays(w1s, 4); // vendredi de la 1ʳᵉ semaine
+    renderRadar({
+      entries: [
+        // Mère VACANCE démarrant vendredi, couvrant 2 semaines calendaires.
+        closure({ id: "hm", periodType: "holiday", title: "Toussaint", startDate: friday, endDate: addDays(w2s, 1) }),
+        closure({ id: "w1", periodType: "holiday", title: "S1", parentEntryId: "hm", startDate: w1s, endDate: addDays(w1s, 6) }),
+        closure({ id: "w2", periodType: "holiday", title: "S2", parentEntryId: "hm", startDate: w2s, endDate: addDays(w2s, 6) }),
+      ],
+    });
+    // Les DEUX semaines-enfants restent affichées (la partielle n'est pas masquée).
+    expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(2);
+  });
+
   // P2-5 E1 : une période DÉCOUPÉE porte une carte de COUVERTURE (chips par
   // semaine), et sa carte classique disparaît. Semaines ALIGNÉES sur le vrai
   // calendrier (mondayOf) : la carte calcule les slots via weeksCovering.

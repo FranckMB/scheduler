@@ -9,7 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
@@ -138,10 +138,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
       return children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c }));
     }
-    return weeksCovering(m.startDate, m.endDate, workingSeason).map((week) => ({
-      week,
-      child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null,
-    }));
+    // Filet #262 + revue C F1 : on itère TOUTES les semaines calendaires et on garde
+    // une semaine si elle porte un enfant EXISTANT (toujours visible/gérable) OU si
+    // elle est OFFERTE à la création (periodAdjustWeeks écarte la semaine partielle
+    // d'une vacance démarrant Ven/Sam/Dim). Une semaine partielle SANS enfant
+    // disparaît (pas de chip « + créer ») ; AVEC enfant, elle reste (jamais orpheline).
+    const offeredMondays = new Set(periodAdjustWeeks(m.startDate, m.endDate, workingSeason, m.periodType).map((w) => w.monday));
+    return weeksCovering(m.startDate, m.endDate, workingSeason)
+      .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
+      .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday));
   };
   const splitMothers = roots.filter((e) => {
     const children = childrenByParent.get(e.id);
@@ -173,7 +178,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const requestAdapt = (entry: CalendarEntry) => {
     const planId = (plans ?? []).find((p) => p.calendarEntryId === entry.id)?.id ?? null;
     const blockGenerated = null !== planId && plansWithVersions.has(planId);
-    const multiWeek = null !== workingSeason && weeksCovering(entry.startDate, entry.endDate, workingSeason).length > 1;
+    const multiWeek = null !== workingSeason && periodAdjustWeeks(entry.startDate, entry.endDate, workingSeason, entry.periodType).length > 1;
     if (multiWeek && !childrenByParent.has(entry.id) && !schedulesUnresolved && !blockGenerated) {
       setPickerFor(entry);
       return;
@@ -411,7 +416,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                   const pending = { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate };
                   // Vacances couvrant PLUSIEURS semaines → picker SANS création (la
                   // mère naît à la confirmation) ; 1 semaine → création + wizard direct.
-                  const multiWeek = null !== workingSeason && weeksCovering(range.startDate, range.endDate, workingSeason).length > 1;
+                  const multiWeek = null !== workingSeason && periodAdjustWeeks(range.startDate, range.endDate, workingSeason, "holiday").length > 1;
                   if (multiWeek) {
                     openPendingPicker(pending);
                     return;
@@ -460,7 +465,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pendingHoliday.label}
           startDate={pendingHoliday.startDate}
           endDate={pendingHoliday.endDate}
-          weeks={weeksCovering(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason, "holiday")}
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
@@ -473,7 +478,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={weeksCovering(pickerFor.startDate, pickerFor.endDate, workingSeason)}
+          weeks={periodAdjustWeeks(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType)}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {
