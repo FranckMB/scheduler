@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -14,6 +15,9 @@ vi.mock("./queries", () => ({
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
   // DayDialog (ouvert au clic) dérive « overlay validé » du plan de la période (lot D-b).
   useSchedulePlanForEntry: () => ({ data: null, isSuccess: true }),
+  // DayList liste les plannings couvrants (AJUSTER/Consulter) via les plans (B1).
+  useSchedulePlans: () => ({ data: [] }),
+  useCalendarEntries: () => ({ data: [] }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [] }),
@@ -51,8 +55,10 @@ function renderMay(entries: CalendarEntry[] = [], hols: SchoolHoliday[] = [], pu
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      {/* May 2026 — month is 0-indexed */}
-      <MonthCalendar year={2026} month={4} entries={entries} holidays={hols} publicHolidays={publicHols} onPrev={vi.fn()} onNext={vi.fn()} />
+      <MemoryRouter>
+        {/* May 2026 — month is 0-indexed */}
+        <MonthCalendar year={2026} month={4} entries={entries} holidays={hols} publicHolidays={publicHols} onPrev={vi.fn()} onNext={vi.fn()} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

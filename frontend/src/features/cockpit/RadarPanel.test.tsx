@@ -124,6 +124,30 @@ describe("RadarPanel", () => {
     expect(screen.getByRole("button", { name: "Reprendre" })).toBeEnabled();
   });
 
+  // B1 (retour fondateur 2026-07-19) : une vacance ajustée « d'un bloc » mais PAS
+  // encore générée (0 version) doit rester visible « en cours » — sinon le
+  // gestionnaire ne peut plus la reprendre.
+  it("a whole-block holiday plan with ZERO generated version still shows an « en cours » card", () => {
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = []; // aucune version générée
+    renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: todayISO(), endDate: addDays(todayISO(), 5) })] });
+
+    expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reprendre" })).toBeInTheDocument();
+  });
+
+  // Revue B1 F1 : « Reprendre » d'une carte 0 version reste GATÉ tant que la saison
+  // n'est pas validée (démarrer un secondaire = interdit) ; un plan AVEC versions,
+  // lui, reste reprenable (couvert par le test « keeps Reprendre enabled » plus haut).
+  it("disables « Reprendre » on a ZERO-version card while the season plan is not validated", () => {
+    meData = { seasonPlan: { chosenScheduleId: null } };
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = []; // 0 version
+    renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: todayISO(), endDate: addDays(todayISO(), 5) })] });
+
+    expect(screen.getByRole("button", { name: "Reprendre" })).toBeDisabled();
+  });
+
   it("a CLOSURE with an in-progress plan keeps its rich impact card (sessions count) with « Reprendre »", () => {
     // La carte générique gommerait le détail des séances touchées (revue #260) :
     // la fermeture garde ClosureRadarItem, marquée « en cours », CTA Reprendre.
