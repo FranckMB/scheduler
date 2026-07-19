@@ -12,6 +12,7 @@ import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
+import { localIso, seasonPrepWindow } from "./seasonTransition";
 
 /**
  * Header season switcher (transition-de-saison P1). Shows the season the
@@ -20,7 +21,7 @@ import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
  * "Préparer la saison suivante" copies the current season's entries into a
  * fresh N+1 draft (confirmed first — structural club action).
  */
-export function SeasonSelector() {
+export function SeasonSelector({ today = new Date() }: { today?: Date } = {}) {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);
@@ -44,6 +45,13 @@ export function SeasonSelector() {
   const seasons = me?.seasons ?? [];
   const currentSeasonId = me?.currentSeasonId ?? null;
   const selected = seasons.find((s) => s.id === selectedSeasonId) ?? seasons.find((s) => s.id === currentSeasonId) ?? null;
+
+  // « Préparer la saison suivante » n'est proposé que du 1er mai à la fin de la
+  // saison courante (retour fondateur 2026-07-19 : trop tôt en pleine saison).
+  // Gaté sur la DATE seule (inWindow) — pas sur successorExists : préparer une 2ᵉ
+  // fois réutilise gracieusement le brouillon existant (409 serveur → bascule),
+  // flux conçu et couvert par l'e2e. Fenêtre PARTAGÉE avec la bannière (ancre today).
+  const { inWindow: canPrepareNextSeason } = seasonPrepWindow(localIso(today), seasons, "05-01");
 
   // Stale persisted selection (season purged / other club): reset to current.
   const staleSelection = null !== selectedSeasonId && seasons.length > 0 && !seasons.some((s) => s.id === selectedSeasonId);
@@ -137,9 +145,11 @@ export function SeasonSelector() {
             </MenuItem>
           );
         })}
-        <MenuItem icon={<CalendarPlus />} onSelect={openConfirm}>
-          Préparer la saison suivante…
-        </MenuItem>
+        {canPrepareNextSeason ? (
+          <MenuItem icon={<CalendarPlus />} onSelect={openConfirm}>
+            Préparer la saison suivante…
+          </MenuItem>
+        ) : null}
       </Menu>
 
       <ConfirmDialog

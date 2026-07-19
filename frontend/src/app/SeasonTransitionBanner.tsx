@@ -2,17 +2,14 @@ import { CalendarPlus } from "lucide-react";
 
 import { useMe } from "@/features/auth/queries";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
-import { seasonYearOf } from "./seasonTransition";
-
-/** Local Y-m-d (never toISOString — the UTC shift can flip the day). */
-function localIso(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+import { frDayMonth, localIso, seasonPrepWindow } from "./seasonTransition";
 
 /**
  * Permanent anticipation banner (transition P2-PR2): from May 15 until the
- * July-15 pivot, while NO season N+1 exists, nudge the manager to prepare the
- * next season. Entirely derived from /api/me (no endpoint); the CTA opens the
+ * current season's real end (fallback July-15 pivot for a dormant club), while
+ * NO season N+1 exists, nudge the manager to prepare the next season — window
+ * shared with the SeasonSelector via seasonPrepWindow. Entirely derived from
+ * /api/me (no endpoint); the CTA opens the
  * existing "Préparer la saison suivante" confirm via the shared store. The
  * e-mail cron (app:seasons:remind-transition) is the out-of-app twin.
  * Not dismissible by design — the user asked for a permanent on-screen nudge.
@@ -30,20 +27,13 @@ export function SeasonTransitionBanner({ today = new Date() }: { today?: Date })
     return null;
   }
 
-  // Anchor on TODAY's season-year, never the current season's: a dormant club
-  // whose latest season is years old must still be nudged before EVERY
-  // upcoming pivot (mirrors TransitionReminderCommand).
-  const todayIso = localIso(today);
-  const anchorYear = seasonYearOf(todayIso);
-  const successorExists = seasons.some((s) => seasonYearOf(s.startDate) > anchorYear);
-  if (successorExists) {
-    return null;
-  }
-
-  // Window [May 15, July 15[ before the next pivot — the pivot day itself is
-  // out (the season has switched; N+1 resolution takes over).
-  const pivotYear = anchorYear + 1;
-  if (todayIso < `${pivotYear}-05-15` || todayIso >= `${pivotYear}-07-15`) {
+  // Fenêtre PARTAGÉE avec le sélecteur (revue D : logique unique, plus de
+  // divergence). Ancrée sur AUJOURD'HUI (nudge un club dormant avant chaque pivot) ;
+  // bannière = à partir du 15 mai. La deadline affichée est la borne réelle (fin de
+  // saison), plus le 15 juillet codé en dur (revue D F2).
+  const { inWindow, successorExists, deadline } = seasonPrepWindow(localIso(today), seasons, "05-15");
+  // La bannière (nag) se masque hors fenêtre ET quand un successeur existe déjà.
+  if (!inWindow || successorExists) {
     return null;
   }
 
@@ -51,7 +41,7 @@ export function SeasonTransitionBanner({ today = new Date() }: { today?: Date })
     <div className="mb-4 flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
       <CalendarPlus className="size-4 shrink-0 text-accent" />
       <span className="min-w-0 flex-1">
-        La saison <span className="font-medium">{current.name}</span> se termine — préparez la saison suivante avant le 15 juillet.
+        La saison <span className="font-medium">{current.name}</span> se termine — préparez la saison suivante avant le {frDayMonth(deadline)}.
       </span>
       <button type="button" className="shrink-0 font-medium text-accent hover:underline" onClick={openConfirm}>
         Préparer la saison suivante
