@@ -273,9 +273,15 @@ export function WizardPage() {
             ) : null}
           </span>
           <span className="flex items-center gap-1">
-            {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit. */}
-            {null !== calendarEntryId ? (
-              <DeletePlanningButton calendarEntryId={calendarEntryId} title={periodEntry?.title ?? "ce planning"} onDeleted={() => { exitPeriodMode(); navigate("/"); }} />
+            {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit.
+                On ARME leavingRef comme finishQuit, sinon le useBlocker d'abandon
+                intercepte le navigate et ré-ouvre « Abandonner ? » sur une entrée déjà
+                supprimée (revue B2 F1). Masqué sur l'étape GÉNÉRATION : une génération
+                lancée à l'instant n'est pas encore dans le cache — supprimer là
+                détruirait la version en vol (revue B2 F4 ; l'abandon relit le serveur,
+                pas ce bouton). */}
+            {null !== calendarEntryId && "generate" !== stepId ? (
+              <DeletePlanningButton calendarEntryId={calendarEntryId} title={periodEntry?.title ?? "ce planning"} onDeleted={() => { leavingRef.current = true; exitPeriodMode(); navigate("/"); }} />
             ) : null}
             <Button variant="ghost" size="sm" onClick={quitPeriod}>
               <X className="size-4" />

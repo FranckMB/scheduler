@@ -19,11 +19,15 @@ const DEFAULT_PLANS = [
   { id: "p2", calendarEntryId: "entry-2", chosenScheduleId: null },
 ];
 let plansMock: { id: string; type?: string; name?: string; calendarEntryId: string | null; chosenScheduleId: string | null }[] = DEFAULT_PLANS;
+let seasonIsReadonly = false;
 
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode, exitPeriodMode }) } }));
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }), useSchedules: () => ({ data: [] }) }));
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }) }));
+vi.mock("@/features/auth/queries", () => ({
+  useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }),
+  useWorkingSeason: () => ({ id: "sn1", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-31", isCurrent: true, isReadonly: seasonIsReadonly }),
+}));
 vi.mock("./queries", () => ({
   useSchedulePlans: () => ({ data: plansMock }),
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
@@ -42,6 +46,7 @@ beforeEach(() => {
   navigate.mockClear();
   run.mockClear();
   plansMock = DEFAULT_PLANS;
+  seasonIsReadonly = false;
 });
 
 const plan = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
@@ -150,6 +155,20 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(screen.getByRole("button", { name: "Supprimer Vacances Toussaint" })).toBeInTheDocument();
     // Le socle (« Planning de la saison … ») n'a pas de Supprimer.
     expect(screen.queryByRole("button", { name: /^Supprimer Planning de la saison/ })).not.toBeInTheDocument();
+  });
+
+  // Revue B2 F2 : saison archivée (readonly) → pas de suppression (éviterait un 409).
+  it("hides « Supprimer » on overlays in a read-only (archived) season", () => {
+    seasonIsReadonly = true;
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", planType: "CLOSURE", schedulePlanId: "p1" })]);
+    expect(screen.queryByRole("button", { name: /^Supprimer/ })).not.toBeInTheDocument();
+  });
+
+  // Revue B2 : une version en vol (GENERATING) ne doit pas être supprimable (la
+  // cascade emporterait le solve en cours).
+  it("hides « Supprimer » on an in-flight (GENERATING) overlay row", () => {
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "GENERATING", planType: "CLOSURE", schedulePlanId: "p1" })]);
+    expect(screen.queryByRole("button", { name: /^Supprimer/ })).not.toBeInTheDocument();
   });
 
   it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {

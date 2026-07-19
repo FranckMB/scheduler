@@ -339,8 +339,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 <Pencil className="size-4" />
               </Button>
             ) : null}
-            {/* Supprimer : plannings SECONDAIRES uniquement (jamais le socle) → retour cockpit. */}
-            {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly ? (
+            {/* Supprimer : plannings SECONDAIRES uniquement (jamais le socle), et
+                jamais pendant une génération en vol (la cascade emporterait la version
+                en cours de solve — revue B2 F3) → retour cockpit. */}
+            {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
               <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
