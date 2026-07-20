@@ -14,6 +14,11 @@ Thumbs.db
 /doc/
 # dossier business perso (stratégie, pricing, pilote) — local only, jamais poussé
 /business/
+# Claude Code : config perso par machine (allowlist permissions, MCP) — jamais poussé
+/.claude/settings.local.json
+# RTK : stats de tracking locales — on garde uniquement filters.toml (config projet)
+/.rtk/*
+!/.rtk/filters.toml
 
 # --- PHP / Symfony ---
 /vendor/
