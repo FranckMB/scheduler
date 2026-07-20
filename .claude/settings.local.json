@@ -15,7 +15,21 @@
       "Bash(git stash *)",
       "Bash(git checkout *)",
       "Bash(git pull *)",
-      "Workflow(code-review)"
+      "Workflow(code-review)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(sed -n '343p' specs/evolution/roadmap.md)",
+      "Bash(sed -n '344p' specs/evolution/roadmap.md)",
+      "Bash(sed -i '343d;344d' specs/evolution/roadmap.md)",
+      "Bash(sed -i \"342r /tmp/p423.txt\" specs/evolution/roadmap.md)",
+      "Bash(sed -i \"343r /tmp/p424.txt\" specs/evolution/roadmap.md)",
+      "Bash(make bootstrap *)",
+      "Bash(echo \"php-fpm:   $\\(docker compose exec -T php-fpm date -u +%H:%M:%S 2>&1\\)\")",
+      "Bash(echo \"postgres:  $\\(docker compose exec -T postgres date -u +%H:%M:%S 2>&1\\)\")",
+      "Bash(rtk --version)",
+      "Bash(rtk gain *)",
+      "Read(//home/marabou/projects/scheduler/**)",
+      "Bash(rtk init *)",
+      "Bash(rtk git *)"
     ]
   },
   "enabledMcpjsonServers": [
