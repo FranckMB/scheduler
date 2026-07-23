@@ -15,5 +15,12 @@ api_platform:
         json: ["application/json"]
     defaults:
         stateless: true
+        # Les clés null restent PRÉSENTES en application/json (le défaut d'API Platform
+        # les omet — SerializerContextBuilder: skip_null_values ??= true). Le frontend
+        # compare en strict (null === x) : une clé absente arrive undefined et casse la
+        # lecture (chosenScheduleId null lu « validé », parentEntryId null → mère plus
+        # racine). jsonld les incluait déjà. Gardé par JsonNullKeysTest (phase1).
+        normalization_context:
+            skip_null_values: false
         cache_headers:
             vary: ["Content-Type", "Authorization", "Origin"]
