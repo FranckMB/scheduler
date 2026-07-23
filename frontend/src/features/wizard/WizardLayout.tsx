@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useMe } from "@/features/auth/queries";
 import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { frDateNumeric } from "@/features/cockpit/lib/date";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { listSchedules } from "@/features/planning/api";
 import { useSchedules } from "@/features/planning/queries";
@@ -68,7 +69,7 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
     return null;
   }
   return (
-    <div className="fixed right-4 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1">
+    <div className="fixed right-4 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-1 sm:flex">
       <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
         <ChevronsUp className="size-4" />
       </Button>
@@ -268,7 +269,7 @@ export function WizardPage() {
             <span className="font-medium">Mode période — {periodEntry?.title ?? "…"}</span>
             {periodEntry ? (
               <span className="text-muted-foreground">
-                du {periodEntry.startDate} au {periodEntry.endDate}
+                du {frDateNumeric(periodEntry.startDate)} au {frDateNumeric(periodEntry.endDate)}
               </span>
             ) : null}
           </span>

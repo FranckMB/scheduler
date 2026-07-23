@@ -9,6 +9,7 @@ import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
+import { frDateNumeric } from "./lib/date";
 import { useSchedulePlans } from "./queries";
 import type { CalendarEntry } from "./api";
 import { DeletePlanningButton } from "./DeletePlanningButton";
@@ -86,6 +87,18 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
   // emporterait le solve en cours). Entrée de calendrier de son plan comme cible.
   const workingSeason = useWorkingSeason();
   const isReadonly = true === workingSeason?.isReadonly;
+  // Période d'un planning : le principal couvre TOUTE la saison ; un overlay couvre
+  // les dates de son entrée calendrier (plan → calendarEntryId → entrée). null quand
+  // l'info n'est pas résolue (saison non chargée / entrée absente) → ligne masquée.
+  const periodLabel = (row: PlanningRow): string | null => {
+    const range = (a: string, b: string): string => `${frDateNumeric(a)} → ${frDateNumeric(b)}`;
+    if (!row.isOverlay) {
+      return workingSeason ? range(workingSeason.startDate, workingSeason.endDate) : null;
+    }
+    const entryId = null !== row.schedulePlanId ? (entryByPlan.get(row.schedulePlanId) ?? null) : null;
+    const entry = null !== entryId ? entries.find((e) => e.id === entryId) : undefined;
+    return entry ? range(entry.startDate, entry.endDate) : null;
+  };
   const deletableEntryId = (row: PlanningRow): string | null => {
     if (!row.isOverlay || isReadonly || "PENDING" === row.status || "GENERATING" === row.status || null === row.schedulePlanId) {
       return null;
@@ -128,6 +141,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
       <ul className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
         {rows.map((row) => {
           const resumeBlocked = row.isOverlay && row.isOpen && (null === row.schedulePlanId || !entryByPlan.has(row.schedulePlanId));
+          const period = periodLabel(row);
           return (
             <li key={row.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
               <div className="min-w-0">
@@ -137,6 +151,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
                   {row.isOverlay ? null : <Star className="size-3.5 fill-accent text-accent" />}
                   {row.label}
                 </p>
+                {period ? <p className="truncate text-xs text-muted-foreground">{period}</p> : null}
                 <p className="text-xs text-muted-foreground">{row.isOpen ? `${STATUS_LABELS[row.status]} · en cours` : STATUS_LABELS[row.status]}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
