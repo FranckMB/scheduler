@@ -60,6 +60,12 @@ export function addDays(iso: string, n: number): string {
   return toISODate(new Date(y, m - 1, d + n));
 }
 
+/** Numeric French date dd-mm-yyyy (FR reading order, dashes), e.g. "2026-10-17" → "17-10-2026". */
+export function frDateNumeric(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+}
+
 /** Short French date for compact UI copy, e.g. "2026-12-19" → "19 déc. 2026". */
 export function frDateShort(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
