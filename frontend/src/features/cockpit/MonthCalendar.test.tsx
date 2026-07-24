@@ -97,6 +97,28 @@ describe("MonthCalendar — projection of the exception layer", () => {
     expect(screen.getAllByText("Pont de mai")).toHaveLength(4);
   });
 
+  it("hides holiday WEEK-CHILD markers (the amber highlight suffices) but keeps closure children ⛔", () => {
+    // Fondateur 2026-07-24 : une semaine de vacances est un rail technique, pas
+    // un événement — aucun ⛔ ; une semaine de FERMETURE garde le sien (seule
+    // trace visible de la fermeture, pas de surlignage amber pour elle).
+    renderMay(
+      [
+        entry({ id: "hw1", kind: "period", periodType: "holiday", parentEntryId: "mother-h", title: "Pont de mai — semaine du 11 mai", startDate: "2026-05-14", endDate: "2026-05-17" }),
+        entry({ id: "cw1", kind: "period", periodType: "closure", parentEntryId: "mother-c", title: "Travaux — semaine du 4 mai", startDate: "2026-05-04", endDate: "2026-05-05" }),
+      ],
+      holidays,
+    );
+
+    // La semaine de vacances ne peint RIEN (ni marqueur, ni libellé a11y)…
+    expect(screen.queryByTitle("Pont de mai — semaine du 11 mai")).toBeNull();
+    expect(screen.queryByRole("button", { name: /semaine du 11 mai/ })).toBeNull();
+    // …le surlignage vacances, lui, reste (la citrouille/plage marque la période).
+    expect(screen.getAllByTitle("Vacances — Pont de mai")).toHaveLength(4);
+    // La semaine de fermeture garde son ⛔ sur chaque jour couvert.
+    expect(screen.getAllByTitle("Travaux — semaine du 4 mai")).toHaveLength(2);
+    expect(screen.getAllByTitle("Travaux — semaine du 4 mai")[0]).toHaveTextContent("⛔");
+  });
+
   it("marks a cutoff 🛑 (distinct from other periods) on every day of its window", () => {
     renderMay([entry({ id: "cut1", kind: "period", periodType: "cutoff", title: "Coupure de Noël", startDate: "2026-05-11", endDate: "2026-05-12" })]);
 

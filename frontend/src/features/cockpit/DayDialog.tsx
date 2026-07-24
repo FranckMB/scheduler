@@ -16,7 +16,7 @@ import { useWorkingSeason } from "@/features/auth/queries";
 import { clampRangeToSeason, frDateShort, periodAdjustWeeks, todayISO, weeksCovering } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
-import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor } from "./lib/markers";
+import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor, isHolidayWeekChild } from "./lib/markers";
 import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreatePeriodPlan, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 
@@ -125,8 +125,11 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
 
   // La mère vacances est un ancrage invisible (la vacance scolaire EST l'événement,
   // portée par HolidayBlock) : jamais listée comme entrée supprimable. Ses
-  // semaines-enfants et les autres entrées restent supprimables.
-  const deletable = entries.filter((e) => !isHolidayAnchor(e));
+  // SEMAINES non plus quand l'encart vacances est là — leurs actions (ajuster,
+  // voir, supprimer) vivent DANS l'encart (fondateur 2026-07-24 : « le plan est
+  // attaché aux vacances, plus simple en UX »). Un jour où la semaine déborde la
+  // vacance (pas d'encart), la ligne reste — sinon elle serait inaccessible.
+  const deletable = entries.filter((e) => !isHolidayAnchor(e) && !(undefined !== holiday && isHolidayWeekChild(e)));
 
   return (
     <div className="space-y-4">
@@ -277,18 +280,40 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const childrenResolved = null === entry || undefined !== childrenQuery.data;
   const weekChildren = (childrenQuery.data ?? []).filter((e) => e.parentEntryId === (entry?.id ?? "")).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const { data: allPlans } = useSchedulePlans();
-  // Index une fois (revue dette F2, même règle que DayList) : version validée par
-  // entrée-enfant — plutôt qu'un .find par chip de semaine rendu. Premier-gagne.
-  const chosenByEntry = new Map<string, string | null>();
+  // Index une fois (revue dette F2, même règle que DayList) : plan (id + version
+  // validée) par entrée-enfant — plutôt qu'un .find par chip rendu. Premier-gagne.
+  const planByChildEntry = new Map<string, { planId: string; chosen: string | null }>();
   for (const p of allPlans ?? []) {
-    if (null !== p.calendarEntryId && !chosenByEntry.has(p.calendarEntryId)) {
-      chosenByEntry.set(p.calendarEntryId, p.chosenScheduleId);
+    if (null !== p.calendarEntryId && !planByChildEntry.has(p.calendarEntryId)) {
+      planByChildEntry.set(p.calendarEntryId, { planId: p.id, chosen: p.chosenScheduleId });
     }
   }
-  const chosenOfChild = (childId: string): string | null => chosenByEntry.get(childId) ?? null;
+  const chosenOfChild = (childId: string): string | null => planByChildEntry.get(childId)?.chosen ?? null;
   // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
   const schedulesQuery = useSchedules();
   const schedulesResolved = undefined !== schedulesQuery.data;
+  // « en cours » par semaine (parité radar startedEntryIds) : plan avec ≥1 version,
+  // non validé. Sert au libellé 3 états ET au gating (reprendre un travail commencé
+  // n'est jamais bloqué par le socle — même règle que la carte radar).
+  const plansWithVersionsSet = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
+  const wipOfChild = (childId: string): boolean => {
+    const p = planByChildEntry.get(childId);
+    return undefined !== p && null === p.chosen && plansWithVersionsSet.has(p.planId);
+  };
+  // Suppression d'UNE semaine — intégrée à l'encart (fondateur 2026-07-24). Même
+  // avertissement fort que DayList : fail-closed sur l'ABSENCE de donnée (plans ou
+  // schedules pas résolus → on annonce la cascade, jamais « rien à perdre »).
+  const deleteEntry = useDeleteEntry();
+  const [weekToDelete, setWeekToDelete] = useState<CalendarEntry | null>(null);
+  const weekToDeleteHasVersions =
+    null !== weekToDelete
+    && (undefined === allPlans || !schedulesResolved
+      || (() => { const p = planByChildEntry.get(weekToDelete.id); return undefined !== p && plansWithVersionsSet.has(p.planId); })());
+  const confirmWeekDelete = () => {
+    if (null === weekToDelete) return;
+    deleteEntry.mutate(weekToDelete.id, { onSuccess: () => toast.success("Semaine retirée du calendrier") });
+    setWeekToDelete(null);
+  };
   // Plan résolu ? blockGenerated est faux tant que plan.data est undefined
   // (chargement) — offrir le picker alors ferait 422 chaque semaine sur une mère
   // déjà générée en bloc (revue #262 round 3). entry null (aucune période encore)
@@ -338,7 +363,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         // P2-5 E1 — période DÉCOUPÉE : la couverture par semaine, même lecture
         // que la carte radar (validée → Voir, sinon → Reprendre, MANQUANTE → +
         // créer — une semaine décochée reste planifiable, revue #262).
-        <div className="flex flex-wrap justify-end gap-1">
+        <div className="flex flex-col items-end gap-1">
           {(null === workingSeason
             ? weekChildren.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c as CalendarEntry | null }))
             : (() => {
@@ -366,18 +391,35 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
               );
             }
             const chosen = chosenOfChild(child.id);
-            // « Voir » (semaine validée) reste actif — lecture seule, sans gating.
+            const wip = wipOfChild(child.id);
+            // 3 états, mêmes libellés que la carte radar (fondateur 2026-07-24) :
+            // ✅ validée · « en cours » (versions, non validée) · « à faire » (0 version).
+            // Gating : seule une semaine À DÉMARRER est bloquée socle non validé —
+            // « Voir » et « en cours » (reprise) restent actifs (parité radar).
+            const chipLocked = null === chosen && !wip && !socleValidated;
             return (
-              <Button
-                key={child.id}
-                variant={null !== chosen ? "ghost" : "outline"}
-                size="sm"
-                disabled={null === chosen && !socleValidated}
-                title={null === chosen ? lockTitle : undefined}
-                onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}
-              >
-                {`sem. du ${frDateShort(child.startDate)} ${null !== chosen ? "✅" : "· à faire"}`}
-              </Button>
+              <span key={child.id} className="flex items-center gap-1">
+                <Button
+                  variant={null !== chosen ? "ghost" : "outline"}
+                  size="sm"
+                  disabled={chipLocked}
+                  title={chipLocked ? lockTitle : undefined}
+                  onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}
+                >
+                  {`sem. du ${frDateShort(child.startDate)} ${null !== chosen ? "✅" : wip ? "· en cours" : "· à faire"}`}
+                </Button>
+                {/* Suppression de LA semaine — dans l'encart, le plan est attaché aux
+                    vacances (fondateur 2026-07-24 ; la ligne séparée a disparu). */}
+                <button
+                  type="button"
+                  aria-label={`Supprimer la semaine du ${frDateShort(child.startDate)}`}
+                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  disabled={deleteEntry.isPending}
+                  onClick={() => setWeekToDelete(child)}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </span>
             );
           })}
         </div>
@@ -434,6 +476,20 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={null !== weekToDelete}
+        title={`Supprimer « ${weekToDelete?.title ?? ""} » ?`}
+        description={
+          weekToDeleteHasVersions
+            ? "Supprimer cette semaine supprime aussi son plan et toutes ses versions générées. À refaire si besoin."
+            : "Cette semaine sera retirée du calendrier."
+        }
+        confirmLabel="Supprimer"
+        destructive={weekToDeleteHasVersions}
+        onConfirm={confirmWeekDelete}
+        onCancel={() => setWeekToDelete(null)}
+      />
 
       {/* Vacance PAS encore matérialisée : picker sur une mère synthétique (aucune
           création tant que non confirmé). */}
