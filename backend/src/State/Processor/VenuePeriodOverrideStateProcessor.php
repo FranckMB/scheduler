@@ -8,12 +8,12 @@ use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\VenuePeriodOverrideResource;
 use App\Dto\VenuePeriodOverrideInput;
 use App\Entity\VenuePeriodOverride;
-use App\Entity\VenueTrainingSlot;
 use App\Enum\VenuePeriodMode;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
+use App\Service\VenuePeriodGrid;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -44,6 +44,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly VenuePeriodGrid $venuePeriodGrid,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -123,8 +124,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId, $schedulePlanId, $venueId, $wasBlank): void {
             parent::processDelete($uriVariables, $clubId);
             if ($wasBlank && null !== $schedulePlanId && null !== $venueId) {
-                $this->clearVenueGrid($schedulePlanId, $venueId);
-                $this->schedulePlanProvisioner->copySeasonalSlotsForVenue($schedulePlanId, $venueId);
+                $this->venuePeriodGrid->resetFromSeason($schedulePlanId, $venueId);
             }
         });
     }
@@ -198,21 +198,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         // quelle — désactiver ne doit pas coûter la saisie qu'on avait faite.
         // VIERGE, lui, vide bel et bien : c'est ce qu'on lui demande.
         if (VenuePeriodMode::BLANK->value === $output->mode) {
-            $this->clearVenueGrid($output->schedulePlanId, $output->venueId);
+            $this->venuePeriodGrid->clear($output->schedulePlanId, $output->venueId);
         }
-    }
-
-    /** Vide la grille d'UN gymnase pour CETTE période — jamais les créneaux de saison. */
-    private function clearVenueGrid(string $schedulePlanId, string $venueId): void
-    {
-        $slots = $this->entityManager->getRepository(VenueTrainingSlot::class)
-            ->findBy(['schedulePlanId' => $schedulePlanId, 'venueId' => $venueId]);
-        foreach ($slots as $slot) {
-            // Cascade sanctionnée : emporte les réservations du créneau et les verrous
-            // HARD qu'elles ont matérialisés.
-            $this->cascadeDeleter?->purgeChildrenOfSlot($slot);
-            $this->entityManager->remove($slot);
-        }
-        $this->entityManager->flush();
     }
 }

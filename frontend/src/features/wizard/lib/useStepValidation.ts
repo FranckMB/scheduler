@@ -1,6 +1,6 @@
 import { usePeriodAnchor } from "@/features/cockpit/queries";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
-import { useConstraintValidation, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, usePeriodSlots, useReservations, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
@@ -96,6 +96,14 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
   const periodAnchor = usePeriodAnchor(periodEntryId);
   const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
+  // #8 PR-B — une période POSSÈDE désormais sa grille (elle n'est plus héritée en lecture
+  // seule) : la règle « gymnase sans créneau » doit donc s'y appliquer AUSSI, mais sur les
+  // créneaux de la PÉRIODE et en épargnant les gymnases explicitement désactivés (dont
+  // l'absence de créneau servi est voulue). Sans elle, vider une grille passait « Suivant »
+  // sans un mot et la période se générait à vide (revue #8 PR-B).
+  const periodSlotsQuery = usePeriodSlots(periodMode ? periodAnchor.planId : null);
+  const periodSlots = periodSlotsQuery.data ?? [];
+  const { data: periodOverrides = [] } = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.
@@ -114,19 +122,30 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
   }
+  // Les gymnases qui bloquent : sur le socle, tout gymnase sans créneau ; en période,
+  // tout gymnase ACTIF (non désactivé) sans créneau de la période — un gymnase désactivé
+  // n'a volontairement rien à servir.
+  const disabledVenueIds = new Set(periodOverrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
+  // En période, on n'évalue la règle QUE lorsque le plan est résolu : sans lui les
+  // créneaux de la période ne sont pas encore lus (query désactivée → []), et bloquer là
+  // dessus serait un faux « sans créneau » pendant le chargement. Un gymnase désactivé est
+  // épargné : son absence de créneau servi est voulue.
+  // period_slots vient d'une query SÉPARÉE qui ne démarre qu'une fois planId connu : il
+  // faut attendre qu'elle ait CHARGÉ, pas seulement que le plan soit résolu, sinon on
+  // confond « pas encore chargé » (undefined→[]) et « vraiment vide » et on crie « sans
+  // créneau » sur une grille pleine (revue #8 PR-B round 2).
+  const periodGridReady = periodAnchor.ready && null !== periodAnchor.planId && !periodSlotsQuery.isLoading;
+  const emptyVenues = periodMode
+    ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
+    : venuesWithoutSlot(venues, slots);
+
   if ("venues" === stepId) {
     const errors: string[] = [];
     if (0 === venues.length) {
       errors.push("Ajoutez au moins un gymnase.");
     }
-    // In period mode the venues + their slots are inherited from the base plan and
-    // read-only — a "sans créneau" blocker there is a false alarm (the user cannot
-    // add slots on a secondary planning). The rule only applies to the base plan.
-    if (!periodMode) {
-      const empty = venuesWithoutSlot(venues, slots);
-      if (empty.length > 0) {
-        errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
-      }
+    if (emptyVenues.length > 0) {
+      errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
     }
     return { errors, warnings: [] };
   }
@@ -152,13 +171,8 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     if (0 === venues.length) {
       errors.push("Ajoutez au moins un gymnase.");
     }
-    // Period mode: slots are inherited & read-only — skip the "sans créneau" gate
-    // (same rationale as the venues step above).
-    if (!periodMode) {
-      const empty = venuesWithoutSlot(venues, slots);
-      if (empty.length > 0) {
-        errors.push(`Gymnase(s) sans créneau : ${empty.map((v) => v.name).join(", ")}.`);
-      }
+    if (emptyVenues.length > 0) {
+      errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
     }
     if (constraintValidation && !constraintValidation.valid) {
       for (const messages of Object.values(constraintValidation.errors)) {

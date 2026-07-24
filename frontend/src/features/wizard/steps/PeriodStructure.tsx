@@ -1,27 +1,42 @@
-import { CalendarPlus, Loader2, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
+import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
+import { Input } from "@/shared/components/ui/input";
+import { Modal } from "@/shared/components/ui/modal";
+import { Select } from "@/shared/components/ui/select";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride } from "../api";
-import { countSlotsByVenue } from "../lib/summary";
+import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
+import { DAYS, DURATIONS, hhmm } from "../lib/days";
+import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
+  useClearVenuePeriodGrid,
+  useClearVenuePeriodMode,
   useCreatePeriodSlot,
   useCreateTeamPeriodOverride,
+  useDeleteReservation,
   useDeletePeriodConstraintOverride,
   useDeletePeriodSlot,
   useDeleteTeamPeriodOverride,
   usePeriodConstraintOverrides,
   usePeriodSlots,
   usePriorityTiers,
+  useReservations,
+  useResetVenuePeriodGrid,
+  useSetVenuePeriodMode,
+  useUpdatePeriodSlot,
+  useVenuePeriodOverrides,
   useWizardTeamTagAssignments,
   useWizardTeamTags,
   useTeamPeriodOverrides,
@@ -32,6 +47,9 @@ import {
   useWizardVenues,
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
+import { WEEK } from "../lib/weekGrid";
+import { CapacitySelect } from "./slotFields";
+import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
@@ -245,134 +263,422 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   );
 }
 
-const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 /**
- * Period-editable venues (F1, refondu par #8) : une période POSSÈDE sa grille — ses
- * créneaux sont une COPIE du modèle de saison prise à la naissance du plan, plus rien
- * d'additif. Ce panneau montre donc la grille RÉELLEMENT SERVIE à la période et permet
- * de l'éditer ; la saison n'en est jamais affectée.
+ * Period-editable venues (#8, PR-B) — même forme que l'éditeur de gymnases de la SAISON
+ * (`VenuesEditor`), volontairement : un SÉLECTEUR de gymnase (UNE grille à la fois) et le
+ * même geste d'édition de créneau. Réinventer ce panneau en « une carte par gymnase,
+ * toutes montées » avait fait ressurgir tout ce que la saison avait déjà résolu — durée
+ * figée, pas d'éditeur, mur de milliers de boutons, clavier cassé (revue #8 PR-B). Le
+ * gestionnaire voit sa grille — une à la fois, exactement comme en saison.
  *
- * Avant #8 cette liste s'appelait « créneaux prêtés » et tenait 0 à 2 lignes (le gymnase
- * que la mairie prête pour cette fenêtre). Elle contient désormais toute la grille
- * hebdomadaire du club : le libellé d'origine invitait à supprimer comme des parasites
- * des créneaux d'entraînement bien réels (revue #8, round 4).
+ * DEUX contrôles, pas trois positions (arbitrage fondateur) :
+ *  - un ÉTAT persisté, actif / désactivé, qui ne touche JAMAIS la grille ;
+ *  - deux ACTIONS destructives — reprendre la grille du planning principal, ou la vider —
+ *    chacune confirmée en annonçant les réservations emportées.
+ * « Hériter » n'est pas un état : c'est le défaut, l'absence de ligne. Réactiver ne coûte
+ * donc jamais la saisie déjà faite.
+ *
+ * La grille d'un gymnase DÉSACTIVÉ est gelée dans un <fieldset disabled> — inerte à la
+ * souris ET au clavier, contrairement à un pointer-events-none (revue #8 PR-B).
  */
 export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: venues = [] } = useWizardVenues();
-  // Le créneau PRÊTÉ pend au PLAN (inv. 5, lot C3) ; les CONFLITS, eux, se lisent par
-  // l'entrée — le radar parle du FAIT (« Barros fermé »), pas de la réponse.
   const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
-  const { data: periodSlots = [] } = usePeriodSlots(schedulePlanId);
+  const periodSlotsQuery = usePeriodSlots(schedulePlanId);
+  const overridesQuery = useVenuePeriodOverrides(schedulePlanId);
   const { data: conflicts } = useEntryConflicts(calendarEntryId);
-  const createSlot = useCreatePeriodSlot(schedulePlanId);
-  const deleteSlot = useDeletePeriodSlot(schedulePlanId);
+
+  const [selectedId, setSelectedId] = useState("");
+  const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
+
+  if (!anchorReady || null === schedulePlanId) {
+    return <p className="text-xs text-muted-foreground">Chargement des créneaux de la période…</p>;
+  }
+  if (0 === venues.length) {
+    return <EmptyHint>Aucun gymnase.</EmptyHint>;
+  }
+
+  const periodSlots = periodSlotsQuery.data ?? [];
+  const overrides = overridesQuery.data ?? [];
+  const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0];
+  const override = overrides.find((o) => o.venueId === selected.id) ?? null;
   const closed = new Set(conflicts?.venueIds ?? []);
-  // Le compte de la couche SERVIE à la période, pas celui de la saison : c'est cette
-  // grille-là que le solveur recevra, et elle peut en différer (#8).
-  const slotsByVenue = countSlotsByVenue(periodSlots);
-  const venueName = new Map(venues.map((v) => [v.id, v.name]));
-
-  const [venueId, setVenueId] = useState("");
-  const [day, setDay] = useState(1);
-  const [start, setStart] = useState("18:00");
-  const [duration, setDuration] = useState(90);
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    // Sans ancre certaine, on n'écrit pas : `null` est une ancre LÉGITIME (= base), donc
-    // le serveur accepterait — et le gymnase prêté deviendrait un créneau PERMANENT du
-    // club, nourrissant toutes les générations de la saison. C'est la garde que mes
-    // composants frères ont et que celui-ci n'avait pas (round 2 du code-review).
-    if ("" === venueId || !anchorReady) {
-      return;
-    }
-    createSlot.mutate(
-      { venueId, dayOfWeek: day, startTime: start, durationMinutes: duration, capacity: 1 },
-      { onSuccess: () => toast.success("Créneau ajouté pour la période") },
-    );
-  };
+  const venueSlots = periodSlots.filter((s) => s.venueId === selected.id);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Gymnases de la période</p>
-        {0 === venues.length ? (
-          <EmptyHint>Aucun gymnase.</EmptyHint>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {venues.map((v) => {
-              const isClosed = closed.has(v.id);
-              return (
-                <li key={v.id} className={cn("flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm", isClosed ? "border-destructive/50 bg-destructive/10" : "border-border bg-card")}>
-                  <VenueSwatch color={v.color ?? "transparent"} className="size-3 border border-border" />
-                  <span className={cn("flex-1", isClosed && "text-destructive line-through")}>{v.name}</span>
-                  <span className={cn("shrink-0 text-xs", isClosed ? "font-semibold text-destructive" : "text-muted-foreground")}>{isClosed ? "INTERDIT cette période" : `${slotsByVenue.get(v.id) ?? 0} créneau(x)`}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+    <div>
+      <p className="mb-3 text-sm text-muted-foreground">
+        Ces créneaux sont repris de votre planning principal à l’ouverture de la période. Les modifier ici ne change que cette période — cliquez dans la grille pour poser un créneau, un créneau pour l’ajuster.
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="text-sm font-medium" htmlFor="period-venue-picker">
+          Gymnase :
+        </label>
+        <Select
+          id="period-venue-picker"
+          aria-label="Gymnase"
+          className="h-9 w-56"
+          value={selected.id}
+          onChange={(e) => {
+            setSelectedId(e.target.value);
+            setEditingSlot(null); // ne jamais laisser l'éditeur ouvert sur un créneau d'un autre gymnase
+          }}
+        >
+          {venues.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+              {closed.has(v.id) ? " — INTERDIT cette période" : ""}
+            </option>
+          ))}
+        </Select>
+        <VenueSwatch color={selected.color ?? "transparent"} className="size-4 border border-input" />
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Créneaux de la période</p>
-        <p className="text-xs text-muted-foreground">
-          Repris de votre planning principal à l’ouverture de cette période. Les modifier ici ne change que cette période — votre planning principal reste intact.
+      {/* Indicateur d'ensemble : le badge par gymnase ne montre que le gymnase choisi, or
+          un gestionnaire doit voir d'un coup TOUS les gymnases interdits (revue #8 PR-B
+          round 2) — sans quoi il croit un gymnase utilisable et ne comprend pas pourquoi
+          aucune équipe n'y est placée. */}
+      {venues.some((v) => closed.has(v.id)) ? (
+        <p role="alert" className="mb-3 text-sm text-destructive">
+          INTERDIT cette période : {venues.filter((v) => closed.has(v.id)).map((v) => v.name).join(", ")}.
         </p>
-        {periodSlots.length > 0 ? (
-          <ul className="flex flex-col gap-1">
-            {periodSlots.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-accent/40 bg-accent/5 px-3 py-1.5 text-sm">
-                <span>
-                  {venueName.get(s.venueId) ?? "Gymnase"} — {WEEKDAYS[s.dayOfWeek - 1]} {s.startTime.slice(0, 5)} ({s.durationMinutes} min)
-                </span>
-                <button
-                  type="button"
-                  aria-label="Supprimer ce créneau pour la période"
-                  title="Retire ce créneau pour cette période uniquement"
-                  className="rounded p-1 text-muted-foreground hover:text-destructive"
-                  disabled={deleteSlot.isPending}
-                  onClick={() => deleteSlot.mutate(s.id)}
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {anchorReady ? "Aucun créneau pour cette période : personne ne pourra s’entraîner tant que vous n’en aurez pas ajouté." : "Chargement des créneaux de la période…"}
-          </p>
-        )}
+      ) : null}
 
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-2 rounded-md border border-border p-2">
-          <select className={fieldClass} aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-            <option value="">Gymnase…</option>
-            {venues.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-          <select className={fieldClass} aria-label="Jour" value={day} onChange={(e) => setDay(Number(e.target.value))}>
-            {WEEKDAYS.map((d, i) => (
-              <option key={d} value={i + 1}>
-                {d}
-              </option>
-            ))}
-          </select>
-          <input type="time" className={fieldClass} aria-label="Heure de début" value={start} onChange={(e) => setStart(e.target.value)} />
-          <input type="number" min={15} step={15} className={cn(fieldClass, "w-20")} aria-label="Durée (min)" value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
-          <Button type="submit" size="sm" disabled={createSlot.isPending || "" === venueId || !anchorReady}>
-            <CalendarPlus className="size-4" />
-            Ajouter
-          </Button>
-        </form>
-      </div>
+      <PeriodVenuePanel
+        key={selected.id}
+        venue={selected}
+        schedulePlanId={schedulePlanId}
+        slots={venueSlots}
+        override={override}
+        isClosedByConstraint={closed.has(selected.id)}
+        syncing={overridesQuery.isFetching}
+        editingSlot={editingSlot}
+        onEditSlot={setEditingSlot}
+      />
     </div>
   );
 }
+
+function PeriodVenuePanel({
+  venue,
+  schedulePlanId,
+  slots,
+  override,
+  isClosedByConstraint,
+  syncing,
+  editingSlot,
+  onEditSlot,
+}: {
+  venue: Venue;
+  schedulePlanId: string;
+  slots: VenueTrainingSlot[];
+  override: VenuePeriodOverride | null;
+  isClosedByConstraint: boolean;
+  syncing: boolean;
+  editingSlot: VenueTrainingSlot | null;
+  onEditSlot: (slot: VenueTrainingSlot | null) => void;
+}) {
+  const [pending, setPending] = useState<"reset" | "clear" | null>(null);
+  const { data: reservations = [] } = useReservations(schedulePlanId);
+  const createSlot = useCreatePeriodSlot(schedulePlanId);
+  const deleteSlot = useDeletePeriodSlot(schedulePlanId);
+  const setMode = useSetVenuePeriodMode(schedulePlanId);
+  const clearMode = useClearVenuePeriodMode(schedulePlanId);
+  const resetGrid = useResetVenuePeriodGrid(schedulePlanId);
+  const clearGrid = useClearVenuePeriodGrid(schedulePlanId);
+
+  const isDisabled = "DISABLED" === override?.mode;
+  // `syncing` ferme la fenêtre entre le succès d'une mutation et le refetch des overrides :
+  // sans lui, un double-clic « Désactiver » repartait en POST create (override encore null
+  // dans le cache) → 422 (revue #8 PR-B). Le bouton reste inerte tant que l'état n'est pas
+  // à jour.
+  const modeBusy = setMode.isPending || clearMode.isPending || syncing;
+  const gridBusy = resetGrid.isPending || clearGrid.isPending;
+  const reservationCount = reservations.filter((r) => r.venueId === venue.id).length;
+  // #8 round 2 finding #6 — un creneau sur un jour que la grille ne montre pas (dimanche,
+  // jour 7, herite de l ancien formulaire ; ni la saison ni la nouvelle grille ne le
+  // proposent) resterait INVISIBLE tout en etant SERVI au solveur. On le rend visible et
+  // supprimable plutot que de le laisser agir en silence.
+  const offGridSlots = slots.filter((sl) => !WEEK.some((d) => d.n === sl.dayOfWeek));
+
+  const toggleActive = () => {
+    if (isDisabled) {
+      // Réactiver = retirer la ligne. Depuis DISABLED, le backend ne touche PAS la grille.
+      clearMode.mutate(override.id);
+      return;
+    }
+    setMode.mutate({ venueId: venue.id, mode: "DISABLED", existingId: override?.id });
+  };
+
+  return (
+    <section aria-label={`Gymnase ${venue.name}`} className="rounded-lg border border-border bg-card p-3">
+      <header className="mb-2 flex flex-wrap items-center gap-2">
+        <span className={cn("font-medium", isDisabled && "text-muted-foreground line-through")}>{venue.name}</span>
+        {isDisabled ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
+        {isClosedByConstraint ? <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">INTERDIT cette période</span> : null}
+        <span className="text-xs text-muted-foreground">
+          {slots.length} créneau{slots.length > 1 ? "x" : ""}
+        </span>
+        <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={modeBusy} onClick={toggleActive}>
+          {isDisabled ? "Réactiver" : "Désactiver"}
+        </Button>
+      </header>
+
+      {isDisabled ? (
+        <p className="mb-2 text-xs text-muted-foreground">Ce gymnase ne sera pas utilisé pour cette période. Sa grille est conservée telle quelle — réactivez-le pour la modifier.</p>
+      ) : 0 === slots.length ? (
+        <p role="alert" className="mb-2 text-sm text-destructive">Aucun créneau : aucune équipe ne pourra s’entraîner dans ce gymnase tant que vous n’en aurez pas posé.</p>
+      ) : null}
+
+      {/* fieldset disabled : gèle la grille à la souris ET au clavier quand le gymnase est
+          désactivé — ses boutons sortent de l'ordre de tabulation et ne s'activent pas. */}
+      <fieldset disabled={isDisabled} className={cn("min-w-0 border-0 p-0", isDisabled && "opacity-50")}>
+        <VenueAvailabilityGrid
+          venue={venue}
+          slots={slots}
+          selectedSlotId={editingSlot?.id ?? null}
+          onAdd={(dayOfWeek, startTime) => {
+            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Pas de
+            // borne de fin de journée — la grille de saison n'en a pas et un créneau du soir
+            // (21:00–22:30) y est légitime ; l'y interdire rendait la période plus stricte
+            // que la saison (revue #8 PR-B round 2).
+            if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
+              toast.error("Ce créneau en chevauche un autre sur ce gymnase.");
+              return;
+            }
+            createSlot.mutate({ venueId: venue.id, dayOfWeek, startTime, durationMinutes: 90, capacity: 1 });
+          }}
+          onSelect={(slot) => onEditSlot(slot)}
+        />
+      </fieldset>
+
+      {offGridSlots.length > 0 && !isDisabled ? (
+        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2">
+          <p role="alert" className="mb-1 text-xs font-medium text-destructive">
+            Créneau(x) sur un jour non affichable (dimanche) — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
+          </p>
+          <ul className="flex flex-col gap-1">
+            {offGridSlots.map((sl) => (
+              <li key={sl.id} className="flex items-center justify-between gap-2 text-xs">
+                <span>
+                  {DAY_LABELS_LONG[sl.dayOfWeek] ?? `jour ${sl.dayOfWeek}`} {hhmm(sl.startTime)} ({sl.durationMinutes} min)
+                </span>
+                <Button type="button" size="sm" variant="destructive" disabled={deleteSlot.isPending} onClick={() => deleteSlot.mutate(sl.id)}>
+                  <Trash2 className="size-4" />
+                  Supprimer
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={isDisabled || gridBusy} onClick={() => setPending("reset")}>
+          Reprendre la grille du planning principal
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={isDisabled || gridBusy || 0 === slots.length} onClick={() => setPending("clear")}>
+          Vider la grille
+        </Button>
+      </div>
+
+      {null !== editingSlot && editingSlot.venueId === venue.id && !isDisabled ? (
+        <PeriodSlotEditor
+          key={editingSlot.id}
+          slot={editingSlot}
+          schedulePlanId={schedulePlanId}
+          canSplit={venue.canSplit}
+          otherSlots={slots.filter((s) => s.id !== editingSlot.id)}
+          reservationsHere={reservations.filter((r) => r.venueId === venue.id && r.dayOfWeek === editingSlot.dayOfWeek && hhmm(r.startTime) === hhmm(editingSlot.startTime))}
+          onClose={() => onEditSlot(null)}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={null !== pending}
+        destructive
+        title={"reset" === pending ? `Reprendre la grille de ${venue.name} ?` : `Vider la grille de ${venue.name} ?`}
+        description={
+          "reset" === pending
+            ? `Les créneaux de ${venue.name} pour cette période seront remplacés par ceux de votre planning principal.${reservationCount > 0 ? ` ${reservationCount} réservation${reservationCount > 1 ? "s" : ""} sur ce gymnase ser${reservationCount > 1 ? "ont" : "a"} supprimée${reservationCount > 1 ? "s" : ""}.` : ""}`
+            : `Tous les créneaux de ${venue.name} pour cette période seront supprimés, à ressaisir.${reservationCount > 0 ? ` ${reservationCount} réservation${reservationCount > 1 ? "s" : ""} sur ce gymnase part${reservationCount > 1 ? "iront" : "ira"} avec eux.` : ""}`
+        }
+        confirmLabel={"reset" === pending ? "Reprendre" : "Vider"}
+        onConfirm={() => {
+          // Actions atomiques et idempotentes des deux côtés : jamais un PUT de mode, dont
+          // l'idempotence rendrait « vider » un no-op quand le mode ne change pas.
+          if ("reset" === pending) {
+            resetGrid.mutate(venue.id, { onSuccess: () => toast.success("Grille reprise du planning principal") });
+          } else {
+            clearGrid.mutate(venue.id, { onSuccess: () => toast.success("Grille vidée") });
+          }
+          onEditSlot(null); // l'éditeur pouvait viser un créneau qu'on vient de détruire
+          setPending(null);
+        }}
+        onCancel={() => setPending(null)}
+      />
+    </section>
+  );
+}
+
+/**
+ * Édite un créneau de la période — jour, heure, DURÉE, capacité (gymnase divisible) — ou
+ * le supprime. Miroir de `SlotEditor` (saison), câblé sur les hooks de la COUCHE période :
+ * mêmes gestes, écriture sur le plan et jamais sur le socle.
+ *
+ * DÉPLACER un créneau (changer jour/heure) laisse les réservations épinglées à l'ANCIENNE
+ * position orphelines — et un épinglage orphelin BLOQUE la génération (OrphanPinGuard). On
+ * ne le fait donc jamais en silence : si le créneau porte des réservations et que sa
+ * position change, on confirme en annonçant qu'elles seront retirées, puis on déplace ET
+ * on les supprime (pas d'orphelin laissé derrière — revue #8 PR-B round 2).
+ */
+function PeriodSlotEditor({
+  slot,
+  schedulePlanId,
+  canSplit,
+  otherSlots,
+  reservationsHere,
+  onClose,
+}: {
+  slot: VenueTrainingSlot;
+  schedulePlanId: string;
+  canSplit: boolean;
+  otherSlots: VenueTrainingSlot[];
+  reservationsHere: { id: string }[];
+  onClose: () => void;
+}) {
+  const update = useUpdatePeriodSlot(schedulePlanId);
+  const del = useDeletePeriodSlot(schedulePlanId);
+  const delReservation = useDeleteReservation();
+  const [day, setDay] = useState(slot.dayOfWeek);
+  const [time, setTime] = useState(hhmm(slot.startTime));
+  const [duration, setDuration] = useState(slot.durationMinutes);
+  const [capacity, setCapacity] = useState(slot.capacity);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmMove, setConfirmMove] = useState(false);
+
+  const moved = day !== slot.dayOfWeek || time !== hhmm(slot.startTime);
+  const reservationCount = reservationsHere.length;
+
+  const doSave = () => {
+    // Pas de borne de fin de journée : la saison n'en a pas, un créneau du soir
+    // (21:00–22:30) y est légitime. Ne referme qu'au succès — une écriture rejetée garde
+    // l'éditeur ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
+    update.mutate(
+      { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } },
+      {
+        onSuccess: () => {
+          // Le déplacement a orpheliné les réservations de l'ancienne position : on les
+          // retire pour ne pas bloquer la génération (elles ont été annoncées).
+          for (const r of reservationsHere) {
+            delReservation.mutate(r.id);
+          }
+          onClose();
+        },
+      },
+    );
+  };
+
+  const save = () => {
+    const conflict = findSlotConflict(otherSlots, day, time, duration);
+    if (null !== conflict) {
+      setError(conflictMessage(conflict));
+      return;
+    }
+    // Déplacer un créneau réservé retire ses réservations : on le confirme d'abord.
+    if (moved && reservationCount > 0) {
+      setConfirmMove(true);
+      return;
+    }
+    doSave();
+  };
+
+  return (
+    <Modal label="Modifier le créneau" title="Modifier le créneau" onClose={onClose}>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-xs text-muted-foreground">
+          Jour
+          <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
+            {DAYS.filter((d) => d.n <= 6).map((d) => (
+              <option key={d.n} value={d.n}>
+                {d.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Début
+          <Input aria-label="Début" type="time" className="mt-0.5 h-9 w-28" value={time} onChange={(e) => (setTime(e.target.value), setError(null))} />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Durée
+          <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
+            {DURATIONS.map((d) => (
+              <option key={d} value={d}>
+                {formatDuration(d)}
+              </option>
+            ))}
+          </Select>
+        </label>
+        {canSplit ? (
+          <div className="text-xs text-muted-foreground">
+            {/* CapacitySelect porte son propre aria-label="Capacité". */}
+            <span>Capacité</span>
+            <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="mt-0.5 block h-9 w-52" />
+          </div>
+        ) : null}
+      </div>
+
+      {null !== error ? (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+          <Trash2 className="size-4" />
+          Supprimer
+        </Button>
+        <Button onClick={save} disabled={update.isPending}>
+          Enregistrer
+        </Button>
+      </div>
+
+      {/* affectsPeriodPlans NON posé : supprimer un créneau de PÉRIODE ne touche QUE cette
+          période, pas « les plannings de période » — l'exagérer trompe (invariant n°4,
+          revue #8 PR-B round 2). */}
+      <DeleteConfirm
+        open={confirmDelete}
+        entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
+        impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
+        onConfirm={() => {
+          del.mutate(slot.id, { onSuccess: onClose });
+          setConfirmDelete(false);
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmMove}
+        destructive
+        title="Déplacer ce créneau ?"
+        description={`Ce créneau porte ${reservationCount} réservation${reservationCount > 1 ? "s" : ""} d'équipe. Le déplacer ${reservationCount > 1 ? "les retirera" : "la retirera"} — il faudra ${reservationCount > 1 ? "les reposer" : "la reposer"} sur le nouveau créneau.`}
+        confirmLabel="Déplacer"
+        onConfirm={() => {
+          setConfirmMove(false);
+          doSave();
+        }}
+        onCancel={() => setConfirmMove(false)}
+      />
+    </Modal>
+  );
+}
+
+const DAY_LABELS_LONG: Record<number, string> = { 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" };
 
 /** Libellés gestionnaire (jamais l'enum brut à l'écran). */
 const RULE_LABEL: Record<ConstraintRuleType, string> = {

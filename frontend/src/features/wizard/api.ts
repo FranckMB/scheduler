@@ -92,7 +92,7 @@ export interface VenueTrainingSlot {
   startTime: string;
   durationMinutes: number;
   capacity: number;
-  /** null = créneau saisonnier (structure PARTAGÉE, inv. 6) ; set = prêté à CE plan (additif). */
+  /** null = créneau de SAISON ; set = créneau de la grille que ce plan de période possède (#8). */
   schedulePlanId?: string | null;
 }
 
@@ -115,7 +115,7 @@ export interface SlotPayload {
 
 export const listVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
 export const listVenueSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
-/** Period-editable structure: the slots scoped to ONE period (the borrowed gyms). */
+/** #8 — la grille que la période POSSÈDE (copie du modèle de saison, plus rien d'additif). */
 export const listPeriodSlots = (schedulePlanId: string): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots", { schedulePlanId });
 export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("venues", { json: { source: "manual", ...body } }).json();
 export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
@@ -123,6 +123,42 @@ export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${i
 export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
 export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
+
+/**
+ * #8 — le MODE d'un gymnase POUR une période. Réglage SPARSE : pas de ligne = « hériter »,
+ * le défaut. Seuls les deux écarts sont stockés.
+ *
+ * `DISABLED` : le gymnase ne sert pas cette période — sa grille est CONSERVÉE (on la voit
+ * à l'écran, elle sort juste du payload envoyé au solveur), pour que réactiver ne coûte
+ * jamais la saisie déjà faite.
+ * `BLANK` : on repart d'une grille vierge — destructif, à confirmer.
+ */
+export type VenuePeriodMode = "DISABLED" | "BLANK";
+
+export interface VenuePeriodOverride {
+  id: string;
+  schedulePlanId: string;
+  venueId: string;
+  mode: VenuePeriodMode;
+}
+
+export const listVenuePeriodOverrides = (schedulePlanId: string): Promise<VenuePeriodOverride[]> =>
+  collectionAll<VenuePeriodOverride>("venue_period_overrides", { schedulePlanId });
+export const createVenuePeriodOverride = (body: { schedulePlanId: string; venueId: string; mode: VenuePeriodMode }): Promise<VenuePeriodOverride> =>
+  api.post("venue_period_overrides", { json: body }).json();
+export const updateVenuePeriodOverride = (id: string, body: { schedulePlanId: string; venueId: string; mode: VenuePeriodMode }): Promise<VenuePeriodOverride> =>
+  api.put(`venue_period_overrides/${id}`, { json: body }).json();
+/** Retirer la ligne = revenir au défaut « hériter ». Depuis VIERGE, cela reprend la grille
+ *  de saison ; depuis DÉSACTIVÉ, cela réactive SANS toucher à la grille (revue #8 round 4). */
+export const deleteVenuePeriodOverride = (id: string): Promise<void> =>
+  api.delete(`venue_period_overrides/${id}`).then(() => undefined);
+/** Action atomique : vider puis recopier le modèle de saison pour CE gymnase. Destructif. */
+export const resetVenuePeriodGrid = (schedulePlanId: string, venueId: string): Promise<unknown> =>
+  api.post("venue_period_overrides/reset-grid", { json: { schedulePlanId, venueId } }).json();
+/** Action atomique : vider la grille de CE gymnase. Destructif, idempotent (vider une
+ *  grille déjà vide ne fait rien) — jamais un PUT de mode BLANK, qui serait un no-op. */
+export const clearVenuePeriodGrid = (schedulePlanId: string, venueId: string): Promise<unknown> =>
+  api.post("venue_period_overrides/clear-grid", { json: { schedulePlanId, venueId } }).json();
 
 /**
  * Period-editable structure: a sparse per-(plan, team) override — off for the period, or a

@@ -22,3 +22,6 @@ export const toMinutes = (time: string): number => {
 
 /** Minutes since midnight back to "HH:MM". */
 export const fmtMinutes = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/** Durées proposées pour un créneau (min) — éditeurs de saison et de période. */
+export const DURATIONS = [60, 75, 90, 105, 120];

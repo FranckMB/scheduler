@@ -10,7 +10,9 @@ import { useWizardStore } from "../store";
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
-  usePeriodAnchor: () => ({ planId: "plan-1", ready: true, isLoading: false }),
+  // Ancre résolue seulement si une entrée est fournie : mode période sans entrée = plan
+  // non résolu (planId null), comme dans le vrai code.
+  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: false, isLoading: false } : { planId: "plan-1", ready: true, isLoading: false }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),
@@ -21,7 +23,11 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useConstraintValidation: () => ({ data: undefined, isLoading: false }),
   useReservations: () => ({ data: [] }),
+  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading }),
+  useVenuePeriodOverrides: () => ({ data: [] }),
 }));
+
+const periodSlotsState: { data: unknown[]; isLoading: boolean } = { data: [], isLoading: false };
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -106,7 +112,7 @@ describe("computeReservationWarnings (W6)", () => {
   });
 });
 
-describe("useStepValidation — venue slot rule is skipped in period mode", () => {
+describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille est éditable)", () => {
   afterEach(() => useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "teams" }));
 
   it("flags a gym without a slot in base (season) mode", () => {
@@ -115,17 +121,32 @@ describe("useStepValidation — venue slot rule is skipped in period mode", () =
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(true);
   });
 
-  it("does NOT flag it in period mode — slots are inherited & read-only", () => {
+  it("flags an ACTIVE gym without a period slot — la période possède sa grille, plus d'héritage lecture seule", () => {
+    // Avant #8 la règle était neutralisée en période (grille héritée). Depuis PR-B la
+    // période édite sa grille : vider la grille du seul gymnase doit bloquer « Suivant »,
+    // sinon la période se génère à vide sans un mot (revue #8 PR-B, finding #5).
     useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
-    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(true);
   });
 
-  it("skips the rule in period mode even before the entry id resolves (no dead-end)", () => {
-    // Keyed on mode, not the id: mode='period' with calendarEntryId=null must NOT
-    // raise a blocker the user cannot clear (slots are read-only in period mode).
+  it("ne bloque PAS tant que le plan de la période n'est pas résolu (faux positif de chargement)", () => {
+    // planId null (via calendarEntryId null → l'ancre n'est pas résolue dans le vrai code) :
+    // les créneaux de la période ne sont pas encore lus, on reste neutre plutôt que de
+    // crier « sans créneau » sur une grille qu'on n'a pas chargée.
     useWizardStore.setState({ mode: "period", calendarEntryId: null, stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
   });
-});
+
+  it("ne bloque PAS pendant que la query des créneaux de période charge (faux positif)", () => {
+    // Round 2 finding #4 : le plan peut être résolu (ready) alors que la query period_slots
+    // n'a pas encore chargé (data []). Armer la règle là dessus criait « sans créneau » sur
+    // une grille en fait pleine. On attend que la query ait chargé.
+    periodSlotsState.isLoading = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+    const { result } = renderHook(() => useStepValidation("venues"));
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+    periodSlotsState.isLoading = false;
+  });
+});;
