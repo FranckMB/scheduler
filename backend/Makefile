@@ -61,6 +61,11 @@ db-init-test: APP_ENV = test
 db-init-test:
 	$(EXEC) php bin/console doctrine:database:create --if-not-exists --connection admin -e test
 	$(EXEC) php bin/console doctrine:migrations:migrate --no-interaction -e test
+	# Un phpunit tué (Ctrl-C, kill, gel WSL2) laisse sa transaction DAMA « idle in
+	# transaction » : son verrou survit et TOUT run suivant gèle au premier accès à la
+	# même table (constaté 2026-07-24 : RunAdminJobCommandTest, DELETE bloqué en boucle).
+	# Postgres purge seul ces zombies après 60 s — DB de TEST uniquement.
+	$(FIG) exec -T postgres psql -U clubscheduler -d postgres -c "ALTER DATABASE clubscheduler_test SET idle_in_transaction_session_timeout = '60s'"
 
 .PHONY: db-reset ## Drop, recreate, and migrate the dev database
 db-reset: APP_ENV = dev
