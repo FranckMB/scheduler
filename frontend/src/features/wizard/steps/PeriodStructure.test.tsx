@@ -436,6 +436,23 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(updateSlot).toHaveBeenCalled();
   });
 
+  it("rend visible et supprimable un créneau sur un jour non affichable (dimanche, jour 7)", async () => {
+    // Round 2 finding #6 : un créneau jour-7 hérité serait servi au solveur mais invisible
+    // sur la grille (1–6). On le montre dans un bandeau d'alerte, avec un bouton Supprimer,
+    // plutôt que de le laisser planifier le dimanche en silence.
+    const del = vi.fn();
+    deletePeriodSlotImpl.value = del;
+    periodSlotOverride.value = [{ id: "sun1", venueId: "v1", dayOfWeek: 7, startTime: "10:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    const alert = screen.getByText(/jour non affichable \(dimanche\)/);
+    expect(alert).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Supprimer/ }));
+    expect(del).toHaveBeenCalledWith("sun1");
+    deletePeriodSlotImpl.value = deleteSlot;
+  });
+
   it("gèle la grille d'un gymnase désactivé au lieu de la laisser éditer", async () => {
     // La table ne stocke qu'un mode par gymnase : « vider » écraserait l'état désactivé.
     // On gèle donc la grille et on le DIT, plutôt que de perdre l'état en silence.

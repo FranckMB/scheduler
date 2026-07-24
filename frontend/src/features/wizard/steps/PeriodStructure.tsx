@@ -47,6 +47,7 @@ import {
   useWizardVenues,
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
+import { WEEK } from "../lib/weekGrid";
 import { CapacitySelect } from "./slotFields";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
@@ -382,6 +383,7 @@ function PeriodVenuePanel({
   const [pending, setPending] = useState<"reset" | "clear" | null>(null);
   const { data: reservations = [] } = useReservations(schedulePlanId);
   const createSlot = useCreatePeriodSlot(schedulePlanId);
+  const deleteSlot = useDeletePeriodSlot(schedulePlanId);
   const setMode = useSetVenuePeriodMode(schedulePlanId);
   const clearMode = useClearVenuePeriodMode(schedulePlanId);
   const resetGrid = useResetVenuePeriodGrid(schedulePlanId);
@@ -395,6 +397,11 @@ function PeriodVenuePanel({
   const modeBusy = setMode.isPending || clearMode.isPending || syncing;
   const gridBusy = resetGrid.isPending || clearGrid.isPending;
   const reservationCount = reservations.filter((r) => r.venueId === venue.id).length;
+  // #8 round 2 finding #6 — un creneau sur un jour que la grille ne montre pas (dimanche,
+  // jour 7, herite de l ancien formulaire ; ni la saison ni la nouvelle grille ne le
+  // proposent) resterait INVISIBLE tout en etant SERVI au solveur. On le rend visible et
+  // supprimable plutot que de le laisser agir en silence.
+  const offGridSlots = slots.filter((sl) => !WEEK.some((d) => d.n === sl.dayOfWeek));
 
   const toggleActive = () => {
     if (isDisabled) {
@@ -446,6 +453,27 @@ function PeriodVenuePanel({
           onSelect={(slot) => onEditSlot(slot)}
         />
       </fieldset>
+
+      {offGridSlots.length > 0 && !isDisabled ? (
+        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2">
+          <p role="alert" className="mb-1 text-xs font-medium text-destructive">
+            Créneau(x) sur un jour non affichable (dimanche) — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
+          </p>
+          <ul className="flex flex-col gap-1">
+            {offGridSlots.map((sl) => (
+              <li key={sl.id} className="flex items-center justify-between gap-2 text-xs">
+                <span>
+                  {DAY_LABELS_LONG[sl.dayOfWeek] ?? `jour ${sl.dayOfWeek}`} {hhmm(sl.startTime)} ({sl.durationMinutes} min)
+                </span>
+                <Button type="button" size="sm" variant="destructive" disabled={deleteSlot.isPending} onClick={() => deleteSlot.mutate(sl.id)}>
+                  <Trash2 className="size-4" />
+                  Supprimer
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={isDisabled || gridBusy} onClick={() => setPending("reset")}>
@@ -649,6 +677,8 @@ function PeriodSlotEditor({
     </Modal>
   );
 }
+
+const DAY_LABELS_LONG: Record<number, string> = { 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" };
 
 /** Libellés gestionnaire (jamais l'enum brut à l'écran). */
 const RULE_LABEL: Record<ConstraintRuleType, string> = {
