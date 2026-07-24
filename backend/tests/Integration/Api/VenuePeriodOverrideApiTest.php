@@ -85,15 +85,23 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         self::assertSame(3, $this->countSeasonSlots(), 'les créneaux de saison survivent TOUS — le planning principal n’est jamais modifié');
     }
 
-    public function testDisabledAlsoEmptiesTheVenuesPeriodGrid(): void
+    /**
+     * NR — DÉSACTIVÉ CONSERVE LA GRILLE, il ne la SERT pas (décision fondateur
+     * 2026-07-24) : « ça doit se voir que l'on a désactivé à l'écran et ça ne doit pas la
+     * servir côté backend pour l'engine ». Vider serait doublement fautif : le
+     * gestionnaire perdrait la saisie qu'il avait faite, et réactiver ne la lui rendrait
+     * pas. VIERGE, lui, vide — c'est ce qu'on lui demande.
+     */
+    public function testDisabledKeepsTheVenuesGridInsteadOfEmptyingIt(): void
     {
-        // DÉSACTIVÉ part du même geste que VIERGE : le gymnase est vidé pour la période.
-        // La différence est de LECTURE (il sort du payload et des sélecteurs).
+        $before = $this->countPeriodSlots($this->venueA);
+        self::assertGreaterThan(0, $before, 'le gymnase a bien une grille avant la bascule');
+
         $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
         self::assertResponseStatusCodeSame(201);
 
-        self::assertSame(0, $this->countPeriodSlots($this->venueA));
-        self::assertSame(3, $this->countSeasonSlots());
+        self::assertSame($before, $this->countPeriodSlots($this->venueA), 'désactiver ne détruit pas la grille — elle reste visible à l’écran');
+        self::assertSame(3, $this->countSeasonSlots(), 'et le planning principal reste intact');
     }
 
     public function testSwitchingToBlankCarriesTheReservationsAndHardLocksItHeld(): void

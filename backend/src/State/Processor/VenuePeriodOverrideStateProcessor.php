@@ -158,10 +158,15 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
      */
     private function applyMode(VenuePeriodOverrideResource $output): void
     {
-        // VIERGE comme DÉSACTIVÉ partent d'un gymnase vide pour cette période. La
-        // différence est de LECTURE : un gymnase désactivé sort en plus du payload et des
-        // sélecteurs, et le gestionnaire ne peut rien y saisir.
-        $this->clearVenueGrid($output->schedulePlanId, $output->venueId);
+        // DÉSACTIVÉ CONSERVE LA GRILLE, il ne la SERT pas (décision fondateur
+        // 2026-07-24) : le gestionnaire voit à l'écran ce qu'il a désactivé, et le
+        // gymnase est simplement absent du payload envoyé à l'engine
+        // (ScheduleConstraintBuilder::buildForOverlay). Réactiver rend la grille telle
+        // quelle — désactiver ne doit pas coûter la saisie qu'on avait faite.
+        // VIERGE, lui, vide bel et bien : c'est ce qu'on lui demande.
+        if (VenuePeriodMode::BLANK->value === $output->mode) {
+            $this->clearVenueGrid($output->schedulePlanId, $output->venueId);
+        }
     }
 
     /** Vide la grille d'UN gymnase pour CETTE période — jamais les créneaux de saison. */
