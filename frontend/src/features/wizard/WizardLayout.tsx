@@ -92,7 +92,10 @@ export function WizardPage() {
   // SEMAINE enfant. On résout la mère et on filtre la todo-list sur la semaine du plan
   // courant (plan de bloc → parentEntryId null → toutes les semaines).
   const { data: motherEntry } = useCalendarEntry(wishesMotherId(periodEntry));
-  const wishesMother = motherEntry ?? periodEntry ?? null;
+  // Ne JAMAIS retomber sur l'ENFANT tant que la mère charge : la modale s'ancrerait à
+  // l'id enfant → liste vide + ajout refusé en 422 (revue #10 C1). On n'utilise periodEntry
+  // directement que s'il EST la mère (pas de parent) ; sinon on attend motherEntry.
+  const wishesMother = periodEntry?.parentEntryId ? (motherEntry ?? null) : periodEntry ?? null;
   const wishesFilter = wishesWeekFilter(periodEntry);
   const [wishesOpen, setWishesOpen] = useState(false);
   const canWishes = periodMode && canOpenWishes(periodEntry);

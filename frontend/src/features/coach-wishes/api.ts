@@ -24,7 +24,8 @@ export interface CoachWishPayload {
   calendarEntryId: string;
   weekStart: string;
   teamId: string;
-  coachId: string;
+  /** null = doléance dé-attribuée (coach supprimé). Requis à la CRÉATION (garde serveur). */
+  coachId: string | null;
   slotsWanted: number;
   unavailableDays: number[];
   comment: string | null;

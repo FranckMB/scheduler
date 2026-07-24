@@ -138,6 +138,41 @@ final class CoachWishApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
+    public function testAcceptsAWeekWhoseMondayEqualsTheHolidayEndDate(): void
+    {
+        // Revue #10 C1 : une semaine dont le LUNDI égale l'endDate des vacances recoupe
+        // encore la période (le front l'offre). Ancrer weekStart à midi la rejetait à tort
+        // (12:00 > endDate 00:00) ; la comparaison est désormais date-à-date.
+        $entry = $this->holidayMother('2026-02-02', '2026-02-16'); // endDate = un lundi
+        $this->post($this->payload(['calendarEntryId' => $entry->getId(), 'weekStart' => '2026-02-16']));
+        self::assertResponseStatusCodeSame(201);
+    }
+
+    public function testDetachedWishCanBeEditedAndToggledWithoutACoach(): void
+    {
+        // Revue #10 C1 : une doléance dé-attribuée (coach supprimé → coachId null) doit
+        // pouvoir être re-cochée ou éditée sans coach. Le DTO l'autorise en écriture ; seule
+        // la CRÉATION exige un coach.
+        $created = $this->post($this->payload(['weekStart' => '2026-02-16']));
+        self::assertResponseStatusCodeSame(201);
+
+        $this->client->request('PUT', '/api/coach_wishes/' . $created['id'], [], [], $this->headers(), json_encode([
+            'calendarEntryId' => $this->mother->getId(), 'weekStart' => '2026-02-16', 'teamId' => $this->team->getId(),
+            'coachId' => null, 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => 'complété à la main', 'done' => true,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertNull($body['coachId'], 'la doléance reste dé-attribuée');
+        self::assertTrue($body['done']);
+    }
+
+    public function testCreateWithoutACoachIsRejected(): void
+    {
+        // « Une doléance se saisit au nom d'un coach » : la CRÉATION sans coach est refusée.
+        $this->post($this->payload(['weekStart' => '2026-02-16', 'coachId' => null]));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     public function testDeletingTheMotherEntryPurgesItsWishes(): void
     {
         $created = $this->post($this->payload(['weekStart' => '2026-02-16']));

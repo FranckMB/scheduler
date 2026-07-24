@@ -73,7 +73,9 @@ export function CoachWishesModal({ mother, weekFilter, onClose }: { mother: Cale
   const toggleDone = (w: CoachWish) =>
     updateWish.mutate({
       id: w.id,
-      body: { calendarEntryId: w.calendarEntryId, weekStart: w.weekStart, teamId: w.teamId, coachId: w.coachId ?? "", slotsWanted: w.slotsWanted, unavailableDays: w.unavailableDays, comment: w.comment, done: !w.done },
+      // coachId PRÉSERVÉ tel quel (null si dé-attribuée) : envoyer "" échouait le NotBlank
+      // et une doléance dé-attribuée ne pouvait jamais être cochée (revue #10 C1).
+      body: { calendarEntryId: w.calendarEntryId, weekStart: w.weekStart, teamId: w.teamId, coachId: w.coachId, slotsWanted: w.slotsWanted, unavailableDays: w.unavailableDays, comment: w.comment, done: !w.done },
     });
 
   const title = null === weekFilter ? `Doléances des coachs — ${mother.title}` : "Doléances des coachs — semaine";

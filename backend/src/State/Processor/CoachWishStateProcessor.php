@@ -42,21 +42,28 @@ class CoachWishStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): CoachWish
     {
-        $this->assertValidAnchor($input);
+        $weekStart = $this->parseWeekStart((string) $input->weekStart);
+        $this->assertValidAnchor($input, $weekStart);
+
+        // À la CRÉATION la doléance est saisie « au nom d'un coach » : coachId requis ici
+        // (le DTO l'a rendu nullable pour l'ÉDITION d'une doléance dé-attribuée — revue #10 C1).
+        if (null === $input->coachId) {
+            throw new ValidationException('Une doléance se saisit au nom d’un coach.');
+        }
 
         // Une seule doléance par (période, équipe, semaine) — l'index unique remonterait
         // sinon en 500 sur un double-submit ; on rend un 422 propre (l'édition passe par PUT).
         if (null !== $this->entityManager->getRepository(CoachWish::class)->findOneBy([
             'calendarEntryId' => $input->calendarEntryId,
             'teamId' => $input->teamId,
-            'weekStart' => $this->parseWeekStart((string) $input->weekStart),
+            'weekStart' => $weekStart,
         ])) {
             throw new ValidationException('Une doléance existe déjà pour cette équipe et cette semaine — modifiez-la.');
         }
 
         $entity = new CoachWish;
         $entity->setCalendarEntryId((string) $input->calendarEntryId);
-        $entity->setWeekStart($this->parseWeekStart((string) $input->weekStart));
+        $entity->setWeekStart($weekStart);
         $entity->setTeamId((string) $input->teamId);
         $this->applyEditableFields($entity, $input);
 
@@ -94,7 +101,7 @@ class CoachWishStateProcessor extends AbstractStateProcessor
      * La doléance s'ancre à l'entrée MÈRE des vacances + un lundi de sa fenêtre. Tenant
      * scoppe déjà l'entrée au club (tenant_filter) : introuvable = 422.
      */
-    private function assertValidAnchor(CoachWishInput $input): void
+    private function assertValidAnchor(CoachWishInput $input, DateTimeImmutable $weekStart): void
     {
         $entry = null === $input->calendarEntryId
             ? null
@@ -109,13 +116,14 @@ class CoachWishStateProcessor extends AbstractStateProcessor
             throw new ValidationException('Adressez la doléance à la période mère, pas à une semaine isolée.');
         }
 
-        $weekStart = $this->parseWeekStart((string) $input->weekStart);
         if ('1' !== $weekStart->format('N')) {
             throw new ValidationException('La semaine doit commencer un lundi.');
         }
         // Fenêtre élargie : la semaine (lundi→dimanche) doit INTERSECTER la période — c'est
         // l'ensemble que `weeksCovering` produit côté front (une semaine peut déborder avant
-        // le début des vacances tout en les touchant).
+        // le début des vacances tout en les touchant). Comparaison DATE À DATE (weekStart et
+        // les bornes sont tous à minuit) : un weekStart ÉGAL à endDate recoupe encore — les
+        // ancrer à midi rejetait à tort une semaine que l'UI offre (revue #10 C1).
         $weekEnd = $weekStart->modify('+6 days');
         if ($weekStart > $entry->getEndDate() || $weekEnd < $entry->getStartDate()) {
             throw new ValidationException('Cette semaine ne recoupe pas la période de vacances.');
@@ -124,14 +132,17 @@ class CoachWishStateProcessor extends AbstractStateProcessor
         if (null === $this->entityManager->getRepository(Team::class)->find($input->teamId)) {
             throw new ValidationException('Équipe introuvable.');
         }
-        if (null === $this->entityManager->getRepository(Coach::class)->find($input->coachId)) {
+        // coachId est optionnel côté DTO (édition d'une doléance dé-attribuée) ; à la
+        // création il est déjà exigé plus haut. Ne vérifier l'existence que s'il est fourni.
+        if (null !== $input->coachId && null === $this->entityManager->getRepository(Coach::class)->find($input->coachId)) {
             throw new ValidationException('Coach introuvable.');
         }
     }
 
     private function parseWeekStart(string $value): DateTimeImmutable
     {
-        // Ancré à midi UTC : une DATE pure, indépendante du fuseau — pas de dérive de jour.
-        return new DateTimeImmutable($value . ' 12:00:00');
+        // À MINUIT, comme les dates d'une CalendarEntry (date_immutable) : la comparaison de
+        // fenêtre reste date-à-date, symétrique — sans dérive de jour ni décalage d'heure.
+        return new DateTimeImmutable($value . ' 00:00:00');
     }
 }

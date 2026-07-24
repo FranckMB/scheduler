@@ -48,22 +48,28 @@ export function CoachWishForm({
   const [days, setDays] = useState<number[]>(editing?.unavailableDays ?? []);
   const [comment, setComment] = useState(editing?.comment ?? "");
 
-  // Défaut coach = le coach MAIN de l'équipe choisie (le plus probable) — surchargeable.
+  const isEdit = null !== editing;
+  // Défaut coach = le coach MAIN de l'équipe, mais À LA CRÉATION seulement. En édition on
+  // garde ce qui est là — y compris "" pour une doléance DÉ-ATTRIBUÉE (coach supprimé) :
+  // retomber sur le MAIN actuel la ré-attribuerait en silence à un autre auteur (revue #10 C1).
   const mainCoachId = (t: string): string => teamCoaches.find((tc) => tc.teamId === t && "MAIN" === tc.role)?.coachId ?? "";
-  const resolvedCoachId = "" !== coachId ? coachId : mainCoachId(teamId);
+  const resolvedCoachId = "" !== coachId ? coachId : isEdit ? "" : mainCoachId(teamId);
 
   const toggleDay = (n: number) => setDays((prev) => (prev.includes(n) ? prev.filter((d) => d !== n) : [...prev, n].sort((a, b) => a - b)));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if ("" === teamId || "" === resolvedCoachId || "" === weekStart) {
+    // La CRÉATION exige un coach (« au nom d'un coach ») ; l'ÉDITION accepte une doléance
+    // dé-attribuée (coachId null) — on ne force pas le gestionnaire à lui rattacher un coach
+    // juste pour corriger un commentaire.
+    if ("" === teamId || "" === weekStart || (!isEdit && "" === resolvedCoachId)) {
       return;
     }
     onSubmit({
       calendarEntryId,
       weekStart,
       teamId,
-      coachId: resolvedCoachId,
+      coachId: "" === resolvedCoachId ? null : resolvedCoachId,
       slotsWanted,
       unavailableDays: days,
       comment: "" === comment.trim() ? null : comment.trim(),
@@ -157,7 +163,7 @@ export function CoachWishForm({
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           Annuler
         </Button>
-        <Button type="submit" size="sm" disabled={pending || "" === resolvedCoachId}>
+        <Button type="submit" size="sm" disabled={pending || (!isEdit && "" === resolvedCoachId)}>
           {null !== editing ? "Enregistrer" : "Ajouter la doléance"}
         </Button>
       </div>

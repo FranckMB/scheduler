@@ -30,8 +30,12 @@ class CoachWishInput
     #[Groups(['write'])]
     public ?string $teamId = null;
 
-    /** En C1 la doléance est toujours saisie « au nom d'un coach » → requis en écriture. */
-    #[Assert\NotBlank]
+    /**
+     * Requis à la CRÉATION (« au nom d'un coach », imposé par le processor), mais NULLABLE
+     * en écriture : une doléance dé-attribuée (le coach a été supprimé, coachId=null)
+     * doit pouvoir être re-cochée « traité » ou éditée sans qu'un NotBlank la bloque
+     * (revue #10 C1). NotBlank retiré, Uuid ignore null.
+     */
     #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $coachId = null;

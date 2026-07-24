@@ -85,10 +85,30 @@ describe("CoachWishesModal", () => {
     expect(updateMut).toHaveBeenCalledWith(expect.objectContaining({ id: "w1", body: expect.objectContaining({ done: true }) }));
   });
 
+  it("cocher « traité » sur une doléance dé-attribuée préserve coachId null (pas de 422)", async () => {
+    // Revue #10 C1 finding #1 : envoyer coachId:"" échouait le NotBlank et une doléance
+    // dé-attribuée ne pouvait jamais être cochée. On préserve null.
+    wishesState.data = [wish({ id: "w1", coachId: null, done: false })];
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: /Traité/ }));
+    expect(updateMut).toHaveBeenCalledWith(expect.objectContaining({ id: "w1", body: expect.objectContaining({ coachId: null, done: true }) }));
+  });
+
   it("une doléance dé-attribuée (coachId null) l'affiche explicitement", () => {
     wishesState.data = [wish({ id: "w1", coachId: null })];
     render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
     expect(screen.getByText(/coach dé-attribué/)).toBeInTheDocument();
+  });
+
+  it("éditer une doléance dé-attribuée ne la réattribue PAS au coach MAIN", async () => {
+    // Revue #10 C1 finding #2 : l'équipe t1 a un coach MAIN (c1) ; éditer une doléance
+    // dé-attribuée retombait sur lui, corrompant l'auteur. On garde coachId null.
+    wishesState.data = [wish({ id: "w1", coachId: null, teamId: "t1", weekStart: "2026-02-16" })];
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(updateMut).toHaveBeenCalledWith(expect.objectContaining({ id: "w1", body: expect.objectContaining({ coachId: null }) }), expect.anything());
   });
 
   it("le filtre par équipe masque les autres équipes", async () => {
