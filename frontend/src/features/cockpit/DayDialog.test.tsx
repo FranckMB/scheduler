@@ -34,6 +34,7 @@ let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
 // fail-closed. Le code clé sur la PRÉSENCE de `data`, pas sur le statut (une donnée périmée
 // après un refetch en échec reste exploitable).
 let queriesNoData = false;
+let childEntriesData: CalendarEntry[] = [];
 // #5 gating : socle (plan de saison) validé par défaut ; un test dédié le passe à null.
 let meData: { seasonPlan: { chosenScheduleId: string | null } } = { seasonPlan: { chosenScheduleId: "s-season" } };
 
@@ -46,8 +47,8 @@ vi.mock("./queries", () => ({
   useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
-  // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests.
-  useCalendarEntries: () => ({ data: [] }),
+  // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests (mutable pour l'encart).
+  useCalendarEntries: () => ({ data: childEntriesData }),
   useSchedulePlans: () => ({ data: allPlansMock }),
 }));
 vi.mock("@/features/planning/queries", () => ({
@@ -106,6 +107,7 @@ describe("DayDialog — deletion is always confirmed", () => {
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
+    childEntriesData = [];
   });
 
   it("asks for confirmation before deleting, then deletes on confirm", async () => {
@@ -299,6 +301,7 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     plansByEntry = {};
     schedulesData = [];
     queriesNoData = false;
+    childEntriesData = [];
   });
 
   // item 1: a public holiday (jour férié) shows read-only info.
@@ -487,5 +490,60 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     await waitFor(() => expect(weekChildrenMutate).toHaveBeenCalled());
     expect(startPeriodMode).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalledWith("/wizard");
+  });
+});
+
+// ── Encart vacances : chips 3 états + suppression intégrée (fondateur 2026-07-24) ──
+describe("DayDialog — holiday block chips (3 states) and integrated week deletion", () => {
+  beforeEach(() => {
+    deleteMutate.mockReset();
+    startPeriodMode.mockClear();
+    navigate.mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    allPlansMock = [];
+    plansByEntry = {};
+    schedulesData = [];
+    queriesNoData = false;
+    childEntriesData = [];
+  });
+
+  const mother = () => entry({ id: "mh1", kind: "period", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20" });
+  const week = () => entry({ id: "wk1", kind: "period", periodType: "holiday", title: "Vacances de Noël — semaine du 11 mai", parentEntryId: "mh1", startDate: "2026-05-11", endDate: "2026-05-17" });
+
+  it("shows « · en cours » on a week whose plan has versions but no validated one, clickable even if the season plan is reopened", async () => {
+    meData = { seasonPlan: { chosenScheduleId: null } }; // socle non validé
+    childEntriesData = [mother(), week()];
+    allPlansMock = [{ id: "wp1", calendarEntryId: "wk1", chosenScheduleId: null }];
+    schedulesData = [{ id: "s1", schedulePlanId: "wp1" }]; // versions → en cours
+    renderDialog([mother(), week()], { holiday: schoolHoliday() });
+
+    const chip = await screen.findByRole("button", { name: /sem\. du 11 mai .*· en cours/ });
+    expect(chip).toBeEnabled(); // reprise jamais bloquée par le socle (parité radar)
+    await userEvent.click(chip);
+    expect(startPeriodMode).toHaveBeenCalledWith("wk1");
+  });
+
+  it("shows « · à faire » (locked while the season plan is not validated) on a 0-version week", async () => {
+    meData = { seasonPlan: { chosenScheduleId: null } };
+    childEntriesData = [mother(), week()];
+    allPlansMock = [{ id: "wp1", calendarEntryId: "wk1", chosenScheduleId: null }];
+    renderDialog([mother(), week()], { holiday: schoolHoliday() });
+
+    const chip = await screen.findByRole("button", { name: /sem\. du 11 mai .*· à faire/ });
+    expect(chip).toBeDisabled();
+  });
+
+  it("moves the week's delete action INTO the holiday block (no separate list row) and confirms it", async () => {
+    childEntriesData = [mother(), week()];
+    allPlansMock = [{ id: "wp1", calendarEntryId: "wk1", chosenScheduleId: null }];
+    renderDialog([mother(), week()], { holiday: schoolHoliday() });
+
+    // Plus de ligne séparée « ⛔ … semaine du 11 mai [🗑] » dans la liste du jour…
+    expect(screen.queryByRole("button", { name: "Supprimer Vacances de Noël — semaine du 11 mai" })).toBeNull();
+    // …la poubelle vit DANS l'encart, à côté de la chip.
+    await userEvent.click(await screen.findByRole("button", { name: "Supprimer la semaine du 11 mai 2026" }));
+    expect(deleteMutate).not.toHaveBeenCalled(); // jamais sans confirmation
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer" }));
+    expect(deleteMutate).toHaveBeenCalledWith("wk1", expect.anything());
   });
 });

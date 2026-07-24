@@ -18,6 +18,16 @@ import type { CalendarEntry, SchoolHoliday } from "../api";
  */
 export const isHolidayAnchor = (e: CalendarEntry): boolean => null === e.parentEntryId && null !== e.schoolHolidayId;
 
+/**
+ * Semaine-enfant d'une VACANCE (P2-5 E1) : un rail technique (1 entrée = 1 plan),
+ * pas un événement — le surlignage amber de la vacance marque déjà la période.
+ * Masquée des marqueurs de la grille comme sa mère (retour fondateur 2026-07-24 :
+ * « pas de ⛔ en plus juste parce que je crée un planning »). Les semaines de
+ * FERMETURE gardent leur ⛔ : sans surlignage amber, ce serait la seule trace
+ * visible de la fermeture au calendrier.
+ */
+export const isHolidayWeekChild = (e: CalendarEntry): boolean => null !== e.parentEntryId && "holiday" === e.periodType;
+
 /** Emoji marker for a calendar entry (event / period). */
 export const entryIcon = (e: CalendarEntry): string => {
   if (e.kind === "period") {
