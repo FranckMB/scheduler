@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\CalendarEntry;
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
@@ -44,10 +46,18 @@ final class OrphanPinGuard
         }
         $schedulePlanId = $schedule->getSchedulePlanId();
 
-        // Les créneaux RÉELS de la période, par (gymnase, jour, heure) — c'est ce qu'un
-        // épinglage désigne : ni un verrou ni une réservation ne cite l'id du créneau.
+        // Les créneaux RÉELLEMENT SERVIS à la période, par (gymnase, jour, heure) — c'est
+        // ce qu'un épinglage désigne : ni un verrou ni une réservation ne cite l'id du
+        // créneau. On applique le MÊME retrait des jours fermés que buildForOverlay : sans
+        // lui, un verrou posé un jour où le gymnase est déclaré fermé passerait le
+        // garde-fou et la séance serait perdue en silence — ce que ce garde existe pour
+        // empêcher (revue #8).
+        $closedWeekdaysByVenue = $this->closedWeekdaysOf($schedule);
         $available = [];
         foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
+            if (isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {
+                continue;
+            }
             $available[$this->key($slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'))] = true;
         }
 
@@ -70,6 +80,25 @@ final class OrphanPinGuard
         }
 
         return null;
+    }
+
+    /**
+     * Les jours de fermeture effectifs de la période — même source que buildForOverlay
+     * (contraintes datées de l'entrée, ou de sa mère pour une semaine enfant).
+     *
+     * @return array<string, array<int, true>>
+     */
+    private function closedWeekdaysOf(Schedule $schedule): array
+    {
+        $entry = $this->entityManager->getRepository(CalendarEntry::class)
+            ->findOneBy(['id' => $this->schedulePlanProvisioner->periodEntryIdOf($schedule) ?? '']);
+        if (!$entry instanceof CalendarEntry) {
+            return [];
+        }
+        $dated = $this->entityManager->getRepository(Constraint::class)
+            ->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
+
+        return VenueClosureDays::closedWeekdaysByVenue($dated, $entry->getStartDate(), $entry->getEndDate());
     }
 
     private function key(string $venueId, int $dayOfWeek, string $startTime): string

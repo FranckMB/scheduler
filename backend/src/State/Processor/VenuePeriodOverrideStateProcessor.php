@@ -73,10 +73,19 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
      */
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
-        return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
+        $id = $uriVariables['id'] ?? null;
+        $before = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id)?->getMode() : null;
+
+        return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId, $before): object {
             /** @var VenuePeriodOverrideResource $output */
             $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            $this->applyMode($output);
+            // Seul un CHANGEMENT de mode agit sur la grille. Re-enregistrer le mode déjà
+            // en place doit être sans effet : rejouer la purge détruirait les créneaux que
+            // le gestionnaire vient de saisir à la main (revue #8 — une action d'apparence
+            // idempotente était destructrice à chaque répétition).
+            if ($before?->value !== $output->mode) {
+                $this->applyMode($output);
+            }
 
             return $output;
         });
@@ -115,6 +124,15 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         if (null !== $input->schedulePlanId && null !== $input->venueId
             && null !== $this->entityManager->getRepository(VenuePeriodOverride::class)->findOneBy(['schedulePlanId' => $input->schedulePlanId, 'venueId' => $input->venueId])) {
             throw new ValidationException('Ce gymnase a déjà un réglage pour cette période — modifiez-le.');
+        }
+
+        // Le mode est un réglage DE PÉRIODE. Le viser sur le plan de saison rendrait ses
+        // actions destructrices : « vierge » viderait la grille du planning principal, et
+        // le retour à « hériter » recopierait les créneaux de saison PAR-DESSUS eux-mêmes.
+        // Le planning principal n'est JAMAIS modifié par une période (invariant n°1) —
+        // on le rend impossible ici plutôt que d'en dépendre côté UI.
+        if ($this->schedulePlanProvisioner->planIsSeason($input->schedulePlanId)) {
+            throw new ValidationException('Un mode de gymnase se règle sur une période, pas sur le planning de la saison.');
         }
 
         $entity = new VenuePeriodOverride;

@@ -141,11 +141,20 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         }
     }
 
+    /**
+     * Deux créneaux de PLANS DIFFÉRENTS ne sont jamais servis ensemble, donc ne peuvent
+     * pas se télescoper — y compris un créneau de saison face à la COPIE qu'une période
+     * en détient (#8) : depuis que la période possède sa grille, le socle est bâti sur
+     * les créneaux de saison seuls et une période sur les siens seuls, sans union.
+     *
+     * Exiger (comme avant) que les DEUX portent un plan rendait la grille de saison
+     * inéditable dès qu'une période existait : sa copie, identique heure pour heure,
+     * était vue comme un chevauchement (revue #8). Le chevauchement RÉEL — deux créneaux
+     * d'une même couche — reste refusé.
+     */
     private function neverGeneratedTogether(VenueTrainingSlot $a, VenueTrainingSlot $b): bool
     {
-        return null !== $a->getSchedulePlanId()
-            && null !== $b->getSchedulePlanId()
-            && $a->getSchedulePlanId() !== $b->getSchedulePlanId();
+        return $a->getSchedulePlanId() !== $b->getSchedulePlanId();
     }
 
     private function minutesOf(VenueTrainingSlot $slot): int

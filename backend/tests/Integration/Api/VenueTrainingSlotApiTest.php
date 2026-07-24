@@ -191,23 +191,36 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertSame([$period], $this->listPlanIds('?schedulePlanId=' . $period), 'period listing returns only period slots');
     }
 
-    public function testPeriodSlotOverlappingSeasonalIsRejectedButDifferentPeriodAllowed(): void
+    /**
+     * #8 — depuis que la période POSSÈDE sa grille (copie du modèle de saison à sa
+     * naissance), le socle est bâti sur les créneaux de saison SEULS et une période sur
+     * les siens SEULS : plus aucune union. Des couches différentes ne peuvent donc plus
+     * se télescoper, et c'est indispensable — la copie d'une période est identique heure
+     * pour heure à son original, si on la comptait comme un chevauchement la grille de
+     * saison deviendrait inéditable dès qu'une période existe (revue #8).
+     * Le chevauchement RÉEL — deux créneaux d'une MÊME couche — reste refusé.
+     */
+    public function testOverlapIsCheckedWithinALayerNotAcrossLayers(): void
     {
         $venue = $this->createVenue(false);
-        $this->postSlot($venue->getId(), 1, '18:00', 90); // seasonal 18:00–19:30
+        $this->postSlot($venue->getId(), 1, '18:00', 90); // saison 18:00–19:30
         self::assertResponseStatusCodeSame(201);
 
-        // A period slot on the SAME gym/time as the seasonal one WOULD double-book the
-        // court at overlay solve (seasonal ∪ period) → rejected.
+        // Couche différente (une période) au même horaire : jamais servi ensemble → OK.
         $this->postPeriodSlot($venue->getId(), 1, '18:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
-        self::assertResponseStatusCodeSame(422);
+        self::assertResponseStatusCodeSame(201);
 
-        // Two DIFFERENT periods never generate together → same time is fine, on a
-        // day/time with NO seasonal slot (day 3, 20:00).
+        // Deux périodes DIFFÉRENTES au même horaire : jamais servies ensemble non plus.
         $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
         self::assertResponseStatusCodeSame(201);
         $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
         self::assertResponseStatusCodeSame(201);
+
+        // MÊME couche, en revanche : le double-booking reste refusé, des deux côtés.
+        $this->postSlot($venue->getId(), 1, '18:30', 90); // saison vs saison
+        self::assertResponseStatusCodeSame(422);
+        $this->postPeriodSlot($venue->getId(), 1, '18:30', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'); // période vs même période
+        self::assertResponseStatusCodeSame(422);
     }
 
     protected function setUp(): void

@@ -13,6 +13,7 @@ use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
@@ -21,6 +22,7 @@ use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
+use App\Enum\SchedulePlanType;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -172,18 +174,22 @@ final class EntityCascadeDeleter
             if (null !== $planId) {
                 $qb->setParameter('planId', $planId);
             }
-        } elseif (ScheduleSlotTemplate::class === $entityClass && null !== $planId) {
-            // Le verrou ne porte que sa VERSION : on borne aux versions de CE plan quand on
-            // supprime un créneau de PÉRIODE — sans quoi vider une grille de période
-            // emporterait les verrous du planning principal (le planning principal n'est
-            // jamais modifié par une période). Supprimer un créneau de SAISON garde, lui,
-            // le comportement historique : l'horaire disparaît pour tout le monde.
+        } elseif (ScheduleSlotTemplate::class === $entityClass) {
+            // Le verrou ne porte que sa VERSION, jamais un plan : on borne donc aux
+            // versions de la COUCHE du créneau supprimé — celles de CE plan pour un
+            // créneau de période, celles du plan de SAISON pour un créneau de socle.
+            //
+            // La borne va dans les DEUX SENS depuis #8, et c'est nécessaire : une période
+            // possède désormais sa grille, une copie. Supprimer un créneau de saison ne
+            // supprime PAS la copie qu'en détient la période — emporter au passage le
+            // verrou que le gestionnaire y avait posé laissait la période avec un créneau
+            // toujours offert mais son épinglage disparu, sans un mot.
             $scheduleIds = array_map(
                 static fn (Schedule $s): string => $s->getId(),
-                $this->entityManager->getRepository(Schedule::class)->findBy(['schedulePlanId' => $planId]),
+                $this->entityManager->getRepository(Schedule::class)->findBy(['schedulePlanId' => $planId ?? $this->seasonPlanIds($seasonId)]),
             );
             if ([] === $scheduleIds) {
-                return; // aucune version sur ce plan : aucun verrou à emporter
+                return; // aucune version sur cette couche : aucun verrou à emporter
             }
             $qb->andWhere('e.scheduleId IN (:scheduleIds)')->setParameter('scheduleIds', $scheduleIds);
         }
@@ -191,6 +197,21 @@ final class EntityCascadeDeleter
             $qb->andWhere('e.lockLevel = :hard')->setParameter('hard', LockLevel::HARD);
         }
         $qb->getQuery()->execute();
+    }
+
+    /**
+     * Les plans SOCLE de la saison — la couche d'un créneau saisonnier (schedulePlanId
+     * null). Une liste, pas un id : rien n'interdit en base d'en avoir plus d'un, et un
+     * `find` unique choisirait silencieusement.
+     *
+     * @return list<string>
+     */
+    private function seasonPlanIds(string $seasonId): array
+    {
+        return array_map(
+            static fn (SchedulePlan $p): string => $p->getId(),
+            $this->entityManager->getRepository(SchedulePlan::class)->findBy(['seasonId' => $seasonId, 'type' => SchedulePlanType::SEASON]),
+        );
     }
 
     private function deleteByField(string $entityClass, string $field, string $value, ?string $clubId, string $seasonId): void
