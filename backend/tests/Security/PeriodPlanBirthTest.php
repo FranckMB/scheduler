@@ -27,21 +27,27 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 /**
- * NR — ADR-0002 lot C, axe *planning lifecycle* : LE PLAN NAÎT DU GESTE.
+ * NR — ADR-0002 (amendé 2026-07-24), axe *planning lifecycle* : LE PLAN NAÎT DU
+ * GESTE D'ADAPTER.
  *
- * Décision fondateur (2026-07-17) : un plan naît en réponse à un événement du
- * calendrier. Le geste « ajuster une période de vacances / un souci du calendrier »
- * EST la création du `CalendarEntry`, et c'est la SEULE façon de créer un plan
- * CLOSURE/HOLIDAY. Le lot A le créait à la première génération : trop tard, car les
- * réglages de la période (inv. 5) se saisissent AVANT toute version et doivent
- * s'accrocher à un plan existant.
+ * Décision fondateur (2026-07-24, durcit celle du 2026-07-17) : un plan naît
+ * UNIQUEMENT d'un geste EXPLICITE d'adaptation — jamais de la simple existence
+ * d'une période. Les gestes : POST /api/schedule_plans {calendarEntryId} (« Adapter »
+ * un bloc ou une fermeture), et cocher une semaine au picker (l'entrée-SEMAINE naît
+ * avec son plan — couvert par WeekChildEntryTest). Matérialiser une vacance ou
+ * signaler une indisponibilité ne crée RIEN : l'entrée est un ancrage, le radar lit
+ * l'impact par les contraintes datées, sans plan.
  *
  * Ce que ce test verrouille :
- *  1. créer une période génératrice ⇒ son plan existe AVANT toute génération ;
- *  2. inv. 9 — `cutoff`/`mutualisation` restent des rappels calendrier : AUCUN plan ;
- *  3. le type du plan suit le type de la période ;
- *  4. promouvoir une période non génératrice (PUT) mint son plan — c'est le geste ;
- *  5. un plan par période, jamais deux (le geste rejoué ne duplique pas).
+ *  1. créer une période closure/holiday ⇒ AUCUN plan (matérialiser ≠ adapter) ;
+ *  2. le geste (POST /schedule_plans) ⇒ le plan existe AVANT toute génération,
+ *     type suivant la période ; rejoué ⇒ toujours UN SEUL plan (idempotence) ;
+ *  3. inv. 9 — cutoff/mutualisation : jamais de plan, le geste y répond 422 ;
+ *  4. un PUT ne crée JAMAIS de plan (promotion comprise) — anti-résurrection ;
+ *  5. l'identité d'une période à plan OU à semaines-enfants est GELÉE (422) ;
+ *  6. une mère découpée ne reporte jamais de plan-bloc (422) tant que ses semaines
+ *     existent — les supprimer rouvre le geste (symétrie fondateur) ;
+ *  7. SEC-07 : le geste est réservé au management (403 sinon).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -53,25 +59,39 @@ final class PeriodPlanBirthTest extends WebTestCase
 
     private EntityManagerInterface $em;
 
-    public function testCreatingAHolidayPeriodBirthsItsPlanBeforeAnyGeneration(): void
+    public function testCreatingAHolidayPeriodDoesNotBirthAPlan(): void
     {
         [$user, $club] = $this->createClubWithSeason();
 
         $entryId = $this->postPeriod($user, 'holiday', 'Vacances de Toussaint');
 
-        // Le cœur du lot C : le plan est là alors qu'AUCUN schedule n'existe.
+        // Amendement 2026-07-24 : matérialiser la vacance = un ANCRAGE, pas une
+        // adaptation. Aucun plan tant que le gestionnaire n'a pas cliqué Adapter.
+        self::assertNull($this->planOf($club->getId(), $entryId), 'Matérialiser une période ne crée pas de plan.');
+    }
+
+    public function testAdaptGestureBirthsTheHolidayPlanBeforeAnyGeneration(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances de Toussaint');
+
+        $this->adaptPeriod($user, $entryId);
+
+        // Le cœur : le plan est là alors qu'AUCUN schedule n'existe.
         $plan = $this->planOf($club->getId(), $entryId);
-        self::assertInstanceOf(SchedulePlan::class, $plan, 'Le geste « ajuster » doit créer le plan de la période.');
+        self::assertInstanceOf(SchedulePlan::class, $plan, 'Le geste « Adapter » doit créer le plan de la période.');
         self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
         self::assertFalse($plan->isTeamSelectionInitialized(), 'Un plan neuf n’est pas encore configuré (garde de seed).');
         self::assertSame(0, $this->scheduleCount($club->getId()), 'Aucune génération ne doit être nécessaire.');
     }
 
-    public function testCreatingAClosurePeriodBirthsAClosurePlan(): void
+    public function testAdaptGestureBirthsAClosurePlan(): void
     {
         [$user, $club] = $this->createClubWithSeason();
-
         $entryId = $this->postPeriod($user, 'closure', 'Gymnase en travaux');
+        self::assertNull($this->planOf($club->getId(), $entryId), 'Signaler une indisponibilité ne crée pas de plan.');
+
+        $this->adaptPeriod($user, $entryId);
 
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
@@ -80,10 +100,10 @@ final class PeriodPlanBirthTest extends WebTestCase
 
     /**
      * Invariant 9 — « Périodes sans plan » : cutoff/mutualisation restent des rappels
-     * calendrier. Leur créer un plan donnerait un espace de travail fantôme, jamais
-     * générable, dans le sélecteur.
+     * calendrier. Le geste Adapter y répond 422 : leur créer un plan donnerait un
+     * espace de travail fantôme, jamais générable, dans le sélecteur.
      */
-    public function testNonGeneratingPeriodsCarryNoPlan(): void
+    public function testNonGeneratingPeriodsCarryNoPlanAndRefuseTheGesture(): void
     {
         [$user, $club] = $this->createClubWithSeason();
 
@@ -93,15 +113,17 @@ final class PeriodPlanBirthTest extends WebTestCase
                 $this->planOf($club->getId(), $entryId),
                 \sprintf('Une période « %s » ne porte pas de plan (inv. 9).', $periodType),
             );
+            $this->adaptPeriodExpecting(422, $user, $entryId);
         }
     }
 
     /**
-     * Promouvoir un rappel en période génératrice EST le geste « ajuster » : le plan
-     * doit naître à ce moment-là, sinon la période resterait inconfigurable pour
-     * toujours (plus aucun code ne crée un plan a posteriori).
+     * Un PUT ne crée JAMAIS de plan (amendement 2026-07-24) : « promouvoir » un rappel
+     * en période génératrice n'est pas un geste d'adaptation — et ce scénario n'existe
+     * pas dans l'UI (ruling fondateur : « une coupure ne devient pas des vacances »).
+     * Le plan naîtra du clic Adapter, la porte POST existe désormais pour ça.
      */
-    public function testPromotingANonGeneratingPeriodBirthsItsPlan(): void
+    public function testPromotingANonGeneratingPeriodDoesNotBirthAPlan(): void
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'cutoff', 'Rappel à promouvoir');
@@ -109,27 +131,94 @@ final class PeriodPlanBirthTest extends WebTestCase
 
         $this->putPeriod($user, $entryId, ['periodType' => 'holiday', 'title' => 'Rappel à promouvoir']);
 
-        $plan = $this->planOf($club->getId(), $entryId);
-        self::assertInstanceOf(SchedulePlan::class, $plan, 'La promotion est un geste : elle doit créer le plan.');
-        self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
+        self::assertNull($this->planOf($club->getId(), $entryId), 'Un PUT ne mint jamais de plan (anti-résurrection).');
     }
 
     /**
      * Un plan par période — garanti par uniq_schedule_plan_calendar_entry ET par
-     * l'idempotence de provisionPeriodPlan. Un PUT (qui re-provisionne) ne doit pas
-     * en faire naître un second : deux plans = deux jeux de réglages divergents.
+     * l'idempotence de provisionPeriodPlan : le geste rejoué rend le MÊME plan,
+     * et un PUT ultérieur n'en fait pas naître un second.
      */
     public function testTheGestureReplayedDoesNotDuplicateThePlan(): void
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
 
+        $firstPlanId = $this->adaptPeriod($user, $entryId);
+        $secondPlanId = $this->adaptPeriod($user, $entryId, 201);
+        self::assertSame($firstPlanId, $secondPlanId, 'Le geste rejoué rend le même plan.');
+
         $this->putPeriod($user, $entryId, ['periodType' => 'holiday', 'title' => 'Vacances renommées']);
 
         $this->scopeGucToClub($club->getId());
         $this->em->clear();
         $plans = $this->em->getRepository(SchedulePlan::class)->findBy(['calendarEntryId' => $entryId]);
-        self::assertCount(1, $plans, 'Le geste rejoué ne duplique pas le plan.');
+        self::assertCount(1, $plans, 'Ni le geste rejoué ni un PUT ne dupliquent le plan.');
+    }
+
+    /**
+     * NR — une mère DÉCOUPÉE ne reporte jamais de plan-bloc : 422 tant que des
+     * semaines-enfants existent. État réversible, pas verrou définitif (symétrie
+     * fondateur : on ne bascule jamais semaines↔bloc automatiquement — supprimer
+     * toutes les semaines rouvre le geste bloc).
+     */
+    public function testAdaptGestureOnASplitMotherIsRefusedUntilChildrenAreDeleted(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriod($user, 'holiday', 'Vacances découpées');
+        $childId = $this->postWeekChild($user, $motherId, '2026-10-19', '2026-10-25');
+
+        $this->adaptPeriodExpecting(422, $user, $motherId);
+        self::assertNull($this->planOf($club->getId(), $motherId), 'Pas de plan-bloc sur une mère découpée.');
+
+        // Symétrie : la semaine supprimée (cascade : son plan part avec), le geste
+        // bloc redevient légitime.
+        $this->client->request('DELETE', '/api/calendar_entries/' . $childId, [], [], $this->authHeaders($user));
+        self::assertResponseStatusCodeSame(204);
+
+        $this->adaptPeriod($user, $motherId);
+        $plan = $this->planOf($club->getId(), $motherId);
+        self::assertInstanceOf(SchedulePlan::class, $plan, 'Semaines supprimées → le geste bloc rouvre.');
+        self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
+    }
+
+    /**
+     * NR anti-résurrection — un PUT sur une mère découpée (sans plan) : le titre reste
+     * éditable, mais l'identité est gelée par ses SEMAINES et aucun plan ne re-naît.
+     */
+    public function testPutOnASplitMotherDoesNotResurrectAPlanAndFreezesIdentity(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriod($user, 'holiday', 'Vacances découpées');
+        $this->postWeekChild($user, $motherId, '2026-10-19', '2026-10-25');
+        self::assertNull($this->planOf($club->getId(), $motherId));
+
+        // Titre : libre — et toujours aucun plan après.
+        $this->putPeriod($user, $motherId, ['periodType' => 'holiday', 'title' => 'Titre changé']);
+        self::assertNull($this->planOf($club->getId(), $motherId), 'Un PUT ne re-mint pas le plan-bloc d’une mère découpée.');
+
+        // Dates : gelées par les enfants (la couverture bougerait sous les semaines).
+        $this->putPeriodExpecting(422, $user, $motherId, [
+            'periodType' => 'holiday',
+            'title' => 'Titre changé',
+            'startDate' => '2027-02-15',
+            'endDate' => '2027-02-22',
+        ]);
+    }
+
+    /** SEC-07 — le geste Adapter est une écriture cockpit : membre non-management → 403. */
+    public function testAdaptGestureRequiresManagementRole(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+
+        $coach = $this->addMember($club, 'coach');
+        $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($coach) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(403);
+
+        self::assertNull($this->planOf($club->getId(), $entryId));
     }
 
     /**
@@ -146,6 +235,7 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+        $this->adaptPeriod($user, $entryId);
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
 
@@ -165,6 +255,7 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+        $this->adaptPeriod($user, $entryId);
 
         $this->putPeriodExpecting(422, $user, $entryId, [
             'periodType' => 'holiday',
@@ -186,6 +277,7 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Nom de naissance');
+        $this->adaptPeriod($user, $entryId);
 
         // Le nom de NAISSANCE du plan est la réponse générée (E6, « Planning de vacances … »),
         // distincte du titre de la période — on le capture, puis on prouve qu'il ne bouge pas.
@@ -215,6 +307,7 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club, $season] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'holiday', 'Vacances déjà générées');
+        $this->adaptPeriod($user, $entryId);
         $plan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $plan);
         $planId = $plan->getId();
@@ -259,8 +352,12 @@ final class PeriodPlanBirthTest extends WebTestCase
     public function testPeriodSettingsHangOffThePlanNotTheCalendarEntry(): void
     {
         [$user, $club] = $this->createClubWithSeason();
-        $planA = $this->planOf($club->getId(), $this->postPeriod($user, 'holiday', 'Toussaint'));
-        $planB = $this->planOf($club->getId(), $this->postPeriod($user, 'closure', 'Gymnase en travaux'));
+        $entryA = $this->postPeriod($user, 'holiday', 'Toussaint');
+        $entryB = $this->postPeriod($user, 'closure', 'Gymnase en travaux');
+        $this->adaptPeriod($user, $entryA);
+        $this->adaptPeriod($user, $entryB);
+        $planA = $this->planOf($club->getId(), $entryA);
+        $planB = $this->planOf($club->getId(), $entryB);
         self::assertInstanceOf(SchedulePlan::class, $planA);
         self::assertInstanceOf(SchedulePlan::class, $planB);
 
@@ -294,8 +391,8 @@ final class PeriodPlanBirthTest extends WebTestCase
     public function testPeriodLayersHangOffThePlanAndNullStillMeansShared(): void
     {
         [$user, $club, $season] = $this->createClubWithSeason();
-        $planId = $this->planOf($club->getId(), $this->postPeriod($user, 'holiday', 'Vacances'))?->getId();
-        self::assertIsString($planId);
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+        $planId = $this->adaptPeriod($user, $entryId);
 
         $this->scopeGucToClub($club->getId());
         $venueId = '99999999-9999-4999-8999-999999999999';
@@ -325,12 +422,9 @@ final class PeriodPlanBirthTest extends WebTestCase
      * NR lot C3 — les contraintes DATÉES, elles, NE bougent PAS : elles restent sur la
      * CalendarEntry, et le RADAR doit pouvoir les lire AVANT tout plan.
      *
-     * Décision fondateur (2026-07-17), qui a levé une contradiction de l'ADR : une
-     * contrainte datée décrit le FAIT (« Barros fermé »), pas la réponse. Le radar la lit
-     * PAR L'ENTRÉE pour annoncer « cette fermeture gêne 3 séances » — c'est ce qui
-     * DÉCLENCHE le geste « ajuster ». L'ancrer au plan la rendrait illisible tant qu'aucun
-     * plan n'existe… or le plan naît de ce geste : le radar ne pourrait plus jamais le
-     * provoquer.
+     * RENFORCÉ par l'amendement 2026-07-24 : une closure vit désormais SANS plan tant
+     * que personne ne clique Adapter — le radar n'a QUE la contrainte datée pour
+     * annoncer « cette fermeture gêne 3 séances », et c'est ce qui déclenche le geste.
      *
      * On teste le COMPORTEMENT (la contrainte se relit par son entrée), pas la forme de la
      * classe : un method_exists ne dirait rien de ce qui compte.
@@ -339,6 +433,7 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club, $season] = $this->createClubWithSeason();
         $entryId = $this->postPeriod($user, 'closure', 'Barros fermé');
+        // Volontairement AUCUN adaptPeriod : la lecture doit marcher sans plan.
 
         $this->scopeGucToClub($club->getId());
         $dated = new Constraint;
@@ -367,6 +462,76 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /** Le geste « Adapter » : POST /api/schedule_plans — rend l'id du plan (201). */
+    private function adaptPeriod(User $user, string $entryId, int $expected = 201): string
+    {
+        $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame($expected);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['id']);
+
+        return $payload['id'];
+    }
+
+    private function adaptPeriodExpecting(int $status, User $user, string $entryId): void
+    {
+        $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame($status);
+    }
+
+    /** POST d'une entrée-SEMAINE (P2-5 E1) — elle naît AVEC son plan (le geste = cocher). */
+    private function postWeekChild(User $user, string $motherId, string $start, string $end): string
+    {
+        $this->client->request('POST', '/api/calendar_entries', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'title' => 'Semaine du ' . $start,
+            'startDate' => $start,
+            'endDate' => $end,
+            'periodType' => 'holiday',
+            'parentEntryId' => $motherId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['id']);
+
+        return $payload['id'];
+    }
+
+    private function addMember(Club $club, string $role): User
+    {
+        $uid = uniqid('', true);
+        $hasher = self::getContainer()->get('security.user_password_hasher');
+
+        $member = new User;
+        $member->setEmail('member' . $uid . '@test.com');
+        $member->setFirstName('Non');
+        $member->setLastName('Manager');
+        $member->setPasswordHash($hasher->hashPassword($member, 'pass'));
+        $this->em->persist($member);
+        $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
+        $membership = new ClubUser;
+        $membership->setClubId($club->getId());
+        $membership->setUserId($member->getId());
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $this->em->persist($membership);
+        $this->em->flush();
+
+        return $member;
     }
 
     /** @return array<int, mixed> */

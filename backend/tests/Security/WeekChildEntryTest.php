@@ -30,15 +30,18 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
  * À LA SEMAINE. Une semaine cochée = une CalendarEntry ENFANT (`parentEntryId`)
  * qui naît avec SON plan par le rail existant (1 entrée = 1 plan, ADR-0002 intact).
  *
- * Ce que ce test verrouille :
- *  1. POST d'un enfant ⇒ son plan naît, fenêtre = la semaine, type hérité ; le plan
- *     de la mère survit (il porte le chemin « d'un bloc ») ;
+ * Ce que ce test verrouille (amendé 2026-07-24 — le plan naît du geste d'ADAPTER) :
+ *  1. POST d'un enfant ⇒ son plan naît, fenêtre = la semaine, type hérité ; la mère,
+ *     elle, n'a JAMAIS de plan tant que personne n'a cliqué Adapter ;
  *  2. un enfant hérite du TYPE de sa mère (422 sinon) ;
  *  3. un seul niveau : un enfant ne se découpe pas (422) ;
  *  4. exclusivité bloc/semaines : mère déjà générée d'un bloc → pas de découpage (422) ;
- *     mère découpée → pas de génération d'un bloc (409 au POST /api/schedules) ;
- *  5. supprimer la MÈRE emporte ses enfants ET leurs plans (cascade complète) ;
- *  6. les contraintes datées d'une semaine se lisent sur sa MÈRE (héritage).
+ *     mère découpée → son plan-bloc a été SUPPRIMÉ par la découpe, générer dessus
+ *     répond 422 (plan inconnu) ;
+ *  5. la découpe emporte le plan-bloc ET ses réglages ancrés (décision fondateur
+ *     2026-07-24), idempotente au 2ᵉ enfant ;
+ *  6. supprimer la MÈRE emporte ses enfants ET leurs plans (cascade complète) ;
+ *  7. les contraintes datées d'une semaine se lisent sur sa MÈRE (héritage).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -62,7 +65,48 @@ final class WeekChildEntryTest extends WebTestCase
         self::assertSame(SchedulePlanType::CLOSURE, $childPlan->getType());
         self::assertSame('2026-11-09', $childPlan->getStartDate()->format('Y-m-d'), 'la fenêtre du plan est la SEMAINE');
         self::assertSame('2026-11-15', $childPlan->getEndDate()->format('Y-m-d'));
-        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $motherId), 'le plan de la mère survit (chemin « d’un bloc »)');
+        // Amendement 2026-07-24 : la mère jamais adaptée n'a JAMAIS eu de plan — la
+        // découpe est le geste, il porte sur les semaines, pas sur le bloc.
+        self::assertNull($this->planOf($club->getId(), $motherId), 'la mère matérialisée sans geste ne porte pas de plan');
+    }
+
+    /**
+     * Décision fondateur 2026-07-24 : la découpe emporte le plan-bloc de la mère
+     * (chemin « d'un bloc » commencé — 0 version — puis abandonné pour les semaines)
+     * ET ses réglages ancrés. Chaque semaine repart de la structure saison.
+     * Idempotent : le 2ᵉ enfant ne trouve plus rien à supprimer, sans erreur.
+     */
+    public function testSplittingDeletesTheMotherBlockPlanAndItsAnchoredSettings(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriod($user, 'holiday', 'Vacances bloc puis semaines', '2026-11-09', '2026-11-22');
+        $motherPlanId = $this->adaptPeriod($user, $motherId);
+
+        // Un réglage ancré au plan-bloc (le gestionnaire avait commencé le chemin bloc).
+        $this->client->request('POST', '/api/team_period_overrides', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'schedulePlanId' => $motherPlanId,
+            'teamId' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            'isActive' => false,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $child1 = $this->postWeekChild($user, $motherId, 'holiday', 'Semaine 1', '2026-11-09', '2026-11-15');
+
+        $this->scopeGucToClub($club->getId());
+        $this->em->clear();
+        self::assertNull($this->planOf($club->getId(), $motherId), 'la découpe supprime le plan-bloc de la mère');
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $child1), 'le plan de la semaine est né');
+        self::assertSame(
+            0,
+            (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM team_period_override WHERE schedule_plan_id = :pid', ['pid' => $motherPlanId]),
+            'les réglages ancrés au plan-bloc partent avec lui',
+        );
+
+        // Idempotence : le 2ᵉ enfant ne re-déclenche rien et ne casse rien.
+        $this->postWeekChild($user, $motherId, 'holiday', 'Semaine 2', '2026-11-16', '2026-11-22');
+        self::assertNull($this->planOf($club->getId(), $motherId));
     }
 
     public function testAWeekChildInheritsItsMotherPeriodType(): void
@@ -101,6 +145,7 @@ final class WeekChildEntryTest extends WebTestCase
     {
         [$user, $club, $season] = $this->createClubWithSeason();
         $motherId = $this->postPeriod($user, 'closure', 'Travaux déjà adaptés', '2026-11-12', '2026-11-18');
+        $this->adaptPeriod($user, $motherId); // le plan-bloc naît du geste (amendement 2026-07-24)
         $motherPlan = $this->planOf($club->getId(), $motherId);
         self::assertInstanceOf(SchedulePlan::class, $motherPlan);
 
@@ -118,40 +163,31 @@ final class WeekChildEntryTest extends WebTestCase
         $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Découpage refusé', '2026-11-09', '2026-11-15');
     }
 
+    /**
+     * Exclusivité bloc/semaines, versant génération : depuis l'amendement 2026-07-24
+     * la DÉCOUPE SUPPRIME le plan-bloc — générer « un bloc » sur une mère découpée
+     * échoue donc en 422 (plan inconnu) dès la résolution du plan. La garde 409
+     * « découpée en semaines » de ScheduleStateProcessor reste dans le code pour la
+     * course concurrentielle (découpe pendant un POST /schedules en vol), injouable
+     * en test HTTP séquentiel.
+     */
     public function testASplitMotherRefusesBlockGeneration(): void
     {
-        [$user, $club, $season] = $this->createClubWithSeason();
+        [$user, $club] = $this->createClubWithSeason();
         $motherId = $this->postPeriod($user, 'closure', 'Travaux découpés', '2026-11-12', '2026-11-18');
-        $this->postWeekChild($user, $motherId, 'closure', 'Semaine 1', '2026-11-09', '2026-11-15');
-        $motherPlan = $this->planOf($club->getId(), $motherId);
-        self::assertInstanceOf(SchedulePlan::class, $motherPlan);
-
-        // POINTER le socle d'abord : sans lui, SocleGuard rend SON 409 avant la garde
-        // testée — le test passait pour la mauvaise raison (revue #262 round 2).
-        $this->scopeGucToClub($club->getId());
-        $provisioner = self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class);
-        $seasonPlanId = $provisioner->ensureSeasonPlanId($season->getId());
-        self::assertIsString($seasonPlanId);
-        $socle = new Schedule;
-        $socle->setClubId($club->getId());
-        $socle->setSeasonId($season->getId());
-        $socle->setSchedulePlanId($seasonPlanId);
-        $socle->setName('Socle');
-        $socle->setStatus(ScheduleStatus::COMPLETED);
-        $this->em->persist($socle);
-        $this->em->flush();
-        self::assertTrue($provisioner->choose($socle));
+        $motherPlanId = $this->adaptPeriod($user, $motherId); // chemin bloc commencé…
+        $this->postWeekChild($user, $motherId, 'closure', 'Semaine 1', '2026-11-09', '2026-11-15'); // …puis découpé
+        self::assertNull($this->planOf($club->getId(), $motherId), 'la découpe a supprimé le plan-bloc');
 
         $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + [
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
             'name' => 'V1 bloc interdite',
             'status' => 'DRAFT',
-            'schedulePlanId' => $motherPlan->getId(),
+            'schedulePlanId' => $motherPlanId,
         ], \JSON_THROW_ON_ERROR));
-        self::assertResponseStatusCodeSame(409);
-        // LE bon 409 : celui de l'exclusivité bloc/semaines, pas celui du socle.
-        self::assertStringContainsString('découpée en semaines', (string) $this->client->getResponse()->getContent());
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('Unknown schedule plan', (string) $this->client->getResponse()->getContent());
     }
 
     public function testDeletingTheMotherCascadesToItsWeekChildren(): void
@@ -207,6 +243,21 @@ final class WeekChildEntryTest extends WebTestCase
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /** Le geste « Adapter » : POST /api/schedule_plans — rend l'id du plan (201). */
+    private function adaptPeriod(User $user, string $entryId): string
+    {
+        $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['id']);
+
+        return $payload['id'];
     }
 
     private function postPeriod(User $user, string $periodType, string $title, string $start, string $end): string
