@@ -13,11 +13,13 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Enum\VenuePeriodMode;
 use App\Service\OrphanPinGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -112,6 +114,29 @@ final class OrphanPinGuardTest extends WebTestCase
         $this->em->flush();
 
         self::assertNull($this->guard->firstOrphanMessage($this->overlay));
+    }
+
+    public function testAPinOnADisabledVenueIsOrphanTooInsteadOfBeingDroppedInSilence(): void
+    {
+        // Revue #8 round 4 — DÉSACTIVÉ conserve la grille : le créneau existe toujours, et
+        // le garde y voyait donc une correspondance valable. Mais buildForOverlay retire ce
+        // gymnase du payload AVEC les épinglages qui s'y trouvent : le verrou passait le
+        // garde-fou pour être supprimé juste après, et la séance partait ailleurs sans un
+        // mot. Fonctionnellement, l'épinglage est orphelin — il doit bloquer et se nommer.
+        $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD)); // le créneau que la période possède
+        $override = new VenuePeriodOverride;
+        $override->setClubId($this->club->getId());
+        $override->setSeasonId($this->season->getId());
+        $override->setSchedulePlanId((string) $this->overlay->getSchedulePlanId());
+        $override->setVenueId($this->venue->getId());
+        $override->setMode(VenuePeriodMode::DISABLED);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        $message = $this->guard->firstOrphanMessage($this->overlay);
+        self::assertIsString($message, 'un épinglage sur un gymnase désactivé bloque la génération');
+        self::assertStringContainsString('mardi', $message);
+        self::assertStringContainsString($this->venue->getName(), $message);
     }
 
     public function testSeasonScheduleIsNeverBlocked(): void

@@ -92,9 +92,23 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * DELETE = retour au défaut « hériter » : on vide le gymnase pour cette période puis
-     * on RECOPIE le modèle de saison. L'ordre importe — recopier avant de vider
-     * supprimerait la copie fraîche.
+     * DELETE = retour au défaut « hériter ». Ce que cela coûte dépend de l'état qu'on quitte :
+     *
+     *  - depuis VIERGE, la grille du gymnase a été VIDÉE : il n'y a rien à préserver et
+     *    « hériter » veut dire reprendre le modèle de saison — on vide (ce qui a pu être
+     *    ressaisi à la main) puis on RECOPIE. L'ordre importe : recopier avant de vider
+     *    supprimerait la copie fraîche.
+     *  - depuis DÉSACTIVÉ, la grille est INTACTE — c'est toute la promesse du mode
+     *    (« réactiver rend la grille telle quelle ; désactiver ne doit pas coûter la
+     *    saisie qu'on avait faite »). Or supprimer la ligne est la SEULE façon de
+     *    réactiver un gymnase. Y rejouer la purge détruisait les réservations et les
+     *    verrous HARD que le gestionnaire avait posés avant de désactiver, en lui
+     *    rendant une grille d'apparence identique et sans un mot (revue #8, round 4).
+     *    Réactiver ne touche donc à rien.
+     *
+     * Conséquence pour la PR-B : « reprendre la grille de saison » sur un gymnase
+     * désactivé n'est pas ce DELETE — c'est un passage explicite par VIERGE, avec sa
+     * confirmation, puisque c'est une destruction.
      *
      * @param array<string, mixed> $uriVariables
      */
@@ -104,10 +118,11 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         $override = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id) : null;
         $schedulePlanId = $override?->getSchedulePlanId();
         $venueId = $override?->getVenueId();
+        $wasBlank = VenuePeriodMode::BLANK === $override?->getMode();
 
-        $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId, $schedulePlanId, $venueId): void {
+        $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId, $schedulePlanId, $venueId, $wasBlank): void {
             parent::processDelete($uriVariables, $clubId);
-            if (null !== $schedulePlanId && null !== $venueId) {
+            if ($wasBlank && null !== $schedulePlanId && null !== $venueId) {
                 $this->clearVenueGrid($schedulePlanId, $venueId);
                 $this->schedulePlanProvisioner->copySeasonalSlotsForVenue($schedulePlanId, $venueId);
             }

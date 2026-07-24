@@ -10,8 +10,10 @@ use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\LockLevel;
+use App\Enum\VenuePeriodMode;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -53,9 +55,20 @@ final class OrphanPinGuard
         // garde-fou et la séance serait perdue en silence — ce que ce garde existe pour
         // empêcher (revue #8).
         $closedWeekdaysByVenue = $this->closedWeekdaysOf($schedule);
+        // Un gymnase DÉSACTIVÉ ne sert pas : ses créneaux existent encore en base (le mode
+        // conserve la grille) mais buildForOverlay les retire du payload, avec les
+        // épinglages qui s'y trouvent. Les compter comme disponibles ici laissait donc
+        // passer un verrou que le solveur ne verrait jamais, et la séance était déplacée
+        // en silence — précisément ce que ce garde existe pour empêcher (revue #8, round 4).
+        $disabledVenueIds = [];
+        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+            if (VenuePeriodMode::DISABLED === $override->getMode()) {
+                $disabledVenueIds[$override->getVenueId()] = true;
+            }
+        }
         $available = [];
         foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
-            if (isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {
+            if (isset($disabledVenueIds[$slot->getVenueId()]) || isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {
                 continue;
             }
             $available[$this->key($slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'))] = true;

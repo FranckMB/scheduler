@@ -239,6 +239,71 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         self::assertCount(0, $this->getCollection('?schedulePlanId=' . $this->planId));
     }
 
+    public function testReactivatingADisabledVenueKeepsItsPinsInstead0fWipingThem(): void
+    {
+        // Revue #8 round 4 — DÉSACTIVÉ conserve la grille, et supprimer la ligne est la
+        // SEULE façon de réactiver le gymnase. Y rejouer la purge détruisait les
+        // réservations et les verrous posés AVANT la désactivation, en rendant une grille
+        // d'apparence identique : le gestionnaire ne voyait rien, et la génération
+        // suivante déplaçait la séance ailleurs.
+        $slot = $this->periodSlots($this->venueA)[0];
+        $reservation = (new Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($this->venueA->getId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90);
+        $hard = $this->slotTemplate($slot, LockLevel::HARD);
+        $this->em->persist($reservation);
+        $this->em->persist($hard);
+        $this->em->flush();
+        $reservationId = $reservation->getId();
+        $hardId = $hard->getId();
+        $before = $this->periodSlotKeys($this->venueA);
+
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertSame($before, $this->periodSlotKeys($this->venueA), 'réactiver rend la grille telle quelle');
+        self::assertNotNull($this->em->getRepository(Reservation::class)->find($reservationId), 'la réservation posée avant la désactivation survit');
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($hardId), 'et le verrou HARD aussi — désactiver ne coûte pas la saisie faite');
+    }
+
+    public function testReSavingTheSameModeLeavesTheHandTypedGridAlone(): void
+    {
+        // Revue #8 round 4 — le correctif d'idempotence du PUT n'était couvert par aucun
+        // test : retirer la comparaison au mode précédent laissait tout le fichier au vert
+        // tout en réintroduisant la perte de données. Un double-submit, ou un simple
+        // ré-enregistrement du formulaire, rejouait la purge sur ce que le gestionnaire
+        // venait de ressaisir.
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame(0, $this->countPeriodSlots($this->venueA), 'VIERGE vide bien la grille du gymnase');
+
+        // Le gestionnaire ressaisit son créneau à la main dans la grille vierge.
+        $manual = (new VenueTrainingSlot)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)->setVenueId($this->venueA->getId())
+            ->setDayOfWeek(4)->setStartTime(new DateTimeImmutable('20:30'))
+            ->setDurationMinutes(60)->setCapacity(1);
+        $this->em->persist($manual);
+        $this->em->flush();
+
+        // Re-enregistrer le MÊME mode : action d'apparence idempotente, elle doit l'être.
+        $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'mode' => 'BLANK',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertSame(1, $this->countPeriodSlots($this->venueA), 'le créneau ressaisi à la main survit au ré-enregistrement');
+    }
+
     public function testAnotherClubNeitherSeesNorWritesTheOverride(): void
     {
         $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);

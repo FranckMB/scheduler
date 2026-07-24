@@ -174,11 +174,28 @@ final class OverlayManager
         $this->purgeArtifacts($schedule->getId());
     }
 
+    /**
+     * Une version en cours de solve ne peut pas être supprimée sous les pieds du worker
+     * (il importerait ses créneaux dans le vide). Le message NOMME la période : depuis
+     * que la reprise du socle emporte aussi les périodes non validées (#8), ce refus
+     * tombe au milieu d'une validation de saison que le gestionnaire vient de confirmer
+     * — un « wait for it to finish » anonyme et en anglais ne lui disait pas quoi
+     * attendre (revue #8, round 4).
+     */
     private function assertNotGenerating(Schedule $schedule): void
     {
         if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
-            throw new ConflictHttpException('The overlay is being generated — wait for it to finish before deleting it.');
+            throw new ConflictHttpException(\sprintf('Le planning « %s » est en cours de génération : attendez qu\'il se termine avant de reprendre le planning de la saison.', $this->periodLabelOf($schedule)));
         }
+    }
+
+    /** Le nom que le gestionnaire voit : celui de la période, sinon celui de la version. */
+    private function periodLabelOf(Schedule $schedule): string
+    {
+        $entryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
+        $entry = null === $entryId ? null : $this->entityManager->getRepository(CalendarEntry::class)->find($entryId);
+
+        return $entry?->getTitle() ?? $schedule->getName();
     }
 
     private function purgeArtifacts(string $scheduleId): void

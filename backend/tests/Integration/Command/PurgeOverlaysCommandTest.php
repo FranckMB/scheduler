@@ -9,6 +9,7 @@ use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\Season;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
@@ -50,9 +51,18 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         self::assertNull($this->em->getRepository(Schedule::class)->find($f['endedV1']));
         self::assertNull($this->em->getRepository(Schedule::class)->find($f['endedV2']));
         self::assertNull(self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($f['endedEntry']), 'le plan de la période échue ne pointe plus aucune version');
+        // #8 (revue round 4) — le PLAN part avec ses versions, pas seulement elles. Depuis
+        // que la naissance d'un plan copie toute la grille de saison dans sa couche,
+        // s'arrêter aux versions laissait un plan sans version traînant sa copie, ses
+        // réservations et ses modes de gymnase : des lignes mortes à chaque saison, et un
+        // plan que le cockpit résout encore pour une période que la purge avait close.
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        self::assertNull($provisioner->periodPlanId($f['endedEntry']), 'le plan de la période échue est supprimé, pas seulement ses versions');
+        self::assertSame([], $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $f['endedPlanId']]), 'sa grille copiée part avec lui');
         // The upcoming period's overlay and the season plan survive.
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($f['upcomingOverlay']));
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($f['seasonPlan']));
+        self::assertNotNull($provisioner->periodPlanId($f['upcomingEntry']), 'la période à venir garde son plan');
     }
 
     public function testDryRunDeletesNothing(): void
@@ -127,9 +137,15 @@ final class PurgeOverlaysCommandTest extends KernelTestCase
         $this->linkSeededSchedule($seasonPlan);
         $this->em->flush();
 
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        $endedPlanId = $provisioner->periodPlanId($endedEntry->getId());
+        self::assertIsString($endedPlanId, 'la période échue porte un plan avant la purge');
+
         return [
             'clubId' => $club->getId(),
             'endedEntry' => $endedEntry->getId(),
+            'endedPlanId' => $endedPlanId,
+            'upcomingEntry' => $upcomingEntry->getId(),
             'endedV1' => $endedV1->getId(),
             'endedV2' => $endedV2->getId(),
             'upcomingOverlay' => $upcomingOverlay->getId(),

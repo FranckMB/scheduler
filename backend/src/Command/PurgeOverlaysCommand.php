@@ -121,7 +121,17 @@ final class PurgeOverlaysCommand extends Command
             try {
                 // force: an ended period is being cleaned up; a validated version
                 // is fair game (this is the authorized purge path).
-                $removed = $this->overlayManager->deleteOverlayForEntry($entry, force: true);
+                //
+                // #8 — le PLAN entier, pas seulement ses versions. Depuis que la naissance
+                // d'un plan copie toute la grille de saison dans sa couche, s'arrêter aux
+                // versions laissait derrière un plan sans version, sa grille copiée, ses
+                // réservations et ses modes de gymnase : des lignes mortes qui s'accumulent
+                // à chaque saison, et un plan que le cockpit résout encore pour une période
+                // que la purge était censée clore — la ré-adapter repartait de cette copie
+                // périmée au lieu d'en reprendre une fraîche (revue #8, round 4).
+                $planId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+                $removed = null === $planId ? 0 : $this->entityManager->getRepository(Schedule::class)->count(['schedulePlanId' => $planId]);
+                $this->overlayManager->deletePeriodPlanForEntry($entry, force: true);
             } catch (Throwable $e) {
                 $this->hadFailure = true;
                 $io->warning(\sprintf('  period %s skipped: %s', $entry->getId(), $e->getMessage()));
