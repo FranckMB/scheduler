@@ -153,11 +153,15 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
     à venir. Il faudra les recommencer. Je supprime les plannings et donc les versions
     liées. » La portée a changé deux fois par rapport au D-b initial (ci-dessous) :
     (1) c'est désormais **toute période qui PORTE un plan, validé ou non**
-    (`CalendarEntryRepository::findWithPlanNotEnded`, qui remplace `findWithOverlayByClubSeason` —
+    (`CalendarEntryRepository::findWithPlanNotStarted`, qui remplace `findWithOverlayByClubSeason` —
     lequel ne voyait que les plans **validés** et laissait vivre, sans le dire, la grille
-    copiée d'une période adaptée (« Adapter ») mais jamais générée) ; (2) **sauf les
-    périodes déjà ÉCHUES** (`endDate < aujourd'hui` — leur planning a été joué, il n'est pas
-    concerné). La destruction est totale : les versions, le **PLAN lui-même**, et tous les
+    copiée d'une période adaptée (« Adapter ») mais jamais générée) ; (2) **seulement les
+    périodes ENTIÈREMENT À VENIR** — pivot = la date de DÉBUT, « rien du passé, rien de ce
+    qui est en cours » (décision fondateur 2026-07-16, `specs/evolution/reprise-perimetre-engage.md` §4) :
+    une période commencée est déjà annoncée aux coachs et à moitié jouée, la détruire au
+    milieu coûterait plus que de la laisser finir sur l'ancien socle. Ce filtre de date
+    solde la dette que cette spec signalait (`findWithOverlayByClubSeason` n'en avait aucun,
+    donc rouvrir en mars détruisait l'overlay de Toussaint, une période passée). La destruction est totale : les versions, le **PLAN lui-même**, et tous les
     réglages qui s'y ancrent (grille copiée, réservations, modes gymnase
     `VenuePeriodOverride`, overrides d'équipes et de contraintes) —
     `OverlayManager::deletePeriodPlanForEntry`. L'**entrée de calendrier survit** : la
@@ -452,7 +456,7 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     `OverlayManager` **simplifié** (plus de clear/promote/pointeur inverse). Le confirm-delete
     (`findWithOverlayByClubSeason`) ne compte que les plans secondaires **validés** (réels) —
     *périmé par l'amendement #8 (2026-07-24) ci-dessus : la méthode a été remplacée par
-    `findWithPlanNotEnded`, dont la portée est plan validé OU non, périodes non échues*. Cross-stack :
+    `findWithPlanNotStarted`, dont la portée est plan validé OU non, périodes non commencées*. Cross-stack :
     entité + migration + 4 controllers + OverlayManager + repo + resource + processor ; cockpit
     (RadarPanel/DayDialog dérivent de `chosenScheduleId`) + wizard (GenerateStep dérive la version à
     reprendre de `schedulePlanId`). NR (`ScheduleSocleFromPlanTest`) : période validée expose la
@@ -466,11 +470,11 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   bascule du modèle union (saison ∪ créneaux prêtés de la période) vers un modèle **copie** — voir
   l'amendement de l'inv. 5 ci-dessus (`copySeasonalSlots`, table `venue_period_override`,
   `OrphanPinGuard` 422). Emporte aussi l'amendement de l'inv. 14 : la reprise/re-validation du socle
-  détruit désormais **tout plan de période non échu** (validé ou non), pas seulement les plans validés
+  détruit désormais **tout plan de période pas encore commencée** (validé ou non), pas seulement les plans validés
   — combler un trou où une période « Adaptée » mais jamais générée survivait silencieusement à un
   changement de socle avec une grille copiée périmée. NR : `VenueTrainingSlotApiTest` (chevauchement
   borné à une couche), `CascadeDeleteApiTest` / `ValidateScheduleTest` / `ReopenScheduleTest` (portée
-  élargie de la destruction, exclusion des périodes échues).
+  élargie de la destruction, survie des périodes en cours et passées).
 
 ### Note de nommage (résolution de collision)
 

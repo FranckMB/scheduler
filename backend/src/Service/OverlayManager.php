@@ -47,15 +47,17 @@ final class OverlayManager
      *    « Adapter » et possède déjà sa grille (copie du modèle de saison) : ne compter
      *    que les périodes validées laissait derrière des grilles copiées d'un socle qui
      *    n'existe plus, invisibles pour le gestionnaire ;
-     *  - sauf celles DÉJÀ ÉCHUES (endDate < aujourd'hui) : leur planning a été joué, il
-     *    est de l'histoire et le nouveau socle ne le concerne pas.
-     * Une période en cours n'est pas échue — elle est reprise avec les autres.
+     *  - sauf celles DÉJÀ COMMENCÉES : « rien du passé, rien de ce qui est en cours »
+     *    (décision fondateur 2026-07-16, specs/evolution/reprise-perimetre-engage.md §4).
+     *    Une période en cours est déjà annoncée aux coachs et à moitié jouée ; la
+     *    détruire au milieu coûterait plus que de la laisser finir sur l'ancien socle.
+     * Le pivot est donc la date de DÉBUT : seules les périodes ENTIÈREMENT à venir.
      *
      * @return list<CalendarEntry>
      */
     public function periodPlansInvalidatedBySeasonChange(string $clubId, string $seasonId): array
     {
-        return $this->calendarEntryRepository->findWithPlanNotEnded($clubId, $seasonId, $this->clock->now());
+        return $this->calendarEntryRepository->findWithPlanNotStarted($clubId, $seasonId, $this->clock->now());
     }
 
     /**

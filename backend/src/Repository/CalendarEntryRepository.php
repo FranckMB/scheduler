@@ -34,8 +34,9 @@ final class CalendarEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * Les périodes de la saison PORTANT UN PLAN et pas encore échues — ce que déplacer
-     * le calendrier de base détruit (ADR-0002 inv. 14, décision fondateur 2026-07-24).
+     * Les périodes de la saison PORTANT UN PLAN et pas encore COMMENCÉES — ce que
+     * déplacer le calendrier de base détruit (ADR-0002 inv. 14, décision fondateur
+     * 2026-07-24).
      *
      * Volontairement PAS keyée sur `chosenScheduleId IS NOT NULL` : depuis #8 le plan
      * naît du geste « Adapter » et possède aussitôt sa grille (copie du modèle de
@@ -43,17 +44,19 @@ final class CalendarEntryRepository extends ServiceEntityRepository
      * copiée d'une période jamais générée, adossés à un socle qui n'existe plus, sans
      * que le gestionnaire en soit averti ni ne puisse les voir.
      *
-     * `endDate >= today` : un planning déjà joué est de l'histoire, le nouveau socle ne
-     * le concerne pas. Une période EN COURS n'est pas échue — elle est reprise.
+     * Pivot = la date de DÉBUT : « rien du passé, rien de ce qui est en cours ». Une
+     * période commencée est déjà annoncée aux coachs et à moitié jouée — la détruire au
+     * milieu coûterait plus que de la laisser finir sur l'ancien socle. Seules les
+     * périodes ENTIÈREMENT à venir sont reprises.
      *
      * @return list<CalendarEntry>
      */
-    public function findWithPlanNotEnded(string $clubId, string $seasonId, DateTimeImmutable $today): array
+    public function findWithPlanNotStarted(string $clubId, string $seasonId, DateTimeImmutable $today): array
     {
         return $this->createQueryBuilder('e')
             ->andWhere('e.clubId = :clubId')
             ->andWhere('e.seasonId = :seasonId')
-            ->andWhere('e.endDate >= :today')
+            ->andWhere('e.startDate > :today')
             ->andWhere('EXISTS (SELECT p.id FROM App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id)')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)

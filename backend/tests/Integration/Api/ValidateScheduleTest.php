@@ -158,8 +158,8 @@ final class ValidateScheduleTest extends WebTestCase
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         $failed = $this->createSchedule($season, ScheduleStatus::FAILED);
         // Une VRAIE période (et son plan né du geste) : un overlay se rattache à un plan réel.
-        // ÉCHUE (relatif au présent) : depuis #8 c'est ce qui la met hors de portée de la
-        // reprise du socle — son planning a été joué, le nouveau socle ne le concerne pas.
+        // DÉJÀ COMMENCÉE (relatif au présent) : depuis #8 c'est ce qui la met hors de
+        // portée de la reprise du socle — « rien du passé, rien de ce qui est en cours ».
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
@@ -340,6 +340,39 @@ final class ValidateScheduleTest extends WebTestCase
         // et l'entrée au calendrier — la période retombe « à traiter », à refaire.
         self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seasonal), 'le créneau de SAISON est intact');
         self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()), 'la période reste au calendrier, à refaire');
+    }
+
+    public function testAPeriodAlreadyUnderWaySurvivesTheSeasonChange(): void
+    {
+        // « Rien du passé, rien de ce qui est en cours » (décision fondateur 2026-07-16,
+        // specs/evolution/reprise-perimetre-engage.md §4) : le pivot est la date de DÉBUT,
+        // pas celle de fin. Une période COMMENCÉE mais pas finie est déjà annoncée aux
+        // coachs et à moitié jouée — la détruire au milieu coûterait plus que de la
+        // laisser finir sur l'ancien socle. Le cas se produit dès qu'on ajuste la saison
+        // pendant des vacances, ce qui est précisément quand on a le temps de le faire.
+        [$user, , $season] = $this->seed('VAL13');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($v1);
+        $entry = (new CalendarEntry)
+            ->setClubId($season->getClubId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Toussaint en cours')
+            ->setStartDate(new DateTimeImmutable('-2 days'))->setEndDate(new DateTimeImmutable('+5 days'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
+        $this->choosePlanVersion($overlay);
+        $planId = $this->em->getRepository(Schedule::class)->find($overlay->getId())?->getSchedulePlanId();
+
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
+        // Aucune confirmation demandée : il n'y a rien à détruire, donc rien à annoncer.
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json']);
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'la période en cours garde son planning');
+        self::assertSame($overlay->getId(), self::getContainer()->get(SchedulePlanProvisioner::class)->chosenOfPeriodPlan($entry->getId()), 'et il reste en vigueur');
+        self::assertNotNull($planId);
     }
 
     public function testFirstValidationWithoutOverlaysNeedsNoConfirmation(): void
