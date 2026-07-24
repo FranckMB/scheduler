@@ -96,7 +96,8 @@
   **commune à toute la période de vacances**, que le gestionnaire **barre ou non**
   (accepte/refuse). Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
 - **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
-  équipes on/off + séances, créneaux prêtés, **choix des semaines** (E1), été inclus (E2),
+  équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
+  modèle de saison, 3 options par gymnase), **choix des semaines** (E1), été inclus (E2),
   **défaut équipes = Fanion + importantes** (E3), **nom auto** `Planning de vacances de … du …
   au …` (E6). Reste la modale « Demandes des coachs » (E5, futur — P2-1). Voir « Écarts ».
 

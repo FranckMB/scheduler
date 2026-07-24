@@ -122,6 +122,23 @@ export function usePeriodSlots(schedulePlanId: string | null) {
   });
 }
 
+/**
+ * Les créneaux de la COUCHE qu'on est en train d'éditer : ceux du socle quand on
+ * travaille la saison (`schedulePlanId` null), la grille que la période POSSÈDE quand
+ * on travaille une période (#8 — copie du modèle de saison prise à la naissance du plan).
+ *
+ * Lire le socle depuis une période était sain tant que le backend unionnait les deux
+ * couches. Il ne le fait plus : une réservation posée sur un créneau de saison absent
+ * de la grille de la période devient un épinglage orphelin, et OrphanPinGuard refuse
+ * alors DÉFINITIVEMENT de générer cette période (revue #8, round 4).
+ */
+export function useGridSlots(schedulePlanId: string | null) {
+  const seasonal = useVenueSlots();
+  const period = usePeriodSlots(schedulePlanId);
+
+  return null === schedulePlanId ? seasonal : period;
+}
+
 export function useCreatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({

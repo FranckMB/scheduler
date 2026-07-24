@@ -573,6 +573,23 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * Recopie le modèle de saison pour UN gymnase — le retour au défaut « hériter » d'un
+     * gymnase déjà retouché (VenuePeriodOverrideStateProcessor). L'appelant a vidé la
+     * grille du gymnase juste avant : sans quoi la copie doublerait les créneaux.
+     */
+    public function copySeasonalSlotsForVenue(string $schedulePlanId, string $venueId): void
+    {
+        $row = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT club_id, season_id FROM schedule_plan WHERE id = :pid',
+            ['pid' => $schedulePlanId],
+        );
+        if (false === $row) {
+            return;
+        }
+        $this->copySeasonalSlotRows($schedulePlanId, (string) $row['club_id'], (string) $row['season_id'], $venueId);
+    }
+
+    /**
      * @throws LogicException le plan du schedule a disparu (reset concurrent)
      *
      * @return array{type: SchedulePlanType, calendarEntryId: string|null}
@@ -692,8 +709,42 @@ final class SchedulePlanProvisioner
             ->setEndDate(new DateTimeImmutable((string) $row['end_date']))
             ->setCalendarEntryId($calendarEntryId);
         $this->entityManager->persist($plan);
+        $this->entityManager->flush(); // l'id du plan doit exister avant la copie ci-dessous
+        $this->copySeasonalSlots($plan);
 
         return $plan->getId();
+    }
+
+    /**
+     * #8 (décision fondateur 2026-07-24) — UNE PÉRIODE POSSÈDE SA GRILLE.
+     *
+     * À sa naissance, le plan reçoit une COPIE des créneaux de saison de chaque gymnase.
+     * Ensuite la période ne lit QUE ses propres créneaux : jamais d'union avec ceux de la
+     * saison. C'est ce qui rend le modèle simple — un gymnase n'a jamais deux jeux de
+     * créneaux dans une même période, donc rien ne peut se chevaucher entre couches, ni
+     * rendre un verrou ambigu (deux créneaux au même horaire, l'un « de saison » et
+     * l'autre « prêté »). Modifier la grille de la période ne touche jamais la saison.
+     *
+     * SQL brut : `season_filter` épingle les lectures ORM à la saison ACTIVE de la requête,
+     * or un plan peut naître pour une autre saison (transition). RLS scope le club.
+     */
+    private function copySeasonalSlots(SchedulePlan $plan): void
+    {
+        $this->copySeasonalSlotRows($plan->getId(), (string) $plan->getClubId(), $plan->getSeasonId(), null);
+    }
+
+    /** @param string|null $venueId null = tous les gymnases */
+    private function copySeasonalSlotRows(string $schedulePlanId, string $clubId, string $seasonId, ?string $venueId): void
+    {
+        $sql = 'INSERT INTO venue_training_slot (id, version, created_at, updated_at, club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, schedule_plan_id) '
+            . 'SELECT gen_random_uuid(), 1, now(), now(), club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, :planId '
+            . 'FROM venue_training_slot WHERE club_id = :clubId AND season_id = :seasonId AND schedule_plan_id IS NULL';
+        $params = ['planId' => $schedulePlanId, 'clubId' => $clubId, 'seasonId' => $seasonId];
+        if (null !== $venueId) {
+            $sql .= ' AND venue_id = :venueId';
+            $params['venueId'] = $venueId;
+        }
+        $this->entityManager->getConnection()->executeStatement($sql, $params);
     }
 
     private function findSeasonPlanId(string $seasonId): ?string

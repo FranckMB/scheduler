@@ -75,9 +75,13 @@ Un match **à l'extérieur** engage : il naît `PLACED` (horaire imposé par l'a
 survit aussi (pivot = la date de **début**) : seules les périodes **entièrement futures**
 sont supprimées.
 
-**Défaut à emporter** : `CalendarEntryRepository::findWithOverlayByClubSeason` n'a **aucun
+~~**Défaut à emporter** : `CalendarEntryRepository::findWithOverlayByClubSeason` n'a **aucun
 filtre de date**. Rouvrir en mars détruit aujourd'hui l'overlay des vacances de Toussaint,
-une période passée. Comportement hérité, jamais conforme à la règle.
+une période passée.~~ **Soldé le 2026-07-24 (#8)** : la méthode est remplacée par
+`findWithPlanNotStarted`, qui filtre sur `startDate > aujourd'hui` — conforme à la règle
+ci-dessus. Attention, la portée s'est en même temps ÉLARGIE dans l'autre sens : elle prend
+désormais les périodes dont le plan n'est **pas validé** (une période « Adaptée » mais
+jamais générée possède déjà sa grille copiée, cf. ADR-0002 inv. 5 amendé).
 
 ## Décisions déjà prises — ne pas les re-poser
 

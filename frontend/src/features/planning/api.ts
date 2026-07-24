@@ -25,11 +25,11 @@ const PAGE_SIZE = 30;
  * so every club row is resolved (team/venue/coach names). Dedupe by id and stop on
  * a short page or a page that adds nothing new (guards against a no-op `page` param).
  */
-async function collectionAll<T extends { id: string }>(path: string): Promise<T[]> {
+async function collectionAll<T extends { id: string }>(path: string, searchParams?: Record<string, string>): Promise<T[]> {
   const seen = new Set<string>();
   const all: T[] = [];
   for (let page = 1; page <= 50; page += 1) {
-    const batch = await collection<T>(path, { page: String(page) });
+    const batch = await collection<T>(path, { ...searchParams, page: String(page) });
     const fresh = batch.filter((item) => !seen.has(item.id));
     for (const item of fresh) {
       seen.add(item.id);
@@ -293,7 +293,15 @@ export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
 export const getVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
-export const getTrainingSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
+/**
+ * Les créneaux de la COUCHE d'une version : le socle (aucun filtre → le provider
+ * restreint à `schedulePlanId IS NULL`) ou la grille que possède un plan de période
+ * (#8). Sans ce filtre, l'écran affichait les cases vides de la SAISON sur un planning
+ * de période, alors que l'export PDF remis aux coachs listait celles de la période :
+ * deux vues du même planning qui ne coïncidaient pas.
+ */
+export const getTrainingSlots = (schedulePlanId: string | null): Promise<VenueTrainingSlot[]> =>
+  collectionAll<VenueTrainingSlot>("venue_training_slots", null === schedulePlanId ? undefined : { schedulePlanId });
 export const getCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
 export const getCategories = (): Promise<Category[]> => collectionAll<Category>("sport_categories");
 export const getTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");

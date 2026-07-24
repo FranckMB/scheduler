@@ -334,7 +334,8 @@ a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'orig
 - **L'écran dédié « calendrier secondaire » = le wizard réutilisé en « mode période »**
   (voir §6bis). Pas un nouvel écran à apprendre : **les mêmes 6 étapes**, mais le roster/les
   gymnases restent **hérités** (non ré-éditables comme entités) — on les **surcharge pour la
-  fenêtre** (équipe on/off + séances, créneaux prêtés) via un DIFF `calendarEntryId`, en plus des
+  fenêtre** (équipe on/off + séances) via un DIFF ancré au **plan** de la période, la grille de
+  gymnases étant, elle, **copiée puis possédée** par la période (#8), en plus des
   **contraintes + la génération**.
   → **Une modale serait trop à l'étroit ; et surtout, réutiliser le wizard = zéro réapprentissage.**
 
@@ -383,7 +384,7 @@ différents** :
 | Étape wizard | En mode période |
 |---|---|
 | Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables. **Défaut : Fanion seul** (ramp de reprise), ajustable. |
-| Gymnases | Hérités (fermetures datées marquées **« fermé cette période »**) + **créneaux prêtés** ajoutables pour la fenêtre (additifs, scopés période) |
+| Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées **« fermé cette période »**. Trois options par gymnase (`VenuePeriodOverride`, épars — pas de ligne = hériter) : **désactivé** (la grille reste visible mais le gymnase sort du payload solveur), **vierge** (grille vidée, à ressaisir), **hériter** (recopie du modèle de saison). Un épinglage qui ne retombe sur aucun créneau **bloque la génération** en nommant le gymnase et le jour. |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |

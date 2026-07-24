@@ -292,7 +292,17 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
   // resté hors de vue, et le lot C3 l'a laissé lire par le déclencheur : le gymnase
   // prêté était confirmé à l'écran (l'UI relisait avec le MÊME mauvais id, donc
   // cohérente avec elle-même) mais n'atteignait jamais le solveur. D'où ce test.
-  it("PeriodVenues lit ses créneaux prêtés par le PLAN", () => {
+  it("compte les créneaux de LA PÉRIODE par gymnase, pas ceux de la saison", () => {
+    // Revue #8 round 4 — une période POSSÈDE sa grille : c'est elle qui part au solveur,
+    // et elle peut différer de celle de la saison (gymnase vidé, désactivé, créneau
+    // ajouté). Afficher le compte SAISONNIER en face de chaque gymnase annonçait donc au
+    // gestionnaire une disponibilité qui n'était pas celle qu'on allait servir. Ici la
+    // saison n'a aucun créneau et la période en a un : le compte doit être celui-là.
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(screen.getByText("1 créneau(x)")).toBeInTheDocument();
+  });
+
+  it("PeriodVenues lit les créneaux de sa grille par le PLAN", () => {
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(periodSlotsAnchor.value).toBe("plan-1");
   });
@@ -301,7 +311,7 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
   // passé au round 2 : le hook d'écriture recevait bien le plan, mais rien n'empêchait de
   // muter AVANT qu'il soit résolu (ancre null = « base » → le gymnase prêté atterrissait
   // sur le socle du club). On assert donc les deux.
-  it("PeriodVenues ÉCRIT ses créneaux prêtés par le PLAN", () => {
+  it("PeriodVenues ÉCRIT les créneaux de sa grille par le PLAN", () => {
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(periodSlotWriteAnchor.value).toBe("plan-1");
   });

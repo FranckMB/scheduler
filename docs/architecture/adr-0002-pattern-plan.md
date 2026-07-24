@@ -60,7 +60,9 @@ Schedule (= Version)                    ← existant, recentré
    couvre tout par nature.
 5. **Les réglages de période s'accrochent au Plan** (pas au déclencheur calendrier) :
    coches équipes (`TeamPeriodOverride`), contraintes gardées/enlevées
-   (`ConstraintPeriodOverride`), créneaux prêtés (`VenueTrainingSlot` scopé période),
+   (`ConstraintPeriodOverride`), sa grille de gymnases (`VenueTrainingSlot` scopé période —
+   depuis #8 une COPIE du modèle de saison, cf. l'amendement ci-dessous) et ses modes de
+   gymnase (`VenuePeriodOverride`),
    réservations, flag de seed (`teamSelectionInitialized`) →
    **re-keyés `calendarEntryId` → `planId`**. Chaque plan-semaine a SES réglages.
 
@@ -75,6 +77,21 @@ Schedule (= Version)                    ← existant, recentré
    gestionnaire décide ». La section « Rôle de `CalendarEntry` » ci-dessous disait déjà
    qu'elle **garde** les contraintes datées du fait : c'est l'invariant 5 qui était trop
    large, et les deux se contredisaient depuis la rédaction.
+
+   ⚠️ **Amendement #8 (décision fondateur, 2026-07-24) — une période POSSÈDE sa grille** :
+   le `VenueTrainingSlot` scopé période n'est plus une liste de « créneaux prêtés » qui
+   s'ajoutent à ceux de la saison — à la naissance du plan, TOUTE la grille de saison de
+   chaque gymnase est **COPIÉE** en créneaux du plan (`SchedulePlanProvisioner::copySeasonalSlots`).
+   Il n'y a donc plus jamais d'union saison ∪ période : `ScheduleConstraintBuilder::buildForOverlay`
+   ne lit QUE les créneaux du plan — un gymnase n'a jamais deux jeux de créneaux dans une
+   même période, rien ne peut se chevaucher entre couches. Un nouveau réglage sparse par
+   (plan, gymnase), `VenuePeriodOverride` (table `venue_period_override`, valeurs
+   `DISABLED`/`BLANK` ; pas de ligne = hériter), agit sur cette copie : DÉSACTIVÉ conserve
+   la grille mais sort le gymnase du payload envoyé à l'engine ; VIERGE la vide ; le retour
+   à « hériter » (`DELETE`) la revide puis la RECOPIE depuis le modèle de saison. Un
+   épinglage (verrou HARD ou réservation) qui ne retombe plus sur aucun créneau de cette
+   grille **bloque la génération en 422** avec un message nommant le gymnase et le jour
+   (`OrphanPinGuard`, appelé par `GenerateScheduleController`) — jamais filtré en silence.
 6. **La structure (équipes/gymnases/coachs/contraintes permanentes) reste PARTAGÉE**
    (état vivant du club par saison) — **pas de duplication par version**. L'indépendance
    des versions passe par la **photo** (JSON, D2, existante) : chaque version COMPLETED
@@ -119,7 +136,7 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 | **Version choisie** | Celle que pointe le plan (= validée). |
 | **Espace de travail** | Plan au pointeur null : on génère/compare des versions. |
 | **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard. |
-| **Réglages de période** | Coches équipes/contraintes + créneaux prêtés d'un plan CLOSURE/HOLIDAY. |
+| **Réglages de période** | Coches équipes/contraintes + grille de gymnases (copie, #8) + modes de gymnase d'un plan CLOSURE/HOLIDAY. |
 | **Termes bannis** | *baseline*, *planningName*, *overlayScheduleId*, *liveContext*, statuts *VALIDATED/ARCHIVED*. |
 
 ### Règles inter-plans & consommateurs (complétées après sweep exhaustif des ~320 usages)
@@ -132,6 +149,27 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
     CLOSURE/HOLIDAY existent → avertissement proportionné (« supprime N plannings ») puis
     **suppression de ces plans et de leurs versions** (reprend les règles 409+confirm
     reopen/validate actuelles ; « le premier plan secondaire fige le socle » reste vrai).
+
+    ⚠️ **Amendement #8 (décision fondateur, 2026-07-24)**, verbatim : « le planning de
+    saison est notre base donc on supprime TOUS les planning overlay ou holidays qui sont
+    à venir. Il faudra les recommencer. Je supprime les plannings et donc les versions
+    liées. » La portée a changé deux fois par rapport au D-b initial (ci-dessous) :
+    (1) c'est désormais **toute période qui PORTE un plan, validé ou non**
+    (`CalendarEntryRepository::findWithPlanNotStarted`, qui remplace `findWithOverlayByClubSeason` —
+    lequel ne voyait que les plans **validés** et laissait vivre, sans le dire, la grille
+    copiée d'une période adaptée (« Adapter ») mais jamais générée) ; (2) **seulement les
+    périodes ENTIÈREMENT À VENIR** — pivot = la date de DÉBUT, « rien du passé, rien de ce
+    qui est en cours » (décision fondateur 2026-07-16, `specs/evolution/reprise-perimetre-engage.md` §4) :
+    une période commencée est déjà annoncée aux coachs et à moitié jouée, la détruire au
+    milieu coûterait plus que de la laisser finir sur l'ancien socle. Ce filtre de date
+    solde la dette que cette spec signalait (`findWithOverlayByClubSeason` n'en avait aucun,
+    donc rouvrir en mars détruisait l'overlay de Toussaint, une période passée). La destruction est totale : les versions, le **PLAN lui-même**, et tous les
+    réglages qui s'y ancrent (grille copiée, réservations, modes gymnase
+    `VenuePeriodOverride`, overrides d'équipes et de contraintes) —
+    `OverlayManager::deletePeriodPlanForEntry`. L'**entrée de calendrier survit** : la
+    période retombe « à traiter » au radar, à refaire. S'applique aux deux portes
+    (`ValidateScheduleController` choisissant une autre version, `ReopenScheduleController`
+    dépointant le socle) via le même 409 `overlays_exist` + `confirmDeleteOverlays: true`.
 15. **Module matchs & radars de conflits** : ils **lisent le plan SEASON** (sa version
     choisie). Le comportement en espace de travail (pointeur null) sera **confirmé au
     cadrage du module matchs**. Consommateurs recensés : `MatchConflictDetector`,
@@ -418,7 +456,9 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
     était posé dès la création — une version non validée s'affichait). Source unique côté back :
     `SchedulePlanProvisioner::chosenOfPeriodPlan(entryId)` (miroir période de `chosenOfSeasonPlan`).
     `OverlayManager` **simplifié** (plus de clear/promote/pointeur inverse). Le confirm-delete
-    (`findWithOverlayByClubSeason`) ne compte que les plans secondaires **validés** (réels). Cross-stack :
+    (`findWithOverlayByClubSeason`) ne compte que les plans secondaires **validés** (réels) —
+    *périmé par l'amendement #8 (2026-07-24) ci-dessus : la méthode a été remplacée par
+    `findWithPlanNotStarted`, dont la portée est plan validé OU non, périodes non commencées*. Cross-stack :
     entité + migration + 4 controllers + OverlayManager + repo + resource + processor ; cockpit
     (RadarPanel/DayDialog dérivent de `chosenScheduleId`) + wizard (GenerateStep dérive la version à
     reprendre de `schedulePlanId`). NR (`ScheduleSocleFromPlanTest`) : période validée expose la
@@ -428,6 +468,15 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   - **Dette C4-PR1 soldée en D-a** : la purge des orphelins du lot D-a (`NOT NULL`) emporte tout overlay
     legacy non lié (`schedulePlanId` null) ; `deleteOverlayForEntry` et l'aperçu de `PurgeOverlaysCommand`
     collectent exclusivement par `schedulePlanId`, redevenus exhaustifs sans lecteur `calendarEntryId`.
+- **Lot #8 — une période possède sa grille (livré 2026-07-24)**, hors de la numérotation A→D (post-ADR) :
+  bascule du modèle union (saison ∪ créneaux prêtés de la période) vers un modèle **copie** — voir
+  l'amendement de l'inv. 5 ci-dessus (`copySeasonalSlots`, table `venue_period_override`,
+  `OrphanPinGuard` 422). Emporte aussi l'amendement de l'inv. 14 : la reprise/re-validation du socle
+  détruit désormais **tout plan de période pas encore commencée** (validé ou non), pas seulement les plans validés
+  — combler un trou où une période « Adaptée » mais jamais générée survivait silencieusement à un
+  changement de socle avec une grille copiée périmée. NR : `VenueTrainingSlotApiTest` (chevauchement
+  borné à une couche), `CascadeDeleteApiTest` / `ValidateScheduleTest` / `ReopenScheduleTest` (portée
+  élargie de la destruction, survie des périodes en cours et passées).
 
 ### Note de nommage (résolution de collision)
 

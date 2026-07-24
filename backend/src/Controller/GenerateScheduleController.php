@@ -30,6 +30,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private readonly \App\Service\SocleGuard $socleGuard,
         private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly \App\Service\GenerationComplexityGuard $complexityGuard,
+        private readonly \App\Service\OrphanPinGuard $orphanPinGuard,
         private readonly ClockInterface $clock,
     ) {}
 
@@ -83,6 +84,15 @@ final class GenerateScheduleController extends AbstractController implements Sea
                 'count' => $violation['count'],
                 'limit' => $violation['limit'],
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // #8 — un verrou ou une réservation qui ne retombe sur aucun créneau de la période
+        // (grille refaite : page blanche, recopie du modèle de saison, gymnase désactivé).
+        // On refuse et on NOMME le problème plutôt que de l'escamoter : le gestionnaire
+        // redéfinit ses créneaux ou retire l'épinglage (décision fondateur 2026-07-24).
+        $orphanPin = $this->orphanPinGuard->firstOrphanMessage($schedule);
+        if (null !== $orphanPin) {
+            return $this->json(['error' => $orphanPin], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $schedule->setStatus(ScheduleStatus::PENDING);

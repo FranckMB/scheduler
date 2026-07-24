@@ -11,6 +11,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -22,6 +23,7 @@ final class ScheduleExportDataProvider
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     public function load(Schedule $schedule, ?string $venueId = null): ScheduleExportData
@@ -65,7 +67,13 @@ final class ScheduleExportDataProvider
         foreach ($slots as $slot) {
             $filled[$slot->getVenueId() . '|' . $slot->getDayOfWeek() . '|' . $slot->getStartTime()->format('H:i')] = true;
         }
-        $trainingCriteria = ['clubId' => $clubId, 'seasonId' => $seasonId];
+        // #8 — LA COUCHE DE LA VERSION EXPORTÉE, et elle seule. Depuis que chaque période
+        // possède sa grille (copie du modèle de saison à la naissance du plan), un club à
+        // trois périodes a quatre exemplaires du même créneau en base : sans ce filtre,
+        // l'export d'un planning quelconque affichait chaque créneau vide quatre fois.
+        // Un plan de saison lit les créneaux du socle (schedulePlanId NULL), une période
+        // les siens — exactement la règle que suit le payload envoyé à l'engine.
+        $trainingCriteria = ['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => $this->slotLayerOf($schedule)];
         if (null !== $venueId) {
             $trainingCriteria['venueId'] = $venueId;
         }
@@ -78,5 +86,14 @@ final class ScheduleExportDataProvider
         }
 
         return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots);
+    }
+
+    /**
+     * La couche de créneaux d'une version : NULL pour le socle (les créneaux de saison),
+     * l'id du plan pour une période (sa grille à elle).
+     */
+    private function slotLayerOf(Schedule $schedule): ?string
+    {
+        return $this->schedulePlanProvisioner->isSeasonSchedule($schedule) ? null : $schedule->getSchedulePlanId();
     }
 }

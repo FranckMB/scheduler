@@ -6,19 +6,21 @@ import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
-import { useReservations, useVenueSlots } from "../queries";
+import { useGridSlots, useReservations } from "../queries";
 import { ReservationGrid } from "./ReservationGrid";
 import { SlotReservationModal } from "./SlotReservationModal";
 
 /**
- * "Réserver" tab: a per-venue weekly grid of the club's availability slots — click
+ * "Réserver" tab: a per-venue weekly grid of the EDITED LAYER's availability slots — click
  * a slot to pin one or two teams on it (a HARD lock honored at generation). The
  * rank-sorted summary of all reservations lives in the Récap step, not here (kept
  * épuré). Server-backed via the Reservation entity; base plan vs period overlay by
  * `schedulePlanId` (ADR-0002 inv. 5 : la réservation est une RÉPONSE, elle pend au plan).
  */
 export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; schedulePlanId: string | null }) {
-  const { data: slots = [] } = useVenueSlots();
+  // La grille de la couche éditée — jamais celle de la saison depuis une période :
+  // une réservation hors de la grille servie bloquerait la génération (#8).
+  const { data: slots = [] } = useGridSlots(schedulePlanId);
   const { data: reservations = [] } = useReservations(schedulePlanId);
   const [venueId, setVenueId] = useState("");
   const [activeSlot, setActiveSlot] = useState<VenueTrainingSlot | null>(null);

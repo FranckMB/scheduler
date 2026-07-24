@@ -1,0 +1,551 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Api;
+
+use App\Entity\CalendarEntry;
+use App\Entity\Club;
+use App\Entity\ClubUser;
+use App\Entity\Reservation;
+use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Season;
+use App\Entity\User;
+use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\LockLevel;
+use App\Tests\ProvisionsPeriodPlanTrait;
+use App\Tests\TenantGucTrait;
+use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+/**
+ * #8 (décision fondateur 2026-07-24) — UNE PÉRIODE POSSÈDE SA GRILLE DE GYMNASES.
+ *
+ * À la naissance du plan de période, les créneaux de saison sont COPIÉS ; la période ne
+ * lit ensuite QUE les siens. Les modes sont donc des ACTIONS sur cette copie, bornées à
+ * UN gymnase, et l'invariant fondateur n°1 tient : le planning principal (la structure de
+ * saison, `schedule_plan_id IS NULL`) n'est JAMAIS modifié.
+ *
+ * Ce que ces cas prouvent : POST d'un mode vide la grille du gymnase pour cette période
+ * (et emporte les épinglages qu'elle portait), DELETE = retour à « hériter » et RECOPIE le
+ * modèle de saison, le doublon rend un 422 propre, et rien de tout cela ne franchit la
+ * frontière du club.
+ */
+#[Group('phase1')]
+#[Group('integration')]
+final class VenuePeriodOverrideApiTest extends WebTestCase
+{
+    use ProvisionsPeriodPlanTrait;
+    use TenantGucTrait;
+
+    private KernelBrowser $client;
+
+    private EntityManagerInterface $em;
+
+    private Club $club;
+
+    private Season $season;
+
+    private string $token;
+
+    /** Gymnase A : 2 créneaux de saison — c'est lui qu'on bascule. */
+    private Venue $venueA;
+
+    /** Gymnase B : 1 créneau de saison — témoin, il ne doit jamais bouger. */
+    private Venue $venueB;
+
+    private string $planId;
+
+    private ?\App\Entity\Schedule $periodSchedule = null;
+
+    public function testBlankEmptiesOnlyThatVenuesPeriodGridAndNeverTheSeason(): void
+    {
+        // État de naissance : la période a reçu une COPIE de toute la grille de saison.
+        self::assertSame(2, $this->countPeriodSlots($this->venueA));
+        self::assertSame(1, $this->countPeriodSlots($this->venueB));
+        self::assertSame(3, $this->countSeasonSlots());
+
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame('BLANK', $created['mode']);
+
+        // Le gymnase basculé repart d'une grille vierge POUR CETTE PÉRIODE…
+        self::assertSame(0, $this->countPeriodSlots($this->venueA), 'la grille du gymnase basculé est vidée pour la période');
+        // …son voisin de la même période n'a pas bougé…
+        self::assertSame(1, $this->countPeriodSlots($this->venueB), 'la bascule est bornée à UN gymnase');
+        // …et le planning principal est intact (invariant fondateur n°1).
+        self::assertSame(3, $this->countSeasonSlots(), 'les créneaux de saison survivent TOUS — le planning principal n’est jamais modifié');
+    }
+
+    /**
+     * NR — DÉSACTIVÉ CONSERVE LA GRILLE, il ne la SERT pas (décision fondateur
+     * 2026-07-24) : « ça doit se voir que l'on a désactivé à l'écran et ça ne doit pas la
+     * servir côté backend pour l'engine ». Vider serait doublement fautif : le
+     * gestionnaire perdrait la saisie qu'il avait faite, et réactiver ne la lui rendrait
+     * pas. VIERGE, lui, vide — c'est ce qu'on lui demande.
+     */
+    public function testDisabledKeepsTheVenuesGridInsteadOfEmptyingIt(): void
+    {
+        $before = $this->countPeriodSlots($this->venueA);
+        self::assertGreaterThan(0, $before, 'le gymnase a bien une grille avant la bascule');
+
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+
+        self::assertSame($before, $this->countPeriodSlots($this->venueA), 'désactiver ne détruit pas la grille — elle reste visible à l’écran');
+        self::assertSame(3, $this->countSeasonSlots(), 'et le planning principal reste intact');
+    }
+
+    public function testSwitchingToBlankCarriesTheReservationsAndHardLocksItHeld(): void
+    {
+        // Un créneau de la période porte une réservation et le verrou HARD qu'elle a
+        // matérialisé. Les laisser derrière produirait exactement l'orphelin que
+        // OrphanPinGuard refuse ensuite : la bascule doit les emporter.
+        $slot = $this->periodSlots($this->venueA)[0];
+        $reservation = (new Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($this->venueA->getId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90);
+        $hard = $this->slotTemplate($slot, LockLevel::HARD);
+        // Un placement SOFT au même horaire est un RÉSULTAT de solve, pas un épinglage :
+        // la cascade ne l'emporte pas (EntityCascadeDeleter, hardOnly).
+        $soft = $this->slotTemplate($slot, LockLevel::SOFT);
+        $this->em->persist($reservation);
+        $this->em->persist($hard);
+        $this->em->persist($soft);
+        $this->em->flush();
+        $reservationId = $reservation->getId();
+        $hardId = $hard->getId();
+        $softId = $soft->getId();
+
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Reservation::class)->find($reservationId), 'la réservation du créneau supprimé part avec lui');
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($hardId), 'le verrou HARD matérialisé part avec le créneau');
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($softId), 'un placement SOFT est un résultat de solve, pas un épinglage — il survit');
+    }
+
+    /**
+     * NR — vider la grille d'une PÉRIODE ne touche jamais les épinglages du PLANNING
+     * PRINCIPAL au même horaire. La cascade identifie un épinglage par (gymnase, jour,
+     * heure) : sans borne de couche, elle emportait la réservation de base au même
+     * créneau — le planning principal était donc modifié par un réglage de période
+     * (invariant fondateur n°1). Fuite trouvée en écrivant ces tests.
+     */
+    public function testEmptyingThePeriodGridSparesTheSeasonPins(): void
+    {
+        $slot = $this->periodSlots($this->venueA)[0];
+        // Une réservation de BASE (schedulePlanId null = structure partagée de la saison)
+        // au MÊME gymnase/jour/heure que le créneau de période qu'on va supprimer.
+        $seasonPin = (new Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId(null)
+            ->setTeamId('22222222-2222-4222-8222-222222222222')
+            ->setVenueId($this->venueA->getId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90);
+        $this->em->persist($seasonPin);
+        $this->em->flush();
+        $seasonPinId = $seasonPin->getId();
+
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->em->clear();
+        self::assertNotNull(
+            $this->em->getRepository(Reservation::class)->find($seasonPinId),
+            'la réservation du planning principal survit — une période ne le modifie jamais',
+        );
+    }
+
+    public function testDuplicateOverrideIsRejectedWithValidationNotServerError(): void
+    {
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+
+        // Un second POST sur le même (période, gymnase) → 422 propre, pas un 500 remonté
+        // de l'index unique. L'édition passe par PUT.
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testCollectionIsScopedToTheRequestedPeriod(): void
+    {
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+
+        // Un réglage d'une AUTRE période ne doit pas apparaître dans cette période.
+        $otherPlanId = $this->planIdOf($this->period('Toussaint', '2025-10-20', '2025-10-26'));
+        $this->post(['schedulePlanId' => $otherPlanId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+
+        $members = $this->getCollection('?schedulePlanId=' . $this->planId);
+        self::assertCount(1, $members, 'la collection est cloisonnée à la période demandée');
+        self::assertSame($this->venueA->getId(), $members[0]['venueId']);
+        self::assertSame('BLANK', $members[0]['mode']);
+
+        // Le filtre venueId affine encore.
+        self::assertCount(0, $this->getCollection('?schedulePlanId=' . $this->planId . '&venueId=' . $this->venueB->getId()));
+    }
+
+    public function testPutChangesTheMode(): void
+    {
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+
+        $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'mode' => 'DISABLED',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('DISABLED', $body['mode']);
+
+        $this->client->request('GET', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertSame('DISABLED', json_decode((string) $this->client->getResponse()->getContent(), true)['mode']);
+    }
+
+    public function testDeleteReturnsToInheritAndRecopiesTheSeasonGrid(): void
+    {
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame(0, $this->countPeriodSlots($this->venueA));
+
+        // DELETE = retour au défaut « hériter » (sparse : pas de ligne = hériter).
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        // La grille du gymnase est RECOPIÉE depuis la saison : même compte qu'en saison,
+        // sans doublon (vider AVANT recopier — l'ordre inverse doublerait les créneaux).
+        self::assertSame(2, $this->countPeriodSlots($this->venueA), 'la grille du gymnase est recopiée depuis le modèle de saison');
+        self::assertSame(1, $this->countPeriodSlots($this->venueB), 'le voisin n’a pas bougé');
+        self::assertSame(3, $this->countSeasonSlots(), 'le planning principal reste intact');
+
+        // Les horaires recopiés sont bien ceux de la saison — pas des créneaux quelconques.
+        self::assertSame($this->seasonSlotKeys($this->venueA), $this->periodSlotKeys($this->venueA));
+
+        // Et la ligne a disparu : la période hérite de nouveau.
+        self::assertCount(0, $this->getCollection('?schedulePlanId=' . $this->planId));
+    }
+
+    public function testReactivatingADisabledVenueKeepsItsPinsInstead0fWipingThem(): void
+    {
+        // Revue #8 round 4 — DÉSACTIVÉ conserve la grille, et supprimer la ligne est la
+        // SEULE façon de réactiver le gymnase. Y rejouer la purge détruisait les
+        // réservations et les verrous posés AVANT la désactivation, en rendant une grille
+        // d'apparence identique : le gestionnaire ne voyait rien, et la génération
+        // suivante déplaçait la séance ailleurs.
+        $slot = $this->periodSlots($this->venueA)[0];
+        $reservation = (new Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($this->venueA->getId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90);
+        $hard = $this->slotTemplate($slot, LockLevel::HARD);
+        $this->em->persist($reservation);
+        $this->em->persist($hard);
+        $this->em->flush();
+        $reservationId = $reservation->getId();
+        $hardId = $hard->getId();
+        $before = $this->periodSlotKeys($this->venueA);
+
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertSame($before, $this->periodSlotKeys($this->venueA), 'réactiver rend la grille telle quelle');
+        self::assertNotNull($this->em->getRepository(Reservation::class)->find($reservationId), 'la réservation posée avant la désactivation survit');
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($hardId), 'et le verrou HARD aussi — désactiver ne coûte pas la saisie faite');
+    }
+
+    public function testReSavingTheSameModeLeavesTheHandTypedGridAlone(): void
+    {
+        // Revue #8 round 4 — le correctif d'idempotence du PUT n'était couvert par aucun
+        // test : retirer la comparaison au mode précédent laissait tout le fichier au vert
+        // tout en réintroduisant la perte de données. Un double-submit, ou un simple
+        // ré-enregistrement du formulaire, rejouait la purge sur ce que le gestionnaire
+        // venait de ressaisir.
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame(0, $this->countPeriodSlots($this->venueA), 'VIERGE vide bien la grille du gymnase');
+
+        // Le gestionnaire ressaisit son créneau à la main dans la grille vierge.
+        $manual = (new VenueTrainingSlot)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)->setVenueId($this->venueA->getId())
+            ->setDayOfWeek(4)->setStartTime(new DateTimeImmutable('20:30'))
+            ->setDurationMinutes(60)->setCapacity(1);
+        $this->em->persist($manual);
+        $this->em->flush();
+
+        // Re-enregistrer le MÊME mode : action d'apparence idempotente, elle doit l'être.
+        $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'mode' => 'BLANK',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertSame(1, $this->countPeriodSlots($this->venueA), 'le créneau ressaisi à la main survit au ré-enregistrement');
+    }
+
+    public function testAnotherClubNeitherSeesNorWritesTheOverride(): void
+    {
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'BLANK']);
+        self::assertResponseStatusCodeSame(201);
+
+        $intruder = $this->seedIntruderClub();
+
+        // Ni en lecture (collection filtrée sur la période de l'autre club)…
+        $this->client->request('GET', '/api/venue_period_overrides?schedulePlanId=' . $this->planId, [], [], $intruder);
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertCount(0, $body['member'] ?? [], 'un autre club ne voit pas les réglages du club voisin');
+
+        // …ni à l'unité…
+        $this->client->request('GET', '/api/venue_period_overrides/' . $created['id'], [], [], $intruder);
+        self::assertResponseStatusCodeSame(404);
+
+        // …ni en écriture — et la grille du voisin n'a pas bougé.
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $intruder);
+        self::assertResponseStatusCodeSame(404);
+
+        $this->scopeGucToClub($this->club->getId());
+        self::assertSame(0, $this->countPeriodSlots($this->venueA), 'la tentative de l’intrus n’a rien recopié chez le voisin');
+        self::assertNotNull($this->em->getRepository(VenuePeriodOverride::class)->find($created['id']));
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $container = self::getContainer();
+        $this->em = $container->get(EntityManagerInterface::class);
+        $hasher = $container->get('security.user_password_hasher');
+        $uid = uniqid('', true);
+
+        $this->club = (new Club)->setName('VPO ' . $uid)->setSlug('vpo-' . $uid)
+            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
+        $this->em->persist($this->club);
+        $user = (new User)->setEmail('vpo' . $uid . '@test.com')->setFirstName('V')->setLastName('P');
+        $user->setPasswordHash($hasher->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+
+        $this->scopeGucToClub($this->club->getId());
+        $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
+        $this->season = (new Season)->setClubId($this->club->getId())->setName('2025-2026')
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+        $this->em->persist($this->season);
+        $this->em->flush();
+
+        $this->venueA = $this->venue('Gymnase A');
+        $this->venueB = $this->venue('Gymnase B');
+        // La grille de SAISON (schedule_plan_id IS NULL) — le modèle que la période copie.
+        $this->seasonSlot($this->venueA, 2, '18:00');
+        $this->seasonSlot($this->venueA, 4, '20:00');
+        $this->seasonSlot($this->venueB, 3, '19:00');
+        $this->em->flush();
+
+        // La période et son plan naissent du geste ; la naissance copie la grille.
+        $this->planId = $this->planIdOf($this->period('Vacances', '2025-12-22', '2025-12-28'));
+
+        $this->periodSchedule = null;
+        $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /**
+     * Un club voisin, avec son propre JWT — pour prouver que rien ne franchit la frontière.
+     *
+     * @return array<string, string>
+     */
+    private function seedIntruderClub(): array
+    {
+        $uid = uniqid('', true);
+        $club = (new Club)->setName('VPO Intrus ' . $uid)->setSlug('vpo-intrus-' . $uid)
+            ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
+        $this->em->persist($club);
+        $user = (new User)->setEmail('vpo-intrus' . $uid . '@test.com')->setFirstName('I')->setLastName('N');
+        $user->setPasswordHash(self::getContainer()->get('security.user_password_hasher')->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
+        $this->em->persist((new ClubUser)->setClubId($club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
+        $season = (new Season)->setClubId($club->getId())->setName('2025-2026')
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+        $this->em->persist($season);
+        $this->em->flush();
+
+        return [
+            'HTTP_X-Club-Id' => $club->getId(),
+            'HTTP_X-Season-Id' => $season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . self::getContainer()->get(JWTTokenManagerInterface::class)->create($user),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+    }
+
+    private function venue(string $name): Venue
+    {
+        $venue = (new Venue)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName($name)->setSource('manual')->setIsActive(true);
+        $this->em->persist($venue);
+        $this->em->flush();
+
+        return $venue;
+    }
+
+    private function seasonSlot(Venue $venue, int $dayOfWeek, string $startTime): VenueTrainingSlot
+    {
+        $slot = (new VenueTrainingSlot)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setVenueId($venue->getId())->setDayOfWeek($dayOfWeek)
+            ->setStartTime(new DateTimeImmutable($startTime))->setDurationMinutes(90)->setCapacity(1);
+        $this->em->persist($slot);
+
+        return $slot;
+    }
+
+    private function period(string $title, string $start, string $end): CalendarEntry
+    {
+        $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle($title)
+            ->setStartDate(new DateTimeImmutable($start))->setEndDate(new DateTimeImmutable($end));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry;
+    }
+
+    /**
+     * Un verrou appartient toujours à une VERSION, et une version à un plan : la cascade
+     * ne touche que les versions du plan concerné (sinon vider une période emporterait les
+     * verrous du planning principal). La fixture doit donc porter une vraie version de
+     * CETTE période — un scheduleId fictif ne modélisait rien de réel.
+     */
+    private function periodSchedule(): \App\Entity\Schedule
+    {
+        if (null === $this->periodSchedule) {
+            $this->periodSchedule = (new \App\Entity\Schedule)
+                ->setClubId($this->club->getId())
+                ->setSeasonId($this->season->getId())
+                ->setSchedulePlanId($this->planId)
+                ->setName('V1 période');
+            $this->periodSchedule->setStatus(\App\Enum\ScheduleStatus::COMPLETED);
+            $this->em->persist($this->periodSchedule);
+            $this->em->flush();
+        }
+
+        return $this->periodSchedule;
+    }
+
+    private function slotTemplate(VenueTrainingSlot $slot, LockLevel $lockLevel): ScheduleSlotTemplate
+    {
+        return (new ScheduleSlotTemplate)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setScheduleId($this->periodSchedule()->getId())
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($slot->getVenueId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90)
+            ->setLockLevel($lockLevel);
+    }
+
+    /** @return list<VenueTrainingSlot> */
+    private function periodSlots(Venue $venue): array
+    {
+        return $this->em->getRepository(VenueTrainingSlot::class)
+            ->findBy(['schedulePlanId' => $this->planId, 'venueId' => $venue->getId()]);
+    }
+
+    private function countPeriodSlots(Venue $venue): int
+    {
+        $this->em->clear();
+
+        return \count($this->periodSlots($venue));
+    }
+
+    private function countSeasonSlots(): int
+    {
+        $this->em->clear();
+
+        return \count($this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => null]));
+    }
+
+    /** @return list<string> */
+    private function seasonSlotKeys(Venue $venue): array
+    {
+        $this->em->clear();
+
+        return $this->keys($this->em->getRepository(VenueTrainingSlot::class)
+            ->findBy(['schedulePlanId' => null, 'venueId' => $venue->getId()]));
+    }
+
+    /** @return list<string> */
+    private function periodSlotKeys(Venue $venue): array
+    {
+        $this->em->clear();
+
+        return $this->keys($this->periodSlots($venue));
+    }
+
+    /**
+     * @param list<VenueTrainingSlot> $slots
+     *
+     * @return list<string>
+     */
+    private function keys(array $slots): array
+    {
+        $keys = array_map(
+            static fn (VenueTrainingSlot $slot): string => $slot->getDayOfWeek() . '@' . $slot->getStartTime()->format('H:i'),
+            $slots,
+        );
+        sort($keys);
+
+        return $keys;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array<string, mixed>
+     */
+    private function post(array $payload): array
+    {
+        $this->client->request('POST', '/api/venue_period_overrides', [], [], $this->headers(), json_encode($payload, \JSON_THROW_ON_ERROR));
+
+        return json_decode((string) $this->client->getResponse()->getContent(), true) ?? [];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function getCollection(string $query): array
+    {
+        $this->client->request('GET', '/api/venue_period_overrides' . $query, [], [], $this->headers());
+        self::assertResponseIsSuccessful();
+
+        return json_decode((string) $this->client->getResponse()->getContent(), true)['member'] ?? [];
+    }
+
+    /** @return array<string, string> */
+    private function headers(): array
+    {
+        return [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_X-Season-Id' => $this->season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+    }
+}

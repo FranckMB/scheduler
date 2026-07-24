@@ -34,23 +34,34 @@ final class CalendarEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * Period entries of the season whose secondary plan is VALIDATED (its plan points at
-     * a chosen version) — the real secondary plannings a baseline reopen would destroy
-     * (ADR-0002 inv. 14). « A un overlay » se dérive du plan (schedule_plan.chosenScheduleId),
-     * plus d'un pointeur sur l'entrée (lot D-b) : un brouillon non validé n'est pas un
-     * planning secondaire « réel » (modèle binaire — seule une version validée est montrée),
-     * on n'en avertit donc pas ; sa purge éventuelle est un nettoyage d'espace de travail.
+     * Les périodes de la saison PORTANT UN PLAN et pas encore COMMENCÉES — ce que
+     * déplacer le calendrier de base détruit (ADR-0002 inv. 14, décision fondateur
+     * 2026-07-24).
+     *
+     * Volontairement PAS keyée sur `chosenScheduleId IS NOT NULL` : depuis #8 le plan
+     * naît du geste « Adapter » et possède aussitôt sa grille (copie du modèle de
+     * saison). Ne retenir que les périodes validées laissait vivre le plan et la grille
+     * copiée d'une période jamais générée, adossés à un socle qui n'existe plus, sans
+     * que le gestionnaire en soit averti ni ne puisse les voir.
+     *
+     * Pivot = la date de DÉBUT : « rien du passé, rien de ce qui est en cours ». Une
+     * période commencée est déjà annoncée aux coachs et à moitié jouée — la détruire au
+     * milieu coûterait plus que de la laisser finir sur l'ancien socle. Seules les
+     * périodes ENTIÈREMENT à venir sont reprises.
      *
      * @return list<CalendarEntry>
      */
-    public function findWithOverlayByClubSeason(string $clubId, string $seasonId): array
+    public function findWithPlanNotStarted(string $clubId, string $seasonId, DateTimeImmutable $today): array
     {
         return $this->createQueryBuilder('e')
             ->andWhere('e.clubId = :clubId')
             ->andWhere('e.seasonId = :seasonId')
-            ->andWhere('EXISTS (SELECT p.id FROM App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id AND p.chosenScheduleId IS NOT NULL)')
+            ->andWhere('e.startDate > :today')
+            ->andWhere('EXISTS (SELECT p.id FROM App\Entity\SchedulePlan p WHERE p.calendarEntryId = e.id)')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
+            ->setParameter('today', $today->format('Y-m-d'))
+            ->orderBy('e.startDate', 'ASC')
             ->getQuery()
             ->getResult();
     }

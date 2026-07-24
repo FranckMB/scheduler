@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
@@ -12,6 +13,7 @@ use App\Entity\Competition;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Reservation;
+use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
@@ -19,13 +21,17 @@ use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CompetitionType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleDiagnosticSeverity;
+use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
+use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -45,6 +51,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('phase1')]
 final class CascadeDeleteApiTest extends WebTestCase
 {
+    use ChoosesPlanVersionTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -52,6 +59,8 @@ final class CascadeDeleteApiTest extends WebTestCase
     private EntityManagerInterface $em;
 
     private Club $club;
+
+    private string $seasonVersionId;
 
     private Season $season;
 
@@ -119,7 +128,7 @@ final class CascadeDeleteApiTest extends WebTestCase
         // A SOFT solver placement at the SAME venue/day/time in a generated
         // schedule is a RESULT, not a pin — it must survive the slot delete.
         $softTemplateId = $this->persist((new ScheduleSlotTemplate)
-            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setScheduleId($this->season->getId())
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setScheduleId($this->seasonVersionId())
             ->setTeamId('55555555-5555-4555-8555-555555555555')->setVenueId($venueId)->setDayOfWeek(3)
             ->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)->setLockLevel(LockLevel::SOFT));
 
@@ -130,6 +139,49 @@ final class CascadeDeleteApiTest extends WebTestCase
         self::assertNull($this->em->getRepository(Reservation::class)->find($reservationId), 'the orphan-reservation cause: slot gone, reservation must go too');
         self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($hardTemplateId), 'the reservation HARD pin goes with the slot');
         self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($softTemplateId), 'a SOFT solver placement is a result, not a pin — must survive');
+    }
+
+    public function testDeletingASeasonSlotLeavesThePinsOfAPeriodAlone(): void
+    {
+        // #8 — une période POSSÈDE sa grille : supprimer un créneau de saison ne supprime
+        // PAS la copie qu'elle en détient. Emporter au passage le verrou que le
+        // gestionnaire y avait posé la laissait avec un créneau toujours offert mais son
+        // épinglage disparu, sans un mot. La borne de couche va donc dans les deux sens.
+        $venueId = '22222222-2222-4222-8222-222222222222';
+        $slot = $this->persist((new VenueTrainingSlot)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setVenueId($venueId)->setDayOfWeek(3)->setStartTime(new DateTimeImmutable('18:00'))
+            ->setDurationMinutes(90)->setCapacity(1));
+        $seasonPin = $this->persistHardTemplate('11111111-1111-4111-8111-111111111111', $venueId, 3, '18:00');
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($this->club->getId());
+        $entry->setSeasonId($this->season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setTitle('Toussaint');
+        $entry->setStartDate(new DateTimeImmutable('+1 month'));
+        $entry->setEndDate(new DateTimeImmutable('+1 month +7 days'));
+        $this->em->persist($entry);
+        $this->em->flush();
+        $periodVersion = new Schedule;
+        $periodVersion->setClubId($this->club->getId());
+        $periodVersion->setSeasonId($this->season->getId());
+        $periodVersion->setName('Toussaint V1');
+        $periodVersion->setStatus(ScheduleStatus::COMPLETED);
+        $this->linkSeededSchedule($periodVersion, $entry->getId());
+        $this->em->flush();
+        $periodPin = $this->persist((new ScheduleSlotTemplate)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setScheduleId($periodVersion->getId())
+            ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId($venueId)->setDayOfWeek(3)
+            ->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)->setLockLevel(LockLevel::HARD));
+
+        $this->client->request('DELETE', '/api/venue_training_slots/' . $slot, [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($seasonPin), 'le verrou de la COUCHE supprimée part avec son créneau');
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($periodPin), 'celui de la période reste : sa grille, elle, n\'a pas bougé');
     }
 
     public function testCascadeNeverCrossesClub(): void
@@ -241,10 +293,32 @@ final class CascadeDeleteApiTest extends WebTestCase
             ->setStartTime(new DateTimeImmutable($start))->setDurationMinutes(120));
     }
 
+    /**
+     * La version de SOCLE à laquelle appartiennent les verrous de ce test. Depuis #8 la
+     * purge d'un créneau est bornée à la COUCHE du créneau (un créneau de saison
+     * n'emporte que les verrous du planning principal) : un scheduleId inventé ne
+     * relèverait d'aucune couche et le test ne prouverait plus rien.
+     */
+    private function seasonVersionId(): string
+    {
+        if (!isset($this->seasonVersionId)) {
+            $schedule = new Schedule;
+            $schedule->setClubId($this->club->getId());
+            $schedule->setSeasonId($this->season->getId());
+            $schedule->setName('Socle');
+            $schedule->setStatus(ScheduleStatus::COMPLETED);
+            $this->linkSeededSchedule($schedule);
+            $this->em->flush();
+            $this->seasonVersionId = $schedule->getId();
+        }
+
+        return $this->seasonVersionId;
+    }
+
     private function persistHardTemplate(string $teamId, string $venueId, int $day, string $start): string
     {
         return $this->persist((new ScheduleSlotTemplate)
-            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setScheduleId($this->season->getId())
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setScheduleId($this->seasonVersionId())
             ->setTeamId($teamId)->setVenueId($venueId)->setDayOfWeek($day)
             ->setStartTime(new DateTimeImmutable($start))->setDurationMinutes(120)->setLockLevel(LockLevel::HARD));
     }

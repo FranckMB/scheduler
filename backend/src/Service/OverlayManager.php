@@ -6,11 +6,18 @@ namespace App\Service;
 
 use App\Entity\CalendarEntry;
 use App\Entity\ConstraintConflict;
+use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\TeamPeriodOverride;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\ScheduleStatus;
+use App\Repository\CalendarEntryRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
@@ -26,7 +33,77 @@ final class OverlayManager
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly CalendarEntryRepository $calendarEntryRepository,
+        private readonly ClockInterface $clock,
     ) {}
+
+    /**
+     * Les périodes de la saison dont le planning serait invalidé si le calendrier de
+     * base bougeait — la portée de la destruction, et donc de la confirmation.
+     *
+     * « Le planning de saison est notre base, donc on supprime TOUS les plannings
+     * overlay ou holidays qui sont à venir » (décision fondateur 2026-07-24) :
+     *  - toute période PORTANT UN PLAN, validée ou non. Depuis #8 le plan naît du geste
+     *    « Adapter » et possède déjà sa grille (copie du modèle de saison) : ne compter
+     *    que les périodes validées laissait derrière des grilles copiées d'un socle qui
+     *    n'existe plus, invisibles pour le gestionnaire ;
+     *  - sauf celles DÉJÀ COMMENCÉES : « rien du passé, rien de ce qui est en cours »
+     *    (décision fondateur 2026-07-16, specs/evolution/reprise-perimetre-engage.md §4).
+     *    Une période en cours est déjà annoncée aux coachs et à moitié jouée ; la
+     *    détruire au milieu coûterait plus que de la laisser finir sur l'ancien socle.
+     * Le pivot est donc la date de DÉBUT : seules les périodes ENTIÈREMENT à venir.
+     *
+     * @return list<CalendarEntry>
+     */
+    public function periodPlansInvalidatedBySeasonChange(string $clubId, string $seasonId): array
+    {
+        return $this->calendarEntryRepository->findWithPlanNotStarted($clubId, $seasonId, $this->clock->now());
+    }
+
+    /**
+     * Détruit le planning d'une période DE BOUT EN BOUT — ses versions, son plan, et
+     * les réglages ancrés à ce plan (grille copiée, réservations, modes gymnase,
+     * overrides d'équipes et de contraintes). L'ENTRÉE de calendrier survit : la
+     * période reste au calendrier et retombe « à traiter » au radar, le gestionnaire
+     * la refait quand il veut.
+     *
+     * Ne supprimer que les versions (ce que fait deleteOverlayForEntry) laissait le
+     * plan et sa grille : « je supprime les plannings et donc les versions liées »
+     * (décision fondateur 2026-07-24).
+     */
+    public function deletePeriodPlanForEntry(CalendarEntry $entry, bool $force = false): void
+    {
+        // AVANT toute lecture qui décide : deleteOverlayForEntry balaie les versions
+        // juste en dessous, et le prendre après ne sérialiserait rien (même idiome que
+        // la suppression d'une période).
+        $this->schedulePlanProvisioner->lockPlanScope($entry->getId());
+        $planId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+        $this->deleteOverlayForEntry($entry, $force);
+        if (null === $planId) {
+            return;
+        }
+
+        $this->entityManager->wrapInTransaction(function () use ($entry, $planId): void {
+            $this->schedulePlanProvisioner->deletePeriodPlan($entry->getId());
+            $this->purgePlanAnchoredSettings($planId);
+            $this->entityManager->flush();
+        });
+    }
+
+    /**
+     * Les réglages ancrés à un plan de période (inv. 5, lots C2-C3) : overrides
+     * d'équipes et de contraintes, créneaux du plan, réservations, modes gymnase.
+     * Partagé par la suppression d'une période, la découpe en semaines (qui emporte le
+     * plan-bloc de la mère) et la reprise du socle. L'appelant flush.
+     */
+    public function purgePlanAnchoredSettings(string $schedulePlanId): void
+    {
+        foreach ([TeamPeriodOverride::class, ConstraintPeriodOverride::class, VenueTrainingSlot::class, Reservation::class, VenuePeriodOverride::class] as $class) {
+            foreach ($this->entityManager->getRepository($class)->findBy(['schedulePlanId' => $schedulePlanId]) as $row) {
+                $this->entityManager->remove($row);
+            }
+        }
+    }
 
     /**
      * Purge les artefacts d'une version et la supprime. Utilisé par la validation
@@ -97,11 +174,28 @@ final class OverlayManager
         $this->purgeArtifacts($schedule->getId());
     }
 
+    /**
+     * Une version en cours de solve ne peut pas être supprimée sous les pieds du worker
+     * (il importerait ses créneaux dans le vide). Le message NOMME la période : depuis
+     * que la reprise du socle emporte aussi les périodes non validées (#8), ce refus
+     * tombe au milieu d'une validation de saison que le gestionnaire vient de confirmer
+     * — un « wait for it to finish » anonyme et en anglais ne lui disait pas quoi
+     * attendre (revue #8, round 4).
+     */
     private function assertNotGenerating(Schedule $schedule): void
     {
         if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
-            throw new ConflictHttpException('The overlay is being generated — wait for it to finish before deleting it.');
+            throw new ConflictHttpException(\sprintf('Le planning « %s » est en cours de génération : attendez qu\'il se termine avant de reprendre le planning de la saison.', $this->periodLabelOf($schedule)));
         }
+    }
+
+    /** Le nom que le gestionnaire voit : celui de la période, sinon celui de la version. */
+    private function periodLabelOf(Schedule $schedule): string
+    {
+        $entryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
+        $entry = null === $entryId ? null : $this->entityManager->getRepository(CalendarEntry::class)->find($entryId);
+
+        return $entry?->getTitle() ?? $schedule->getName();
     }
 
     private function purgeArtifacts(string $scheduleId): void

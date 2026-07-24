@@ -70,9 +70,12 @@ semaines de planning allégé), souvent sur des créneaux prêtés par la mairie
 - **Cas simple par nature** : en général **< 8 équipes**, créneaux simples, peu de gymnases → le
   **solveur n'a aucun souci** (confirme le *zéro changement engine* de P1 ; l'effort est backend
   override + frontend éditeur, pas la perf moteur).
-- **Créneaux additifs** : les créneaux prêtés par la mairie s'**ajoutent** au socle encore valide
-  (moins les fermetures/indispos de la fenêtre) — exactement le patron `VenueTrainingSlot.calendarEntryId`
-  (le jeu période **complète** le saisonnier).
+- ~~**Créneaux additifs** : les créneaux prêtés par la mairie s'**ajoutent** au socle encore valide~~
+  **Périmé le 2026-07-24 (#8, décision fondateur)** : le modèle additif est abandonné. Une période
+  **possède** sa grille — les créneaux de saison y sont copiés à la naissance du plan, puis édités
+  librement (y compris pour ajouter un gymnase prêté par la mairie). Le socle et la période ne sont
+  **jamais** unis : « je ne stocke pas plusieurs types de créneaux d'un gymnase dans une version, ça
+  va créer trop de soucis ». Voir `docs/architecture/adr-0002-pattern-plan.md`, amendement inv. 5.
 - **Coachs read-only, lien préservé** : on ne touche jamais au lien équipe↔coach (cohérent P1).
 - **Rampe = 2 overlays** (S1 = Fanion / S2 = + important), puis le **socle reprend** pour tout le club
   (pas de 3ᵉ overlay). Un flux guidé « Reprise » pourrait pré-créer la rampe d'un clic (bonus, plus tard).

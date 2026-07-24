@@ -285,8 +285,11 @@ final class ReopenScheduleTest extends WebTestCase
         $entry->setKind(CalendarEntryKind::PERIOD);
         $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
         $entry->setTitle($title);
-        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
-        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        // À VENIR, relatif au présent : depuis #8 la reprise du socle ne détruit que les
+        // périodes pas encore échues (une période jouée est de l'histoire). Une date en
+        // dur finirait par passer dans le passé et désarmerait ce test en silence.
+        $entry->setStartDate(new DateTimeImmutable('+1 month'));
+        $entry->setEndDate(new DateTimeImmutable('+1 month +6 days'));
         $this->em->persist($entry);
         $this->em->flush();
         // Depuis C4 l'overlay pend au PLAN de la période (plus de calendarEntryId) : le

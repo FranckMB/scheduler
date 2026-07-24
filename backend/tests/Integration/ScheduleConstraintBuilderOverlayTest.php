@@ -88,13 +88,16 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->team($club, $season, 'U11');
         // Semaine Mon 2026-05-04 → Sun 2026-05-10 ; incident Thu 05-07 → Sun 05-10.
         // Entrée SANS la datée auto de closurePeriod (elle serait sans dates = tous-jours).
-        $entry = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
-        $schedule = $this->overlaySchedule($club, $season, $entry);
+        // #8 : la grille de la période est une COPIE du modèle de saison, faite à la
+        // naissance du plan — les créneaux de saison doivent donc exister AVANT.
         $this->venue($club, $season, self::VENUE_CLOSED, 'Gym fermé jeu-dim');
-        $this->datedClosedVenueConstraintDated($club, $season, $entry, '2026-05-07', '2026-05-10');
         foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
             $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
         }
+        $this->em->flush();
+        $entry = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->datedClosedVenueConstraintDated($club, $season, $entry, '2026-05-07', '2026-05-10');
         $this->em->flush();
 
         $kept = $this->closedVenueWeekdays($schedule, $entry);
@@ -230,6 +233,83 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $serialized = array_values(array_filter($baseTeams, static fn (array $t): bool => $t['id'] === $team->getId()))[0];
 
         self::assertSame(2, $serialized['sessionsPerWeek'], 'the base plan keeps the seasonal volume — no override leak');
+    }
+
+    /**
+     * NR #8 (fondateur 2026-07-24) — UNE PÉRIODE POSSÈDE SA GRILLE : à la naissance du
+     * plan, les créneaux de saison sont COPIÉS. La période ne lit ensuite QUE les siens —
+     * un créneau de saison ajouté APRÈS n'y entre pas, et la saison n'est jamais modifiée.
+     */
+    public function testPeriodGridIsACopyTakenAtPlanBirth(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $venue = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000f1', 'Gym Barros');
+        $this->venueSlot($club, $season, $venue->getId(), null, 2); // saison, AVANT la période
+        $this->em->flush();
+
+        $entry = $this->holidayPeriod($club, $season); // ← naissance du plan : copie
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        // Un créneau de saison ajouté APRÈS coup : la période ne le voit pas.
+        $this->venueSlot($club, $season, $venue->getId(), null, 4);
+        $this->em->flush();
+
+        $counts = $this->venuesBySlotCount($this->builder->buildForOverlay($schedule, $entry)['venues']);
+        self::assertSame(1, $counts[$venue->getId()], 'la période porte la copie prise à sa naissance, et rien d’autre');
+
+        // Le planning principal garde ses deux créneaux : la copie ne lui a rien pris.
+        $base = $this->venuesBySlotCount($this->builder->buildForClubSeason($club->getId(), $season->getId())['venues']);
+        self::assertSame(2, $base[$venue->getId()], 'le planning principal n’est jamais modifié');
+    }
+
+    /**
+     * NR #8 — gymnase DÉSACTIVÉ : il sort entièrement du payload (créneaux, gymnase,
+     * verrous, réservations) et aucune contrainte ne peut plus le nommer — un id fantôme
+     * rendrait le solve INFEASIBLE. Rien n'est détruit pour autant.
+     */
+    public function testDisabledVenueLeavesThePayloadEntirely(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $kept = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000a1', 'Gym gardé');
+        $off = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000a2', 'Gym désactivé');
+        $this->venueSlot($club, $season, $kept->getId(), null, 1);
+        $this->venueSlot($club, $season, $off->getId(), null, 2);
+        $this->em->flush();
+
+        $entry = $this->holidayPeriod($club, $season);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $facility = new Constraint;
+        $facility->setClubId($club->getId());
+        $facility->setSeasonId($season->getId());
+        $facility->setName('Gym désactivé interdit');
+        $facility->setScope(ConstraintScope::FACILITY);
+        $facility->setFamily(ConstraintFamily::FACILITY);
+        $facility->setRuleType(ConstraintRuleType::HARD);
+        $facility->setScopeTargetId($off->getId());
+        $facility->setCalendarEntryId($entry->getId());
+        $this->em->persist($facility);
+        $this->venueMode($club, $season, $entry, $off->getId(), \App\Enum\VenuePeriodMode::DISABLED);
+        $this->em->flush();
+
+        $payload = $this->builder->buildForOverlay($schedule, $entry);
+        $venueIds = array_map(static fn (array $v): string => $v['id'], $payload['venues']);
+
+        self::assertContains($kept->getId(), $venueIds, 'un gymnase normal reste dans le payload');
+        self::assertNotContains($off->getId(), $venueIds, 'le gymnase désactivé sort du payload');
+        foreach ($payload['constraints'] as $row) {
+            if (\is_array($row)) {
+                self::assertNotSame($off->getId(), $row['scopeTargetId'] ?? null, 'aucune contrainte ne nomme un gymnase absent du payload');
+            }
+        }
+
+        // Rien n'a été détruit : les créneaux de la période existent toujours en base.
+        $this->em->clear();
+        self::assertCount(
+            1,
+            $this->em->getRepository(\App\Entity\VenueTrainingSlot::class)->findBy(['schedulePlanId' => $this->planIdOf($entry), 'venueId' => $off->getId()]),
+            'désactiver n’est pas supprimer — les créneaux de la période survivent',
+        );
     }
 
     public function testOverlayDropsConstraintDisabledForPeriod(): void
@@ -429,6 +509,18 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     }
 
     /** $schedulePlanId : null = créneau saisonnier (base) ; set = prêté à ce plan (lot C3). */
+    /** #8 — mode d'un gymnase POUR la période (sparse : pas de ligne = hériter). */
+    private function venueMode(Club $club, Season $season, CalendarEntry $entry, string $venueId, \App\Enum\VenuePeriodMode $mode): void
+    {
+        $o = new \App\Entity\VenuePeriodOverride;
+        $o->setClubId($club->getId());
+        $o->setSeasonId($season->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
+        $o->setVenueId($venueId);
+        $o->setMode($mode);
+        $this->em->persist($o);
+    }
+
     private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): void
     {
         $slot = new \App\Entity\VenueTrainingSlot;

@@ -27,7 +27,6 @@ import {
   useTeamPeriodOverrides,
   useUpdatePeriodConstraintOverride,
   useUpdateTeamPeriodOverride,
-  useVenueSlots,
   useWizardConstraints,
   useWizardTeams,
   useWizardVenues,
@@ -249,13 +248,18 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 /**
- * Period-editable venues (F1): the seasonal gyms are READ-ONLY (with the period's
- * closures marked), plus an editor for the period's OWN borrowed slots (a gym the
- * city lends just for this window) — additive on top of the seasonal set.
+ * Period-editable venues (F1, refondu par #8) : une période POSSÈDE sa grille — ses
+ * créneaux sont une COPIE du modèle de saison prise à la naissance du plan, plus rien
+ * d'additif. Ce panneau montre donc la grille RÉELLEMENT SERVIE à la période et permet
+ * de l'éditer ; la saison n'en est jamais affectée.
+ *
+ * Avant #8 cette liste s'appelait « créneaux prêtés » et tenait 0 à 2 lignes (le gymnase
+ * que la mairie prête pour cette fenêtre). Elle contient désormais toute la grille
+ * hebdomadaire du club : le libellé d'origine invitait à supprimer comme des parasites
+ * des créneaux d'entraînement bien réels (revue #8, round 4).
  */
 export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: venues = [] } = useWizardVenues();
-  const { data: seasonalSlots = [] } = useVenueSlots();
   // Le créneau PRÊTÉ pend au PLAN (inv. 5, lot C3) ; les CONFLITS, eux, se lisent par
   // l'entrée — le radar parle du FAIT (« Barros fermé »), pas de la réponse.
   const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
@@ -264,7 +268,9 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const createSlot = useCreatePeriodSlot(schedulePlanId);
   const deleteSlot = useDeletePeriodSlot(schedulePlanId);
   const closed = new Set(conflicts?.venueIds ?? []);
-  const slotsByVenue = countSlotsByVenue(seasonalSlots);
+  // Le compte de la couche SERVIE à la période, pas celui de la saison : c'est cette
+  // grille-là que le solveur recevra, et elle peut en différer (#8).
+  const slotsByVenue = countSlotsByVenue(periodSlots);
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
 
   const [venueId, setVenueId] = useState("");
@@ -290,7 +296,7 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-sm font-medium">Gymnases du planning principal</p>
+        <p className="text-sm font-medium">Gymnases de la période</p>
         {0 === venues.length ? (
           <EmptyHint>Aucun gymnase.</EmptyHint>
         ) : (
@@ -310,7 +316,10 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Créneaux prêtés pour la période</p>
+        <p className="text-sm font-medium">Créneaux de la période</p>
+        <p className="text-xs text-muted-foreground">
+          Repris de votre planning principal à l’ouverture de cette période. Les modifier ici ne change que cette période — votre planning principal reste intact.
+        </p>
         {periodSlots.length > 0 ? (
           <ul className="flex flex-col gap-1">
             {periodSlots.map((s) => (
@@ -318,7 +327,14 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
                 <span>
                   {venueName.get(s.venueId) ?? "Gymnase"} — {WEEKDAYS[s.dayOfWeek - 1]} {s.startTime.slice(0, 5)} ({s.durationMinutes} min)
                 </span>
-                <button type="button" aria-label="Supprimer ce créneau" className="rounded p-1 text-muted-foreground hover:text-destructive" disabled={deleteSlot.isPending} onClick={() => deleteSlot.mutate(s.id)}>
+                <button
+                  type="button"
+                  aria-label="Supprimer ce créneau pour la période"
+                  title="Retire ce créneau pour cette période uniquement"
+                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  disabled={deleteSlot.isPending}
+                  onClick={() => deleteSlot.mutate(s.id)}
+                >
                   <Trash2 className="size-4" />
                 </button>
               </li>
@@ -326,7 +342,7 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
           </ul>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {anchorReady ? "Aucun créneau ajouté pour cette période." : "Chargement des créneaux de la période…"}
+            {anchorReady ? "Aucun créneau pour cette période : personne ne pourra s’entraîner tant que vous n’en aurez pas ajouté." : "Chargement des créneaux de la période…"}
           </p>
         )}
 

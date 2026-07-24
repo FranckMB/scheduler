@@ -21,6 +21,7 @@ use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
@@ -28,6 +29,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
+use App\Enum\VenuePeriodMode;
 use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +40,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class ScheduleConstraintBuilder
 {
+    /**
+     * Les clés de `config` qui nomment un gymnase. Partagées avec le gate pré-solve
+     * (ValidateConstraintsController) : les deux doivent voir le MÊME jeu de contraintes,
+     * sans quoi le récap annonce applicable ce que le solveur ne recevra pas.
+     */
+    public const VENUE_CONFIG_KEYS = ['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'];
     private const CACHE_TTL_SECONDS = 14_400;
     private const SCHEMA_VERSION = '2.1';
     private const DEFAULT_SOLVER_SEED = 42;
@@ -222,6 +230,18 @@ final class ScheduleConstraintBuilder
             }
         }
 
+        // #8 (fondateur 2026-07-24) — une période POSSÈDE sa grille : ses créneaux ont été
+        // copiés depuis la saison à la naissance du plan. Le seul réglage lu ici est le
+        // gymnase DÉSACTIVÉ, qui sort entièrement du payload : « tout est lié au gymnase,
+        // donc son indisponibilité les impacte forcément ». Sparse : pas de ligne = le
+        // gymnase sert normalement.
+        $disabledVenueIds = [];
+        foreach ($em->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
+            if (VenuePeriodMode::DISABLED === $venueOverride->getMode()) {
+                $disabledVenueIds[$venueOverride->getVenueId()] = true;
+            }
+        }
+
         $constraints = match ($periodType) {
             // Fermeture: inherit ALL permanent constraints (kept by default), minus those
             // the manager explicitly disabled for the window (sparse diff — base untouched).
@@ -239,21 +259,23 @@ final class ScheduleConstraintBuilder
             default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
         };
 
-        // Period-editable structure: the overlay's slots are ADDITIVE — the still-valid
-        // SEASONAL slots (calendarEntryId NULL) plus this period's OWN slots (a gym lent
-        // for the window, calendarEntryId = entry). P2-5 5b : un gymnase fermé perd ses
-        // créneaux sur ses jours FERMÉS uniquement (day-précis) — le reste passe.
+        // La grille de la PÉRIODE, et elle seule — aucune union avec les créneaux de
+        // saison. C'est ce qui rend le modèle sûr : un gymnase n'a jamais deux jeux de
+        // créneaux dans une période, donc rien ne peut se chevaucher entre couches ni
+        // rendre un verrou ambigu (deux créneaux au même horaire, l'un « de saison »
+        // l'autre « de période »). P2-5 5b : un gymnase fermé perd ses créneaux sur ses
+        // jours FERMÉS uniquement (day-précis) — le reste passe.
         $availabilitiesByVenue = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
-            $slots = array_merge(
-                $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null]),
-                $this->venueTrainingSlotRepository->findBy(['schedulePlanId' => $schedulePlanId]),
-            );
-            foreach ($slots as $row) {
-                if (isset($closedWeekdaysByVenue[$row->getVenueId()][$row->getDayOfWeek()])) {
+            foreach ($this->venueTrainingSlotRepository->findBy(['schedulePlanId' => $schedulePlanId]) as $row) {
+                $rowVenueId = $row->getVenueId();
+                if (isset($disabledVenueIds[$rowVenueId])) {
+                    continue; // gymnase désactivé : il ne sert pas cette période
+                }
+                if (isset($closedWeekdaysByVenue[$rowVenueId][$row->getDayOfWeek()])) {
                     continue; // gymnase fermé ce jour-là : créneau retiré du payload
                 }
-                $availabilitiesByVenue[$row->getVenueId()][] = $row;
+                $availabilitiesByVenue[$rowVenueId][] = $row;
             }
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
@@ -267,19 +289,35 @@ final class ScheduleConstraintBuilder
         $payload = $this->buildPayload(
             clubId: $clubId,
             seasonId: $seasonId,
-            venues: $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+            // Un gymnase DÉSACTIVÉ sort du payload : l'y laisser avec 0 créneau serait
+            // inoffensif pour le solveur, mais toute contrainte le nommant deviendrait un
+            // id fantôme (cf. post-filtre plus bas) — on le retire à la source.
+            venues: array_values(array_filter(
+                $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+                static fn (Venue $venue): bool => !isset($disabledVenueIds[$venue->getId()]),
+            )),
             teams: $teams,
             coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId, $em),
             teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId, $em),
             coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId, $em),
             // Overlay's OWN slot templates (its work-loop locks), not the base plan's.
-            slotTemplates: $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+            // Filtre défensif : un verrou sur un gymnase désactivé pointerait un gymnase
+            // absent du payload. Un verrou ORPHELIN (plus aucun créneau à cet horaire) est,
+            // lui, une ERREUR annoncée AVANT la génération (GenerateScheduleController) —
+            // on ne l'escamote pas en silence.
+            slotTemplates: array_values(array_filter(
+                $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+                static fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()]),
+            )),
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $schedule->getSolverSeed(),
             constraints: $constraints,
             // Overlay reservations: this period's own pins (base ones don't leak in,
             // mirroring how HOLIDAY overlays use only dated constraints).
-            reservations: $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+            reservations: array_values(array_filter(
+                $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+                static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
+            )),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -302,6 +340,32 @@ final class ScheduleConstraintBuilder
                 static fn (mixed $row): bool => !\is_array($row)
                     || ConstraintScope::TEAM->value !== ($row['scope'] ?? null)
                     || !isset($deactivatedTeamIds[(string) ($row['scopeTargetId'] ?? '')]),
+            ));
+        }
+
+        // Miroir du filtre équipes, côté GYMNASES : une contrainte qui nomme un gymnase
+        // absent du payload est un id fantôme. Le gestionnaire en est AVERTI au récap
+        // (ValidateConstraintsController) — ignorer sans le dire était le défaut de #285.
+        if ([] !== $disabledVenueIds) {
+            $payload['constraints'] = array_values(array_filter(
+                $payload['constraints'],
+                static function (mixed $row) use ($disabledVenueIds): bool {
+                    if (!\is_array($row)) {
+                        return true;
+                    }
+                    if (ConstraintScope::FACILITY->value === ($row['scope'] ?? null)
+                        && isset($disabledVenueIds[(string) ($row['scopeTargetId'] ?? '')])) {
+                        return false;
+                    }
+                    $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
+                    foreach (self::VENUE_CONFIG_KEYS as $venueKey) {
+                        if (isset($disabledVenueIds[(string) ($config[$venueKey] ?? '')])) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
             ));
         }
 
