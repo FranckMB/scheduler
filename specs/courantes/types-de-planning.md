@@ -54,7 +54,10 @@
 ## 2. Overlay d'ajustement (indisponibilité)
 
 - **Séquence** : (1) l'indisponibilité est **déclarée** (« Signaler une indispo » — gym
-  fermé, etc.) ; (2) **le gestionnaire décide** de traiter cette indispo (« Adapter ») ;
+  fermé, etc.) — **aucun plan n'existe encore** (ADR-0002 amendé 2026-07-24 : le plan naît
+  du geste d'ADAPTER, la déclaration n'est qu'un fait au calendrier, le radar en lit
+  l'impact par les contraintes datées) ; (2) **le gestionnaire décide** de traiter cette
+  indispo (« Adapter ») — **c'est là que le plan naît** (`POST /schedule_plans`) ;
   (3) l'outil découpe **automatiquement** en autant de plannings que de **semaines
   englobées** ; (4) il gère le premier, est **notifié** des suivants à compléter.
 - **Manipulation** : structure verrouillée (équipes entières, gymnases/créneaux, coachs) ;
@@ -73,7 +76,12 @@
 
 - **Séquence** : depuis le cockpit (radar vacances ou clic sur un jour de vacances), le
   gestionnaire **choisit les semaines** à travailler parmi celles des vacances → chaque
-  sélection ouvre le wizard en mode période → génération.
+  sélection ouvre le wizard en mode période → génération. **Chaque semaine cochée naît
+  avec SON plan (c'est le geste)** ; la mère, pur ancrage, **n'a jamais de plan** — sauf
+  chemin « d'un bloc » explicite, où le clic Adapter le crée. **Découper une mère au
+  plan-bloc commencé (0 version) supprime ce plan et ses réglages** ; revenir au bloc =
+  supprimer soi-même chaque semaine puis re-Adapter (jamais de bascule automatique —
+  décision fondateur 2026-07-24).
 - **Manipulation** : équipes **cochables/décochables** — défaut : **Fanion + importantes**
   (rangs S + A) pré-cochées ; séances/équipe surchargables ; **créneaux gym
   redéfinissables** (un gymnase prêté par la mairie juste pour la fenêtre) ; contraintes

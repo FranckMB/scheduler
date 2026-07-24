@@ -567,6 +567,7 @@ final class PeriodPlanBirthTest extends WebTestCase
         return $payload['id'];
     }
 
+    /** @param array<string, mixed> $changes */
     private function putPeriod(User $user, string $entryId, array $changes): void
     {
         $this->putPeriodExpecting(null, $user, $entryId, $changes);
