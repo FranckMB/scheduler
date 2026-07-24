@@ -560,7 +560,9 @@ function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; t
           <p className="text-xs text-muted-foreground">{detail}</p>
         </div>
       </div>
-      {children ? <div className="mt-2 flex justify-end gap-1">{children}</div> : null}
+      {/* Empilées à droite (pas en ligne) : les chips par semaine d'une carte de
+          couverture débordaient de l'encart en ligne (retour fondateur 2026-07-24). */}
+      {children ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}
     </div>
   );
 }
