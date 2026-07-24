@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";

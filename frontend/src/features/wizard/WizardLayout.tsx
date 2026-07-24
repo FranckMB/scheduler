@@ -1,7 +1,7 @@
 import { HTTPError } from "ky";
 import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router";
 
 import { useQueryClient } from "@tanstack/react-query";
 

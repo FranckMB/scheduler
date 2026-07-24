@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Clock } from "lucide-react";
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useAuthStore } from "@/shared/stores/authStore";
 import { Button } from "@/shared/components/ui/button";

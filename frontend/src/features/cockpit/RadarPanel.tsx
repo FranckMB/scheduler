@@ -1,5 +1,5 @@
 import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 
 import { useWorkingSeason } from "@/features/auth/queries";
 import { useSchedules } from "@/features/planning/queries";

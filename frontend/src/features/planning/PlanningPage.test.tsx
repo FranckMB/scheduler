@@ -66,7 +66,7 @@ vi.mock("./api", () => {
 });
 
 const navigate = vi.fn();
-vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
+vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
 const { meState } = vi.hoisted(() => ({ meState: { chosenScheduleId: null as string | null } }));
 

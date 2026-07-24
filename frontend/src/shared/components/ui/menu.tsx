@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useId, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
 

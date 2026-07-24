@@ -1,6 +1,6 @@
 import { CalendarOff, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useSchedules, useVenues } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";

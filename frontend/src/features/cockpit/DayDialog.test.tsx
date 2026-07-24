@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry, PublicHoliday, SchoolHoliday } from "./api";
@@ -55,7 +55,7 @@ vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
   useSchedules: () => ({ data: queriesNoData ? undefined : schedulesData }),
 }));
-vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
+vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 // Freeze "today" so the fixed test date (2026-05-12) is not in the past (start ≥ today).

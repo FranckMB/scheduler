@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router";
 
 import { useMe } from "@/features/auth/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
