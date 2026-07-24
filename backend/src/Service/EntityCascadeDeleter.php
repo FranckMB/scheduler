@@ -11,6 +11,7 @@ use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Fixture;
 use App\Entity\Reservation;
+use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
@@ -84,6 +85,7 @@ final class EntityCascadeDeleter
 
         $this->withoutTenantFilters(function () use ($clubId, $seasonId, $venueId): void {
             $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(\App\Entity\VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleDiagnostic::class, 'venueId', $venueId, $clubId, $seasonId);
@@ -138,6 +140,16 @@ final class EntityCascadeDeleter
         });
     }
 
+    /**
+     * Les épinglages d'un créneau, identifiés par (gymnase, jour, heure) — ni une
+     * réservation ni un verrou ne cite l'id du créneau.
+     *
+     * ⚠️ Bornés à la COUCHE du créneau supprimé (#8) : un créneau de SAISON emporte les
+     * épinglages de base (schedulePlanId null), un créneau de PÉRIODE ceux de SA période.
+     * Sans cette borne, vider la grille d'une période détruirait les réservations du
+     * planning principal au même horaire — le planning principal n'est JAMAIS modifié par
+     * une période (invariant fondateur n°1).
+     */
     private function deleteBySlotKey(string $entityClass, VenueTrainingSlot $slot, string $clubId, string $seasonId, bool $hardOnly): void
     {
         $qb = $this->entityManager->createQueryBuilder()
@@ -152,6 +164,29 @@ final class EntityCascadeDeleter
             ->setParameter('venueId', $slot->getVenueId())
             ->setParameter('dayOfWeek', $slot->getDayOfWeek())
             ->setParameter('startTime', $slot->getStartTime());
+        $planId = $slot->getSchedulePlanId();
+        if (Reservation::class === $entityClass) {
+            // La réservation porte son plan : borne EXACTE. Un créneau de saison n'emporte
+            // que les réservations de base, un créneau de période que les siennes.
+            $qb->andWhere(null === $planId ? 'e.schedulePlanId IS NULL' : 'e.schedulePlanId = :planId');
+            if (null !== $planId) {
+                $qb->setParameter('planId', $planId);
+            }
+        } elseif (ScheduleSlotTemplate::class === $entityClass && null !== $planId) {
+            // Le verrou ne porte que sa VERSION : on borne aux versions de CE plan quand on
+            // supprime un créneau de PÉRIODE — sans quoi vider une grille de période
+            // emporterait les verrous du planning principal (le planning principal n'est
+            // jamais modifié par une période). Supprimer un créneau de SAISON garde, lui,
+            // le comportement historique : l'horaire disparaît pour tout le monde.
+            $scheduleIds = array_map(
+                static fn (Schedule $s): string => $s->getId(),
+                $this->entityManager->getRepository(Schedule::class)->findBy(['schedulePlanId' => $planId]),
+            );
+            if ([] === $scheduleIds) {
+                return; // aucune version sur ce plan : aucun verrou à emporter
+            }
+            $qb->andWhere('e.scheduleId IN (:scheduleIds)')->setParameter('scheduleIds', $scheduleIds);
+        }
         if ($hardOnly) {
             $qb->andWhere('e.lockLevel = :hard')->setParameter('hard', LockLevel::HARD);
         }

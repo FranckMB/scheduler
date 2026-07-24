@@ -12,6 +12,7 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
@@ -363,6 +364,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         }
         foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
             $this->entityManager->remove($reservation);
+        }
+        // #8 — le mode de chaque gymnase pour cette période : un réglage, donc ancré au plan.
+        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
+            $this->entityManager->remove($venueOverride);
         }
     }
 
