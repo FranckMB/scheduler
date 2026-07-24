@@ -8,7 +8,6 @@ use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
-use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,7 +37,6 @@ final class ValidateScheduleController extends AbstractController implements Sea
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
-        private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
@@ -154,11 +152,11 @@ final class ValidateScheduleController extends AbstractController implements Sea
             $currentlyChosen = $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId());
             $overlaysToDelete = [];
             if (null === $entryId && $schedule->getId() !== $currentlyChosen) {
-                $overlaysToDelete = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
+                $overlaysToDelete = $this->overlayManager->periodPlansInvalidatedBySeasonChange($schedule->getClubId(), $schedule->getSeasonId());
                 if ([] !== $overlaysToDelete && !$this->confirmedDeleteOverlays()) {
                     return $this->json([
                         'code' => 'overlays_exist',
-                        'error' => 'Choisir cette version remplace le planning de la saison et supprime ses plannings secondaires.',
+                        'error' => 'Choisir cette version remplace le planning de la saison : les plannings de période à venir sont supprimés et devront être refaits.',
                         'count' => \count($overlaysToDelete),
                         'overlays' => array_map(static fn (CalendarEntry $e): array => [
                             'entryId' => $e->getId(),
@@ -172,8 +170,10 @@ final class ValidateScheduleController extends AbstractController implements Sea
             // sœurs commitent ensemble (un échec en cours de route ne doit pas laisser
             // un plan à moitié basculé).
             foreach ($overlaysToDelete as $entry) {
-                // force : le gestionnaire a explicitement confirmé la destruction.
-                $this->overlayManager->deleteOverlayForEntry($entry, force: true);
+                // Le PLAN entier, pas seulement ses versions : le socle est la base dont
+                // la grille d'une période est copiée, la déplacer périme cette copie
+                // (décision fondateur 2026-07-24). force : destruction confirmée.
+                $this->overlayManager->deletePeriodPlanForEntry($entry, force: true);
             }
 
             // ADR-0002 inv. 1 — VALIDER = POINTER. Seule vérité : « validé » se dérive

@@ -8,12 +8,7 @@ use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
-use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PeriodReminderLog;
-use App\Entity\Reservation;
-use App\Entity\TeamPeriodOverride;
-use App\Entity\VenuePeriodOverride;
-use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
@@ -343,32 +338,12 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * Les réglages ancrés à un plan de période (inv. 5, lots C2-C3) : overrides
-     * d'équipes et de contraintes, créneaux prêtés, réservations. Partagé par la
-     * cascade de suppression d'une période ET la découpe en semaines (qui emporte
-     * le plan-bloc de la mère). L'appelant flush.
+     * Les réglages ancrés à un plan de période : foyer canonique dans OverlayManager,
+     * partagé avec la reprise du socle qui détruit les mêmes plans (#8). L'appelant flush.
      */
     private function removePlanAnchoredSettings(string $schedulePlanId): void
     {
-        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            $this->entityManager->remove($override);
-        }
-        // …and the period's constraint toggles (which permanent constraints it disabled).
-        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            $this->entityManager->remove($override);
-        }
-        // Les créneaux prêtés pour cette période (« la mairie me prête ce gymnase
-        // POUR cet ajustement ») et ses réservations : des RÉPONSES, donc au plan.
-        foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
-            $this->entityManager->remove($slot);
-        }
-        foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
-            $this->entityManager->remove($reservation);
-        }
-        // #8 — le mode de chaque gymnase pour cette période : un réglage, donc ancré au plan.
-        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
-            $this->entityManager->remove($venueOverride);
-        }
+        $this->overlayManager->purgePlanAnchoredSettings($schedulePlanId);
     }
 
     /**

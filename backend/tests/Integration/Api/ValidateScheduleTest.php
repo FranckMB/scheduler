@@ -10,9 +10,14 @@ use App\Entity\ClubUser;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Enum\VenuePeriodMode;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -153,10 +158,12 @@ final class ValidateScheduleTest extends WebTestCase
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         $failed = $this->createSchedule($season, ScheduleStatus::FAILED);
         // Une VRAIE période (et son plan né du geste) : un overlay se rattache à un plan réel.
+        // ÉCHUE (relatif au présent) : depuis #8 c'est ce qui la met hors de portée de la
+        // reprise du socle — son planning a été joué, le nouveau socle ne le concerne pas.
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
-            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+            ->setStartDate(new DateTimeImmutable('-2 months'))->setEndDate(new DateTimeImmutable('-2 months +14 days'));
         $this->em->persist($entry);
         $this->em->flush();
         $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
@@ -172,7 +179,7 @@ final class ValidateScheduleTest extends WebTestCase
         self::assertSame($v2->getId(), $this->chosenPlanVersion($season));
         self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'sibling COMPLETED version deleted');
         self::assertNull($this->em->getRepository(Schedule::class)->find($failed->getId()), 'sibling FAILED version deleted');
-        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'an overlay is NEVER touched by a season-plan choice');
+        self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'le planning d\'une période ÉCHUE survit au changement de socle — il a été joué');
     }
 
     public function testValidateBlockedWhileSiblingIsGenerating(): void
@@ -201,7 +208,7 @@ final class ValidateScheduleTest extends WebTestCase
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Vacances')
-            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+            ->setStartDate(new DateTimeImmutable('+1 month'))->setEndDate(new DateTimeImmutable('+1 month +14 days'));
         $this->em->persist($entry);
         $this->em->flush();
         $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
@@ -240,7 +247,7 @@ final class ValidateScheduleTest extends WebTestCase
         $entry = (new CalendarEntry)
             ->setClubId($season->getClubId())->setSeasonId($season->getId())
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Vacances')
-            ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
+            ->setStartDate(new DateTimeImmutable('+1 month'))->setEndDate(new DateTimeImmutable('+1 month +14 days'));
         $this->em->persist($entry);
         $this->em->flush();
         $overlay = $this->createSchedule($season, ScheduleStatus::COMPLETED, $entry->getId());
@@ -259,6 +266,80 @@ final class ValidateScheduleTest extends WebTestCase
         $this->em->clear();
         self::assertNull($this->chosenPlanVersion($season), 'rien n\'est commité sur le 409');
         self::assertNotNull($this->em->getRepository(Schedule::class)->find($overlay->getId()), 'le plan secondaire survit tant que rien n\'est confirmé');
+    }
+
+    public function testChoosingAnotherSeasonVersionDestroysTheWholePlanOfAPeriodToCome(): void
+    {
+        // « Le planning de saison est notre base, donc on supprime TOUS les plannings
+        // overlay ou holidays qui sont à venir. Il faudra les recommencer. Je supprime
+        // les plannings et donc les versions liées » (décision fondateur 2026-07-24).
+        //
+        // Le cas qui échappait entièrement à l'ancienne garde : une période ADAPTÉE mais
+        // JAMAIS GÉNÉRÉE. Depuis #8 son plan naît du geste et possède aussitôt sa grille
+        // (copie du modèle de saison) ; comme il ne pointe aucune version, la garde —
+        // keyée sur chosenScheduleId — ne le voyait pas. Elle laissait donc vivre, sans
+        // le dire, la copie d'un socle qui n'existe plus, et la période gardait ses
+        // réglages en repartant d'une grille périmée.
+        [$user, $club, $season] = $this->seed('VAL12');
+        $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $this->choosePlanVersion($v1);
+
+        $venue = new Venue;
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName('Barros');
+        $venue->setCanSplit(false);
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+        $seasonal = $this->slot($club, $season, $venue->getId(), null);
+        $this->em->flush();
+
+        $entry = (new CalendarEntry)
+            ->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Toussaint')
+            ->setStartDate(new DateTimeImmutable('+1 month'))->setEndDate(new DateTimeImmutable('+1 month +7 days'));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        // Le geste « Adapter » : le plan naît AVEC sa grille, sans aucune version.
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->provisionPeriodPlan($entry->getId());
+        self::assertNotNull($planId);
+        $mode = new VenuePeriodOverride;
+        $mode->setClubId($club->getId());
+        $mode->setSeasonId($season->getId());
+        $mode->setSchedulePlanId($planId);
+        $mode->setVenueId($venue->getId());
+        $mode->setMode(VenuePeriodMode::DISABLED);
+        $this->em->persist($mode);
+        $this->em->flush();
+        $this->em->clear();
+        self::assertCount(1, $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId]), 'la période est née avec sa copie de la grille de saison');
+
+        $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
+        $jwt = self::getContainer()->get(JWTTokenManagerInterface::class)->create($user);
+        $auth = ['HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'CONTENT_TYPE' => 'application/json'];
+
+        // Une période SANS version validée est bel et bien annoncée : sinon le
+        // gestionnaire confirme une destruction dont il ignore la moitié.
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], $auth);
+        self::assertResponseStatusCodeSame(409);
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('overlays_exist', $body['code'] ?? null);
+        self::assertSame(['Toussaint'], array_column($body['overlays'] ?? [], 'title'));
+
+        $this->client->request('POST', "/api/schedules/{$v2->getId()}/validate", [], [], $auth, json_encode(['confirmDeleteOverlays' => true], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        $provisioner = self::getContainer()->get(SchedulePlanProvisioner::class);
+        self::assertNull($provisioner->periodPlanId($entry->getId()), 'le PLAN de la période est détruit, pas seulement ses versions');
+        self::assertSame([], $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId]), 'sa grille copiée part avec lui');
+        self::assertSame([], $this->em->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $planId]), 'ses réglages de gymnase aussi');
+        // Ce qui SURVIT : le modèle de saison (la base, qu'on vient justement de changer)
+        // et l'entrée au calendrier — la période retombe « à traiter », à refaire.
+        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seasonal), 'le créneau de SAISON est intact');
+        self::assertNotNull($this->em->getRepository(CalendarEntry::class)->find($entry->getId()), 'la période reste au calendrier, à refaire');
     }
 
     public function testFirstValidationWithoutOverlaysNeedsNoConfirmation(): void
@@ -334,6 +415,22 @@ final class ValidateScheduleTest extends WebTestCase
         $container = self::getContainer();
         $this->em = $container->get(EntityManagerInterface::class);
         $this->hasher = $container->get('security.user_password_hasher');
+    }
+
+    private function slot(Club $club, Season $season, string $venueId, ?string $schedulePlanId): string
+    {
+        $slot = new VenueTrainingSlot;
+        $slot->setClubId($club->getId());
+        $slot->setSeasonId($season->getId());
+        $slot->setVenueId($venueId);
+        $slot->setDayOfWeek(1);
+        $slot->setStartTime(new DateTimeImmutable('18:00'));
+        $slot->setDurationMinutes(90);
+        $slot->setCapacity(1);
+        $slot->setSchedulePlanId($schedulePlanId);
+        $this->em->persist($slot);
+
+        return $slot->getId();
     }
 
     /**

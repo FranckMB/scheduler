@@ -7,7 +7,6 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
-use App\Repository\CalendarEntryRepository;
 use App\Service\OverlayManager;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,7 +28,6 @@ final class ReopenScheduleController extends AbstractController implements Seaso
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-        private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly OverlayManager $overlayManager,
         private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
         private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
@@ -75,12 +73,12 @@ final class ReopenScheduleController extends AbstractController implements Seaso
             // qu'elle protège — les clé sur deux vérités différentes laissait un reopen
             // orphaniser des plans secondaires vivants sans jamais demander confirmation.
             if ($schedule->getId() === $this->schedulePlanProvisioner->chosenOfSeasonPlan($schedule->getSeasonId())) {
-                $overlays = $this->calendarEntryRepository->findWithOverlayByClubSeason($schedule->getClubId(), $schedule->getSeasonId());
+                $overlays = $this->overlayManager->periodPlansInvalidatedBySeasonChange($schedule->getClubId(), $schedule->getSeasonId());
                 if ([] !== $overlays) {
                     if (!$this->confirmedDeleteOverlays()) {
                         return $this->json([
                             'code' => 'overlays_exist',
-                            'error' => 'Rouvrir le planning de la saison supprime ses plannings secondaires.',
+                            'error' => 'Rouvrir le planning de la saison supprime les plannings de période à venir, qui devront être refaits.',
                             'count' => \count($overlays),
                             'overlays' => array_map(static fn (CalendarEntry $e): array => [
                                 'entryId' => $e->getId(),
@@ -89,9 +87,11 @@ final class ReopenScheduleController extends AbstractController implements Seaso
                         ], Response::HTTP_CONFLICT);
                     }
                     foreach ($overlays as $entry) {
+                        // Le PLAN entier (versions + grille copiée + réglages) : rouvrir le
+                        // socle périme la copie dont chaque période était partie.
                         // force: the user explicitly confirmed destroying the overlays,
                         // the one in force included (this IS the authorized destructive path).
-                        $this->overlayManager->deleteOverlayForEntry($entry, force: true);
+                        $this->overlayManager->deletePeriodPlanForEntry($entry, force: true);
                     }
                 }
             }
