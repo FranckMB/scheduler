@@ -63,7 +63,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
   // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
 
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
@@ -183,7 +183,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       setPickerFor(entry);
       return;
     }
-    adapt(entry.id);
+    // Bloc/fermeture : le plan naît du geste (adaptBlock) — adapt nu est réservé
+    // aux semaines-enfants, qui naissent avec le leur (ADR-0002 amendé 2026-07-24).
+    void adaptBlock(entry.id);
   };
 
   // A holiday already materialised as a period entry (matched by schoolHolidayId).
@@ -483,7 +485,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {
             setPickerFor(null);
-            adapt(pickerFor.id);
+            void adaptBlock(pickerFor.id);
           }}
           onClose={() => setPickerFor(null)}
         />

@@ -30,6 +30,7 @@ vi.mock("./queries", () => ({
   },
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useEntryConflicts: () => ({ data: undefined }),
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: undefined })),
   // RadarPanel dérive « version active » du plan de la période (lot D-b).

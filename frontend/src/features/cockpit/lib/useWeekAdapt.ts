@@ -3,7 +3,7 @@ import { useState } from "react";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry } from "../api";
-import { useCreateHolidayPeriod, useCreateWeekChildren, type WeekChildrenResult } from "../queries";
+import { useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, type WeekChildrenResult } from "../queries";
 import type { WeekWindow } from "./date";
 
 /** Vacance scolaire pas encore matérialisée en période mère (P2-5 E1). */
@@ -36,6 +36,22 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
   const [pendingHoliday, setPendingHoliday] = useState<PendingHoliday | null>(null);
   const createWeekChildren = useCreateWeekChildren();
   const createHoliday = useCreateHolidayPeriod();
+  const createPeriodPlan = useCreatePeriodPlan();
+
+  // LE GESTE « Adapter » un BLOC (mère entière / fermeture) — ADR-0002 amendé
+  // 2026-07-24 : la période n'a plus de plan à sa matérialisation, il naît ICI,
+  // AVANT startPeriodMode (sinon usePeriodAnchor attendrait à l'infini). Les
+  // SEMAINES, elles, naissent avec leur plan : leur adapt() reste direct.
+  // Idempotent côté serveur ; erreur (ex. 422 période découpée sur données
+  // périmées) relevée par le filet global des mutations — on ne navigue pas.
+  const adaptBlock = async (entryId: string): Promise<void> => {
+    try {
+      await createPeriodPlan.mutateAsync(entryId);
+      adapt(entryId);
+    } catch {
+      /* relevé par le filet global des mutations (queryClient.ts) */
+    }
+  };
 
   const announce = ({ created, failedCount }: WeekChildrenResult): void => {
     if (failedCount > 0) {
@@ -92,12 +108,13 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
     }
   };
 
-  // Chemin « d'un bloc » d'une vacance PAS encore créée : mère née puis adapt direct.
+  // Chemin « d'un bloc » d'une vacance PAS encore créée : mère née SANS plan
+  // (amendement 2026-07-24), puis le geste adaptBlock le crée et ouvre le wizard.
   const adaptWholePending = async (holiday: PendingHoliday): Promise<void> => {
     try {
       const mother = await createHoliday.mutateAsync(holiday);
       setPendingHoliday(null);
-      adapt(mother.id);
+      await adaptBlock(mother.id);
     } catch {
       /* relevé par le filet global des mutations */
     }
@@ -126,6 +143,8 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
     openPendingPicker,
     createWeekChildren,
     createHoliday,
+    createPeriodPlan,
+    adaptBlock,
     pickWeeks,
     pickWeeksPending,
     adaptWholePending,

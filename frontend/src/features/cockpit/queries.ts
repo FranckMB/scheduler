@@ -146,6 +146,20 @@ function invalidateEntries(queryClient: ReturnType<typeof useQueryClient>): void
   void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
 }
 
+/**
+ * LE GESTE « Adapter » (ADR-0002 amendé 2026-07-24) : crée le plan de la période
+ * AVANT d'ouvrir le wizard — une période n'a plus de plan à sa matérialisation,
+ * et usePeriodAnchor attendrait à l'infini sans lui. Idempotent côté serveur.
+ * L'invalidation du préfixe ["calendar-entries"] couvre "plan"/"plans".
+ */
+export function useCreatePeriodPlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (calendarEntryId: string) => cockpitApi.createSchedulePlan(calendarEntryId),
+    onSuccess: () => invalidateEntries(queryClient),
+  });
+}
+
 export function useCreateEvent() {
   const queryClient = useQueryClient();
   return useMutation({

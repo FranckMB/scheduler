@@ -10,6 +10,7 @@ import { MonthCalendar } from "./MonthCalendar";
 
 vi.mock("./queries", () => ({
   useCreateEvent: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateCutoff: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
