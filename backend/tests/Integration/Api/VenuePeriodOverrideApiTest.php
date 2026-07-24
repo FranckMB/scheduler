@@ -17,6 +17,7 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\LockLevel;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -302,6 +303,97 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
 
         $this->em->clear();
         self::assertSame(1, $this->countPeriodSlots($this->venueA), 'le créneau ressaisi à la main survit au ré-enregistrement');
+    }
+
+    // ── PR-B : « Reprendre la grille du planning principal » (action atomique) ──
+
+    public function testResetGridRecopiesTheSeasonModelForThatVenueOnly(): void
+    {
+        // Le geste que l'UI propose sur un gymnase en mode « hériter » — donc SANS ligne
+        // d'override, le cas courant. Le contournement client (poser VIERGE puis
+        // supprimer la ligne) laisserait une grille vidée si le second appel échouait.
+        $slot = $this->periodSlots($this->venueA)[0];
+        $this->em->remove($slot);
+        $this->em->flush();
+        self::assertSame(1, $this->countPeriodSlots($this->venueA), 'la grille de la période a été amputée d’un créneau');
+
+        $this->client->request('POST', '/api/venue_period_overrides/reset-grid', [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertSame($this->seasonSlotKeys($this->venueA), $this->periodSlotKeys($this->venueA), 'la grille du gymnase est celle du planning principal');
+        self::assertSame(1, $this->countPeriodSlots($this->venueB), 'le gymnase voisin n’a pas bougé');
+        self::assertSame(3, $this->countSeasonSlots(), 'et le planning principal reste intact');
+    }
+
+    public function testResetGridIsIdempotentAndNeverDuplicates(): void
+    {
+        // Rejouer le geste (double-clic, retry réseau) doit redonner la MÊME grille.
+        // Recopier sans vider d’abord doublerait chaque créneau — et un créneau en double
+        // au même horaire, c’est un gymnase réservé deux fois.
+        for ($i = 0; $i < 3; ++$i) {
+            $this->client->request('POST', '/api/venue_period_overrides/reset-grid', [], [], $this->headers(), json_encode([
+                'schedulePlanId' => $this->planId,
+                'venueId' => $this->venueA->getId(),
+            ], \JSON_THROW_ON_ERROR));
+            self::assertResponseIsSuccessful();
+        }
+
+        $this->em->clear();
+        self::assertSame($this->seasonSlotKeys($this->venueA), $this->periodSlotKeys($this->venueA));
+    }
+
+    public function testResetGridIsRefusedOnTheSeasonPlan(): void
+    {
+        // Invariant fondateur n°1 : le planning principal n’est JAMAIS modifié par une
+        // période. Visé sur le plan de saison, ce geste viderait la grille du club puis
+        // recopierait ses propres créneaux par-dessus eux-mêmes.
+        $seasonPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->ensureSeasonPlanId($this->season->getId());
+        self::assertIsString($seasonPlanId);
+
+        $this->client->request('POST', '/api/venue_period_overrides/reset-grid', [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $seasonPlanId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+        $this->em->clear();
+        self::assertSame(3, $this->countSeasonSlots(), 'la grille de saison est intacte');
+    }
+
+    public function testResetGridCarriesTheReservationsAndPinsOfTheVenue(): void
+    {
+        // Reprendre la grille DÉTRUIT : les réservations du gymnase et les verrous HARD
+        // qu’elles ont matérialisés partent avec ses créneaux. C’est assumé — c’est
+        // l’écran qui prévient avant (« un changement de créneau supprime tous les
+        // créneaux réservés du gymnase »). Ce qu’on garantit ici, c’est qu’ils ne
+        // survivent pas ORPHELINS : OrphanPinGuard refuserait ensuite toute génération.
+        $slot = $this->periodSlots($this->venueA)[0];
+        $reservation = (new Reservation)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)
+            ->setTeamId('11111111-1111-4111-8111-111111111111')
+            ->setVenueId($this->venueA->getId())
+            ->setDayOfWeek($slot->getDayOfWeek())->setStartTime($slot->getStartTime())->setDurationMinutes(90);
+        $hard = $this->slotTemplate($slot, LockLevel::HARD);
+        $this->em->persist($reservation);
+        $this->em->persist($hard);
+        $this->em->flush();
+        $reservationId = $reservation->getId();
+        $hardId = $hard->getId();
+
+        $this->client->request('POST', '/api/venue_period_overrides/reset-grid', [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(Reservation::class)->find($reservationId), 'la réservation part avec le créneau repris');
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($hardId), 'et le verrou HARD qu’elle avait matérialisé');
     }
 
     public function testAnotherClubNeitherSeesNorWritesTheOverride(): void

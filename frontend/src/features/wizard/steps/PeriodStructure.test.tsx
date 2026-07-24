@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,10 @@ const updateOverride = vi.fn();
 const deleteOverride = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
+// #8 PR-B : les gestes de mode et de grille par gymnase.
+const setMode = vi.fn();
+const clearMode = vi.fn();
+const resetGrid = vi.fn();
 const createConstraintOverride = vi.fn();
 const updateConstraintOverride = vi.fn();
 const deleteConstraintOverride = vi.fn();
@@ -36,6 +40,9 @@ const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
 const conflictState: { venueIds: string[] } = { venueIds: [] };
+const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" }> } = { data: [] };
+const reservationsState: { data: Array<{ id: string; venueId: string }> } = { data: [] };
+const venuePeriodOverridesAnchor: { value: string | null } = { value: null };
 const entryState: { data: { periodType: string } | undefined } = { data: { periodType: "closure" } };
 // ADR-0002 lot C: le garde de seed vit sur le PLAN, pas sur l'événement calendrier.
 // Les ancres REÇUES par les hooks de lecture. Sans les capturer, aucun test ne peut voir
@@ -81,6 +88,15 @@ vi.mock("../queries", () => ({
     return { mutate: createSlot, isPending: false };
   },
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
+  useVenuePeriodOverrides: (anchor: string | null) => {
+    venuePeriodOverridesAnchor.value = anchor;
+
+    return { data: overridesVenueState.data };
+  },
+  useSetVenuePeriodMode: () => ({ mutate: setMode, isPending: false }),
+  useClearVenuePeriodMode: () => ({ mutate: clearMode, isPending: false }),
+  useResetVenuePeriodGrid: () => ({ mutate: resetGrid, isPending: false }),
+  useReservations: () => ({ data: reservationsState.data }),
   useWizardConstraints: () => ({ data: constraintsState.data, isLoading: constraintsState.isLoading, isError: constraintsState.isError }),
   usePeriodConstraintOverrides: (anchor: string | null) => {
     constraintOverridesAnchor.value = anchor;
@@ -131,6 +147,11 @@ afterEach(() => {
   constraintOverridesLoadingState.value = false;
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
+  overridesVenueState.data = [];
+  reservationsState.data = [];
+  setMode.mockClear();
+  clearMode.mockClear();
+  resetGrid.mockClear();
   entryState.data = { periodType: "closure" };
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
   teamsState.data = [T1, T2];
@@ -254,20 +275,100 @@ describe("PeriodTeams — session guard", () => {
   });
 });
 
-describe("PeriodVenues — borrowed period slots", () => {
-  it("lists the period's borrowed slots and adds a new one", async () => {
+/**
+ * #8 PR-B — une carte par gymnase : un ÉTAT (actif/désactivé) qui ne touche jamais la
+ * grille, et deux ACTIONS destructives (reprendre / vider) confirmées avant de partir.
+ */
+describe("PeriodVenues — la grille de la période, gymnase par gymnase", () => {
+  it("montre la grille de la période et ajoute un créneau au clic sur une case", async () => {
     render(<PeriodVenues calendarEntryId="e1" />);
-    expect(screen.getByText(/Gymnase A — Mer 20:00/)).toBeInTheDocument();
+    // Le créneau de la période (Mer 20:00) est dessiné dans la grille.
+    expect(screen.getByTitle(/^20:00 .* cliquer pour modifier$/)).toBeInTheDocument();
 
-    await userEvent.selectOptions(screen.getByLabelText("Gymnase"), "v1");
-    await userEvent.click(screen.getByRole("button", { name: "Ajouter" }));
-    expect(createSlot).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOfWeek: 1, capacity: 1 }), expect.anything());
+    await userEvent.click(screen.getByRole("button", { name: "Lun 18:00" }));
+    expect(createSlot).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOfWeek: 1, startTime: "18:00", capacity: 1 }));
   });
 
-  it("marks a gym closed for the period as INTERDIT", () => {
+  it("marque un gymnase fermé par une contrainte datée", () => {
     conflictState.venueIds = ["v1"];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByText(/INTERDIT cette période/)).toBeInTheDocument();
+  });
+
+  it("désactiver un gymnase pose le mode, sans toucher à sa grille", async () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Désactiver" }));
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", mode: "DISABLED" }));
+    // Aucune écriture de grille : c'est toute la promesse du mode.
+    expect(createSlot).not.toHaveBeenCalled();
+    expect(deleteSlot).not.toHaveBeenCalled();
+    expect(resetGrid).not.toHaveBeenCalled();
+  });
+
+  it("réactiver retire la ligne et ne détruit RIEN — la grille revient telle quelle", async () => {
+    // Arbitrage fondateur : l'état actif/désactivé et la source de la grille sont deux
+    // contrôles distincts. Avec un sélecteur à 3 positions, réactiver aurait voulu dire
+    // « hériter », donc recopier la saison — et perdre les épinglages que désactiver
+    // avait justement préservés (revue #8, round 4).
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "DISABLED" }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Réactiver" }));
+    expect(clearMode).toHaveBeenCalledWith("o1");
+    expect(resetGrid).not.toHaveBeenCalled();
+    expect(deleteSlot).not.toHaveBeenCalled();
+  });
+
+  it("gèle la grille d'un gymnase désactivé au lieu de la laisser éditer", async () => {
+    // La table ne stocke qu'un mode par gymnase : « vider » écraserait l'état désactivé.
+    // On gèle donc la grille et on le DIT, plutôt que de perdre l'état en silence.
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "DISABLED" }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.getByText(/Désactivé cette période/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Reprendre la grille/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Vider la grille" })).toBeDisabled();
+  });
+
+  it("reprendre la grille prévient de ce qu'elle emporte, puis appelle l'action atomique", async () => {
+    // « J'informe le gestionnaire qu'un changement de créneau de gymnase va supprimer
+    // tous les créneaux réservés du gymnase » (fondateur).
+    reservationsState.data = [{ id: "r1", venueId: "v1" }, { id: "r2", venueId: "v1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.click(screen.getByRole("button", { name: /Reprendre la grille/ }));
+    expect(screen.getByText(/2 réservations sur ce gymnase seront supprimées/)).toBeInTheDocument();
+    expect(resetGrid).not.toHaveBeenCalled(); // rien avant la confirmation
+
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+    expect(resetGrid).toHaveBeenCalledWith("v1", expect.anything());
+  });
+
+  it("vider la grille passe par le mode VIERGE, après confirmation", async () => {
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.click(screen.getByRole("button", { name: "Vider la grille" }));
+    expect(setMode).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Vider" }));
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", mode: "BLANK" }), expect.anything());
+  });
+
+  it("depuis une grille VIERGE, reprendre passe par le retrait de la ligne (un seul appel)", async () => {
+    // Le DELETE vide ET recopie côté serveur : deux chemins pour un même geste, mais
+    // toujours UN appel — jamais la séquence « poser VIERGE puis supprimer », qui
+    // laisserait une grille vidée si le second échouait.
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "BLANK" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.click(screen.getByRole("button", { name: /Reprendre la grille/ }));
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+    expect(clearMode).toHaveBeenCalledWith("o1", expect.anything());
+    expect(resetGrid).not.toHaveBeenCalled();
   });
 });
 
@@ -299,7 +400,7 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     // gestionnaire une disponibilité qui n'était pas celle qu'on allait servir. Ici la
     // saison n'a aucun créneau et la période en a un : le compte doit être celui-là.
     render(<PeriodVenues calendarEntryId="e1" />);
-    expect(screen.getByText("1 créneau(x)")).toBeInTheDocument();
+    expect(screen.getByText("1 créneau")).toBeInTheDocument();
   });
 
   it("PeriodVenues lit les créneaux de sa grille par le PLAN", () => {
@@ -316,24 +417,18 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     expect(periodSlotWriteAnchor.value).toBe("plan-1");
   });
 
-  it("PeriodVenues n'écrit RIEN tant que le plan n'est pas résolu (sinon : sur le socle)", async () => {
-    const user = userEvent.setup();
+  it("PeriodVenues n'écrit RIEN tant que le plan n'est pas résolu (sinon : sur le socle)", () => {
+    // Sans ancre certaine, `null` est une ancre LÉGITIME (= le socle), donc le serveur
+    // accepterait : le créneau deviendrait PERMANENT et nourrirait toutes les
+    // générations de la saison. La carte n'est donc pas rendue du tout tant que le plan
+    // n'est pas résolu — plus de surface d'écriture, plus de garde à oublier.
     planState.data = undefined; // plan en cours de chargement, ou GET en échec
     render(<PeriodVenues calendarEntryId="e1" />);
-    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
 
-    // 1. protection visible : le bouton est refusé.
-    expect(screen.getByRole("button", { name: /Ajouter/ })).toBeDisabled();
-
-    // 2. protection de fond : le handler lui-même refuse. On soumet le formulaire
-    //    DIRECTEMENT — un clic ne prouverait rien, le bouton étant déjà désactivé (c'est
-    //    ce qui rendait la première version de ce test décorative : elle passait sans la
-    //    garde). Enter dans un champ, un submit programmatique ou une régression du
-    //    `disabled` passeraient par ici.
-    fireEvent.submit(screen.getByLabelText("Gymnase").closest("form") as HTMLFormElement);
+    expect(screen.getByText(/Chargement des créneaux de la période/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lun 18:00" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Désactiver" })).toBeNull();
     expect(createSlot).not.toHaveBeenCalled();
-
-    // 3. et une fois le plan résolu, l'écriture part — avec l'ancre du PLAN.
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
   });
 
@@ -352,10 +447,8 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
   });
 
   it("PeriodVenues écrit dès que le plan est résolu", async () => {
-    const user = userEvent.setup();
     render(<PeriodVenues calendarEntryId="e1" />);
-    await user.selectOptions(screen.getByLabelText("Gymnase"), "v1");
-    await user.click(screen.getByRole("button", { name: /Ajouter/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Lun 18:00" }));
     expect(createSlot).toHaveBeenCalled();
     expect(periodSlotWriteAnchor.value).toBe("plan-1");
   });

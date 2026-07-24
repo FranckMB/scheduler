@@ -139,6 +139,57 @@ export function useGridSlots(schedulePlanId: string | null) {
   return null === schedulePlanId ? seasonal : period;
 }
 
+// --- #8 : le mode d'un gymnase pour une période (sparse) + la reprise de sa grille ---
+
+export function useVenuePeriodOverrides(schedulePlanId: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "venue_period_overrides", schedulePlanId],
+    queryFn: () => wizardApi.listVenuePeriodOverrides(schedulePlanId as string),
+    enabled: null !== schedulePlanId,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Toute écriture de mode PEUT refaire la grille du gymnase côté serveur (VIERGE la vide,
+ * le retour à « hériter » depuis VIERGE la recopie). On invalide donc les créneaux de la
+ * période EN PLUS des overrides — sans quoi l'écran affiche une grille que le serveur
+ * vient de détruire, et le gestionnaire épingle sur des créneaux qui n'existent plus.
+ */
+function invalidatePeriodGrid(queryClient: ReturnType<typeof useQueryClient>, schedulePlanId: string | null): void {
+  void queryClient.invalidateQueries({ queryKey: ["wizard", "venue_period_overrides", schedulePlanId] });
+  void queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] });
+}
+
+export function useSetVenuePeriodMode(schedulePlanId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ venueId, mode, existingId }: { venueId: string; mode: wizardApi.VenuePeriodMode; existingId?: string }) =>
+      undefined === existingId
+        ? wizardApi.createVenuePeriodOverride({ schedulePlanId: schedulePlanId as string, venueId, mode })
+        : wizardApi.updateVenuePeriodOverride(existingId, { schedulePlanId: schedulePlanId as string, venueId, mode }),
+    onSuccess: () => invalidatePeriodGrid(queryClient, schedulePlanId),
+  });
+}
+
+/** Retour au défaut « hériter » : réactive un gymnase désactivé sans toucher à sa grille. */
+export function useClearVenuePeriodMode(schedulePlanId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => wizardApi.deleteVenuePeriodOverride(id),
+    onSuccess: () => invalidatePeriodGrid(queryClient, schedulePlanId),
+  });
+}
+
+/** « Reprendre la grille du planning principal » — destructif, confirmé côté UI. */
+export function useResetVenuePeriodGrid(schedulePlanId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (venueId: string) => wizardApi.resetVenuePeriodGrid(schedulePlanId as string, venueId),
+    onSuccess: () => invalidatePeriodGrid(queryClient, schedulePlanId),
+  });
+}
+
 export function useCreatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({

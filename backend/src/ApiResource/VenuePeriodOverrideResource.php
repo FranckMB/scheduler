@@ -30,6 +30,17 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post,
     new Put,
     new Delete,
+    // « Reprendre la grille du planning principal » pour UN gymnase (#8, PR-B).
+    // Action, pas état : le mode stocké dit comment le gymnase se comporte, ce geste
+    // refait sa grille. Atomique — l'équivalent côté client (poser VIERGE puis
+    // supprimer la ligne) laisserait une grille vidée si le second appel échouait.
+    new Post(
+        uriTemplate: '/venue_period_overrides/reset-grid',
+        controller: 'App\\Controller\\ResetVenuePeriodGridController',
+        input: false,
+        read: false,
+        name: 'reset_venue_period_grid',
+    ),
 ], input: VenuePeriodOverrideInput::class, paginationEnabled: false, provider: VenuePeriodOverrideStateProvider::class, processor: VenuePeriodOverrideStateProcessor::class)]
 #[ApiFilter(SearchFilter::class, properties: ['schedulePlanId' => 'exact', 'venueId' => 'exact'])]
 class VenuePeriodOverrideResource
