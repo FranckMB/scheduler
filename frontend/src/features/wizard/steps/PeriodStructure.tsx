@@ -517,21 +517,24 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
   if (!isOverlay) {
     return null;
   }
-  // Calculés UNE fois : la garde de chargement et la liste filtrée pilotent à la fois le
-  // retour anticipé par onglet et le rendu — les dupliquer ferait diverger les deux
-  // (c'est exactement ce qui a produit les régressions de la revue round 1).
-  const queriesLoading = isLoading || overridesLoading || teamOverridesLoading;
   const visible = constraints.filter(shown);
-  // Dans un onglet, on ne rend RIEN quand il n'y a rien à montrer — l'EmptyHint global n'a
-  // de sens que pour la liste complète. Règles apprises en revue (#284 round 1) :
-  // - PENDANT le chargement : rien non plus. Rendre le cadre titré puis le retirer une fois
-  //   l'onglet connu vide produit un flash et un saut de mise en page à chaque première
-  //   ouverture de l'étape (les requêtes désactivées tant que le plan n'est pas résolu
-  //   rapportent isLoading=false, d'où un scintillement en trois temps).
-  // - SUR ERREUR de chargement des contraintes : on rend malgré tout (P4-1). Une liste vide
-  //   par échec n'est pas « rien à hériter » : masquer laisserait le gestionnaire conclure
-  //   qu'aucune permanente ne s'applique et valider la période à tort.
-  if (undefined !== family && !constraintsError && (queriesLoading || 0 === visible.length)) {
+  // DEUX niveaux de chargement, à ne pas confondre (revue #284 round 2) :
+  // - PRÉSENCE de la section : ce qui décide QUELLES contraintes s'affichent — la requête
+  //   des contraintes de base, plus la résolution des tags dont `hidden` dépend. Les
+  //   overrides n'en font PAS partie : ils ne pilotent que l'ÉTAT des cases. Les y inclure
+  //   faisait disparaître puis réapparaître la section quand le plan se résolvait (les
+  //   requêtes d'override, désactivées tant que planId est null, rapportent isLoading=false
+  //   avant de basculer à true) — un saut de mise en page pire que le flash corrigé.
+  // - CORPS : attend en plus les overrides, sinon les cases s'afficheraient au mauvais état.
+  const presenceSettled = !isLoading && tagResolutionReady;
+  const bodyLoading = !presenceSettled || overridesLoading || teamOverridesLoading;
+  // Dans un onglet, on ne rend RIEN tant qu'il n'y a rien à montrer (l'EmptyHint global n'a
+  // de sens que pour la liste complète) : rien pendant que la présence se décide — sinon le
+  // cadre titré apparaît puis disparaît — et rien si l'onglet est vide une fois décidée.
+  // Une fois la section rendue, elle ne peut plus disparaître : `visible` ne dépend que de
+  // requêtes déjà résolues. SUR ERREUR des contraintes, on rend malgré tout (P4-1) : une
+  // liste vide par échec n'est pas « rien à hériter ».
+  if (undefined !== family && !constraintsError && (!presenceSettled || 0 === visible.length)) {
     return null;
   }
 
@@ -539,12 +542,17 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
       <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
-      {/* Wait for all three queries to LOAD (constraints, the period's own overrides — else a
-          toggle 422s on an existing row — and team overrides, which drive the reprise default
-          + the non-applicable strike). On a fetch ERROR we still render: the backend stays
-          authoritative on the payload, so a transient error only glitches the strike, and
-          hiding the whole panel would strand the closure editor (query-error UX = dette P4-1). */}
-      {queriesLoading ? null : 0 === visible.length ? (
+      {/* Le corps attend les requêtes qui pilotent l'ÉTAT des cases (overrides de la période —
+          sinon un toggle 422 sur une ligne existante — et overrides d'équipes, qui donnent le
+          défaut reprise et le barré non-applicable). Sur ERREUR des contraintes on le dit
+          explicitement : afficher « Aucune contrainte permanente » serait le mensonge exact
+          que le panneau doit éviter — le gestionnaire validerait la période en croyant que
+          rien n'est hérité (revue #284 round 2). */}
+      {constraintsError ? (
+        <p className="text-xs text-destructive">
+          Impossible de charger les contraintes du planning principal. Elles restent appliquées selon leur réglage actuel — rechargez la page pour les ajuster.
+        </p>
+      ) : bodyLoading ? null : 0 === visible.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">

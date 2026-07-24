@@ -29,6 +29,7 @@ const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">)
 });
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; schedulePlanId: string }> } = { data: [] };
 const tagsState: { data: Array<{ id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }> } = { data: [] };
+const tagsLoadingState = { value: false };
 const tagAssignmentsState: { data: Array<{ id: string; teamId: string; tagId: string; seasonId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
@@ -86,8 +87,8 @@ vi.mock("../queries", () => ({
 
     return { data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value };
   },
-  useWizardTeamTags: () => ({ data: tagsState.data, isLoading: false, isError: false }),
-  useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: false, isError: false }),
+  useWizardTeamTags: () => ({ data: tagsState.data, isLoading: tagsLoadingState.value, isError: false }),
+  useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: tagsLoadingState.value, isError: false }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
   useUpdatePeriodConstraintOverride: () => ({ mutate: updateConstraintOverride, isPending: false }),
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
@@ -123,6 +124,7 @@ afterEach(() => {
   constraintsState.isError = false;
   constraintOverridesState.data = [];
   tagsState.data = [];
+  tagsLoadingState.value = false;
   tagAssignmentsState.data = [];
   teamOverridesLoadingState.value = false;
   teamOverridesErrorState.value = false;
@@ -373,22 +375,45 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // Revue #284 round 1 : masquer sur ERREUR laisserait le gestionnaire conclure qu'aucune
-  // permanente n'est héritée et valider la période à tort (P4-1 : on rend malgré l'erreur).
-  it("family filter: still renders the panel when the constraints query ERRORS (never 'nothing inherited')", () => {
+  // Revue #284 : sur ERREUR on rend le panneau AVEC un message d'erreur explicite. Le
+  // masquer, ou pire afficher « Aucune contrainte permanente », laisserait le gestionnaire
+  // conclure que rien n'est hérité et valider la période à tort (P4-1).
+  it("family filter: on a constraints-query ERROR, renders the panel and says so — never 'aucune contrainte'", () => {
     constraintsState.data = [];
     constraintsState.isError = true;
     render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
     expect(screen.getByText("Contraintes du planning principal")).toBeInTheDocument();
+    expect(screen.getByText(/Impossible de charger les contraintes/)).toBeInTheDocument();
+    expect(screen.queryByText("Aucune contrainte permanente.")).toBeNull();
   });
 
-  // Revue #284 round 1 : le cadre titré ne doit pas apparaître puis disparaître (flash +
-  // saut de mise en page) sur un onglet qui finira vide.
-  it("family filter: renders nothing WHILE LOADING on a tab that will end up empty (no flash)", () => {
-    constraintsState.data = [];
+  // Revue #284 round 2 : la présence de la section attend que les contraintes soient
+  // RÉSOLUES — sinon le cadre titré apparaît puis disparaît. Données NON VIDES : sans ça le
+  // test passerait aussi sans la garde (il serait vacant — c'était le défaut du round 1).
+  it("family filter: renders nothing WHILE the constraints query is loading, even with data pending", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
     constraintsState.isLoading = true;
     const { container } = render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 round 2 : `hidden()` dépend de la résolution des TAGS — décider la présence
+  // avant qu'ils n'arrivent ferait apparaître une contrainte taguée puis la retirer.
+  it("family filter: renders nothing while the TAG queries are still resolving (hidden() depends on them)", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h pour les féminines", family: "TIME", config: { targetTag: "FEMININE" } })];
+    tagsLoadingState.value = true;
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 round 2 : une fois rendue, la section ne doit PLUS disparaître quand les
+  // requêtes d'override basculent en chargement (plan qui se résout) — c'est le saut de
+  // mise en page introduit par le round 1.
+  it("family filter: stays rendered while the OVERRIDE queries load (they drive state, not presence)", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
+    constraintOverridesLoadingState.value = true;
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByText("Contraintes du planning principal")).toBeInTheDocument();
   });
 
   it("closure: lists the club's permanent constraints, all kept by default", () => {

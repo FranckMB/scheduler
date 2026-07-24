@@ -40,10 +40,15 @@ vi.mock("../queries", () => ({
   useDeleteReservation: () => ({ mutate: h.resDelete }),
 }));
 
+// Contrat réel de usePeriodAnchor : sans entrée (mode saison) l'ancre est la BASE
+// (planId null, ready true) ; avec une entrée, le plan de la période — et `ready` reste
+// FAUX tant qu'il n'est pas résolu. `periodAnchorReady` est pilotable pour que la garde
+// anchorReady (qui protège les réservations d'un atterrissage sur le socle) reste
+// exerçable par les tests (revue #284 round 2).
+const periodAnchorReady = vi.hoisted(() => ({ value: true }));
 vi.mock("@/features/cockpit/queries", () => ({
-  // Contrat réel : sans entrée (mode saison) l'ancre est la BASE (null) ; avec une
-  // entrée (mode période) le plan est résolu.
-  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: true } : { planId: "plan-1", ready: true }),
+  usePeriodAnchor: (entryId: string | null) =>
+    null === entryId ? { planId: null, ready: true } : { planId: periodAnchorReady.value ? "plan-1" : null, ready: periodAnchorReady.value },
 }));
 // Stub : le comportement interne de PeriodConstraints est couvert par
 // PeriodStructure.test — ici on ne teste que son PLACEMENT par onglet (#9).
@@ -453,6 +458,7 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
 describe("ConstraintsStep — inherited section lives inside the family tabs (period mode)", () => {
   beforeEach(() => {
     h.list = [];
+    periodAnchorReady.value = true;
     useWizardStore.getState().startPeriodMode("entry-9");
   });
   afterEach(() => {
@@ -484,6 +490,13 @@ describe("ConstraintsStep — inherited section lives inside the family tabs (pe
     await userEvent.click(screen.getByRole("button", { name: "Horaires" }));
     // Même noeud DOM de bout en bout : aucun démontage/remontage entre les onglets.
     expect(screen.getByTestId("inherited-section")).toBe(before);
+  });
+
+  it("waits for the period plan before offering the reservation panel (no write on the base plan)", async () => {
+    periodAnchorReady.value = false;
+    renderWithProviders(<ConstraintsStep />);
+    await userEvent.click(screen.getByRole("button", { name: /Réserver/ }));
+    expect(screen.getByText(/Chargement du planning de la période/)).toBeInTheDocument();
   });
 
   it("renders NO inherited section outside period mode", () => {
