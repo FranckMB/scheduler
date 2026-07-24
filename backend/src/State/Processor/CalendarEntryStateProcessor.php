@@ -207,7 +207,12 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             $output = parent::processPost($input, $clubId, $seasonId);
             if (null !== $input->parentEntryId) {
                 // Découpe : le plan-bloc de la mère (0 version) meurt avec ses
-                // réglages — sous le verrou déjà tenu (deletePeriodPlan est ré-entrant).
+                // réglages. Le verrou du plan-scope pris en TÊTE de branche est un
+                // verrou de TRANSACTION (pg_advisory_xact_lock, tenu jusqu'au commit) :
+                // cette lecture et la suppression sont sérialisées avec un POST
+                // /schedule_plans concurrent (même scope) — et le wrapInTransaction
+                // englobant rend réglages+plan+entrée atomiques (l'imbriqué de
+                // deletePeriodPlan est un no-op Doctrine).
                 $motherPlanId = $this->schedulePlanProvisioner->periodPlanId($input->parentEntryId);
                 if (null !== $motherPlanId) {
                     $this->removePlanAnchoredSettings($motherPlanId);
