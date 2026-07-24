@@ -85,12 +85,13 @@ class SeasonStateProcessor extends AbstractStateProcessor
     protected function createEntityFromInput(object $input): Season
     {
         $entity = new Season;
-        if (null !== $input->name) {
-            $entity->setName($input->name);
-        }
         if (null === $input->startDate || null === $input->endDate) {
             throw new \ApiPlatform\Validator\Exception\ValidationException('startDate and endDate are required to create a season.');
         }
+        // Nom absent/blanc → défaut « 2026-2027 » dérivé de la fenêtre (jamais une
+        // saison sans nom ni un nom mono-année — décision fondateur 2026-07-24).
+        $name = null !== $input->name ? trim($input->name) : '';
+        $entity->setName('' !== $name ? $name : SeasonResolver::defaultSeasonName($input->startDate));
         $entity->setStartDate($input->startDate);
         $entity->setEndDate($input->endDate);
         if (null !== $input->status) {

@@ -118,6 +118,20 @@ final class SeasonResolver
     }
 
     /**
+     * Nom par défaut d'une saison : « 2026-2027 » (année de début–année de fin),
+     * jamais « 2026 » seul — une saison est à cheval sur deux années civiles et un
+     * nom mono-année est ambigu (décision fondateur 2026-07-24). Dérivé de la
+     * fenêtre via seasonYear (pivot 15 juillet) : un start au 2026-08-01 comme au
+     * 2026-07-15 donne « 2026-2027 ».
+     */
+    public static function defaultSeasonName(DateTimeImmutable $startDate): string
+    {
+        $year = self::seasonYear($startDate);
+
+        return $year . '-' . ($year + 1);
+    }
+
+    /**
      * All seasons of the club, oldest first (startDate ASC).
      *
      * @return list<Season>

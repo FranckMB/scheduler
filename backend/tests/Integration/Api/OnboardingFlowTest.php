@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Service\SeasonResolver;
 use App\Tests\VerifiesRegistration;
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -68,6 +70,13 @@ final class OnboardingFlowTest extends WebTestCase
         self::assertNull($me['seasonPlan']['chosenScheduleId']);
         self::assertFalse($me['seasonPlan']['hasFinishedVersion']);
         self::assertGreaterThan($me['seasons'][0]['startDate'], $me['seasons'][0]['endDate']);
+        // NR (fondateur 2026-07-24) : nom « YYYY-YYYY+1 » (jamais mono-année, ambigu)
+        // et fenêtre alignée sur le pivot système du 15 juillet — un club inscrit en
+        // janvier rejoint la saison EN COURS, pas une saison future.
+        $seasonYear = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+        self::assertSame($seasonYear . '-' . ($seasonYear + 1), $me['seasons'][0]['name'], 'le nom par défaut couvre les deux années civiles');
+        self::assertSame($seasonYear . '-07-15', $me['seasons'][0]['startDate'], 'la fenêtre démarre au pivot système (15 juillet)');
+        self::assertSame(($seasonYear + 1) . '-07-14', $me['seasons'][0]['endDate'], 'la fenêtre finit la veille du pivot suivant');
 
         // 3. Minimal data: one team, one gym with a slot, one coach.
         $categoryId = $this->get('/api/sport_categories')['member'][0]['id'];

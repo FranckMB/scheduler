@@ -644,12 +644,17 @@ final class AuthController extends AbstractController
 
     private function seedNewClub(Club $club): void
     {
-        $currentYear = (int) (new DateTimeImmutable)->format('Y');
+        // La saison COURANTE au sens du pivot système (15 juillet, SeasonResolver) —
+        // pas l'année civile : un club inscrit en janvier 2027 rejoint la saison
+        // 2026-2027 en cours, pas une saison future. Fenêtre alignée sur le pivot
+        // (15/07 → 14/07), nom « 2026-2027 » (décision fondateur 2026-07-24 :
+        // jamais « 2026 » seul — ambigu sur une saison à cheval).
+        $seasonYear = SeasonResolver::seasonYear(new DateTimeImmutable);
         $season = new Season;
         $season->setClubId($club->getId());
-        $season->setName((string) $currentYear);
-        $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
-        $season->setEndDate(new DateTimeImmutable(($currentYear + 1) . '-07-15'));
+        $season->setName(SeasonResolver::defaultSeasonName(new DateTimeImmutable($seasonYear . '-07-15')));
+        $season->setStartDate(new DateTimeImmutable($seasonYear . '-07-15'));
+        $season->setEndDate(new DateTimeImmutable(($seasonYear + 1) . '-07-14'));
         $season->setStatus('active');
         $season->setTransitionData([]);
         $this->entityManager->persist($season);
