@@ -73,8 +73,9 @@ final class JsonNullKeysTest extends WebTestCase
     {
         [$user, $club] = $this->seed('JNK2');
 
-        // La closure provisionne son plan (né du geste) — jamais validé ici :
-        // chosenScheduleId est null et la clé doit rester présente.
+        // Le plan naît du geste Adapter (ADR-0002 amendé 2026-07-24) — on le crée
+        // explicitement ; jamais validé ici : chosenScheduleId est null et la clé
+        // doit rester présente.
         $this->post($user, $club, [
             'kind' => 'period',
             'title' => 'Fermeture non validée',
@@ -82,6 +83,12 @@ final class JsonNullKeysTest extends WebTestCase
             'endDate' => '2026-05-10',
             'periodType' => 'closure',
         ]);
+        self::assertResponseStatusCodeSame(201);
+        $entryId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+        $this->client->request('POST', '/api/schedule_plans', [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(201);
 
         $this->client->request('GET', '/api/schedule_plans', [], [], [

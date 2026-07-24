@@ -254,7 +254,13 @@ final class CalendarEntryApiTest extends WebTestCase
         $constraintId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
 
         // Disable it for the period (sparse override). Ancré au PLAN depuis le lot C2
-        // (inv. 5) — le plan de la période existe déjà, il est né du geste (POST ci-dessus).
+        // (inv. 5) — le plan naît du geste Adapter (ADR-0002 amendé 2026-07-24) :
+        // on le crée explicitement avant d'y accrocher le réglage.
+        $this->client->request('POST', '/api/schedule_plans', [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
         $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->periodPlanId($entryId);
         self::assertIsString($planId);
         $this->client->request('POST', '/api/constraint_period_overrides', [], [], [
