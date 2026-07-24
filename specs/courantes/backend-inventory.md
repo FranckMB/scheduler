@@ -94,7 +94,8 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | 17 | CoachPlayerMembership | `/api/coach-player-memberships` | Entraîneurs aussi joueurs | |
 | 18 | TeamTag | `/api/team-tags` | Étiquettes d'équipe | |
 | 19 | TeamTagAssignment | `/api/team-tag-assignments` | Assignations d'étiquettes | |
-| 20 | VenueTrainingSlot | `/api/venue-training-slots` | Créneaux d'entraînement de salle | |
+| 20 | VenueTrainingSlot | `/api/venue_training_slots` | Créneaux d'entraînement de salle — saisonniers (`schedulePlanId` null) ou d'un plan de période (copie du modèle de saison faite à la naissance du plan, #8 : jamais d'union entre les deux couches, l'anti-chevauchement est borné à une même couche) | |
+| — | VenuePeriodOverride | `/api/venue_period_overrides` | Mode d'un gymnase pour une période (#8) : sparse par (`schedulePlanId`, `venueId`), `DISABLED`\|`BLANK` — pas de ligne = hériter la grille de saison. DÉSACTIVÉ conserve la grille mais sort le gymnase du payload engine ; VIERGE la vide ; DELETE (retour à hériter) la revide puis la recopie | |
 | — | CalendarEntry | `/api/calendar-entries` | Cockpit temporel : périodes/événements (kind PERIOD/EVENT ; overlay planning via `overlayScheduleId`) | Opération custom conflits (§3) |
 | — | Competition | `/api/competitions` | Compétitions FFBB (championnat/coupe/brassage) — module matchs palier A | season-scoped |
 | — | Fixture | `/api/fixtures` | Rencontres (HOME/AWAY, placement domicile, `externalRef` = n° FBI) | Ops custom conflits + import FBI (§3) |
@@ -155,7 +156,7 @@ parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont sp
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
-| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Gate management (`assertManager`, SEC-07). Vérifie l'appartenance du schedule au club courant, **borne de complexité A10 pré-dispatch** (`GenerationComplexityGuard` : teams ≤200 · venues ≤50 · slots ≤3000 · contraintes permanentes ≤500 · teams×venues ≤2000 → **422** avant toute mise en queue, statut inchangé, #156), passe le statut à `PENDING`, marque `onboardingCompleted=true` à la première génération, dispatche `GenerateScheduleMessage`. Retourne 202. |
+| `/api/schedules/{id}/generate` | POST | `GenerateScheduleController` | Lance la génération asynchrone. Gate management (`assertManager`, SEC-07). Vérifie l'appartenance du schedule au club courant, **borne de complexité A10 pré-dispatch** (`GenerationComplexityGuard` : teams ≤200 · venues ≤50 · slots ≤3000 · contraintes permanentes ≤500 · teams×venues ≤2000 → **422** avant toute mise en queue, statut inchangé, #156), **épinglage orphelin sur un planning de période** (`OrphanPinGuard`, #8) : un verrou HARD ou une réservation qui ne retombe plus sur aucun créneau de la grille de la période (grille refaite : page blanche, recopie, gymnase désactivé) → **422** nommant le gymnase et le jour, passe le statut à `PENDING`, marque `onboardingCompleted=true` à la première génération, dispatche `GenerateScheduleMessage`. Retourne 202. |
 
 ### Cycle de vie du planning (pointeur du plan — ADR-0002)
 
@@ -163,8 +164,8 @@ parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont sp
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
-| `/api/schedules/{id}/validate` | POST | `ValidateScheduleController` | **Pointe** la version sur son plan **et supprime les versions sœurs** du même périmètre (inv. 1 — plus d'archivage). Gate management (SEC-07) + contrôle club courant (403 sinon). 409 si le statut n'est pas `COMPLETED`, si une sœur est `PENDING`/`GENERATING`, ou (`overlays_exist`) si déplacer le pointeur de la saison détruirait des plans secondaires — confirmer par `{"confirmDeleteOverlays": true}`. |
-| `/api/schedules/{id}/reopen` | POST | `ReopenScheduleController` | Inverse : le plan **dépointe** la version, qui survit et redevient éditable (inv. 2). Gate management (SEC-07). 409 si la version n'est pas celle que pointe son plan ; 409 `overlays_exist` si le calendrier de la saison porte des plans secondaires. |
+| `/api/schedules/{id}/validate` | POST | `ValidateScheduleController` | **Pointe** la version sur son plan **et supprime les versions sœurs** du même périmètre (inv. 1 — plus d'archivage). Gate management (SEC-07) + contrôle club courant (403 sinon). 409 si le statut n'est pas `COMPLETED`, si une sœur est `PENDING`/`GENERATING`, ou (`overlays_exist`) si choisir une **autre** version de saison détruirait des plans secondaires — confirmer par `{"confirmDeleteOverlays": true}` ; portée et destruction : voir `/reopen`. |
+| `/api/schedules/{id}/reopen` | POST | `ReopenScheduleController` | Inverse : le plan **dépointe** la version, qui survit et redevient éditable (inv. 2). Gate management (SEC-07). 409 si la version n'est pas celle que pointe son plan ; 409 `overlays_exist` si le socle porte des plans de période **non échus** (validés ou non, décision fondateur 2026-07-24, ADR-0002 inv. 14) — confirmés, ils sont détruits **de bout en bout** (versions + plan + grille copiée + réglages) ; l'entrée de calendrier survit, « à traiter » de nouveau. |
 | `/api/schedule_plans/{id}` | PUT | `SchedulePlanStateProcessor` | Renomme le plan — le **nom appartient au plan** (inv. 12). Gate management (SEC-07). |
 
 ### Réordonnancement des équipes
