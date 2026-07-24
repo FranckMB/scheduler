@@ -348,6 +348,29 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
 });
 
 describe("PeriodConstraints — inherited constraints toggle", () => {
+  // ── Fondateur 2026-07-24 (#9) : la section vit DANS l'onglet de sa famille ──
+  it("family filter: only shows inherited constraints of the given family tab", () => {
+    constraintsState.data = [
+      constraint({ id: "kt", name: "Pas après 20h", family: "TIME" }),
+      constraint({ id: "kd", name: "Pas le dimanche", family: "DAY" }),
+    ];
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Pas le dimanche appliquée cette période" })).toBeNull();
+  });
+
+  it("family filter: FACILITY_CAPACITY (no tab of its own) files under the Gymnase tab", () => {
+    constraintsState.data = [constraint({ id: "kc", name: "Capacité Barros", family: "FACILITY_CAPACITY", scope: "FACILITY" })];
+    render(<PeriodConstraints calendarEntryId="e1" family="FACILITY" />);
+    expect(screen.getByRole("checkbox", { name: "Capacité Barros appliquée cette période" })).toBeInTheDocument();
+  });
+
+  it("family filter: renders NOTHING (not an empty section) when the tab has no inherited constraint", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="COACH_AVAILABILITY" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("closure: lists the club's permanent constraints, all kept by default", () => {
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);

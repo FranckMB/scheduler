@@ -361,9 +361,6 @@ export function ConstraintsStep() {
         sur l'écran <strong>Gymnases</strong> (1 ou 2 équipes par créneau).
       </p>
 
-      {/* Period overlay: toggle the club's permanent constraints off for a closure. */}
-      {periodEntryId ? <PeriodConstraints calendarEntryId={periodEntryId} /> : null}
-
       {/* Family + reservation tabs */}
       <div className="mb-3 flex flex-wrap gap-1 border-b border-border">
         {FAMILIES.map((f) => {
@@ -414,6 +411,10 @@ export function ConstraintsStep() {
         )
       ) : (
         <>
+          {/* Mode période : les contraintes HÉRITÉES du planning principal vivent DANS
+              l'onglet de leur famille, au-dessus des contraintes propres à la période
+              (fondateur 2026-07-24 — plus d'écran à part au-dessus des onglets). */}
+          {periodEntryId ? <PeriodConstraints calendarEntryId={periodEntryId} family={family} /> : null}
           {/* Per-family add form */}
           <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         {("TIME" === family || "DAY" === family || "FACILITY" === family) && teamPicker}

@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
@@ -40,7 +40,19 @@ vi.mock("../queries", () => ({
   useDeleteReservation: () => ({ mutate: h.resDelete }),
 }));
 
+vi.mock("@/features/cockpit/queries", () => ({
+  // Contrat réel : sans entrée (mode saison) l'ancre est la BASE (null) ; avec une
+  // entrée (mode période) le plan est résolu.
+  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: true } : { planId: "plan-1", ready: true }),
+}));
+// Stub : le comportement interne de PeriodConstraints est couvert par
+// PeriodStructure.test — ici on ne teste que son PLACEMENT par onglet (#9).
+vi.mock("./PeriodStructure", () => ({
+  PeriodConstraints: ({ family }: { family?: string }) => <div data-testid="inherited-section">{family ?? "all"}</div>,
+}));
+
 import { ConstraintsStep } from "./ConstraintsStep";
+import { useWizardStore } from "../store";
 
 /**
  * Freezes the UI OFFER side of the constraint matrix (audit P0.1): the rule
@@ -433,5 +445,37 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     const picker = screen.getByLabelText("Ajouter une équipe");
     expect(within(picker).queryByRole("option", { name: "Fanion" })).toBeNull();
     expect(within(picker).getByRole("option", { name: "SM1" })).toBeInTheDocument();
+  });
+});
+
+
+// ── #9 (fondateur 2026-07-24) : la section héritée vit DANS l'onglet de sa famille ──
+describe("ConstraintsStep — inherited section lives inside the family tabs (period mode)", () => {
+  beforeEach(() => {
+    h.list = [];
+    useWizardStore.getState().startPeriodMode("entry-9");
+  });
+  afterEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+  });
+
+  it("renders the inherited section inside the ACTIVE family tab and follows tab changes", async () => {
+    renderWithProviders(<ConstraintsStep />);
+
+    // Onglet par défaut = Horaires (TIME).
+    expect(screen.getByTestId("inherited-section")).toHaveTextContent("TIME");
+
+    await userEvent.click(screen.getByRole("button", { name: "Jours" }));
+    expect(screen.getByTestId("inherited-section")).toHaveTextContent("DAY");
+
+    // Onglet Réserver : rien d'hérité.
+    await userEvent.click(screen.getByRole("button", { name: /Réserver/ }));
+    expect(screen.queryByTestId("inherited-section")).toBeNull();
+  });
+
+  it("renders NO inherited section outside period mode", () => {
+    useWizardStore.getState().exitPeriodMode();
+    renderWithProviders(<ConstraintsStep />);
+    expect(screen.queryByTestId("inherited-section")).toBeNull();
   });
 });

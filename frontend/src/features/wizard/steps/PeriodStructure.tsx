@@ -379,7 +379,17 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
  * Rendered only for overlay-generating periods (closure | holiday), on a CONFIRMED entry
  * (never during its load window, so the wrong default can't flash).
  */
-export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
+/** L'onglet-famille où une contrainte héritée se range. FACILITY_CAPACITY n'a pas
+ *  d'onglet propre (aucun formulaire ne la crée) → rangée avec « Gymnase ». */
+const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FACILITY_CAPACITY" === family ? "FACILITY" : family);
+
+/**
+ * `family` (fondateur 2026-07-24) : rendue DANS l'onglet-famille de ConstraintsStep,
+ * la section ne montre que les héritées de CET onglet — plus d'écran à part au-dessus.
+ * Sans `family` (tests/usages historiques), liste complète inchangée. 0 héritée dans
+ * l'onglet → rien (pas de section vide répétée par onglet).
+ */
+export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId: string; family?: Constraint["family"] }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
   // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
   // Ce composant ne vit qu'en mode période (calendarEntryId requis), donc `ready` équivaut
@@ -457,6 +467,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     const tagName = targetTagOf(c);
     return tagResolutionReady && "CLUB" === c.scope && null !== tagName && 0 === activeTagTeamIds(tagName).size;
   };
+  const shown = (c: Constraint): boolean => !hidden(c) && (undefined === family || familyTabOf(c.family) === family);
   const activeOf = (c: Constraint): boolean => (notApplicable(c) ? false : inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
@@ -499,6 +510,11 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   if (!isOverlay) {
     return null;
   }
+  // Dans un onglet : 0 héritée de cette famille → pas de section (l'EmptyHint global
+  // n'a de sens que pour la liste complète).
+  if (undefined !== family && !(isLoading || overridesLoading || teamOverridesLoading) && 0 === constraints.filter(shown).length) {
+    return null;
+  }
 
   return (
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
@@ -509,11 +525,11 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
           + the non-applicable strike). On a fetch ERROR we still render: the backend stays
           authoritative on the payload, so a transient error only glitches the strike, and
           hiding the whole panel would strand the closure editor (query-error UX = dette P4-1). */}
-      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.filter((c) => !hidden(c)).length ? (
+      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.filter(shown).length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
-          {constraints.filter((c) => !hidden(c)).map((c) => {
+          {constraints.filter(shown).map((c) => {
             const active = activeOf(c);
             const naf = notApplicable(c);
             const tagName = targetTagOf(c);
