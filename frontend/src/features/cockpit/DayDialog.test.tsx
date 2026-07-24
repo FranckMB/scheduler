@@ -43,6 +43,7 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), mutateAsync: holidayMutateAsync, isPending: false }),
   useCreateWeekChildren: () => ({ mutate: weekChildrenMutate, isPending: false }),
+  useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
   // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests.

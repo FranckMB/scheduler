@@ -29,6 +29,7 @@ let schedulesData: { schedulePlanId: string }[] | undefined = [];
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
   useCreateWeekChildren: () => ({ mutate: createWeekChildrenMutate, isPending: false }),
+  useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).

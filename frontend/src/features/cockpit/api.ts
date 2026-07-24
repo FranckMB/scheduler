@@ -52,6 +52,14 @@ export const getSchedulePlanForEntry = async (calendarEntryId: string): Promise<
  */
 export const getAllSchedulePlans = async (): Promise<SchedulePlan[]> => collectionAll<SchedulePlan>("schedule_plans");
 
+/**
+ * LE GESTE « Adapter » (ADR-0002 amendé 2026-07-24) : le plan d'une période
+ * closure/holiday naît de ce POST — plus jamais de la création de l'entrée.
+ * Idempotent : la période a déjà son plan → il est rendu tel quel (201).
+ */
+export const createSchedulePlan = (calendarEntryId: string): Promise<SchedulePlan> =>
+  api.post("schedule_plans", { json: { calendarEntryId } }).json();
+
 export interface SchoolHoliday {
   id: string;
   label: string;

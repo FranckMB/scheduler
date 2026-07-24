@@ -351,6 +351,31 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   Le flag de seed `teamSelectionInitialized` a suivi les réglages sur le plan (inv. 5).
   **C2/C3 livrés** (re-keyage `calendarEntryId` → `planId` des réglages et calques ; les
   contraintes datées du FAIT restent au calendrier).
+
+  **Amendement 2026-07-24 — LE PLAN NAÎT DU GESTE D'ADAPTER** (*décision fondateur, durcit
+  C1*) : « geste » signifie **geste EXPLICITE d'adaptation**, pas la simple existence d'une
+  période. Matérialiser une vacance (ancrage pour la découpe) ou signaler une indisponibilité
+  ne crée **rien** — le radar lit l'impact par les contraintes datées, sans plan. Les gestes,
+  limitativement :
+  - **cocher une semaine au picker** → l'entrée-SEMAINE naît avec son plan (rail 1 entrée = 1
+    plan, atomique, inchangé) ;
+  - **« Adapter » un bloc ou une fermeture** → `POST /api/schedule_plans {calendarEntryId}`
+    (management-gated SEC-07, idempotent — la période a déjà son plan → il est rendu tel
+    quel ; 422 sur cutoff/mutualisation et sur une mère découpée).
+  Conséquences structurelles :
+  - **une période closure/holiday peut exister SANS plan** (jamais adaptée) — elle n'apparaît
+    ni dans « Tous les plannings » ni « en cours » au radar : c'est une carte « à traiter » ;
+  - **la découpe supprime le plan-bloc de la mère** (0 version garanti — découper une mère
+    générée reste refusé) **avec ses réglages ancrés** : chaque semaine repart de la structure
+    saison. Idempotent au 2ᵉ enfant ;
+  - **on ne bascule jamais bloc↔semaines automatiquement** (symétrie fondateur) : revenir au
+    bloc = supprimer soi-même chaque semaine (cascade : son plan part avec), puis re-Adapter —
+    la mère n'ayant plus d'enfants, le geste bloc redevient accepté ;
+  - **anti-résurrection** : un PUT ne provisionne plus jamais (la « promotion » cutoff→holiday
+    ne mint plus rien — le scénario n'existe pas dans l'UI, ruling fondateur : « une coupure ne
+    devient pas des vacances ») ; le gel d'identité s'étend aux mères découpées (**un plan OU
+    des semaines-enfants** gèlent type/fenêtre/kind).
+  Gardé par `PeriodPlanBirthTest` + `WeekChildEntryTest` (phase1, réécrits avec l'amendement).
 - **Lot C4** — LE SOCLE SE LIT DU PLAN, `Schedule.calendarEntryId` disparaît. Le champ était
   redondant avec `plan.calendarEntryId` (doublon d'ancre nullable — la classe de bug de C2/C3).
   Découpé en **3 PR**. **PR1 livré (2026-07-17)** : `plan.type === SEASON` remplace

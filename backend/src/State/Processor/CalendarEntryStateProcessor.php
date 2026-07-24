@@ -83,19 +83,21 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         // the overlay semantically wrong (or crash the next regeneration in
         // buildForOverlay). Title/status/isDisruptive edits stay allowed.
         //
-        // La garde porte sur « cette période a-t-elle un PLAN ? » : depuis le lot C une
-        // closure/holiday a TOUJOURS un plan (né du geste, cf. processPost). Geler leur
-        // identité revient donc à dire : le type et la fenêtre d'une période se choisissent
-        // à sa création, et se corrigent en la supprimant puis en la recréant — ce que
-        // l'UI impose déjà (elle n'expose aucun PUT ; ce verbe n'est atteignable qu'en
-        // direct sur l'API).
+        // La garde porte sur « cette période a-t-elle un PLAN, ou des SEMAINES ? »
+        // (amendement ADR-0002 2026-07-24 : le plan naît du geste d'ADAPTER, plus de la
+        // matérialisation — une période peut donc exister sans plan). Deux gels :
+        // - un plan existe → l'identité de la période se choisit à la création et se
+        //   corrige en supprimant/recréant (l'UI n'expose aucun PUT) ;
+        // - des semaines-enfants existent → même gel SANS plan : re-dater/re-typer la
+        //   mère déplacerait la couverture sous les semaines, et un PUT ne doit jamais
+        //   re-minter un plan-bloc sur une mère découpée (anti-résurrection).
         //
         // Ce choix rend inatteignables, PAR CONSTRUCTION, deux défauts que les rounds 1
         // et 2 du code-review avaient trouvés : la rétrogradation qui détruit un plan, et
         // la fenêtre du plan qui se périme quand on corrige les dates de sa période. Une
         // machinerie de synchronisation les réparait ; ne pas les laisser exister est plus
         // sûr. Un cutoff/mutualisation (sans plan) reste librement promouvable.
-        if ($this->schedulePlanProvisioner->periodPlanExists($entity->getId())) {
+        if ($this->schedulePlanProvisioner->periodPlanExists($entity->getId()) || $this->hasWeekChildren($entity->getId())) {
             $kindChanged = null !== $input->kind && $this->parseKind($input->kind) !== $entity->getKind();
             $periodTypeChanged = null !== $input->periodType && $this->parsePeriodType($input->periodType) !== $entity->getPeriodType();
             $startChanged = null !== $input->startDate && $this->parseDate($input->startDate)->format('Y-m-d') !== $entity->getStartDate()->format('Y-m-d');
@@ -172,18 +174,22 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * ADR-0002 lot C — LE PLAN NAÎT DU GESTE. Creating a CLOSURE/HOLIDAY entry IS
-     * the gesture "ajuster cette période", so its plan is born here, not at the first
-     * generation: the period's settings (inv. 5) are entered BEFORE any version exists
-     * and must have a plan to hang off.
+     * ADR-0002, amendement 2026-07-24 — LE PLAN NAÎT DU GESTE D'ADAPTER, pas de la
+     * matérialisation. Créer une entrée closure/holiday RACINE ne provisionne plus
+     * rien (signaler une indisponibilité / matérialiser une vacance = un ancrage,
+     * pas une adaptation ; le plan naîtra au POST /schedule_plans du clic Adapter).
+     * SEULE l'entrée-SEMAINE (parentEntryId) naît avec son plan : cocher la semaine
+     * au picker EST le geste d'adaptation.
      *
-     * ATOMIQUE, et c'est structurel : le plan est la SEULE porte (linkSchedule ne fait
-     * plus que chercher, et choose() ne peut donc plus réparer). Sans transaction
-     * englobante, un échec du provisioning après le flush du parent — wrapInTransaction
-     * FERME l'EntityManager et relance — laisserait une période commitée sans plan, que
-     * plus aucun chemin ne rattraperait : sa génération produirait une version non liée,
-     * et sa validation un 409 définitif. Une période sans plan ne doit pas pouvoir
-     * exister ; on préfère ne pas créer la période du tout.
+     * La découpe emporte le plan-bloc de la mère : s'il existe (chemin « d'un bloc »
+     * commencé puis abandonné — 0 version, garanti par assertValidWeekChild), il est
+     * supprimé AVEC ses réglages ancrés (décision fondateur 2026-07-24 : chaque
+     * semaine repart de la structure saison ; on ne bascule jamais bloc↔semaines,
+     * on supprime puis on recrée). Idempotent : 2ᵉ enfant → plus de plan-mère, no-op.
+     *
+     * ATOMIQUE : sans transaction englobante, un échec du provisioning de l'enfant
+     * après le flush du parent laisserait une semaine commitée sans plan — sa
+     * génération produirait une version non liée, sa validation un 409 définitif.
      *
      * @param CalendarEntryInput $input
      */
@@ -199,23 +205,35 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             }
 
             $output = parent::processPost($input, $clubId, $seasonId);
-            // Le flush du parent rend la ligne visible à la relecture SQL brute du
-            // provisioner — même connexion, même transaction.
-            $this->provisionIfPlanBearing($output);
+            if (null !== $input->parentEntryId) {
+                // Découpe : le plan-bloc de la mère (0 version) meurt avec ses
+                // réglages. Le verrou du plan-scope pris en TÊTE de branche est un
+                // verrou de TRANSACTION (pg_advisory_xact_lock, tenu jusqu'au commit) :
+                // cette lecture et la suppression sont sérialisées avec un POST
+                // /schedule_plans concurrent (même scope) — et le wrapInTransaction
+                // englobant rend réglages+plan+entrée atomiques (l'imbriqué de
+                // deletePeriodPlan est un no-op Doctrine).
+                $motherPlanId = $this->schedulePlanProvisioner->periodPlanId($input->parentEntryId);
+                if (null !== $motherPlanId) {
+                    $this->removePlanAnchoredSettings($motherPlanId);
+                    $this->entityManager->flush();
+                    $this->schedulePlanProvisioner->deletePeriodPlan($input->parentEntryId);
+                }
+                // Le flush du parent rend la ligne enfant visible à la relecture SQL
+                // brute du provisioner — même connexion, même transaction.
+                $this->provisionIfPlanBearing($output);
+            }
 
             return $output;
         });
     }
 
     /**
-     * Un PUT ne peut PROMOUVOIR qu'une période sans plan (cutoff/mutualisation →
-     * closure/holiday) : la garde d'identité ci-dessus refuse tout changement dès qu'un
-     * plan existe. Cette promotion est le geste « ajuster », elle crée donc le plan —
-     * sans quoi la période promue resterait inconfigurable à vie, plus rien ne créant un
-     * plan a posteriori. Atomique pour la même raison que le POST.
-     *
-     * Aucune synchronisation, aucune suppression : provisionPeriodPlan ne fait que
-     * naître-si-absent. Le reste est rendu impossible en amont plutôt que réparé après.
+     * Un PUT ne crée JAMAIS de plan (amendement ADR-0002 2026-07-24) : changer le
+     * type d'une période n'est pas un geste d'adaptation — le plan naît au POST
+     * /schedule_plans du clic Adapter. C'est aussi l'anti-résurrection : un PUT sur
+     * une mère découpée (gel d'identité par ses enfants, ci-dessus) ne re-mint pas
+     * de plan-bloc. Atomique pour la même raison que le POST.
      *
      * @param array<string, mixed> $uriVariables
      * @param CalendarEntryInput   $input
@@ -234,7 +252,6 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             }
 
             $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            $this->provisionIfPlanBearing($output);
 
             return $output;
         });
@@ -315,6 +332,40 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         );
     }
 
+    /** La période a-t-elle des semaines-enfants ? Gel d'identité d'une mère découpée (même sans plan). */
+    private function hasWeekChildren(string $calendarEntryId): bool
+    {
+        return false !== $this->entityManager->getConnection()->fetchOne(
+            'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :eid LIMIT 1',
+            ['eid' => $calendarEntryId],
+        );
+    }
+
+    /**
+     * Les réglages ancrés à un plan de période (inv. 5, lots C2-C3) : overrides
+     * d'équipes et de contraintes, créneaux prêtés, réservations. Partagé par la
+     * cascade de suppression d'une période ET la découpe en semaines (qui emporte
+     * le plan-bloc de la mère). L'appelant flush.
+     */
+    private function removePlanAnchoredSettings(string $schedulePlanId): void
+    {
+        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+            $this->entityManager->remove($override);
+        }
+        // …and the period's constraint toggles (which permanent constraints it disabled).
+        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+            $this->entityManager->remove($override);
+        }
+        // Les créneaux prêtés pour cette période (« la mairie me prête ce gymnase
+        // POUR cet ajustement ») et ses réservations : des RÉPONSES, donc au plan.
+        foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
+            $this->entityManager->remove($slot);
+        }
+        foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
+            $this->entityManager->remove($reservation);
+        }
+    }
+
     /**
      * N'entre dans le provisioner que pour ce qui peut porter un plan (inv. 9) : un
      * event ou un cutoff y paierait une transaction imbriquée, un verrou consultatif et
@@ -389,21 +440,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             // Tous les réglages de la période pendent au PLAN (inv. 5, lots C2-C3) — d'où
             // l'id capturé AVANT sa destruction, sans quoi ils orphelineraient.
             if (null !== $schedulePlanId) {
-                foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-                    $this->entityManager->remove($override);
-                }
-                // …and the period's constraint toggles (which permanent constraints it disabled).
-                foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-                    $this->entityManager->remove($override);
-                }
-                // Les créneaux prêtés pour cette période (« la mairie me prête ce gymnase
-                // POUR cet ajustement ») et ses réservations : des RÉPONSES, donc au plan.
-                foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
-                    $this->entityManager->remove($slot);
-                }
-                foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
-                    $this->entityManager->remove($reservation);
-                }
+                $this->removePlanAnchoredSettings($schedulePlanId);
             }
             // …and any reminder logged for this period (else a ghost survives to the season purge).
             foreach ($this->entityManager->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $id]) as $log) {

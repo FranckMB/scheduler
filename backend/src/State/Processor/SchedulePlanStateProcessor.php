@@ -5,23 +5,42 @@ declare(strict_types=1);
 namespace App\State\Processor;
 
 use App\ApiResource\SchedulePlanResource;
+use App\Dto\CreatePeriodPlanInput;
 use App\Dto\SchedulePlanInput;
 use App\Entity\SchedulePlan;
-use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use App\Service\ManagementAccessGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SeasonAccessGuard;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use LogicException;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
- * Renommer un plan — la SEULE écriture client sur un plan, et le SEUL écrivain du
- * nom (ADR-0002 inv. 12 : le nom public vit sur le plan).
+ * Écritures client sur un plan : renommer (PUT, inv. 12 — le nom public vit sur le
+ * plan), et depuis l'amendement ADR-0002 du 2026-07-24, CRÉER le plan d'une période
+ * par le geste explicite « Adapter » (POST {calendarEntryId}).
  *
- * Un plan naît par provisioning et meurt avec son déclencheur ; sa version choisie
- * se désigne en validant cette version. Le client ne peut donc ni le créer, ni le
- * supprimer, ni toucher au pointeur.
+ * Le plan de saison reste provisionné par le serveur ; le pointeur (version choisie)
+ * se désigne en validant une version — jamais ici.
  *
- * @extends AbstractStateProcessor<SchedulePlan, SchedulePlanInput, SchedulePlanResource>
+ * @extends AbstractStateProcessor<SchedulePlan, SchedulePlanInput|CreatePeriodPlanInput, SchedulePlanResource>
  */
 class SchedulePlanStateProcessor extends AbstractStateProcessor
 {
-    /** SEC-07 : renommer le planning est une écriture cockpit (management). */
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        SeasonResolver $seasonResolver,
+        SeasonAccessGuard $seasonAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+    ) {
+        parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
+    }
+
+    /** SEC-07 : créer/renommer un planning est une écriture cockpit (management). */
     protected function requiresManagementRole(): bool
     {
         return true;
@@ -33,20 +52,88 @@ class SchedulePlanStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * @param SchedulePlanInput $input
+     * ADR-0002 (amendement 2026-07-24) — LE PLAN NAÎT DU GESTE D'ADAPTER.
+     *
+     * Gardes, puis provisioning idempotent (le verrou de plan-scope sérialise avec
+     * un POST d'entrée-semaine concurrent — exclusivité bloc/semaines) :
+     * - l'entrée doit exister, dans CE club et CETTE saison (lecture SQL brute,
+     *   même rétablissement explicite de garde que ScheduleStateProcessor) ;
+     * - closure/holiday uniquement (inv. 9 : cutoff/mutualisation ne portent pas
+     *   de plan) ;
+     * - une mère DÉCOUPÉE ne reporte jamais de plan-bloc : 422 tant que des
+     *   semaines-enfants existent. État, pas verrou définitif — supprimer toutes
+     *   les semaines rouvre le geste bloc (symétrie fondateur : on ne bascule
+     *   jamais automatiquement, on supprime puis on recrée).
+     *
+     * @param SchedulePlanInput|CreatePeriodPlanInput $input
      */
-    protected function createEntityFromInput(object $input): SchedulePlan
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
-        // Injoignable (la ressource n'expose pas Post) — explicite plutôt que muet.
-        throw new MethodNotAllowedHttpException(['GET', 'PUT'], 'Un planning est créé par le système, pas via l\'API.');
+        if (!$input instanceof CreatePeriodPlanInput) {
+            throw new UnprocessableEntityHttpException('calendarEntryId est requis.');
+        }
+        $entryId = $input->calendarEntryId;
+        $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
+
+        /** @var array{club_id: string, season_id: string, kind: string, period_type: ?string}|false $entry */
+        $entry = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT club_id, season_id, kind, period_type FROM calendar_entry WHERE id = :eid',
+            ['eid' => $entryId],
+        );
+        if (false === $entry
+            || (null !== $clubId && $entry['club_id'] !== $clubId)
+            || (null !== $resolvedSeasonId && $entry['season_id'] !== $resolvedSeasonId)) {
+            throw new UnprocessableEntityHttpException('Unknown calendar entry.');
+        }
+        if ('period' !== $entry['kind'] || !\in_array($entry['period_type'], ['closure', 'holiday'], true)) {
+            throw new UnprocessableEntityHttpException('Seule une période de fermeture ou de vacances porte un planning.');
+        }
+
+        return $this->entityManager->wrapInTransaction(function () use ($entryId): SchedulePlanResource {
+            // Verrou AVANT la lecture des enfants : un POST de semaine concurrent
+            // (même scope) est sérialisé — pas de plan-bloc minté pendant une découpe.
+            $this->schedulePlanProvisioner->lockPlanScope($entryId);
+
+            $hasChildren = false !== $this->entityManager->getConnection()->fetchOne(
+                'SELECT 1 FROM calendar_entry WHERE parent_entry_id = :eid LIMIT 1',
+                ['eid' => $entryId],
+            );
+            if ($hasChildren) {
+                throw new UnprocessableEntityHttpException('Cette période est découpée en semaines : adaptez chaque semaine.');
+            }
+
+            $planId = $this->schedulePlanProvisioner->provisionPeriodPlan($entryId);
+            if (null === $planId) {
+                throw new UnprocessableEntityHttpException('Seule une période de fermeture ou de vacances porte un planning.');
+            }
+
+            $plan = $this->entityManager->getRepository(SchedulePlan::class)->find($planId);
+            if (!$plan instanceof SchedulePlan) {
+                throw new UnprocessableEntityHttpException('Unknown schedule plan.');
+            }
+
+            return $this->mapEntityToOutput($plan);
+        });
     }
 
     /**
-     * @param SchedulePlan      $entity
-     * @param SchedulePlanInput $input
+     * @param SchedulePlanInput|CreatePeriodPlanInput $input
+     */
+    protected function createEntityFromInput(object $input): SchedulePlan
+    {
+        // processPost est surchargé — ce chemin du parent n'est plus atteint.
+        throw new LogicException('SchedulePlanStateProcessor::processPost est la seule porte de création.');
+    }
+
+    /**
+     * @param SchedulePlan                            $entity
+     * @param SchedulePlanInput|CreatePeriodPlanInput $input
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        if (!$input instanceof SchedulePlanInput) {
+            throw new UnprocessableEntityHttpException('Le nom du planning ne peut pas être vide.');
+        }
         // `name` UNIQUEMENT.
         $entity->setName(trim($input->name));
     }

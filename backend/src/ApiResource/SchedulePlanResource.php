@@ -7,7 +7,9 @@ namespace App\ApiResource;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
+use App\Dto\CreatePeriodPlanInput;
 use App\Dto\SchedulePlanInput;
 use App\Entity\SchedulePlan;
 use App\Enum\SchedulePlanType;
@@ -25,8 +27,10 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * Le Plan — le conteneur nommé des versions d'une saison ou d'une période. Le plan
  * de saison et sa version choisie sont le calendrier de base de la saison.
  *
- * Un plan est créé et supprimé par le serveur, et sa version choisie est désignée
- * en validant cette version. Seul son nom est éditable.
+ * POST crée le plan d'une période closure/holiday : c'est le geste « adapter cette
+ * période » (idempotent — la période a déjà son plan → il est rendu tel quel).
+ * Le plan de saison, lui, est créé par le serveur. La version choisie se désigne
+ * en validant cette version ; seul le nom est éditable.
  */
 // The ?calendarEntryId / ?type query filters are implemented by the custom
 // provider (SchedulePlanStateProvider::applyRequestFilters) — a Doctrine
@@ -35,6 +39,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiResource(shortName: 'SchedulePlan', operations: [
     new GetCollection,
     new Get,
+    new Post(input: CreatePeriodPlanInput::class),
     new Put,
 ], input: SchedulePlanInput::class, paginationEnabled: false, provider: SchedulePlanStateProvider::class, processor: SchedulePlanStateProcessor::class)]
 class SchedulePlanResource

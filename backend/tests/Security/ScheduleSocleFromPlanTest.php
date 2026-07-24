@@ -284,12 +284,17 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
             'periodType' => 'closure',
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(201);
+        // ADR-0002 amendé 2026-07-24 : le plan naît du geste Adapter, plus de la
+        // création de l'entrée — les appelants d'ici ont tous besoin du plan.
+        $created = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($created);
+        self::assertIsString($created['id']);
+        $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $created['id']], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
 
-        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
-        self::assertIsArray($payload);
-        self::assertIsString($payload['id']);
-
-        return $payload['id'];
+        return $created['id'];
     }
 
     /**
