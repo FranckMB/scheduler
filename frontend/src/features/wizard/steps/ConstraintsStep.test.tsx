@@ -32,6 +32,15 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
+  // #8 — la grille de la couche ÉDITÉE : le socle en mode saison, la grille que la
+  // période POSSÈDE sinon. Les deux couches portent volontairement des créneaux
+  // DIFFÉRENTS ici : c'est ce qui rend observable le fait qu'on lise la bonne.
+  useGridSlots: (schedulePlanId: string | null) => ({
+    data:
+      null === schedulePlanId
+        ? [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]
+        : [{ id: "p1", venueId: "v2", dayOfWeek: 4, startTime: "19:00", durationMinutes: 90, capacity: 1 }],
+  }),
   useCreateConstraint: () => ({ mutate: h.createMut, isPending: false }),
   useUpdateConstraint: () => ({ mutate: h.updateMut, isPending: false }),
   useDeleteConstraint: () => ({ mutate: vi.fn() }),
@@ -490,6 +499,27 @@ describe("ConstraintsStep — inherited section lives inside the family tabs (pe
     await userEvent.click(screen.getByRole("button", { name: "Horaires" }));
     // Même noeud DOM de bout en bout : aucun démontage/remontage entre les onglets.
     expect(screen.getByTestId("inherited-section")).toBe(before);
+  });
+
+
+  it("réserve sur la grille de la PÉRIODE, jamais sur celle de la saison", async () => {
+    // Revue #8 round 4 — l'onglet listait les créneaux de SAISON tout en écrivant la
+    // réservation sur le plan de la période. C'était sain tant que le backend unionnait
+    // les deux couches ; il ne le fait plus. Une réservation posée sur un créneau absent
+    // de la grille de la période devient un épinglage orphelin, et la génération de cette
+    // période est alors refusée DÉFINITIVEMENT (OrphanPinGuard).
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+
+    // Gymnase A est sélectionné par défaut et porte le créneau que seule la SAISON
+    // possède : sur la bonne couche, sa grille est vide.
+    expect(screen.queryByRole("button", { name: /Gymnase A.*cliquer pour gérer/ })).toBeNull();
+
+    // Gymnase B porte celui de la période : c'est lui qu'on doit pouvoir réserver.
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    expect(screen.getByRole("button", { name: /Gymnase B.*cliquer pour gérer/ })).toBeInTheDocument();
   });
 
   it("waits for the period plan before offering the reservation panel (no write on the base plan)", async () => {

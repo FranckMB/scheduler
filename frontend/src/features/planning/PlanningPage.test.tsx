@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import { listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import { getTrainingSlots, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -109,6 +109,33 @@ describe("PlanningPage (integration)", () => {
     // une version de travail, qui reste offerte à la validation.
     expect(screen.getByText("principal")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
+  });
+
+  it("lit les créneaux du SOCLE quand la version affichée est celle de la saison", async () => {
+    // Revue #8 round 4 — l'écran calculait ses cases vides sur la grille de SAISON quelle
+    // que soit la version affichée, alors que l'export PDF remis aux coachs lit celle de
+    // la version affichée. Deux vues du même planning qui ne coïncidaient pas, alors que
+    // le code affirme qu'elles montrent la même chose.
+    vi.mocked(getTrainingSlots).mockClear();
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(vi.mocked(getTrainingSlots)).toHaveBeenCalledWith(null);
+  });
+
+  it("lit la grille DE LA PÉRIODE quand la version affichée est un planning de période", async () => {
+    vi.mocked(getTrainingSlots).mockClear();
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Toussaint V1", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "toussaint-plan" },
+    ]);
+    // Le cockpit navigue vers un planning de période avec la version en sélection —
+    // l'atterrissage par défaut, lui, vise le socle.
+    usePlanningStore.setState({ selectedScheduleId: SID });
+    renderWithProviders(<PlanningPage />);
+
+    // La couche du socle peut être demandée le temps que la liste des versions arrive ;
+    // ce qui compte est celle sur laquelle l'écran se STABILISE.
+    await vi.waitFor(() => expect(vi.mocked(getTrainingSlots).mock.lastCall).toEqual(["toussaint-plan"]));
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {

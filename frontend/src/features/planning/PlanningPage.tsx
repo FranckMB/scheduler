@@ -111,9 +111,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     }
   }, [validScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
 
+  // La COUCHE de créneaux de la version affichée (#8) : le socle lit la grille de
+  // saison, une période lit la sienne. Dérivée ici, avant les requêtes, pour que
+  // l'écran et l'export montrent les mêmes créneaux vides.
+  const displayed = schedules.find((s) => s.id === validScheduleId) ?? null;
+  const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
+
   const { data: slots = [] } = useSlots(validScheduleId);
   const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
-  const { data: trainingSlots = [] } = useTrainingSlots();
+  const { data: trainingSlots = [] } = useTrainingSlots(slotLayerId);
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
   const { data: coaches = [] } = useCoaches();
@@ -192,7 +198,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     );
   };
 
-  const selectedSchedule = schedules.find((s) => s.id === validScheduleId) ?? null;
+  const selectedSchedule = displayed;
   // Suppression d'un planning SECONDAIRE (overlay) depuis l'en-tête (retour fondateur
   // 2026-07-19) : l'entrée de calendrier de son plan (jamais pour le socle SEASON).
   const { data: allSchedulePlans } = useSchedulePlans();

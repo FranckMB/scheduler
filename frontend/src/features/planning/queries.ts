@@ -55,8 +55,13 @@ export function useVenues() {
   return useQuery({ queryKey: ["venues"], queryFn: planningApi.getVenues, staleTime: 300_000 });
 }
 
-export function useTrainingSlots() {
-  return useQuery({ queryKey: ["training-slots"], queryFn: planningApi.getTrainingSlots, staleTime: 300_000 });
+/** Cf. `getTrainingSlots` : la couche de la version affichée, jamais celle de la saison par défaut. */
+export function useTrainingSlots(schedulePlanId: string | null) {
+  return useQuery({
+    queryKey: ["training-slots", schedulePlanId],
+    queryFn: () => planningApi.getTrainingSlots(schedulePlanId),
+    staleTime: 300_000,
+  });
 }
 
 export function useCoaches() {
@@ -270,7 +275,11 @@ export function useRegenerateOverlay() {
     // Invalidate on settled, not just success: if generate fails AFTER the create,
     // the new version already exists server-side — the list must refresh either way.
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
-    onError: () => toast.error("La régénération de la période a échoué."),
+    // Le motif du serveur, pas un échec anonyme : le garde d'épinglage orphelin (#8)
+    // répond 422 en NOMMANT le gymnase et le jour, et c'est exactement ce que le
+    // gestionnaire doit lire pour agir — l'escamoter derrière « la régénération a
+    // échoué » rendait muet un garde écrit pour parler (revue #8, round 4).
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
 
@@ -284,6 +293,7 @@ export function useRegenerate() {
     // selects the new id — otherwise it is absent from the cache and the landing
     // effect immediately reverts the selection to the baseline.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
-    onError: () => toast.error("La régénération a échoué."),
+    // Même raison que useRegenerateOverlay : le motif du serveur, pas un échec anonyme.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }

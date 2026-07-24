@@ -11,6 +11,7 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
+import { errorMessage } from "@/shared/lib/errorMessage";
 
 import { useStepValidation } from "../lib/useStepValidation";
 import { useLaunchGeneration, useScheduleStatus } from "../queries";
@@ -46,6 +47,8 @@ export function GenerateStep() {
   const launch = useLaunchGeneration();
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  // Le motif exact rendu par le serveur au dernier essai (null = message générique).
+  const [launchReason, setLaunchReason] = useState<string | null>(null);
 
   const { data: sched } = useScheduleStatus(scheduleId);
   const status = sched?.status ?? null;
@@ -123,6 +126,7 @@ export function GenerateStep() {
       return;
     }
     setTimedOut(false);
+    setLaunchReason(null);
     launch.reset();
     setScheduleId(null);
     try {
@@ -138,8 +142,12 @@ export function GenerateStep() {
           : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
       );
       setScheduleId(id);
-    } catch {
-      // launch.isError drives the failed state below.
+    } catch (error) {
+      // launch.isError drives the failed state below ; on en garde le MOTIF. Le garde
+      // d'épinglage orphelin (#8) refuse en 422 en nommant le gymnase et le jour —
+      // exactement ce qu'il faut lire pour agir. Le remplacer par « une erreur est
+      // survenue » rendait muet un garde écrit pour parler (revue #8, round 4).
+      setLaunchReason(await errorMessage(error));
     }
   };
 
@@ -163,7 +171,7 @@ export function GenerateStep() {
             <p className="max-w-md text-sm text-muted-foreground">
               {timedOut
                 ? "Le service met trop de temps à répondre. Vérifie que le moteur tourne, puis réessaie."
-                : "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer."}
+                : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer.")}
             </p>
           </div>
           <Button size="lg" onClick={start}>
