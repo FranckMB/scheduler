@@ -1,5 +1,5 @@
 import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User, ShieldCheck } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router";
 
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";

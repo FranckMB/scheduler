@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Spinner } from "@/shared/components/ui/spinner";

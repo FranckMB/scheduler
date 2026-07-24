@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 const h = { verify: vi.fn(), navigate: vi.fn() };
@@ -8,8 +8,8 @@ const h = { verify: vi.fn(), navigate: vi.fn() };
 vi.mock("./queries", () => ({
   useVerifyEmail: () => ({ mutateAsync: h.verify, isPending: false }),
 }));
-vi.mock("react-router-dom", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("react-router-dom")>()),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => h.navigate,
 }));
 

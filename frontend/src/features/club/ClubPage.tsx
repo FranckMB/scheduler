@@ -1,6 +1,6 @@
 import { Crop, ImagePlus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useMe } from "@/features/auth/queries";
 import type { FfbbOrganisme, MeResponse } from "@/features/auth/api";

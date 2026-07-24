@@ -1,6 +1,6 @@
 import { Download, Eye, Loader2, Pencil, Star } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useMe, useWorkingSeason } from "@/features/auth/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";

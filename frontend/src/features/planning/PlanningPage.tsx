@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/queries";
 import { useWizardStore } from "@/features/wizard/store";

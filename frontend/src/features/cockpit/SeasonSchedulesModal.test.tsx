@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schedule } from "@/features/planning/api";
@@ -33,7 +33,7 @@ vi.mock("./queries", () => ({
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
   useSchedulePlanForEntry: () => ({ data: undefined }),
 }));
-vi.mock("react-router-dom", async (orig) => ({ ...(await orig<typeof import("react-router-dom")>()), useNavigate: () => navigate }));
+vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
 import { SeasonSchedulesModal } from "./SeasonSchedulesModal";
 import { seasonPlanCounts } from "./seasonPlannings";
