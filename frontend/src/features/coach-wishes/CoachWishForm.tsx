@@ -1,0 +1,166 @@
+import { type FormEvent, useState } from "react";
+
+import type { Coach, Team, TeamCoach } from "@/features/wizard/api";
+import { DAYS } from "@/features/wizard/lib/days";
+import { Button } from "@/shared/components/ui/button";
+import { Select } from "@/shared/components/ui/select";
+import { cn } from "@/shared/lib/utils";
+
+import type { CoachWish, CoachWishPayload } from "./api";
+import type { WeekWindow } from "@/features/cockpit/lib/date";
+
+const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
+
+/**
+ * Saisie « au nom d'un coach » d'une doléance (feature #10, lot C1) — ajout ou édition.
+ * Le gestionnaire recueille les souhaits par WhatsApp/téléphone et les consigne ici.
+ *
+ * La semaine est FIGÉE quand la modale est filtrée sur une semaine (vue wizard d'un plan
+ * de semaine) : on ne saisit alors une doléance que pour cette semaine-là.
+ */
+export function CoachWishForm({
+  calendarEntryId,
+  weeks,
+  lockedWeek,
+  teams,
+  coaches,
+  teamCoaches,
+  editing,
+  onSubmit,
+  onCancel,
+  pending,
+}: {
+  calendarEntryId: string;
+  weeks: WeekWindow[];
+  lockedWeek: string | null;
+  teams: Team[];
+  coaches: Coach[];
+  teamCoaches: TeamCoach[];
+  editing: CoachWish | null;
+  onSubmit: (payload: CoachWishPayload) => void;
+  onCancel: () => void;
+  pending: boolean;
+}) {
+  const [teamId, setTeamId] = useState(editing?.teamId ?? teams[0]?.id ?? "");
+  const [weekStart, setWeekStart] = useState(editing?.weekStart ?? lockedWeek ?? weeks[0]?.monday ?? "");
+  const [coachId, setCoachId] = useState(editing?.coachId ?? "");
+  const [slotsWanted, setSlotsWanted] = useState(editing?.slotsWanted ?? 1);
+  const [days, setDays] = useState<number[]>(editing?.unavailableDays ?? []);
+  const [comment, setComment] = useState(editing?.comment ?? "");
+
+  // Défaut coach = le coach MAIN de l'équipe choisie (le plus probable) — surchargeable.
+  const mainCoachId = (t: string): string => teamCoaches.find((tc) => tc.teamId === t && "MAIN" === tc.role)?.coachId ?? "";
+  const resolvedCoachId = "" !== coachId ? coachId : mainCoachId(teamId);
+
+  const toggleDay = (n: number) => setDays((prev) => (prev.includes(n) ? prev.filter((d) => d !== n) : [...prev, n].sort((a, b) => a - b)));
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if ("" === teamId || "" === resolvedCoachId || "" === weekStart) {
+      return;
+    }
+    onSubmit({
+      calendarEntryId,
+      weekStart,
+      teamId,
+      coachId: resolvedCoachId,
+      slotsWanted,
+      unavailableDays: days,
+      comment: "" === comment.trim() ? null : comment.trim(),
+      done: editing?.done ?? false,
+    });
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-md border border-border bg-muted/30 p-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-muted-foreground">
+          Équipe
+          <Select
+            aria-label="Équipe"
+            className={cn(fieldClass, "mt-0.5 block w-40")}
+            value={teamId}
+            disabled={null !== editing}
+            onChange={(e) => {
+              setTeamId(e.target.value);
+              setCoachId(""); // recalcule le défaut coach sur la nouvelle équipe
+            }}
+          >
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Coach
+          <Select aria-label="Coach" className={cn(fieldClass, "mt-0.5 block w-40")} value={resolvedCoachId} onChange={(e) => setCoachId(e.target.value)}>
+            <option value="">Coach…</option>
+            {coaches.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.firstName} {c.lastName}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Semaine
+          <Select
+            aria-label="Semaine"
+            className={cn(fieldClass, "mt-0.5 block w-40")}
+            value={weekStart}
+            disabled={null !== lockedWeek || null !== editing}
+            onChange={(e) => setWeekStart(e.target.value)}
+          >
+            {weeks.map((w) => (
+              <option key={w.monday} value={w.monday}>
+                Semaine du {w.startDate}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Créneaux souhaités
+          <Select aria-label="Créneaux souhaités" className={cn(fieldClass, "mt-0.5 block w-24")} value={slotsWanted} onChange={(e) => setSlotsWanted(Number(e.target.value))}>
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </Select>
+        </label>
+      </div>
+
+      <fieldset className="text-xs text-muted-foreground">
+        <legend className="mb-0.5">Jours indisponibles</legend>
+        <div className="flex flex-wrap gap-1">
+          {DAYS.map((d) => (
+            <label key={d.n} className={cn("cursor-pointer rounded border px-2 py-0.5", days.includes(d.n) ? "border-destructive bg-destructive/10 text-destructive" : "border-border")}>
+              <input type="checkbox" className="sr-only" checked={days.includes(d.n)} onChange={() => toggleDay(d.n)} />
+              {d.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <textarea
+        aria-label="Commentaire"
+        placeholder="Commentaire (mutualisation, contexte…)"
+        className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+        maxLength={1000}
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+      />
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          Annuler
+        </Button>
+        <Button type="submit" size="sm" disabled={pending || "" === resolvedCoachId}>
+          {null !== editing ? "Enregistrer" : "Ajouter la doléance"}
+        </Button>
+      </div>
+    </form>
+  );
+}

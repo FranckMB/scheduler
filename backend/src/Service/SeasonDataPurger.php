@@ -70,6 +70,9 @@ final class SeasonDataPurger
         // dimensions sont dénormalisées à la capture). L'effacement RGPD du club reste
         // sa seule porte de sortie (ErasedClubPurger, delete par clubId).
         $deleted += $this->deleteBySubQuery(PeriodReminderLog::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
+        // #10 — doléances coachs (ancrées à l'entrée de vacances). Table club_id, mais on
+        // borne par la saison via l'entrée, comme le reminder log.
+        $deleted += $this->deleteBySubQuery(\App\Entity\CoachWish::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
 
         // TeamTagAssignment has a season_id but NO club_id → deleted by season.
         $deleted += (int) $this->entityManager->createQueryBuilder()

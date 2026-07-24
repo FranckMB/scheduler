@@ -54,7 +54,7 @@ Même patron que les contraintes datées (déjà en place) : un `calendarEntryId
 
 1. **Structure de période éditable** (créneaux salle **et** séances) — retenu (a). La lecture seule de palier B devient éditable en copie-sur-édition.
 2. **Souhait coach ≠ contrainte** : le coach propose, le gestionnaire dispose. Arbitrage = simple **liste + case « traité »**, pas d'automatisation ni de seeding.
-3. **Volume seul** côté coach (garde / rien / réduit + commentaire) — **pas** de dispos horaires fines.
+3. ~~**Volume seul** côté coach (garde / rien / réduit + commentaire)~~ **Amendé le 2026-07-25 (#10, terrain BCCL)** : le formulaire réel porte, PAR ÉQUIPE ET PAR SEMAINE, le **nombre de créneaux souhaités** (0 = rien), les **jours indisponibles** et un **commentaire libre** (la mutualisation s'y exprime). Pas de dispos horaires fines. Ancrage = l'entrée MÈRE des vacances + le lundi de la semaine (`CoachWish`), robuste à la découpe. Découpage : **C1** = socle (entité + todo-list 2 vues + saisie « au nom d'un coach » + coche « traité »), **C2** = collecte tokenisée (page publique + copier-lien), **C3** = emails + relance + suivi.
 4. **Date limite** fixée par le gestionnaire → le lien tokenisé expire à cette date.
 5. **Mutualisation par réservation** sur créneau à capacité 2 — **pas** de réécriture engine.
 6. **Équipe désactivée** pour la période → absente de l'overlay ; son plan de base reste intact hors vacances.
