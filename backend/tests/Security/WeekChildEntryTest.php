@@ -11,6 +11,7 @@ use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -78,7 +79,7 @@ final class WeekChildEntryTest extends WebTestCase
      */
     public function testSplittingDeletesTheMotherBlockPlanAndItsAnchoredSettings(): void
     {
-        [$user, $club] = $this->createClubWithSeason();
+        [$user, $club, $season] = $this->createClubWithSeason();
         $motherId = $this->postPeriod($user, 'holiday', 'Vacances bloc puis semaines', '2026-11-09', '2026-11-22');
         $motherPlanId = $this->adaptPeriod($user, $motherId);
 
@@ -92,6 +93,37 @@ final class WeekChildEntryTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(201);
 
+        // #8 — les réglages de GYMNASE de la période sont ancrés au plan eux aussi : le
+        // mode d'un gymnase (ici grille vierge) et un créneau de saison écarté.
+        $this->scopeGucToClub($club->getId());
+        $seasonSlot = new VenueTrainingSlot;
+        $seasonSlot->setClubId($club->getId());
+        $seasonSlot->setSeasonId($season->getId());
+        $seasonSlot->setVenueId('88888888-8888-4888-8888-888888888888');
+        $seasonSlot->setDayOfWeek(2);
+        $seasonSlot->setStartTime(new DateTimeImmutable('18:00'));
+        $seasonSlot->setDurationMinutes(90);
+        $this->em->persist($seasonSlot);
+        $this->em->flush();
+        $seasonSlotId = $seasonSlot->getId();
+
+        $this->client->request('POST', '/api/venue_period_overrides', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'schedulePlanId' => $motherPlanId,
+            'venueId' => '88888888-8888-4888-8888-888888888888',
+            'mode' => 'BLANK',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $this->client->request('POST', '/api/venue_slot_period_exclusions', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'schedulePlanId' => $motherPlanId,
+            'venueTrainingSlotId' => $seasonSlotId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
         $child1 = $this->postWeekChild($user, $motherId, 'holiday', 'Semaine 1', '2026-11-09', '2026-11-15');
 
         $this->scopeGucToClub($club->getId());
@@ -102,6 +134,20 @@ final class WeekChildEntryTest extends WebTestCase
             0,
             (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM team_period_override WHERE schedule_plan_id = :pid', ['pid' => $motherPlanId]),
             'les réglages ancrés au plan-bloc partent avec lui',
+        );
+        self::assertSame(
+            0,
+            (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM venue_period_override WHERE schedule_plan_id = :pid', ['pid' => $motherPlanId]),
+            'le mode des gymnases du plan-bloc part avec lui',
+        );
+        self::assertSame(
+            0,
+            (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM venue_slot_period_exclusion WHERE schedule_plan_id = :pid', ['pid' => $motherPlanId]),
+            'les créneaux écartés par le plan-bloc partent avec lui',
+        );
+        self::assertNotNull(
+            $this->em->getRepository(VenueTrainingSlot::class)->find($seasonSlotId),
+            'le créneau de SAISON écarté survit à la découpe — la structure de la saison n’est jamais détruite',
         );
 
         // Idempotence : le 2ᵉ enfant ne re-déclenche rien et ne casse rien.

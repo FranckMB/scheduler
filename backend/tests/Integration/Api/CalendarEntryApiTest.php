@@ -11,6 +11,9 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueSlotPeriodExclusion;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
@@ -276,6 +279,61 @@ final class CalendarEntryApiTest extends WebTestCase
 
         $this->em->clear();
         self::assertNull($this->em->getRepository(\App\Entity\ConstraintPeriodOverride::class)->find($overrideId), 'a period constraint override must not survive its period');
+    }
+
+    /**
+     * #8 — même cascade pour les réglages de GYMNASE de la période : son mode par
+     * gymnase (désactivé / grille vierge) et les créneaux de saison qu'elle écarte sont
+     * ancrés au plan (inv. 5) — supprimer la période les emporte, sinon ils orphelinent
+     * un plan détruit. Le créneau de SAISON écarté, lui, SURVIT : la structure de la
+     * saison n'est jamais détruite par une période (invariant fondateur n°1).
+     */
+    public function testDeletingPeriodCascadesVenuePeriodSettings(): void
+    {
+        [$user, $club, $season] = $this->seed('CE13c');
+        $headers = [...$this->authHeaders($user, $club), 'HTTP_X-Season-Id' => $season->getId()];
+
+        // Un créneau SAISONNIER (schedulePlanId nul) : celui que la période écartera.
+        $this->scopeGucToClub($club->getId());
+        $seasonSlot = new VenueTrainingSlot;
+        $seasonSlot->setClubId($club->getId());
+        $seasonSlot->setSeasonId($season->getId());
+        $seasonSlot->setVenueId('44444444-4444-4444-8444-444444444444');
+        $seasonSlot->setDayOfWeek(2);
+        $seasonSlot->setStartTime(new DateTimeImmutable('18:00'));
+        $seasonSlot->setDurationMinutes(90);
+        $this->em->persist($seasonSlot);
+        $this->em->flush();
+        $seasonSlotId = $seasonSlot->getId();
+
+        $this->client->request('POST', '/api/calendar_entries', [], [], [...$headers, 'CONTENT_TYPE' => 'application/ld+json'], json_encode(['kind' => 'period', 'title' => 'Fermeture', 'startDate' => '2026-05-04', 'endDate' => '2026-05-10', 'periodType' => 'closure'], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $entryId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        // Le plan naît du geste Adapter (ADR-0002 amendé) — les réglages s'y accrochent.
+        $this->client->request('POST', '/api/schedule_plans', [], [], [...$headers, 'CONTENT_TYPE' => 'application/ld+json'], json_encode(['calendarEntryId' => $entryId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $planId = self::getContainer()->get(SchedulePlanProvisioner::class)->periodPlanId($entryId);
+        self::assertIsString($planId);
+
+        // BLANK et non DISABLED : désactiver le gymnase purgerait l'exclusion tout de
+        // suite, on ne testerait plus la cascade de la SUPPRESSION de période.
+        $this->client->request('POST', '/api/venue_period_overrides', [], [], [...$headers, 'CONTENT_TYPE' => 'application/ld+json'], json_encode(['schedulePlanId' => $planId, 'venueId' => '44444444-4444-4444-8444-444444444444', 'mode' => 'BLANK'], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $venueOverrideId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        $this->client->request('POST', '/api/venue_slot_period_exclusions', [], [], [...$headers, 'CONTENT_TYPE' => 'application/ld+json'], json_encode(['schedulePlanId' => $planId, 'venueTrainingSlotId' => $seasonSlotId], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $exclusionId = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        $this->client->request('DELETE', "/api/calendar_entries/{$entryId}", [], [], $headers);
+        self::assertResponseStatusCodeSame(204);
+
+        $this->scopeGucToClub($club->getId());
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(VenuePeriodOverride::class)->find($venueOverrideId), 'a venue period mode must not survive its period');
+        self::assertNull($this->em->getRepository(VenueSlotPeriodExclusion::class)->find($exclusionId), 'a period slot exclusion must not survive its period');
+        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seasonSlotId), 'the excluded SEASON slot survives — a period never destroys the season structure');
     }
 
     public function testCollectionScopedToActiveSeason(): void

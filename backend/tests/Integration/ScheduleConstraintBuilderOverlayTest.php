@@ -232,6 +232,116 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertSame(2, $serialized['sessionsPerWeek'], 'the base plan keeps the seasonal volume — no override leak');
     }
 
+    /**
+     * #8 (fondateur 2026-07-24) — gymnase DÉSACTIVÉ pour la période : il sort entièrement
+     * du payload (aucun créneau, saison comme prêté), et rien ne doit plus le nommer —
+     * une contrainte FACILITY rescapée serait un id fantôme (solve INFEASIBLE).
+     */
+    public function testOverlayDisabledVenueLeavesThePayloadEntirely(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $kept = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000a1', 'Gym gardé');
+        $off = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000a2', 'Gym désactivé');
+        $this->venueSlot($club, $season, $kept->getId(), null);
+        $this->venueSlot($club, $season, $off->getId(), null);                          // créneau de saison
+        $this->venueSlot($club, $season, $off->getId(), $this->planIdOf($entry), 2);     // créneau prêté
+        // Une contrainte FACILITY qui vise le gymnase désactivé.
+        $facility = new Constraint;
+        $facility->setClubId($club->getId());
+        $facility->setSeasonId($season->getId());
+        $facility->setName('Gym désactivé interdit');
+        $facility->setScope(ConstraintScope::FACILITY);
+        $facility->setFamily(ConstraintFamily::FACILITY);
+        $facility->setRuleType(ConstraintRuleType::HARD);
+        $facility->setScopeTargetId($off->getId());
+        $facility->setCalendarEntryId($entry->getId()); // datée : héritée par l'overlay
+        $this->em->persist($facility);
+        $this->venueMode($club, $season, $entry, $off->getId(), \App\Enum\VenuePeriodMode::DISABLED);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        // Une réservation rescapée sur le gymnase désactivé (la bascule la supprime côté
+        // serveur — ce filtre est la ceinture) : elle ne doit pas atteindre le solveur,
+        // elle épinglerait une séance dans un gymnase absent du payload.
+        $ghost = new \App\Entity\Reservation;
+        $ghost->setClubId($club->getId());
+        $ghost->setSeasonId($season->getId());
+        $ghost->setSchedulePlanId($this->planIdOf($entry));
+        $ghost->setTeamId('30000000-0000-4000-8000-0000000000f1');
+        $ghost->setVenueId($off->getId());
+        $ghost->setDayOfWeek(1);
+        $ghost->setStartTime(new DateTimeImmutable('18:00'));
+        $ghost->setDurationMinutes(90);
+        $this->em->persist($ghost);
+        $this->em->flush();
+
+        $payload = $this->builder->buildForOverlay($schedule, $entry);
+        $venueIds = array_map(static fn (array $v): string => $v['id'], $payload['venues']);
+        $pinnedVenueIds = array_map(static fn (array $s): ?string => $s['venueId'] ?? null, $payload['slotTemplates']);
+
+        self::assertNotContains($off->getId(), $pinnedVenueIds, 'aucun verrou/réservation ne pointe le gymnase désactivé');
+
+        self::assertContains($kept->getId(), $venueIds, 'un gymnase hérité reste dans le payload');
+        self::assertNotContains($off->getId(), $venueIds, 'le gymnase désactivé sort du payload');
+        foreach ($payload['constraints'] as $row) {
+            if (\is_array($row)) {
+                self::assertNotSame($off->getId(), $row['scopeTargetId'] ?? null, 'aucune contrainte ne nomme un gymnase absent du payload');
+            }
+        }
+
+        // Le planning principal, lui, n'a rien perdu : ses deux gymnases gardent leur créneau.
+        $base = $this->venuesBySlotCount($this->builder->buildForClubSeason($club->getId(), $season->getId())['venues']);
+        self::assertSame(1, $base[$off->getId()], 'le créneau de saison du gymnase désactivé survit au planning principal');
+    }
+
+    /**
+     * #8 — gymnase « grille VIERGE » : ses créneaux de SAISON sont ignorés pour la période,
+     * ses créneaux PRÊTÉS restent (ils ont été créés pour elle). Le gymnase, lui, demeure
+     * dans le payload — ses prêtés le référencent.
+     */
+    public function testOverlayBlankVenueIgnoresSeasonalSlotsButKeepsBorrowedOnes(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $blank = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000b1', 'Gym vierge');
+        $this->venueSlot($club, $season, $blank->getId(), null, 1);                    // saison → ignoré
+        $this->venueSlot($club, $season, $blank->getId(), $this->planIdOf($entry), 3);  // prêté → gardé
+        $this->venueMode($club, $season, $entry, $blank->getId(), \App\Enum\VenuePeriodMode::BLANK);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $counts = $this->venuesBySlotCount($this->builder->buildForOverlay($schedule, $entry)['venues']);
+        self::assertSame(1, $counts[$blank->getId()], 'seul le créneau prêté reste : la grille repart vierge');
+
+        $base = $this->venuesBySlotCount($this->builder->buildForClubSeason($club->getId(), $season->getId())['venues']);
+        self::assertSame(1, $base[$blank->getId()], 'le créneau de saison est intact côté planning principal');
+    }
+
+    /**
+     * #8 — ÉCARTER un créneau de saison ne retire QUE celui-là, pour CETTE période : ses
+     * voisins restent, et le planning principal n'est jamais modifié (décision fondateur).
+     */
+    public function testOverlayExcludedSeasonalSlotDisappearsAloneAndBasePlanIsUntouched(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $venue = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000c1', 'Gym partiel');
+        $excluded = $this->venueSlot($club, $season, $venue->getId(), null, 1);
+        $this->venueSlot($club, $season, $venue->getId(), null, 4); // le voisin, gardé
+        $this->em->flush(); // l'exclusion a besoin de l'id du créneau
+        $this->excludeSlot($club, $season, $entry, $excluded->getId());
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->em->flush();
+
+        $counts = $this->venuesBySlotCount($this->builder->buildForOverlay($schedule, $entry)['venues']);
+        self::assertSame(1, $counts[$venue->getId()], 'seul le créneau écarté disparaît de la période');
+
+        $base = $this->venuesBySlotCount($this->builder->buildForClubSeason($club->getId(), $season->getId())['venues']);
+        self::assertSame(2, $base[$venue->getId()], 'le planning principal garde ses DEUX créneaux — il n’est jamais modifié');
+    }
+
     public function testOverlayDropsConstraintDisabledForPeriod(): void
     {
         [$club, $season] = $this->seed();
@@ -429,7 +539,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     }
 
     /** $schedulePlanId : null = créneau saisonnier (base) ; set = prêté à ce plan (lot C3). */
-    private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): void
+    private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): \App\Entity\VenueTrainingSlot
     {
         $slot = new \App\Entity\VenueTrainingSlot;
         $slot->setClubId($club->getId());
@@ -441,6 +551,31 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $slot->setCapacity(1);
         $slot->setSchedulePlanId($schedulePlanId);
         $this->em->persist($slot);
+
+        return $slot;
+    }
+
+    /** #8 — mode d'un gymnase POUR la période (sparse : pas de ligne = hériter). */
+    private function venueMode(Club $club, Season $season, CalendarEntry $entry, string $venueId, \App\Enum\VenuePeriodMode $mode): void
+    {
+        $o = new \App\Entity\VenuePeriodOverride;
+        $o->setClubId($club->getId());
+        $o->setSeasonId($season->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
+        $o->setVenueId($venueId);
+        $o->setMode($mode);
+        $this->em->persist($o);
+    }
+
+    /** #8 — un créneau de SAISON écarté POUR la période (le créneau lui-même survit). */
+    private function excludeSlot(Club $club, Season $season, CalendarEntry $entry, string $slotId): void
+    {
+        $x = new \App\Entity\VenueSlotPeriodExclusion;
+        $x->setClubId($club->getId());
+        $x->setSeasonId($season->getId());
+        $x->setSchedulePlanId($this->planIdOf($entry));
+        $x->setVenueTrainingSlotId($slotId);
+        $this->em->persist($x);
     }
 
     /** Créneaux (jours ISO) du gymnase VENUE_CLOSED effectivement présents dans le payload overlay. */

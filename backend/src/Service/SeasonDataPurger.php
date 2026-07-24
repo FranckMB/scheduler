@@ -87,6 +87,8 @@ final class SeasonDataPurger
             Reservation::class,
             \App\Entity\TeamPeriodOverride::class,
             \App\Entity\ConstraintPeriodOverride::class,
+            \App\Entity\VenuePeriodOverride::class,
+            \App\Entity\VenueSlotPeriodExclusion::class,
             // Module matchs (ajouté après ce purger — gap RGPD constaté PR-1) :
             // Fixture avant Competition (competitionId y pointe). Changement
             // ASSUMÉ pour ResetSeasonController aussi : « réinitialiser la

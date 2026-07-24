@@ -21,6 +21,8 @@ use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueSlotPeriodExclusion;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
@@ -28,6 +30,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
+use App\Enum\VenuePeriodMode;
 use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -222,6 +225,28 @@ final class ScheduleConstraintBuilder
             }
         }
 
+        // #8 (fondateur 2026-07-24) — MODES DE GYMNASE pour la période, ancrés au PLAN
+        // (inv. 5), sparse : pas de ligne = INHERIT, le comportement historique.
+        //  - DISABLED : le gymnase ne sert pas du tout cette période (aucun créneau, ses
+        //    prêtés compris) et sort du payload ;
+        //  - BLANK : on repart d'une grille vierge — ses créneaux de SAISON sont ignorés,
+        //    seuls ses créneaux prêtés comptent (le gymnase, lui, reste dans le payload,
+        //    ses prêtés le référencent).
+        // + exclusions sparse : un créneau de SAISON écarté pour cette période. Le créneau
+        // saisonnier n'est jamais touché — le planning principal reste intact.
+        $disabledVenueIds = [];
+        $blankVenueIds = [];
+        foreach ($em->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
+            match ($venueOverride->getMode()) {
+                VenuePeriodMode::DISABLED => $disabledVenueIds[$venueOverride->getVenueId()] = true,
+                VenuePeriodMode::BLANK => $blankVenueIds[$venueOverride->getVenueId()] = true,
+            };
+        }
+        $excludedSlotIds = [];
+        foreach ($em->getRepository(VenueSlotPeriodExclusion::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $exclusion) {
+            $excludedSlotIds[$exclusion->getVenueTrainingSlotId()] = true;
+        }
+
         $constraints = match ($periodType) {
             // Fermeture: inherit ALL permanent constraints (kept by default), minus those
             // the manager explicitly disabled for the window (sparse diff — base untouched).
@@ -250,10 +275,20 @@ final class ScheduleConstraintBuilder
                 $this->venueTrainingSlotRepository->findBy(['schedulePlanId' => $schedulePlanId]),
             );
             foreach ($slots as $row) {
-                if (isset($closedWeekdaysByVenue[$row->getVenueId()][$row->getDayOfWeek()])) {
+                $rowVenueId = $row->getVenueId();
+                // Rien à filtrer ici pour un gymnase DÉSACTIVÉ : il est retiré de `venues:`
+                // (plus bas), et cette map n'est lue QUE pour sérialiser un gymnase présent
+                // dans le payload — un skip ici serait du code mort, donc jamais testé.
+                // Un créneau de SAISON saute si le gymnase repart d'une grille vierge, ou si
+                // le gestionnaire l'a écarté pour cette période. Un créneau PRÊTÉ (ancré au
+                // plan) n'est jamais concerné : il a été créé POUR cette période.
+                if (null === $row->getSchedulePlanId() && (isset($blankVenueIds[$rowVenueId]) || isset($excludedSlotIds[$row->getId()]))) {
+                    continue;
+                }
+                if (isset($closedWeekdaysByVenue[$rowVenueId][$row->getDayOfWeek()])) {
                     continue; // gymnase fermé ce jour-là : créneau retiré du payload
                 }
-                $availabilitiesByVenue[$row->getVenueId()][] = $row;
+                $availabilitiesByVenue[$rowVenueId][] = $row;
             }
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
@@ -267,19 +302,34 @@ final class ScheduleConstraintBuilder
         $payload = $this->buildPayload(
             clubId: $clubId,
             seasonId: $seasonId,
-            venues: $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+            // Un gymnase DÉSACTIVÉ sort du payload : l'y laisser avec 0 créneau serait
+            // inoffensif pour le solveur, mais toute contrainte le nommant deviendrait un
+            // id fantôme (cf. post-filtre plus bas) — on le retire à la source.
+            venues: array_values(array_filter(
+                $this->findByClubSeason(Venue::class, $clubId, $seasonId, $em),
+                static fn (Venue $venue): bool => !isset($disabledVenueIds[$venue->getId()]),
+            )),
             teams: $teams,
             coaches: $this->findByClubSeason(Coach::class, $clubId, $seasonId, $em),
             teamCoaches: $this->findByClubSeason(TeamCoach::class, $clubId, $seasonId, $em),
             coachPlayerMemberships: $this->findByClubSeason(CoachPlayerMembership::class, $clubId, $seasonId, $em),
             // Overlay's OWN slot templates (its work-loop locks), not the base plan's.
-            slotTemplates: $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+            // Filtres DÉFENSIFS sur les gymnases désactivés : la bascule en DISABLED
+            // supprime déjà prêtés et réservations côté serveur, mais un verrou ou une
+            // réservation rescapé pointerait un gymnase absent du payload (INFEASIBLE).
+            slotTemplates: array_values(array_filter(
+                $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+                static fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()]),
+            )),
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $schedule->getSolverSeed(),
             constraints: $constraints,
             // Overlay reservations: this period's own pins (base ones don't leak in,
             // mirroring how HOLIDAY overlays use only dated constraints).
-            reservations: $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+            reservations: array_values(array_filter(
+                $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+                static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
+            )),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -302,6 +352,33 @@ final class ScheduleConstraintBuilder
                 static fn (mixed $row): bool => !\is_array($row)
                     || ConstraintScope::TEAM->value !== ($row['scope'] ?? null)
                     || !isset($deactivatedTeamIds[(string) ($row['scopeTargetId'] ?? '')]),
+            ));
+        }
+
+        // Miroir du filtre équipes ci-dessus, côté GYMNASES : une contrainte qui nomme un
+        // gymnase absent du payload est un id fantôme — une `forcedVenueId`/`minAtVenueId`
+        // HARD rendrait le solve INFEASIBLE. On filtre le payload SÉRIALISÉ (pas la liste
+        // d'entités) pour attraper aussi les expansions par équipe faites à la sérialisation.
+        if ([] !== $disabledVenueIds) {
+            $payload['constraints'] = array_values(array_filter(
+                $payload['constraints'],
+                static function (mixed $row) use ($disabledVenueIds): bool {
+                    if (!\is_array($row)) {
+                        return true;
+                    }
+                    if (ConstraintScope::FACILITY->value === ($row['scope'] ?? null)
+                        && isset($disabledVenueIds[(string) ($row['scopeTargetId'] ?? '')])) {
+                        return false;
+                    }
+                    $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
+                    foreach (['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'] as $venueKey) {
+                        if (isset($disabledVenueIds[(string) ($config[$venueKey] ?? '')])) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                },
             ));
         }
 

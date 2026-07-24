@@ -12,6 +12,8 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueSlotPeriodExclusion;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
@@ -363,6 +365,14 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         }
         foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
             $this->entityManager->remove($reservation);
+        }
+        // #8 — le mode de chaque gymnase pour la période (désactivé / grille vierge) et
+        // les créneaux de saison qu'elle écarte : des réglages, donc ancrés au plan.
+        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
+            $this->entityManager->remove($venueOverride);
+        }
+        foreach ($this->entityManager->getRepository(VenueSlotPeriodExclusion::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $exclusion) {
+            $this->entityManager->remove($exclusion);
         }
     }
 

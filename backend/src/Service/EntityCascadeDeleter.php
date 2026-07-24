@@ -83,7 +83,11 @@ final class EntityCascadeDeleter
         $venueId = $venue->getId();
 
         $this->withoutTenantFilters(function () use ($clubId, $seasonId, $venueId): void {
+            // #8 : les exclusions visent des créneaux — résolus AVANT de supprimer ceux-ci,
+            // sinon plus rien ne relie l'exclusion au gymnase et elle orphelinerait.
+            $this->deleteExclusionsOfVenueSlots($venueId, $clubId, $seasonId);
             $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(\App\Entity\VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleDiagnostic::class, 'venueId', $venueId, $clubId, $seasonId);
@@ -136,6 +140,26 @@ final class EntityCascadeDeleter
             $this->deleteBySlotKey(Reservation::class, $slot, $clubId, $seasonId, hardOnly: false);
             $this->deleteBySlotKey(ScheduleSlotTemplate::class, $slot, $clubId, $seasonId, hardOnly: true);
         });
+    }
+
+    /**
+     * #8 — les exclusions de créneau ne portent que l'id du créneau : pour purger celles
+     * d'un gymnase, il faut d'abord résoudre SES créneaux. Appelé sous withoutTenantFilters,
+     * comme le reste de la cascade.
+     */
+    private function deleteExclusionsOfVenueSlots(string $venueId, ?string $clubId, string $seasonId): void
+    {
+        $criteria = ['venueId' => $venueId, 'seasonId' => $seasonId];
+        if (null !== $clubId) {
+            $criteria['clubId'] = $clubId;
+        }
+        $slotIds = array_map(
+            static fn (VenueTrainingSlot $slot): string => $slot->getId(),
+            $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy($criteria),
+        );
+        foreach ($slotIds as $slotId) {
+            $this->deleteByField(\App\Entity\VenueSlotPeriodExclusion::class, 'venueTrainingSlotId', $slotId, $clubId, $seasonId);
+        }
     }
 
     private function deleteBySlotKey(string $entityClass, VenueTrainingSlot $slot, string $clubId, string $seasonId, bool $hardOnly): void
