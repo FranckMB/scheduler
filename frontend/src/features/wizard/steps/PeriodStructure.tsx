@@ -366,6 +366,10 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
   LOCK: "Verrouillé",
 };
 
+/** L'onglet-famille où une contrainte héritée se range. FACILITY_CAPACITY n'a pas
+ *  d'onglet propre (aucun formulaire ne la crée) → rangée avec « Gymnase ». */
+const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FACILITY_CAPACITY" === family ? "FACILITY" : family);
+
 /**
  * Period-editable constraints: the club's PERMANENT constraints are inherited into the
  * overlay (read-only), each toggle-able for the window via a sparse ConstraintPeriodOverride
@@ -378,8 +382,21 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
  *
  * Rendered only for overlay-generating periods (closure | holiday), on a CONFIRMED entry
  * (never during its load window, so the wrong default can't flash).
+ *
+ * `family` (fondateur 2026-07-24) : rendue DANS l'onglet-famille de ConstraintsStep, la
+ * section ne montre que les héritées de CET onglet — plus d'écran à part au-dessus. Sans
+ * `family` (tests/usages historiques), liste complète inchangée. Un onglet sans héritée
+ * ne rend RIEN (pas de section vide répétée par onglet) — mais uniquement une fois les
+ * requêtes RÉSOLUES et SANS erreur : masquer pendant le chargement ferait clignoter le
+ * cadre, et masquer sur erreur laisserait croire qu'aucune contrainte n'est héritée
+ * (P4-1 : le panneau reste visible sur erreur, cf. plus bas).
+ *
+ * ⚠️ Le composant DOIT rester monté tant que le gestionnaire travaille la période :
+ * `inflight` (et les onSettled par mutation) sérialisent les écritures d'override, et un
+ * démontage en cours d'écriture les perd — d'où le rendu conditionnel de l'appelant, qui
+ * doit dépendre de l'onglet actif SANS démonter (voir ConstraintsStep).
  */
-export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string }) {
+export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId: string; family?: Constraint["family"] }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
   // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
   // Ce composant ne vit qu'en mode période (calendarEntryId requis), donc `ready` équivaut
@@ -388,7 +405,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
-  const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
+  const { data: constraints = [], isLoading, isError: constraintsError } = useWizardConstraints(); // permanent (base) constraints
   const { data: teams = [] } = useWizardTeams();
   const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useWizardTeamTags();
   const { data: tagAssignments = [], isLoading: tagAssignmentsLoading, isError: tagAssignmentsError } = useWizardTeamTagAssignments();
@@ -457,6 +474,7 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
     const tagName = targetTagOf(c);
     return tagResolutionReady && "CLUB" === c.scope && null !== tagName && 0 === activeTagTeamIds(tagName).size;
   };
+  const shown = (c: Constraint): boolean => !hidden(c) && (undefined === family || familyTabOf(c.family) === family);
   const activeOf = (c: Constraint): boolean => (notApplicable(c) ? false : inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
   // Toggle = upsert-or-delete-to-default (mirrors the team override): back to the default
@@ -499,21 +517,46 @@ export function PeriodConstraints({ calendarEntryId }: { calendarEntryId: string
   if (!isOverlay) {
     return null;
   }
+  const visible = constraints.filter(shown);
+  // DEUX niveaux de chargement, à ne pas confondre (revue #284 round 2) :
+  // - PRÉSENCE de la section : ce qui décide QUELLES contraintes s'affichent — la requête
+  //   des contraintes de base, plus la résolution des tags dont `hidden` dépend. Les
+  //   overrides n'en font PAS partie : ils ne pilotent que l'ÉTAT des cases. Les y inclure
+  //   faisait disparaître puis réapparaître la section quand le plan se résolvait (les
+  //   requêtes d'override, désactivées tant que planId est null, rapportent isLoading=false
+  //   avant de basculer à true) — un saut de mise en page pire que le flash corrigé.
+  // - CORPS : attend en plus les overrides, sinon les cases s'afficheraient au mauvais état.
+  const presenceSettled = !isLoading && tagResolutionReady;
+  const bodyLoading = !presenceSettled || overridesLoading || teamOverridesLoading;
+  // Dans un onglet, on ne rend RIEN tant qu'il n'y a rien à montrer (l'EmptyHint global n'a
+  // de sens que pour la liste complète) : rien pendant que la présence se décide — sinon le
+  // cadre titré apparaît puis disparaît — et rien si l'onglet est vide une fois décidée.
+  // Une fois la section rendue, elle ne peut plus disparaître : `visible` ne dépend que de
+  // requêtes déjà résolues. SUR ERREUR des contraintes, on rend malgré tout (P4-1) : une
+  // liste vide par échec n'est pas « rien à hériter ».
+  if (undefined !== family && !constraintsError && (!presenceSettled || 0 === visible.length)) {
+    return null;
+  }
 
   return (
     <div className="mb-4 space-y-2 rounded-lg border border-border bg-card p-3">
       <p className="text-sm font-medium">Contraintes du planning principal</p>
       <p className="text-xs text-muted-foreground">Cochez celles à garder pendant cette période — le planning principal n'est pas modifié.</p>
-      {/* Wait for all three queries to LOAD (constraints, the period's own overrides — else a
-          toggle 422s on an existing row — and team overrides, which drive the reprise default
-          + the non-applicable strike). On a fetch ERROR we still render: the backend stays
-          authoritative on the payload, so a transient error only glitches the strike, and
-          hiding the whole panel would strand the closure editor (query-error UX = dette P4-1). */}
-      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.filter((c) => !hidden(c)).length ? (
+      {/* Le corps attend les requêtes qui pilotent l'ÉTAT des cases (overrides de la période —
+          sinon un toggle 422 sur une ligne existante — et overrides d'équipes, qui donnent le
+          défaut reprise et le barré non-applicable). Sur ERREUR des contraintes on le dit
+          explicitement : afficher « Aucune contrainte permanente » serait le mensonge exact
+          que le panneau doit éviter — le gestionnaire validerait la période en croyant que
+          rien n'est hérité (revue #284 round 2). */}
+      {constraintsError ? (
+        <p className="text-xs text-destructive">
+          Impossible de charger les contraintes du planning principal. Elles restent appliquées selon leur réglage actuel — rechargez la page pour les ajuster.
+        </p>
+      ) : bodyLoading ? null : 0 === visible.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
-          {constraints.filter((c) => !hidden(c)).map((c) => {
+          {visible.map((c) => {
             const active = activeOf(c);
             const naf = notApplicable(c);
             const tagName = targetTagOf(c);

@@ -361,9 +361,6 @@ export function ConstraintsStep() {
         sur l'écran <strong>Gymnases</strong> (1 ou 2 équipes par créneau).
       </p>
 
-      {/* Period overlay: toggle the club's permanent constraints off for a closure. */}
-      {periodEntryId ? <PeriodConstraints calendarEntryId={periodEntryId} /> : null}
-
       {/* Family + reservation tabs */}
       <div className="mb-3 flex flex-wrap gap-1 border-b border-border">
         {FAMILIES.map((f) => {
@@ -403,6 +400,20 @@ export function ConstraintsStep() {
           Réserver
         </button>
       </div>
+
+      {/* Mode période : les contraintes HÉRITÉES du planning principal vivent DANS l'onglet
+          de leur famille, juste au-dessus du formulaire d'ajout (fondateur 2026-07-24 —
+          plus d'écran à part au-dessus des onglets).
+          ⚠️ MONTÉ EN PERMANENCE, masqué en CSS sur l'onglet « Réserver » : PeriodConstraints
+          sérialise ses écritures d'override via un état `inflight` interne, qu'un démontage
+          perdrait — basculer d'onglet pendant une écriture en vol laisserait passer un
+          second POST (create dupliqué → 422 muet, case qui semble ignorer les clics).
+          Revue #284 round 1. */}
+      {periodEntryId ? (
+        <div className={cn("reserve" === mode && "hidden")} aria-hidden={"reserve" === mode}>
+          <PeriodConstraints calendarEntryId={periodEntryId} family={family} />
+        </div>
+      ) : null}
 
       {"reserve" === mode ? (
         anchorReady ? (

@@ -16,7 +16,7 @@ const overridesState: { data: Array<{ id: string; teamId: string; isActive: bool
 // Le VRAI type, pas une copie étroite : une seconde description du même objet finit
 // toujours par diverger — celle d'avant ignorait family/config/isActive, que les tests
 // envoient pourtant. Le helper porte les défauts, chaque test ne dit que ce qui compte.
-const constraintsState: { data: Constraint[] } = { data: [] };
+const constraintsState: { data: Constraint[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
 
 const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">): Constraint => ({
   scope: "CLUB",
@@ -29,6 +29,7 @@ const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">)
 });
 const constraintOverridesState: { data: Array<{ id: string; constraintId: string; isActive: boolean; schedulePlanId: string }> } = { data: [] };
 const tagsState: { data: Array<{ id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }> } = { data: [] };
+const tagsLoadingState = { value: false };
 const tagAssignmentsState: { data: Array<{ id: string; teamId: string; tagId: string; seasonId: string }> } = { data: [] };
 const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
@@ -80,14 +81,14 @@ vi.mock("../queries", () => ({
     return { mutate: createSlot, isPending: false };
   },
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
-  useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
+  useWizardConstraints: () => ({ data: constraintsState.data, isLoading: constraintsState.isLoading, isError: constraintsState.isError }),
   usePeriodConstraintOverrides: (anchor: string | null) => {
     constraintOverridesAnchor.value = anchor;
 
     return { data: constraintOverridesState.data, isLoading: constraintOverridesLoadingState.value, isError: constraintOverridesErrorState.value };
   },
-  useWizardTeamTags: () => ({ data: tagsState.data, isLoading: false, isError: false }),
-  useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: false, isError: false }),
+  useWizardTeamTags: () => ({ data: tagsState.data, isLoading: tagsLoadingState.value, isError: false }),
+  useWizardTeamTagAssignments: () => ({ data: tagAssignmentsState.data, isLoading: tagsLoadingState.value, isError: false }),
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
   useUpdatePeriodConstraintOverride: () => ({ mutate: updateConstraintOverride, isPending: false }),
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
@@ -119,8 +120,11 @@ afterEach(() => {
   resetPeriodSeed();
   overridesState.data = [];
   constraintsState.data = [];
+  constraintsState.isLoading = false;
+  constraintsState.isError = false;
   constraintOverridesState.data = [];
   tagsState.data = [];
+  tagsLoadingState.value = false;
   tagAssignmentsState.data = [];
   teamOverridesLoadingState.value = false;
   teamOverridesErrorState.value = false;
@@ -348,6 +352,70 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
 });
 
 describe("PeriodConstraints — inherited constraints toggle", () => {
+  // ── Fondateur 2026-07-24 (#9) : la section vit DANS l'onglet de sa famille ──
+  it("family filter: only shows inherited constraints of the given family tab", () => {
+    constraintsState.data = [
+      constraint({ id: "kt", name: "Pas après 20h", family: "TIME" }),
+      constraint({ id: "kd", name: "Pas le dimanche", family: "DAY" }),
+    ];
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByRole("checkbox", { name: "Pas après 20h appliquée cette période" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Pas le dimanche appliquée cette période" })).toBeNull();
+  });
+
+  it("family filter: FACILITY_CAPACITY (no tab of its own) files under the Gymnase tab", () => {
+    constraintsState.data = [constraint({ id: "kc", name: "Capacité Barros", family: "FACILITY_CAPACITY", scope: "FACILITY" })];
+    render(<PeriodConstraints calendarEntryId="e1" family="FACILITY" />);
+    expect(screen.getByRole("checkbox", { name: "Capacité Barros appliquée cette période" })).toBeInTheDocument();
+  });
+
+  it("family filter: renders NOTHING (not an empty section) when the tab has no inherited constraint", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="COACH_AVAILABILITY" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 : sur ERREUR on rend le panneau AVEC un message d'erreur explicite. Le
+  // masquer, ou pire afficher « Aucune contrainte permanente », laisserait le gestionnaire
+  // conclure que rien n'est hérité et valider la période à tort (P4-1).
+  it("family filter: on a constraints-query ERROR, renders the panel and says so — never 'aucune contrainte'", () => {
+    constraintsState.data = [];
+    constraintsState.isError = true;
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByText("Contraintes du planning principal")).toBeInTheDocument();
+    expect(screen.getByText(/Impossible de charger les contraintes/)).toBeInTheDocument();
+    expect(screen.queryByText("Aucune contrainte permanente.")).toBeNull();
+  });
+
+  // Revue #284 round 2 : la présence de la section attend que les contraintes soient
+  // RÉSOLUES — sinon le cadre titré apparaît puis disparaît. Données NON VIDES : sans ça le
+  // test passerait aussi sans la garde (il serait vacant — c'était le défaut du round 1).
+  it("family filter: renders nothing WHILE the constraints query is loading, even with data pending", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
+    constraintsState.isLoading = true;
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 round 2 : `hidden()` dépend de la résolution des TAGS — décider la présence
+  // avant qu'ils n'arrivent ferait apparaître une contrainte taguée puis la retirer.
+  it("family filter: renders nothing while the TAG queries are still resolving (hidden() depends on them)", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h pour les féminines", family: "TIME", config: { targetTag: "FEMININE" } })];
+    tagsLoadingState.value = true;
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 round 2 : une fois rendue, la section ne doit PLUS disparaître quand les
+  // requêtes d'override basculent en chargement (plan qui se résout) — c'est le saut de
+  // mise en page introduit par le round 1.
+  it("family filter: stays rendered while the OVERRIDE queries load (they drive state, not presence)", () => {
+    constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
+    constraintOverridesLoadingState.value = true;
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByText("Contraintes du planning principal")).toBeInTheDocument();
+  });
+
   it("closure: lists the club's permanent constraints, all kept by default", () => {
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];
     render(<PeriodConstraints calendarEntryId="e1" />);
