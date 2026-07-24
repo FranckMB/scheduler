@@ -191,6 +191,73 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertSame([$period], $this->listPlanIds('?schedulePlanId=' . $period), 'period listing returns only period slots');
     }
 
+    /**
+     * NR #8 — « repartir d'une GRILLE VIERGE » doit être utilisable : c'est tout son
+     * objet de redéfinir les heures du gymnase pour la période. Exemple fondateur :
+     * Barros a un créneau de saison mardi 18h-19h30 ; la mairie le prête toute la
+     * journée pendant les vacances, le gestionnaire veut y mettre 14h-20h. Sans cette
+     * exception le POST 422 sur le créneau de saison qu'il vient précisément d'écarter,
+     * et le seul contournement serait de SUPPRIMER ce créneau — donc de modifier le
+     * planning principal (invariant fondateur n°1). Revue #285.
+     */
+    public function testPeriodSlotMayOverlapASeasonalSlotTheModeIgnores(): void
+    {
+        $venue = $this->createVenue(false);
+        $period = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $this->postSlot($venue->getId(), 2, '18:00', 90); // saison : mardi 18h00–19h30
+        self::assertResponseStatusCodeSame(201);
+
+        // Sans réglage, le chevauchement reste refusé (les deux se rejoindraient au solve).
+        $this->postPeriodSlot($venue->getId(), 2, '14:00', 360, $period);
+        self::assertResponseStatusCodeSame(422);
+
+        // Le gymnase repart d'une grille VIERGE pour cette période : son créneau de saison
+        // n'entrera pas dans le payload, il ne peut donc plus rien télescoper.
+        $this->scopeGucToClub($this->club->getId());
+        $override = (new \App\Entity\VenuePeriodOverride)
+            ->setClubId($this->club->getId())
+            ->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($period)
+            ->setVenueId($venue->getId())
+            ->setMode(\App\Enum\VenuePeriodMode::BLANK);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        $this->postPeriodSlot($venue->getId(), 2, '14:00', 360, $period);
+        self::assertResponseStatusCodeSame(201);
+
+        // Le créneau de SAISON est intact : on l'a ignoré, pas supprimé.
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertCount(
+            1,
+            $this->em->getRepository(VenueTrainingSlot::class)->findBy(['venueId' => $venue->getId(), 'schedulePlanId' => null]),
+            'le créneau de saison survit — la période l’ignore, elle ne le touche pas',
+        );
+    }
+
+    /** Même exception pour un créneau de saison ÉCARTÉ individuellement (mode hériter). */
+    public function testPeriodSlotMayOverlapAnExcludedSeasonalSlot(): void
+    {
+        $venue = $this->createVenue(false);
+        $period = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $this->postSlot($venue->getId(), 2, '18:00', 90);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->scopeGucToClub($this->club->getId());
+        $seasonal = $this->em->getRepository(VenueTrainingSlot::class)->findOneBy(['venueId' => $venue->getId(), 'schedulePlanId' => null]);
+        self::assertNotNull($seasonal);
+        $this->em->persist((new \App\Entity\VenueSlotPeriodExclusion)
+            ->setClubId($this->club->getId())
+            ->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($period)
+            ->setVenueTrainingSlotId($seasonal->getId()));
+        $this->em->flush();
+
+        $this->postPeriodSlot($venue->getId(), 2, '18:00', 90, $period);
+        self::assertResponseStatusCodeSame(201);
+    }
+
     public function testPeriodSlotOverlappingSeasonalIsRejectedButDifferentPeriodAllowed(): void
     {
         $venue = $this->createVenue(false);

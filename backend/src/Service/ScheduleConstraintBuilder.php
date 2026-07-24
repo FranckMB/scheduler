@@ -41,6 +41,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class ScheduleConstraintBuilder
 {
+    /**
+     * Les clés de `config` qui nomment un gymnase. Partagées avec le gate pré-solve
+     * (ValidateConstraintsController) : les deux doivent voir le MÊME jeu de contraintes,
+     * sans quoi le récap annonce applicable ce que le solveur ne recevra pas.
+     */
+    public const VENUE_CONFIG_KEYS = ['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'];
     private const CACHE_TTL_SECONDS = 14_400;
     private const SCHEMA_VERSION = '2.1';
     private const DEFAULT_SOLVER_SEED = 42;
@@ -120,6 +126,7 @@ final class ScheduleConstraintBuilder
         // Base plan only: SEASONAL slots (calendarEntryId IS NULL) — a period's own
         // slots (a gym lent for a window) must never leak into the base generation.
         $availabilitiesByVenue = [];
+        $ignoredSeasonalSlots = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
             $rows = $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null]);
             foreach ($rows as $row) {
@@ -269,6 +276,7 @@ final class ScheduleConstraintBuilder
         // for the window, calendarEntryId = entry). P2-5 5b : un gymnase fermé perd ses
         // créneaux sur ses jours FERMÉS uniquement (day-précis) — le reste passe.
         $availabilitiesByVenue = [];
+        $ignoredSeasonalSlots = [];
         if ($this->venueTrainingSlotRepository instanceof VenueTrainingSlotRepository) {
             $slots = array_merge(
                 $this->venueTrainingSlotRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null]),
@@ -283,6 +291,7 @@ final class ScheduleConstraintBuilder
                 // le gestionnaire l'a écarté pour cette période. Un créneau PRÊTÉ (ancré au
                 // plan) n'est jamais concerné : il a été créé POUR cette période.
                 if (null === $row->getSchedulePlanId() && (isset($blankVenueIds[$rowVenueId]) || isset($excludedSlotIds[$row->getId()]))) {
+                    $ignoredSeasonalSlots[] = $row;
                     continue;
                 }
                 if (isset($closedWeekdaysByVenue[$rowVenueId][$row->getDayOfWeek()])) {
@@ -292,6 +301,17 @@ final class ScheduleConstraintBuilder
             }
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
+
+        // Un verrou ou une réservation posé sur un créneau que la période IGNORE (gymnase
+        // désactivé/vierge, ou créneau écarté) ne doit pas atteindre le solveur : l'engine
+        // ré-émet les créneaux verrouillés tels quels, la séance reviendrait donc au même
+        // endroit et l'exclusion n'aurait rien fait (revue #285). On compare sur le triplet
+        // (gymnase, jour, heure) — c'est ce qu'un verrou porte, il ne référence pas le
+        // créneau par son id.
+        $ignoredPins = [];
+        foreach ($ignoredSeasonalSlots as $ignored) {
+            $ignoredPins[$this->pinKey($ignored->getVenueId(), $ignored->getDayOfWeek(), $this->formatTime($ignored->getStartTime()))] = true;
+        }
 
         // Deactivated teams (computed above) are dropped from the payload.
         $teams = array_values(array_filter(
@@ -319,7 +339,8 @@ final class ScheduleConstraintBuilder
             // réservation rescapé pointerait un gymnase absent du payload (INFEASIBLE).
             slotTemplates: array_values(array_filter(
                 $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
-                static fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()]),
+                fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()])
+                    && !isset($ignoredPins[$this->pinKey($template->getVenueId(), $template->getDayOfWeek(), $this->formatTime($template->getStartTime()))]),
             )),
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
             solverSeed: $schedule->getSolverSeed(),
@@ -328,7 +349,8 @@ final class ScheduleConstraintBuilder
             // mirroring how HOLIDAY overlays use only dated constraints).
             reservations: array_values(array_filter(
                 $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
-                static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
+                fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()])
+                    && !isset($ignoredPins[$this->pinKey($reservation->getVenueId(), $reservation->getDayOfWeek(), $this->formatTime($reservation->getStartTime()))]),
             )),
         );
 
@@ -371,7 +393,7 @@ final class ScheduleConstraintBuilder
                         return false;
                     }
                     $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
-                    foreach (['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'] as $venueKey) {
+                    foreach (self::VENUE_CONFIG_KEYS as $venueKey) {
                         if (isset($disabledVenueIds[(string) ($config[$venueKey] ?? '')])) {
                             return false;
                         }
@@ -889,6 +911,12 @@ final class ScheduleConstraintBuilder
         }
 
         return $result;
+    }
+
+    /** Clé d'un épinglage (verrou/réservation) : un verrou ne cite pas l'id du créneau. */
+    private function pinKey(string $venueId, int $dayOfWeek, string $startTime): string
+    {
+        return $venueId . '|' . $dayOfWeek . '|' . $startTime;
     }
 
     /**

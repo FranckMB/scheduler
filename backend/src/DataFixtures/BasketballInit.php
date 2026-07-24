@@ -969,20 +969,20 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
     {
         $ara = 'ARA00TEST';
 
-        $club = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => $ara]);
-        if (!$club instanceof Club) {
-            $club = new Club;
-            $club->setName('FakeClub');
-            $club->setSlug('fakeclub');
-            $club->setFfbbClubCode($ara);
-            $club->setTimezone('Europe/Paris');
-            $club->setLocale('fr');
-            $club->setOnboardingCompleted(false);
-            $manager->persist($club);
+        $clubNgnima = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => $ara]);
+        if (!$clubNgnima instanceof Club) {
+            $clubNgnima = new Club;
+            $clubNgnima->setName('FakeClub');
+            $clubNgnima->setSlug('fakeclub');
+            $clubNgnima->setFfbbClubCode($ara);
+            $clubNgnima->setTimezone('Europe/Paris');
+            $clubNgnima->setLocale('fr');
+            $clubNgnima->setOnboardingCompleted(false);
+            $manager->persist($clubNgnima);
             $manager->flush();
         }
 
-        $clubId = $club->getId();
+        $clubId = $clubNgnima->getId();
         $manager->getConnection()->executeStatement('SELECT set_config(\'app.club_id\', ?, false)', [$clubId]);
 
         $user = $manager->getRepository(User::class)->findOneBy(['email' => 'n.eblin@gmail.com']);
@@ -998,12 +998,12 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
 
         $existingMembership = $manager->getRepository(ClubUser::class)->findOneBy([
-            'clubId' => $club->getId(),
+            'clubId' => $clubNgnima->getId(),
             'userId' => $user->getId(),
         ]);
         if (null === $existingMembership) {
             $clubUser = new ClubUser;
-            $clubUser->setClubId($club->getId());
+            $clubUser->setClubId($clubNgnima->getId());
             $clubUser->setUserId($user->getId());
             $clubUser->setRole('admin');
             $clubUser->setIsActive(true);
@@ -1011,16 +1011,15 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         }
 
         $existingSeason = $manager->getRepository(Season::class)->findOneBy([
-            'clubId' => $club->getId(),
+            'clubId' => $clubNgnima->getId(),
             'status' => 'active',
         ]);
         if (null === $existingSeason) {
-            $currentYear = (int) (new DateTimeImmutable)->format('Y');
             $season = new Season;
-            $season->setClubId($club->getId());
-            $season->setName((string) $currentYear);
-            $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
-            $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
+            $season->setClubId($clubNgnima->getId());
+            $season->setName('2026-2027');
+            $season->setStartDate(new DateTimeImmutable('2026-07-15'));
+            $season->setEndDate(new DateTimeImmutable('2027-07-14'));
             $season->setStatus('active');
             $season->setTransitionData([]);
             $manager->persist($season);
@@ -1036,12 +1035,12 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $manager->persist($sport);
                 $manager->flush();
             }
-            $club->setSportId($sport->getId());
+            $clubNgnima->setSportId($sport->getId());
 
             $categories = BasketballCategoryCatalog::categories();
             foreach ($categories as $categoryData) {
                 $sportCategory = new SportCategory;
-                $sportCategory->setClubId($club->getId());
+                $sportCategory->setClubId($clubNgnima->getId());
                 $sportCategory->setSportId($sport->getId());
                 $sportCategory->setName($categoryData['name']);
                 $sportCategory->setAgeMin($categoryData['ageMin']);

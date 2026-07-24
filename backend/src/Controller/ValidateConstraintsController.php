@@ -10,12 +10,16 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
+use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintScope;
+use App\Enum\VenuePeriodMode;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ConstraintRepository;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
+use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +34,14 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class ValidateConstraintsController extends AbstractController
 {
+    /**
+     * Avertissements du récap pour la période en cours de validation — remplis par
+     * constraintsForPeriod (voir la réponse JSON : ils n'invalident rien).
+     *
+     * @var list<string>
+     */
+    private array $periodWarnings = [];
+
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
         private readonly CalendarEntryRepository $calendarEntryRepository,
@@ -72,6 +84,7 @@ final class ValidateConstraintsController extends AbstractController
             /** @var list<Constraint> $constraints */
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
         }
+        $warnings = $this->periodWarnings;
 
         // Map teamId → sessions/week for the fail-fast venue-minimum check — only
         // loaded when at least one constraint actually carries a minAtVenueId (the
@@ -107,8 +120,12 @@ final class ValidateConstraintsController extends AbstractController
 
         $valid = [] === $errors && [] === $conflicts;
 
+        // Les avertissements n'invalident RIEN : ils disent au récap ce qui ne sera pas
+        // appliqué (décision fondateur 2026-07-24 — « on ignore la contrainte, mais on
+        // AVERTIT côté récap »). Les traiter comme des erreurs bloquerait une génération
+        // parfaitement légitime.
         return $this->json(
-            ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts],
+            ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts, 'warnings' => $warnings],
             $valid ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY,
         );
     }
@@ -168,6 +185,18 @@ final class ValidateConstraintsController extends AbstractController
             }
         }
 
+        // #8 — les gymnases DÉSACTIVÉS pour cette période : leurs contraintes ne seront pas
+        // envoyées au solveur (ScheduleConstraintBuilder::buildForOverlay les filtre). Le gate
+        // pré-solve doit voir le MÊME jeu, sinon il valide ce qui ne partira pas ; et le récap
+        // doit le DIRE — « on ignore la contrainte, mais on avertit » (fondateur 2026-07-24).
+        $disabledVenueNames = [];
+        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
+            if (VenuePeriodMode::DISABLED === $venueOverride->getMode()) {
+                $venue = $this->entityManager->getRepository(Venue::class)->find($venueOverride->getVenueId());
+                $disabledVenueNames[$venueOverride->getVenueId()] = $venue?->getName() ?? 'gymnase désactivé';
+            }
+        }
+
         $activeTagTeamIds = $this->activeTagTeamIdsByName($clubId, $seasonId, $activeTeamIds);
         $permanent = [];
         foreach ($this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId) as $constraint) {
@@ -183,10 +212,42 @@ final class ValidateConstraintsController extends AbstractController
             if (ConstraintScope::CLUB === $constraint->getScope() && \is_string($targetTag) && '' !== $targetTag && [] === ($activeTagTeamIds[$targetTag] ?? [])) {
                 continue;
             }
+            $disabledVenueName = $this->disabledVenueNamed($constraint, $disabledVenueNames);
+            if (null !== $disabledVenueName) {
+                $this->periodWarnings[] = \sprintf(
+                    '« %s » vise le gymnase %s, désactivé pour cette période : elle ne sera pas appliquée.',
+                    $constraint->getName(),
+                    $disabledVenueName,
+                );
+
+                continue;
+            }
             $permanent[] = $constraint;
         }
 
         return [...$permanent, ...$dated];
+    }
+
+    /**
+     * Le nom du gymnase DÉSACTIVÉ que cette contrainte nomme, ou null. Mêmes clés que le
+     * builder (constante partagée) : le gate et le payload doivent voir la même chose.
+     *
+     * @param array<string, string> $disabledVenueNames
+     */
+    private function disabledVenueNamed(Constraint $constraint, array $disabledVenueNames): ?string
+    {
+        if (ConstraintScope::FACILITY === $constraint->getScope() && isset($disabledVenueNames[$constraint->getScopeTargetId() ?? ''])) {
+            return $disabledVenueNames[$constraint->getScopeTargetId() ?? ''];
+        }
+        $config = $constraint->getConfig();
+        foreach (ScheduleConstraintBuilder::VENUE_CONFIG_KEYS as $venueKey) {
+            $venueId = $config[$venueKey] ?? null;
+            if (\is_string($venueId) && isset($disabledVenueNames[$venueId])) {
+                return $disabledVenueNames[$venueId];
+            }
+        }
+
+        return null;
     }
 
     /**

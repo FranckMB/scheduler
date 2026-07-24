@@ -8,7 +8,10 @@ use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\VenueTrainingSlotResource;
 use App\Dto\VenueTrainingSlotInput;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueSlotPeriodExclusion;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\VenuePeriodMode;
 use DateTimeImmutable;
 
 /**
@@ -134,11 +137,42 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
             if ($this->neverGeneratedTogether($entity, $other)) {
                 continue;
             }
+            // #8 — un créneau de SAISON que CETTE période ignore (gymnase en « grille
+            // vierge », ou créneau écarté) n'entrera jamais dans son payload : il ne peut
+            // donc pas s'y télescoper avec un créneau prêté. Sans cette exception, « repartir
+            // d'une grille vierge » serait inutilisable — redéfinir les heures du gymnase
+            // buterait sur les créneaux de saison qu'on vient précisément d'écarter, et le
+            // seul contournement serait de les SUPPRIMER, ce qui modifierait le planning
+            // principal (revue #285 : invariant fondateur n°1).
+            if ($this->ignoredByPeriodOf($entity, $other)) {
+                continue;
+            }
             $otherStart = $this->minutesOf($other);
             if ($start < $otherStart + $other->getDurationMinutes() && $otherStart < $end) {
                 throw new ValidationException('This slot overlaps another slot of the same venue on that day.');
             }
         }
+    }
+
+    /**
+     * Le créneau qu'on écrit est-il PRÊTÉ à une période qui ignore l'autre créneau ?
+     * Vrai seulement dans ce sens : la période décide ce qu'elle ignore, la saison non.
+     */
+    private function ignoredByPeriodOf(VenueTrainingSlot $entity, VenueTrainingSlot $other): bool
+    {
+        $planId = $entity->getSchedulePlanId();
+        if (null === $planId || null !== $other->getSchedulePlanId()) {
+            return false; // on n'écrit pas pour une période, ou l'autre n'est pas saisonnier
+        }
+
+        $mode = $this->entityManager->getRepository(VenuePeriodOverride::class)
+            ->findOneBy(['schedulePlanId' => $planId, 'venueId' => $other->getVenueId()])?->getMode();
+        if (VenuePeriodMode::BLANK === $mode || VenuePeriodMode::DISABLED === $mode) {
+            return true;
+        }
+
+        return null !== $this->entityManager->getRepository(VenueSlotPeriodExclusion::class)
+            ->findOneBy(['schedulePlanId' => $planId, 'venueTrainingSlotId' => $other->getId()]);
     }
 
     private function neverGeneratedTogether(VenueTrainingSlot $a, VenueTrainingSlot $b): bool

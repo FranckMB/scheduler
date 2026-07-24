@@ -156,21 +156,24 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
      * créneaux de saison disparaissent. Ce qui appartient au planning principal — les
      * créneaux de SAISON — survit, et rien d'un AUTRE gymnase n'est touché.
      */
-    public function testDisablingAVenuePurgesItsPeriodRowsAndSparesTheSeasonStructure(): void
+    /**
+     * NR — DÉSACTIVER N'EST PAS SUPPRIMER (décision fondateur 2026-07-24) : le gymnase et
+     * tout ce qui s'y rattache sont IGNORÉS pour la période, jamais détruits. Une purge
+     * ferait re-saisir des créneaux prêtés perdus sur un simple clic, et rendrait la
+     * bascule irréversible (revue #285).
+     */
+    public function testDisablingAVenueDestroysNothing(): void
     {
         $seed = $this->seedCascadeFixture();
 
         $this->post(['schedulePlanId' => self::PLAN, 'venueId' => self::VENUE, 'mode' => 'DISABLED']);
         self::assertResponseStatusCodeSame(201);
 
-        $this->assertCascadePurged($seed);
+        $this->assertNothingDestroyed($seed);
     }
 
-    /**
-     * Même purge par ÉDITION (grille vierge → désactivé) : le chemin PUT ne doit pas
-     * laisser passer les orphelins que le chemin POST nettoie.
-     */
-    public function testEditingAVenueToDisabledPurgesTheSameWay(): void
+    /** Même garantie par ÉDITION (grille vierge → désactivé). */
+    public function testEditingAVenueToDisabledDestroysNothingEither(): void
     {
         $created = $this->post(['schedulePlanId' => self::PLAN, 'venueId' => self::VENUE, 'mode' => 'BLANK']);
         self::assertResponseStatusCodeSame(201);
@@ -180,7 +183,29 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode(['schedulePlanId' => self::PLAN, 'venueId' => self::VENUE, 'mode' => 'DISABLED'], \JSON_THROW_ON_ERROR));
         self::assertResponseIsSuccessful();
 
-        $this->assertCascadePurged($seed);
+        $this->assertNothingDestroyed($seed);
+    }
+
+    /**
+     * NR — la bascule est RÉVERSIBLE : désactiver puis revenir au défaut (DELETE de
+     * l'override) rend le gymnase et ses réglages tels qu'ils étaient.
+     */
+    public function testDisablingThenReturningToInheritRestoresEverything(): void
+    {
+        $seed = $this->seedCascadeFixture();
+        $created = $this->post(['schedulePlanId' => self::PLAN, 'venueId' => self::VENUE, 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->assertNothingDestroyed($seed);
+        $this->scopeGucToClub($this->club->getId());
+        $this->em->clear();
+        self::assertNull(
+            $this->em->getRepository(VenuePeriodOverride::class)->findOneBy(['schedulePlanId' => self::PLAN, 'venueId' => self::VENUE]),
+            'le retour au défaut supprime la ligne — le gymnase hérite de nouveau',
+        );
     }
 
     /**
@@ -239,9 +264,8 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
     }
 
     /**
-     * Les lignes que la désactivation doit emporter — et leurs témoins, qui doivent
-     * survivre : le créneau de SAISON du gymnase (planning principal) et le créneau
-     * prêté d'un AUTRE gymnase de la même période (la purge est ciblée).
+     * Tout ce qu'une désactivation pourrait détruire à tort — et qui doit survivre :
+     * créneaux prêtés, réservation, exclusions, et le créneau de SAISON du gymnase.
      *
      * @return array{lentSlot: string, reservation: string, exclusion: string, seasonSlot: string, otherVenueLentSlot: string, otherVenueExclusion: string}
      */
@@ -279,8 +303,8 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
             'otherVenueExclusion' => $otherVenueExclusion->getId(),
         ];
 
-        // AVANT : les trois lignes visées existent bel et bien (assertion non vacante —
-        // sans elle, un « c'est parti » ne prouverait rien).
+        // AVANT : les lignes existent bel et bien — sans quoi un « rien n'a disparu »
+        // serait vrai pour la mauvaise raison (assertion non vacante).
         $this->em->clear();
         self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['lentSlot']), 'le créneau prêté est en place avant la bascule');
         self::assertNotNull($this->em->getRepository(Reservation::class)->find($seed['reservation']), 'la réservation est en place avant la bascule');
@@ -289,21 +313,24 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         return $seed;
     }
 
-    /** @param array{lentSlot: string, reservation: string, exclusion: string, seasonSlot: string, otherVenueLentSlot: string, otherVenueExclusion: string} $seed */
-    private function assertCascadePurged(array $seed): void
+    /**
+     * Rien n'a disparu : ni les créneaux prêtés, ni les réservations, ni les exclusions,
+     * ni — surtout — le créneau de SAISON (invariant fondateur n°1 : le planning principal
+     * n'est jamais modifié). Le mode ne fait qu'IGNORER, au moment de bâtir le payload.
+     *
+     * @param array{lentSlot: string, reservation: string, exclusion: string, seasonSlot: string, otherVenueLentSlot: string, otherVenueExclusion: string} $seed
+     */
+    private function assertNothingDestroyed(array $seed): void
     {
         $this->scopeGucToClub($this->club->getId());
         $this->em->clear();
 
-        self::assertNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['lentSlot']), 'le créneau PRÊTÉ n’a plus de sens sur un gymnase désactivé');
-        self::assertNull($this->em->getRepository(Reservation::class)->find($seed['reservation']), 'la réservation de période part avec le gymnase désactivé');
-        self::assertNull($this->em->getRepository(VenueSlotPeriodExclusion::class)->find($seed['exclusion']), 'l’exclusion visant un créneau de ce gymnase n’a plus d’objet');
-
-        // Invariant fondateur n°1 : le planning principal n'est JAMAIS modifié.
-        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['seasonSlot']), 'le créneau de SAISON du gymnase survit — le planning principal n’est jamais modifié');
-        // La purge est ciblée sur CE gymnase.
-        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['otherVenueLentSlot']), 'le créneau prêté d’un autre gymnase de la période survit');
-        self::assertNotNull($this->em->getRepository(VenueSlotPeriodExclusion::class)->find($seed['otherVenueExclusion']), 'l’exclusion visant un autre gymnase survit');
+        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['lentSlot']), 'le créneau prêté survit — désactiver n’est pas supprimer');
+        self::assertNotNull($this->em->getRepository(Reservation::class)->find($seed['reservation']), 'la réservation survit');
+        self::assertNotNull($this->em->getRepository(VenueSlotPeriodExclusion::class)->find($seed['exclusion']), 'l’exclusion survit (l’aller-retour de mode doit être symétrique)');
+        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['seasonSlot']), 'le créneau de SAISON est intact — le planning principal n’est jamais modifié');
+        self::assertNotNull($this->em->getRepository(VenueTrainingSlot::class)->find($seed['otherVenueLentSlot']), 'les réglages des autres gymnases sont intacts');
+        self::assertNotNull($this->em->getRepository(VenueSlotPeriodExclusion::class)->find($seed['otherVenueExclusion']), 'les exclusions des autres gymnases sont intactes');
     }
 
     private function persistSlot(string $venueId, int $day, string $start, ?string $schedulePlanId): string

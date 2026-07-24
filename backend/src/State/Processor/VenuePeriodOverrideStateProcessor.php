@@ -7,13 +7,17 @@ namespace App\State\Processor;
 use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\VenuePeriodOverrideResource;
 use App\Dto\VenuePeriodOverrideInput;
-use App\Entity\Reservation;
 use App\Entity\VenuePeriodOverride;
-use App\Entity\VenueSlotPeriodExclusion;
-use App\Entity\VenueTrainingSlot;
 use App\Enum\VenuePeriodMode;
 
 /**
+ * DÉSACTIVER UN GYMNASE NE DÉTRUIT RIEN (décision fondateur 2026-07-24) : « tout est lié
+ * au gymnase, donc son indisponibilité les impacte forcément » — ses créneaux, ses
+ * réservations et ses contraintes sont IGNORÉS pour la période, jamais supprimés. Le
+ * réglage reste donc un pur filtre de LECTURE (ScheduleConstraintBuilder::buildForOverlay),
+ * et la bascule est réversible : revenir à « hériter » (DELETE de la ligne) rend tout tel
+ * quel. Une purge, elle, ferait re-saisir des créneaux prêtés perdus sur un simple clic.
+ *
  * @extends AbstractStateProcessor<VenuePeriodOverride, VenuePeriodOverrideInput, VenuePeriodOverrideResource>
  */
 class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
@@ -21,43 +25,6 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     protected function getEntityClass(): string
     {
         return VenuePeriodOverride::class;
-    }
-
-    /**
-     * Passer un gymnase en DÉSACTIVÉ le vide de tout ce qui n'aurait plus de sens pour
-     * cette période : ses créneaux PRÊTÉS, ses réservations, et les créneaux de saison
-     * qu'on avait écartés (le gymnase entier l'est désormais). L'UI confirme AVANT — mais
-     * la cohérence est garantie ICI, sinon un appel direct à l'API laisserait des lignes
-     * qui pointent un gymnase absent du payload (cf. filtres défensifs de
-     * ScheduleConstraintBuilder::buildForOverlay). ATOMIQUE avec l'écriture du mode : un
-     * mode DISABLED commité sans sa purge laisserait exactement ces orphelins.
-     *
-     * @param VenuePeriodOverrideInput $input
-     */
-    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
-    {
-        return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
-            $output = parent::processPost($input, $clubId, $seasonId);
-            $this->purgeIfDisabled($output);
-
-            return $output;
-        });
-    }
-
-    /**
-     * @param array<string, mixed>     $uriVariables
-     * @param VenuePeriodOverrideInput $input
-     */
-    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
-    {
-        return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
-            $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            // La bascule vers DISABLED peut aussi venir d'une ÉDITION (hériter → désactivé) :
-            // la purge doit s'appliquer aux deux verbes, sinon le chemin PUT laisse passer.
-            $this->purgeIfDisabled($output);
-
-            return $output;
-        });
     }
 
     /**
@@ -104,41 +71,5 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): VenuePeriodOverrideResource
     {
         return VenuePeriodOverrideResource::fromEntity($entity);
-    }
-
-    /**
-     * Purge des lignes de période devenues sans objet.
-     *
-     * L'ancre vient de la RESSOURCE PERSISTÉE, jamais du corps de la requête : au PUT,
-     * `updateEntityFromInput` ignore délibérément schedulePlanId/venueId (ils identifient
-     * la ligne), donc un corps qui les change ne déplace PAS la ligne — s'y fier ferait
-     * purger les créneaux et réservations d'une AUTRE période/gymnase que celle éditée.
-     */
-    private function purgeIfDisabled(VenuePeriodOverrideResource $output): void
-    {
-        if (VenuePeriodMode::DISABLED->value !== $output->mode) {
-            return;
-        }
-        $schedulePlanId = $output->schedulePlanId;
-        $venueId = $output->venueId;
-
-        foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId, 'venueId' => $venueId]) as $slot) {
-            $this->entityManager->remove($slot);
-        }
-        foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId, 'venueId' => $venueId]) as $reservation) {
-            $this->entityManager->remove($reservation);
-        }
-        // Les exclusions ne portent que l'id du créneau : on résout d'abord les créneaux de
-        // SAISON de ce gymnase, puis on retire les exclusions qui les visaient.
-        $seasonalSlotIds = array_map(
-            static fn (VenueTrainingSlot $slot): string => $slot->getId(),
-            $this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['venueId' => $venueId, 'schedulePlanId' => null]),
-        );
-        if ([] !== $seasonalSlotIds) {
-            foreach ($this->entityManager->getRepository(VenueSlotPeriodExclusion::class)->findBy(['schedulePlanId' => $schedulePlanId, 'venueTrainingSlotId' => $seasonalSlotIds]) as $exclusion) {
-                $this->entityManager->remove($exclusion);
-            }
-        }
-        $this->entityManager->flush();
     }
 }

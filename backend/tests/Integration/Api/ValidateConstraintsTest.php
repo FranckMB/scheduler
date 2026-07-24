@@ -116,6 +116,64 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertNotEmpty($data['conflicts'], 'overlay validation must include inherited permanent constraints');
     }
 
+    /**
+     * NR #8 (fondateur 2026-07-24) — « on ignore la contrainte, mais on AVERTIT côté
+     * récap ». Une contrainte qui vise un gymnase désactivé pour la période n'est pas
+     * envoyée au solveur (buildForOverlay la filtre) : le gate pré-solve doit voir le
+     * MÊME jeu — sinon il valide ce qui ne partira pas — et le dire au gestionnaire,
+     * sans pour autant bloquer la génération.
+     */
+    public function testAConstraintOnADisabledVenueWarnsWithoutBlocking(): void
+    {
+        $entry = $this->period(CalendarEntryPeriodType::HOLIDAY);
+        $planId = $this->planIdOf($entry);
+
+        $venue = new \App\Entity\Venue;
+        $venue->setClubId($this->club->getId());
+        $venue->setSeasonId($this->season->getId());
+        $venue->setName('Barros');
+        $venue->setCanSplit(false);
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+
+        $forced = new Constraint;
+        $forced->setClubId($this->club->getId());
+        $forced->setSeasonId($this->season->getId());
+        $forced->setName('SM1 impose Barros');
+        $forced->setScope(ConstraintScope::TEAM);
+        $forced->setFamily(ConstraintFamily::FACILITY);
+        $forced->setRuleType(ConstraintRuleType::HARD);
+        $forced->setConfig(['forcedVenueId' => $venue->getId()]);
+        $forced->setIsActive(true);
+        $this->em->persist($forced);
+
+        $override = new \App\Entity\VenuePeriodOverride;
+        $override->setClubId($this->club->getId());
+        $override->setSeasonId($this->season->getId());
+        $override->setSchedulePlanId($planId);
+        $override->setVenueId($venue->getId());
+        $override->setMode(\App\Enum\VenuePeriodMode::DISABLED);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        $this->client->loginUser($this->user);
+        $this->client->request(
+            'POST',
+            '/api/constraints/validate',
+            [],
+            [],
+            ['HTTP_X-Club-Id' => $this->club->getId()],
+            json_encode(['calendarEntryId' => $entry->getId()], \JSON_THROW_ON_ERROR),
+        );
+
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($data['valid'], 'un avertissement ne bloque pas la génération');
+        self::assertNotEmpty($data['warnings'], 'le récap doit signaler la contrainte laissée de côté');
+        self::assertStringContainsString('Barros', $data['warnings'][0]);
+        self::assertStringContainsString('SM1 impose Barros', $data['warnings'][0]);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

@@ -139,6 +139,9 @@ final class EntityCascadeDeleter
             // own schedule, not to this availability slot.
             $this->deleteBySlotKey(Reservation::class, $slot, $clubId, $seasonId, hardOnly: false);
             $this->deleteBySlotKey(ScheduleSlotTemplate::class, $slot, $clubId, $seasonId, hardOnly: true);
+            // #8 — les périodes qui ÉCARTAIENT ce créneau n'ont plus rien à écarter : sans
+            // ça l'exclusion pendrait sur un id disparu et l'API la renverrait encore.
+            $this->deleteByField(\App\Entity\VenueSlotPeriodExclusion::class, 'venueTrainingSlotId', $slot->getId(), $clubId, $seasonId);
         });
     }
 

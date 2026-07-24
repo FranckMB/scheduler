@@ -342,6 +342,48 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertSame(2, $base[$venue->getId()], 'le planning principal garde ses DEUX créneaux — il n’est jamais modifié');
     }
 
+    /**
+     * NR #8 (revue #285) — un VERROU ou une réservation posé sur un créneau que la période
+     * ÉCARTE ne doit pas atteindre le solveur : l'engine ré-émet les créneaux verrouillés
+     * tels quels, la séance reviendrait donc au même endroit et l'exclusion n'aurait rien
+     * fait. Idem sur un gymnase désactivé (le verrou, lui, n'était pas couvert).
+     */
+    public function testOverlayDropsPinsSittingOnIgnoredSlots(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $entry = $this->holidayPeriod($club, $season);
+        $venue = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000d1', 'Gym écarté');
+        $off = $this->venue($club, $season, '10000000-0000-4000-8000-0000000000d2', 'Gym désactivé');
+        $excluded = $this->venueSlot($club, $season, $venue->getId(), null, 2); // mardi 18h
+        $this->venueSlot($club, $season, $off->getId(), null, 2);
+        $this->em->flush();
+        $this->excludeSlot($club, $season, $entry, $excluded->getId());
+        $this->venueMode($club, $season, $entry, $off->getId(), \App\Enum\VenuePeriodMode::DISABLED);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+
+        // Un VERROU sur le créneau écarté, et un autre sur le gymnase désactivé.
+        foreach ([$venue->getId(), $off->getId()] as $pinnedVenueId) {
+            $lock = new ScheduleSlotTemplate;
+            $lock->setClubId($club->getId());
+            $lock->setSeasonId($season->getId());
+            $lock->setScheduleId($schedule->getId());
+            $lock->setTeamId('30000000-0000-4000-8000-0000000000e1');
+            $lock->setVenueId($pinnedVenueId);
+            $lock->setDayOfWeek(2);
+            $lock->setStartTime(new DateTimeImmutable('18:00'));
+            $lock->setDurationMinutes(90);
+            $lock->setLockLevel(\App\Enum\LockLevel::HARD);
+            $this->em->persist($lock);
+        }
+        $this->em->flush();
+
+        $pinned = array_map(static fn (array $s): ?string => $s['venueId'] ?? null, $this->builder->buildForOverlay($schedule, $entry)['slotTemplates']);
+
+        self::assertNotContains($venue->getId(), $pinned, 'un verrou sur un créneau écarté ne doit pas replacer la séance au même endroit');
+        self::assertNotContains($off->getId(), $pinned, 'un verrou sur un gymnase désactivé n’atteint pas le solveur');
+    }
+
     public function testOverlayDropsConstraintDisabledForPeriod(): void
     {
         [$club, $season] = $this->seed();
