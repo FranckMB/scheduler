@@ -60,7 +60,9 @@ Schedule (= Version)                    ← existant, recentré
    couvre tout par nature.
 5. **Les réglages de période s'accrochent au Plan** (pas au déclencheur calendrier) :
    coches équipes (`TeamPeriodOverride`), contraintes gardées/enlevées
-   (`ConstraintPeriodOverride`), créneaux prêtés (`VenueTrainingSlot` scopé période),
+   (`ConstraintPeriodOverride`), sa grille de gymnases (`VenueTrainingSlot` scopé période —
+   depuis #8 une COPIE du modèle de saison, cf. l'amendement ci-dessous) et ses modes de
+   gymnase (`VenuePeriodOverride`),
    réservations, flag de seed (`teamSelectionInitialized`) →
    **re-keyés `calendarEntryId` → `planId`**. Chaque plan-semaine a SES réglages.
 
@@ -134,7 +136,7 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 | **Version choisie** | Celle que pointe le plan (= validée). |
 | **Espace de travail** | Plan au pointeur null : on génère/compare des versions. |
 | **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard. |
-| **Réglages de période** | Coches équipes/contraintes + créneaux prêtés d'un plan CLOSURE/HOLIDAY. |
+| **Réglages de période** | Coches équipes/contraintes + grille de gymnases (copie, #8) + modes de gymnase d'un plan CLOSURE/HOLIDAY. |
 | **Termes bannis** | *baseline*, *planningName*, *overlayScheduleId*, *liveContext*, statuts *VALIDATED/ARCHIVED*. |
 
 ### Règles inter-plans & consommateurs (complétées après sweep exhaustif des ~320 usages)
