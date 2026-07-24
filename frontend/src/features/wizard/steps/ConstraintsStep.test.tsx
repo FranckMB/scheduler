@@ -468,9 +468,22 @@ describe("ConstraintsStep — inherited section lives inside the family tabs (pe
     await userEvent.click(screen.getByRole("button", { name: "Jours" }));
     expect(screen.getByTestId("inherited-section")).toHaveTextContent("DAY");
 
-    // Onglet Réserver : rien d'hérité.
+    // Onglet Réserver : la section est MASQUÉE (aria-hidden) mais reste MONTÉE — la
+    // démonter perdrait la sérialisation des écritures d'override en vol (revue #284 R1).
     await userEvent.click(screen.getByRole("button", { name: /Réserver/ }));
-    expect(screen.queryByTestId("inherited-section")).toBeNull();
+    const section = screen.getByTestId("inherited-section");
+    expect(section).toBeInTheDocument();
+    expect(section.parentElement).toHaveAttribute("aria-hidden", "true");
+    expect(section.parentElement).toHaveClass("hidden");
+  });
+
+  it("keeps the inherited section MOUNTED across tab switches (inflight write serialization)", async () => {
+    renderWithProviders(<ConstraintsStep />);
+    const before = screen.getByTestId("inherited-section");
+    await userEvent.click(screen.getByRole("button", { name: /Réserver/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Horaires" }));
+    // Même noeud DOM de bout en bout : aucun démontage/remontage entre les onglets.
+    expect(screen.getByTestId("inherited-section")).toBe(before);
   });
 
   it("renders NO inherited section outside period mode", () => {

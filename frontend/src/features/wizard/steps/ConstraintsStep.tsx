@@ -401,6 +401,20 @@ export function ConstraintsStep() {
         </button>
       </div>
 
+      {/* Mode période : les contraintes HÉRITÉES du planning principal vivent DANS l'onglet
+          de leur famille, juste au-dessus du formulaire d'ajout (fondateur 2026-07-24 —
+          plus d'écran à part au-dessus des onglets).
+          ⚠️ MONTÉ EN PERMANENCE, masqué en CSS sur l'onglet « Réserver » : PeriodConstraints
+          sérialise ses écritures d'override via un état `inflight` interne, qu'un démontage
+          perdrait — basculer d'onglet pendant une écriture en vol laisserait passer un
+          second POST (create dupliqué → 422 muet, case qui semble ignorer les clics).
+          Revue #284 round 1. */}
+      {periodEntryId ? (
+        <div className={cn("reserve" === mode && "hidden")} aria-hidden={"reserve" === mode}>
+          <PeriodConstraints calendarEntryId={periodEntryId} family={family} />
+        </div>
+      ) : null}
+
       {"reserve" === mode ? (
         anchorReady ? (
           <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
@@ -411,10 +425,6 @@ export function ConstraintsStep() {
         )
       ) : (
         <>
-          {/* Mode période : les contraintes HÉRITÉES du planning principal vivent DANS
-              l'onglet de leur famille, au-dessus des contraintes propres à la période
-              (fondateur 2026-07-24 — plus d'écran à part au-dessus des onglets). */}
-          {periodEntryId ? <PeriodConstraints calendarEntryId={periodEntryId} family={family} /> : null}
           {/* Per-family add form */}
           <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         {("TIME" === family || "DAY" === family || "FACILITY" === family) && teamPicker}

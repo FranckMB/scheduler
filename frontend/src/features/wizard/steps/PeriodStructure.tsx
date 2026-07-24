@@ -366,6 +366,10 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
   LOCK: "Verrouillé",
 };
 
+/** L'onglet-famille où une contrainte héritée se range. FACILITY_CAPACITY n'a pas
+ *  d'onglet propre (aucun formulaire ne la crée) → rangée avec « Gymnase ». */
+const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FACILITY_CAPACITY" === family ? "FACILITY" : family);
+
 /**
  * Period-editable constraints: the club's PERMANENT constraints are inherited into the
  * overlay (read-only), each toggle-able for the window via a sparse ConstraintPeriodOverride
@@ -378,16 +382,19 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
  *
  * Rendered only for overlay-generating periods (closure | holiday), on a CONFIRMED entry
  * (never during its load window, so the wrong default can't flash).
- */
-/** L'onglet-famille où une contrainte héritée se range. FACILITY_CAPACITY n'a pas
- *  d'onglet propre (aucun formulaire ne la crée) → rangée avec « Gymnase ». */
-const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FACILITY_CAPACITY" === family ? "FACILITY" : family);
-
-/**
- * `family` (fondateur 2026-07-24) : rendue DANS l'onglet-famille de ConstraintsStep,
- * la section ne montre que les héritées de CET onglet — plus d'écran à part au-dessus.
- * Sans `family` (tests/usages historiques), liste complète inchangée. 0 héritée dans
- * l'onglet → rien (pas de section vide répétée par onglet).
+ *
+ * `family` (fondateur 2026-07-24) : rendue DANS l'onglet-famille de ConstraintsStep, la
+ * section ne montre que les héritées de CET onglet — plus d'écran à part au-dessus. Sans
+ * `family` (tests/usages historiques), liste complète inchangée. Un onglet sans héritée
+ * ne rend RIEN (pas de section vide répétée par onglet) — mais uniquement une fois les
+ * requêtes RÉSOLUES et SANS erreur : masquer pendant le chargement ferait clignoter le
+ * cadre, et masquer sur erreur laisserait croire qu'aucune contrainte n'est héritée
+ * (P4-1 : le panneau reste visible sur erreur, cf. plus bas).
+ *
+ * ⚠️ Le composant DOIT rester monté tant que le gestionnaire travaille la période :
+ * `inflight` (et les onSettled par mutation) sérialisent les écritures d'override, et un
+ * démontage en cours d'écriture les perd — d'où le rendu conditionnel de l'appelant, qui
+ * doit dépendre de l'onglet actif SANS démonter (voir ConstraintsStep).
  */
 export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId: string; family?: Constraint["family"] }) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
@@ -398,7 +405,7 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
-  const { data: constraints = [], isLoading } = useWizardConstraints(); // permanent (base) constraints
+  const { data: constraints = [], isLoading, isError: constraintsError } = useWizardConstraints(); // permanent (base) constraints
   const { data: teams = [] } = useWizardTeams();
   const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useWizardTeamTags();
   const { data: tagAssignments = [], isLoading: tagAssignmentsLoading, isError: tagAssignmentsError } = useWizardTeamTagAssignments();
@@ -510,9 +517,21 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
   if (!isOverlay) {
     return null;
   }
-  // Dans un onglet : 0 héritée de cette famille → pas de section (l'EmptyHint global
-  // n'a de sens que pour la liste complète).
-  if (undefined !== family && !(isLoading || overridesLoading || teamOverridesLoading) && 0 === constraints.filter(shown).length) {
+  // Calculés UNE fois : la garde de chargement et la liste filtrée pilotent à la fois le
+  // retour anticipé par onglet et le rendu — les dupliquer ferait diverger les deux
+  // (c'est exactement ce qui a produit les régressions de la revue round 1).
+  const queriesLoading = isLoading || overridesLoading || teamOverridesLoading;
+  const visible = constraints.filter(shown);
+  // Dans un onglet, on ne rend RIEN quand il n'y a rien à montrer — l'EmptyHint global n'a
+  // de sens que pour la liste complète. Règles apprises en revue (#284 round 1) :
+  // - PENDANT le chargement : rien non plus. Rendre le cadre titré puis le retirer une fois
+  //   l'onglet connu vide produit un flash et un saut de mise en page à chaque première
+  //   ouverture de l'étape (les requêtes désactivées tant que le plan n'est pas résolu
+  //   rapportent isLoading=false, d'où un scintillement en trois temps).
+  // - SUR ERREUR de chargement des contraintes : on rend malgré tout (P4-1). Une liste vide
+  //   par échec n'est pas « rien à hériter » : masquer laisserait le gestionnaire conclure
+  //   qu'aucune permanente ne s'applique et valider la période à tort.
+  if (undefined !== family && !constraintsError && (queriesLoading || 0 === visible.length)) {
     return null;
   }
 
@@ -525,11 +544,11 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
           + the non-applicable strike). On a fetch ERROR we still render: the backend stays
           authoritative on the payload, so a transient error only glitches the strike, and
           hiding the whole panel would strand the closure editor (query-error UX = dette P4-1). */}
-      {isLoading || overridesLoading || teamOverridesLoading ? null : 0 === constraints.filter(shown).length ? (
+      {queriesLoading ? null : 0 === visible.length ? (
         <EmptyHint>Aucune contrainte permanente.</EmptyHint>
       ) : (
         <ul className="flex flex-col gap-1">
-          {constraints.filter(shown).map((c) => {
+          {visible.map((c) => {
             const active = activeOf(c);
             const naf = notApplicable(c);
             const tagName = targetTagOf(c);

@@ -16,7 +16,7 @@ const overridesState: { data: Array<{ id: string; teamId: string; isActive: bool
 // Le VRAI type, pas une copie étroite : une seconde description du même objet finit
 // toujours par diverger — celle d'avant ignorait family/config/isActive, que les tests
 // envoient pourtant. Le helper porte les défauts, chaque test ne dit que ce qui compte.
-const constraintsState: { data: Constraint[] } = { data: [] };
+const constraintsState: { data: Constraint[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
 
 const constraint = (over: Partial<Constraint> & Pick<Constraint, "id" | "name">): Constraint => ({
   scope: "CLUB",
@@ -80,7 +80,7 @@ vi.mock("../queries", () => ({
     return { mutate: createSlot, isPending: false };
   },
   useDeletePeriodSlot: () => ({ mutate: deleteSlot, isPending: false }),
-  useWizardConstraints: () => ({ data: constraintsState.data, isLoading: false }),
+  useWizardConstraints: () => ({ data: constraintsState.data, isLoading: constraintsState.isLoading, isError: constraintsState.isError }),
   usePeriodConstraintOverrides: (anchor: string | null) => {
     constraintOverridesAnchor.value = anchor;
 
@@ -119,6 +119,8 @@ afterEach(() => {
   resetPeriodSeed();
   overridesState.data = [];
   constraintsState.data = [];
+  constraintsState.isLoading = false;
+  constraintsState.isError = false;
   constraintOverridesState.data = [];
   tagsState.data = [];
   tagAssignmentsState.data = [];
@@ -368,6 +370,24 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
   it("family filter: renders NOTHING (not an empty section) when the tab has no inherited constraint", () => {
     constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
     const { container } = render(<PeriodConstraints calendarEntryId="e1" family="COACH_AVAILABILITY" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  // Revue #284 round 1 : masquer sur ERREUR laisserait le gestionnaire conclure qu'aucune
+  // permanente n'est héritée et valider la période à tort (P4-1 : on rend malgré l'erreur).
+  it("family filter: still renders the panel when the constraints query ERRORS (never 'nothing inherited')", () => {
+    constraintsState.data = [];
+    constraintsState.isError = true;
+    render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
+    expect(screen.getByText("Contraintes du planning principal")).toBeInTheDocument();
+  });
+
+  // Revue #284 round 1 : le cadre titré ne doit pas apparaître puis disparaître (flash +
+  // saut de mise en page) sur un onglet qui finira vide.
+  it("family filter: renders nothing WHILE LOADING on a tab that will end up empty (no flash)", () => {
+    constraintsState.data = [];
+    constraintsState.isLoading = true;
+    const { container } = render(<PeriodConstraints calendarEntryId="e1" family="TIME" />);
     expect(container).toBeEmptyDOMElement();
   });
 
