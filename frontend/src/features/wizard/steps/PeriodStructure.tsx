@@ -17,15 +17,15 @@ import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
-import { DAYS, hhmm, toMinutes } from "../lib/days";
+import { DAYS, DURATIONS, hhmm } from "../lib/days";
 import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
-import { END_MIN } from "../lib/weekGrid";
 import {
   useCreatePeriodConstraintOverride,
   useClearVenuePeriodGrid,
   useClearVenuePeriodMode,
   useCreatePeriodSlot,
   useCreateTeamPeriodOverride,
+  useDeleteReservation,
   useDeletePeriodConstraintOverride,
   useDeletePeriodSlot,
   useDeleteTeamPeriodOverride,
@@ -47,6 +47,7 @@ import {
   useWizardVenues,
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
+import { CapacitySelect } from "./slotFields";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 
@@ -327,11 +328,22 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
           {venues.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
+              {closed.has(v.id) ? " — INTERDIT cette période" : ""}
             </option>
           ))}
         </Select>
         <VenueSwatch color={selected.color ?? "transparent"} className="size-4 border border-input" />
       </div>
+
+      {/* Indicateur d'ensemble : le badge par gymnase ne montre que le gymnase choisi, or
+          un gestionnaire doit voir d'un coup TOUS les gymnases interdits (revue #8 PR-B
+          round 2) — sans quoi il croit un gymnase utilisable et ne comprend pas pourquoi
+          aucune équipe n'y est placée. */}
+      {venues.some((v) => closed.has(v.id)) ? (
+        <p role="alert" className="mb-3 text-sm text-destructive">
+          INTERDIT cette période : {venues.filter((v) => closed.has(v.id)).map((v) => v.name).join(", ")}.
+        </p>
+      ) : null}
 
       <PeriodVenuePanel
         key={selected.id}
@@ -421,14 +433,10 @@ function PeriodVenuePanel({
           slots={slots}
           selectedSlotId={editingSlot?.id ?? null}
           onAdd={(dayOfWeek, startTime) => {
-            // Borne de fin : un ajout par clic dure 90 min, refusé s'il dépasse la
-            // fermeture de la grille (END_MIN) — sinon la période déclarait au solveur une
-            // disponibilité après la fermeture du gymnase (revue #8 PR-B). Pour une autre
-            // durée, on ajuste ensuite dans l'éditeur (clic sur le créneau).
-            if (toMinutes(startTime) + 90 > END_MIN) {
-              toast.error("Ce créneau dépasserait la fin de journée. Posez-le plus tôt, puis ajustez sa durée.");
-              return;
-            }
+            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Pas de
+            // borne de fin de journée — la grille de saison n'en a pas et un créneau du soir
+            // (21:00–22:30) y est légitime ; l'y interdire rendait la période plus stricte
+            // que la saison (revue #8 PR-B round 2).
             if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
               toast.error("Ce créneau en chevauche un autre sur ce gymnase.");
               return;
@@ -453,8 +461,9 @@ function PeriodVenuePanel({
           key={editingSlot.id}
           slot={editingSlot}
           schedulePlanId={schedulePlanId}
+          canSplit={venue.canSplit}
           otherSlots={slots.filter((s) => s.id !== editingSlot.id)}
-          reservationCount={reservations.filter((r) => r.venueId === venue.id && r.dayOfWeek === editingSlot.dayOfWeek && hhmm(r.startTime) === hhmm(editingSlot.startTime)).length}
+          reservationsHere={reservations.filter((r) => r.venueId === venue.id && r.dayOfWeek === editingSlot.dayOfWeek && hhmm(r.startTime) === hhmm(editingSlot.startTime))}
           onClose={() => onEditSlot(null)}
         />
       ) : null}
@@ -487,44 +496,76 @@ function PeriodVenuePanel({
 }
 
 /**
- * Édite un créneau de la période — jour, heure, DURÉE — ou le supprime avec confirmation
- * annonçant les réservations emportées. Miroir de `SlotEditor` (saison), câblé sur les
- * hooks de la COUCHE période : mêmes gestes, écriture sur le plan et jamais sur le socle.
+ * Édite un créneau de la période — jour, heure, DURÉE, capacité (gymnase divisible) — ou
+ * le supprime. Miroir de `SlotEditor` (saison), câblé sur les hooks de la COUCHE période :
+ * mêmes gestes, écriture sur le plan et jamais sur le socle.
+ *
+ * DÉPLACER un créneau (changer jour/heure) laisse les réservations épinglées à l'ANCIENNE
+ * position orphelines — et un épinglage orphelin BLOQUE la génération (OrphanPinGuard). On
+ * ne le fait donc jamais en silence : si le créneau porte des réservations et que sa
+ * position change, on confirme en annonçant qu'elles seront retirées, puis on déplace ET
+ * on les supprime (pas d'orphelin laissé derrière — revue #8 PR-B round 2).
  */
 function PeriodSlotEditor({
   slot,
   schedulePlanId,
+  canSplit,
   otherSlots,
-  reservationCount,
+  reservationsHere,
   onClose,
 }: {
   slot: VenueTrainingSlot;
   schedulePlanId: string;
+  canSplit: boolean;
   otherSlots: VenueTrainingSlot[];
-  reservationCount: number;
+  reservationsHere: { id: string }[];
   onClose: () => void;
 }) {
   const update = useUpdatePeriodSlot(schedulePlanId);
   const del = useDeletePeriodSlot(schedulePlanId);
+  const delReservation = useDeleteReservation();
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
+  const [capacity, setCapacity] = useState(slot.capacity);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmMove, setConfirmMove] = useState(false);
+
+  const moved = day !== slot.dayOfWeek || time !== hhmm(slot.startTime);
+  const reservationCount = reservationsHere.length;
+
+  const doSave = () => {
+    // Pas de borne de fin de journée : la saison n'en a pas, un créneau du soir
+    // (21:00–22:30) y est légitime. Ne referme qu'au succès — une écriture rejetée garde
+    // l'éditeur ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
+    update.mutate(
+      { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } },
+      {
+        onSuccess: () => {
+          // Le déplacement a orpheliné les réservations de l'ancienne position : on les
+          // retire pour ne pas bloquer la génération (elles ont été annoncées).
+          for (const r of reservationsHere) {
+            delReservation.mutate(r.id);
+          }
+          onClose();
+        },
+      },
+    );
+  };
 
   const save = () => {
-    if (toMinutes(time) + duration > END_MIN) {
-      setError("Ce créneau dépasse la fin de journée.");
-      return;
-    }
     const conflict = findSlotConflict(otherSlots, day, time, duration);
     if (null !== conflict) {
       setError(conflictMessage(conflict));
       return;
     }
-    // Ne referme qu'au succès : une écriture rejetée garde l'éditeur ouvert plutôt que de
-    // disparaître en donnant l'illusion d'être enregistrée.
-    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: 1 } }, { onSuccess: onClose });
+    // Déplacer un créneau réservé retire ses réservations : on le confirme d'abord.
+    if (moved && reservationCount > 0) {
+      setConfirmMove(true);
+      return;
+    }
+    doSave();
   };
 
   return (
@@ -547,13 +588,20 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {[60, 75, 90, 105, 120].map((d) => (
+            {DURATIONS.map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>
             ))}
           </Select>
         </label>
+        {canSplit ? (
+          <div className="text-xs text-muted-foreground">
+            {/* CapacitySelect porte son propre aria-label="Capacité". */}
+            <span>Capacité</span>
+            <CapacitySelect value={capacity} onChange={setCapacity} canSplit={canSplit} className="mt-0.5 block h-9 w-52" />
+          </div>
+        ) : null}
       </div>
 
       {null !== error ? (
@@ -572,16 +620,31 @@ function PeriodSlotEditor({
         </Button>
       </div>
 
+      {/* affectsPeriodPlans NON posé : supprimer un créneau de PÉRIODE ne touche QUE cette
+          période, pas « les plannings de période » — l'exagérer trompe (invariant n°4,
+          revue #8 PR-B round 2). */}
       <DeleteConfirm
         open={confirmDelete}
         entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
-        affectsPeriodPlans
         impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
         onConfirm={() => {
           del.mutate(slot.id, { onSuccess: onClose });
           setConfirmDelete(false);
         }}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmMove}
+        destructive
+        title="Déplacer ce créneau ?"
+        description={`Ce créneau porte ${reservationCount} réservation${reservationCount > 1 ? "s" : ""} d'équipe. Le déplacer ${reservationCount > 1 ? "les retirera" : "la retirera"} — il faudra ${reservationCount > 1 ? "les reposer" : "la reposer"} sur le nouveau créneau.`}
+        confirmLabel="Déplacer"
+        onConfirm={() => {
+          setConfirmMove(false);
+          doSave();
+        }}
+        onCancel={() => setConfirmMove(false)}
       />
     </Modal>
   );

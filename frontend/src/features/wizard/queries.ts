@@ -217,7 +217,12 @@ export function useUpdatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Omit<SlotPayload, "schedulePlanId"> }) => wizardApi.updateSlot(id, { ...body, schedulePlanId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] });
+      // Déplacer un créneau change quelles réservations retombent dessus (et le déplacement
+      // en supprime) — rafraîchir leur cache, comme les autres gestes de grille (round 2).
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "reservations", schedulePlanId] });
+    },
   });
 }
 

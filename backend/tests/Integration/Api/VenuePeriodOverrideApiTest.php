@@ -69,11 +69,6 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
     private ?\App\Entity\Schedule $periodSchedule = null;
 
     /**
-     * Un club voisin, avec son propre JWT — pour prouver que rien ne franchit la frontière.
-     *
-     * @return array<string, string>
-     */
-    /**
      * @return iterable<string, array{string}>
      */
     public static function gridActionRoutes(): iterable

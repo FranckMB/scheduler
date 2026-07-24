@@ -23,9 +23,11 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useConstraintValidation: () => ({ data: undefined, isLoading: false }),
   useReservations: () => ({ data: [] }),
-  usePeriodSlots: () => ({ data: [] }),
+  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading }),
   useVenuePeriodOverrides: () => ({ data: [] }),
 }));
+
+const periodSlotsState: { data: unknown[]; isLoading: boolean } = { data: [], isLoading: false };
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -135,5 +137,16 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     useWizardStore.setState({ mode: "period", calendarEntryId: null, stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+  });
+
+  it("ne bloque PAS pendant que la query des créneaux de période charge (faux positif)", () => {
+    // Round 2 finding #4 : le plan peut être résolu (ready) alors que la query period_slots
+    // n'a pas encore chargé (data []). Armer la règle là dessus criait « sans créneau » sur
+    // une grille en fait pleine. On attend que la query ait chargé.
+    periodSlotsState.isLoading = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+    const { result } = renderHook(() => useStepValidation("venues"));
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+    periodSlotsState.isLoading = false;
   });
 });;

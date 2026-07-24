@@ -13,30 +13,15 @@ import { formatDuration } from "@/shared/lib/duration";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, hhmm } from "../lib/days";
+import { DAYS, DURATIONS, hhmm } from "../lib/days";
 import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
+import { CapacitySelect } from "./slotFields";
 
-const DURATIONS = [60, 75, 90, 105, 120];
 const WEEK = DAYS.filter((d) => d.n <= 6);
-const CAP_HINT = "Nombre d'équipes pouvant s'entraîner en même temps sur ce créneau (2 = terrain coupé en deux).";
-
-/** Capacity picker — only a divisible gym can host 2 teams. On a non-divisible
- * gym there is no choice (always 1 team), so the control disappears entirely. */
-function CapacitySelect({ value, onChange, canSplit, className }: { value: number; onChange: (n: number) => void; canSplit: boolean; className?: string }) {
-  if (!canSplit) {
-    return null;
-  }
-  return (
-    <Select aria-label="Capacité" title={CAP_HINT} className={className} value={value} onChange={(e) => onChange(Number(e.target.value))}>
-      <option value={1}>1 équipe (terrain entier)</option>
-      <option value={2}>2 équipes (terrain divisé)</option>
-    </Select>
-  );
-}
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 

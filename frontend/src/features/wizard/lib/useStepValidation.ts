@@ -101,7 +101,8 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // créneaux de la PÉRIODE et en épargnant les gymnases explicitement désactivés (dont
   // l'absence de créneau servi est voulue). Sans elle, vider une grille passait « Suivant »
   // sans un mot et la période se générait à vide (revue #8 PR-B).
-  const { data: periodSlots = [] } = usePeriodSlots(periodMode ? periodAnchor.planId : null);
+  const periodSlotsQuery = usePeriodSlots(periodMode ? periodAnchor.planId : null);
+  const periodSlots = periodSlotsQuery.data ?? [];
   const { data: periodOverrides = [] } = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
@@ -129,8 +130,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // créneaux de la période ne sont pas encore lus (query désactivée → []), et bloquer là
   // dessus serait un faux « sans créneau » pendant le chargement. Un gymnase désactivé est
   // épargné : son absence de créneau servi est voulue.
+  // period_slots vient d'une query SÉPARÉE qui ne démarre qu'une fois planId connu : il
+  // faut attendre qu'elle ait CHARGÉ, pas seulement que le plan soit résolu, sinon on
+  // confond « pas encore chargé » (undefined→[]) et « vraiment vide » et on crie « sans
+  // créneau » sur une grille pleine (revue #8 PR-B round 2).
+  const periodGridReady = periodAnchor.ready && null !== periodAnchor.planId && !periodSlotsQuery.isLoading;
   const emptyVenues = periodMode
-    ? (periodAnchor.ready && null !== periodAnchor.planId ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
+    ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
     : venuesWithoutSlot(venues, slots);
 
   if ("venues" === stepId) {
