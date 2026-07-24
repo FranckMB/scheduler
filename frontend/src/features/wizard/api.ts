@@ -155,6 +155,10 @@ export const deleteVenuePeriodOverride = (id: string): Promise<void> =>
 /** Action atomique : vider puis recopier le modèle de saison pour CE gymnase. Destructif. */
 export const resetVenuePeriodGrid = (schedulePlanId: string, venueId: string): Promise<unknown> =>
   api.post("venue_period_overrides/reset-grid", { json: { schedulePlanId, venueId } }).json();
+/** Action atomique : vider la grille de CE gymnase. Destructif, idempotent (vider une
+ *  grille déjà vide ne fait rien) — jamais un PUT de mode BLANK, qui serait un no-op. */
+export const clearVenuePeriodGrid = (schedulePlanId: string, venueId: string): Promise<unknown> =>
+  api.post("venue_period_overrides/clear-grid", { json: { schedulePlanId, venueId } }).json();
 
 /**
  * Period-editable structure: a sparse per-(plan, team) override — off for the period, or a

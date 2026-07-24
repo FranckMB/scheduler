@@ -159,6 +159,11 @@ export function useVenuePeriodOverrides(schedulePlanId: string | null) {
 function invalidatePeriodGrid(queryClient: ReturnType<typeof useQueryClient>, schedulePlanId: string | null): void {
   void queryClient.invalidateQueries({ queryKey: ["wizard", "venue_period_overrides", schedulePlanId] });
   void queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] });
+  // Vider ou reprendre une grille supprime EN CASCADE les réservations du gymnase côté
+  // serveur (VenuePeriodGrid::clear → purgeChildrenOfSlot). Sans invalider leur cache,
+  // l'onglet « Réserver » et le récap montrent des épinglages fantômes, et le décompte de
+  // la confirmation suivante ment (invariant n°4 — revue #8 PR-B).
+  void queryClient.invalidateQueries({ queryKey: ["wizard", "reservations", schedulePlanId] });
 }
 
 export function useSetVenuePeriodMode(schedulePlanId: string | null) {
@@ -190,6 +195,16 @@ export function useResetVenuePeriodGrid(schedulePlanId: string | null) {
   });
 }
 
+/** « Vider la grille » — ACTION atomique (pas un PUT de mode BLANK, qui serait un no-op
+ *  quand le mode ne change pas). Destructif, confirmé côté UI. */
+export function useClearVenuePeriodGrid(schedulePlanId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (venueId: string) => wizardApi.clearVenuePeriodGrid(schedulePlanId as string, venueId),
+    onSuccess: () => invalidatePeriodGrid(queryClient, schedulePlanId),
+  });
+}
+
 export function useCreatePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -198,11 +213,24 @@ export function useCreatePeriodSlot(schedulePlanId: string | null) {
   });
 }
 
+export function useUpdatePeriodSlot(schedulePlanId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Omit<SlotPayload, "schedulePlanId"> }) => wizardApi.updateSlot(id, { ...body, schedulePlanId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
+  });
+}
+
 export function useDeletePeriodSlot(schedulePlanId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteSlot(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "period_slots", schedulePlanId] });
+      // Supprimer un créneau emporte ses réservations en cascade — même raison que
+      // invalidatePeriodGrid (revue #8 PR-B).
+      void queryClient.invalidateQueries({ queryKey: ["wizard", "reservations", schedulePlanId] });
+    },
   });
 }
 

@@ -36,10 +36,20 @@ use Symfony\Component\Serializer\Attribute\Groups;
     // supprimer la ligne) laisserait une grille vidée si le second appel échouait.
     new Post(
         uriTemplate: '/venue_period_overrides/reset-grid',
-        controller: 'App\\Controller\\ResetVenuePeriodGridController',
+        controller: 'App\\Controller\\VenuePeriodGridActionController',
         input: false,
         read: false,
         name: 'reset_venue_period_grid',
+    ),
+    // « Vider la grille » d'un gymnase : ACTION, pas mode BLANK. Router « vider » par un
+    // PUT de mode serait un no-op quand le mode ne change pas (garde d'idempotence), donc
+    // un « vidé » mensonger — une action dédiée vide à chaque appel (revue #8 PR-B).
+    new Post(
+        uriTemplate: '/venue_period_overrides/clear-grid',
+        controller: 'App\\Controller\\VenuePeriodGridActionController',
+        input: false,
+        read: false,
+        name: 'clear_venue_period_grid',
     ),
 ], input: VenuePeriodOverrideInput::class, paginationEnabled: false, provider: VenuePeriodOverrideStateProvider::class, processor: VenuePeriodOverrideStateProcessor::class)]
 #[ApiFilter(SearchFilter::class, properties: ['schedulePlanId' => 'exact', 'venueId' => 'exact'])]

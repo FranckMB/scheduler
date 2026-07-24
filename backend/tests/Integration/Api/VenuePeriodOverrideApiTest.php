@@ -23,6 +23,7 @@ use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -66,6 +67,20 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
     private string $planId;
 
     private ?\App\Entity\Schedule $periodSchedule = null;
+
+    /**
+     * Un club voisin, avec son propre JWT — pour prouver que rien ne franchit la frontière.
+     *
+     * @return array<string, string>
+     */
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function gridActionRoutes(): iterable
+    {
+        yield 'reset-grid' => ['/api/venue_period_overrides/reset-grid'];
+        yield 'clear-grid' => ['/api/venue_period_overrides/clear-grid'];
+    }
 
     public function testBlankEmptiesOnlyThatVenuesPeriodGridAndNeverTheSeason(): void
     {
@@ -364,6 +379,44 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         self::assertSame(3, $this->countSeasonSlots(), 'la grille de saison est intacte');
     }
 
+    public function testClearGridEmptiesTheVenueGridEvenWithNoOverrideRow(): void
+    {
+        // Le c\u0153ur du correctif finding #1 : « vider » est une ACTION atomique, pas un PUT
+        // de mode BLANK. Sur un gymnase SANS ligne d'override (« h\u00e9riter », le cas
+        // courant), router par le mode ne cr\u00e9erait rien \u00e0 vider ; l'endpoint clear-grid,
+        // lui, vide bel et bien. Et il est idempotent : rejou\u00e9, il ne l\u00e8ve pas.
+        self::assertGreaterThan(0, $this->countPeriodSlots($this->venueA));
+
+        for ($i = 0; $i < 2; ++$i) {
+            $this->client->request('POST', '/api/venue_period_overrides/clear-grid', [], [], $this->headers(), json_encode([
+                'schedulePlanId' => $this->planId,
+                'venueId' => $this->venueA->getId(),
+            ], \JSON_THROW_ON_ERROR));
+            self::assertResponseIsSuccessful();
+        }
+
+        $this->em->clear();
+        self::assertSame(0, $this->countPeriodSlots($this->venueA), 'la grille du gymnase est vid\u00e9e');
+        self::assertSame(1, $this->countPeriodSlots($this->venueB), 'le voisin n\'a pas boug\u00e9');
+        self::assertSame(3, $this->countSeasonSlots(), 'le planning principal reste intact');
+    }
+
+    public function testClearGridIsRefusedOnTheSeasonPlan(): void
+    {
+        // Invariant n\u00b01 : viser le plan de saison viderait la grille du club.
+        $seasonPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->ensureSeasonPlanId($this->season->getId());
+        self::assertIsString($seasonPlanId);
+
+        $this->client->request('POST', '/api/venue_period_overrides/clear-grid', [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $seasonPlanId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+        $this->em->clear();
+        self::assertSame(3, $this->countSeasonSlots(), 'la grille de saison est intacte');
+    }
+
     public function testResetGridCarriesTheReservationsAndPinsOfTheVenue(): void
     {
         // Reprendre la grille DÉTRUIT : les réservations du gymnase et les verrous HARD
@@ -422,6 +475,42 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         self::assertNotNull($this->em->getRepository(VenuePeriodOverride::class)->find($created['id']));
     }
 
+    #[DataProvider('gridActionRoutes')]
+    public function testGridActionIsRefusedForANonManager(string $route): void
+    {
+        // SEC-07 — les actions de grille sont DESTRUCTIVES : un membre non-management
+        // (editor) doit \u00eatre refus\u00e9 en 403, comme la suppression d'un planning.
+        $editor = $this->addActiveMember('editor');
+        $this->client->request('POST', $route, [], [], $editor, json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(403);
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertGreaterThan(0, $this->countPeriodSlots($this->venueA), 'la grille n\'a pas boug\u00e9');
+    }
+
+    #[DataProvider('gridActionRoutes')]
+    public function testGridActionFromAnotherClubIsRefusedAndTouchesNothing(string $route): void
+    {
+        // Isolation tenant — le plan est r\u00e9solu sous RLS scop\u00e9e sur le club appelant : un
+        // autre club ne le VOIT pas (404, pas 403 : on ne divulgue m\u00eame pas son existence),
+        // et ne peut donc ni le vider ni le reprendre.
+        $intruder = $this->seedIntruderClub();
+
+        $this->client->request('POST', $route, [], [], $intruder, json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+        ], \JSON_THROW_ON_ERROR));
+
+        // 404 = le plan est INVISIBLE \u00e0 l'intrus (RLS) : le contr\u00f4leur sort \u00e0
+        // fetchPlanContext == null, AVANT tout appel \u00e0 VenuePeriodGrid. Rien n'a donc pu
+        // toucher la grille du club voisin \u2014 le 404 le prouve par construction.
+        self::assertResponseStatusCodeSame(404);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -460,11 +549,25 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
     }
 
-    /**
-     * Un club voisin, avec son propre JWT — pour prouver que rien ne franchit la frontière.
-     *
-     * @return array<string, string>
-     */
+    private function addActiveMember(string $role): array
+    {
+        $uid = uniqid('', true);
+        $user = (new User)->setEmail('vpo-' . $role . $uid . '@test.com')->setFirstName('E')->setLastName('D');
+        $user->setPasswordHash(self::getContainer()->get('security.user_password_hasher')->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+        $this->scopeGucToClub($this->club->getId());
+        $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole($role)->setIsActive(true));
+        $this->em->flush();
+
+        return [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_X-Season-Id' => $this->season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . self::getContainer()->get(JWTTokenManagerInterface::class)->create($user),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+    }
+
     private function seedIntruderClub(): array
     {
         $uid = uniqid('', true);

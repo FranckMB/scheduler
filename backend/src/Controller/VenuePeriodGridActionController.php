@@ -16,24 +16,25 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 
 /**
- * « Reprendre la grille du planning principal » pour UN gymnase d'UNE période (#8, PR-B).
+ * Les deux ACTIONS de grille d'un gymnase pour UNE période (#8, PR-B), servies par le
+ * même contrôleur car elles ne diffèrent que par le geste final :
+ *  - `reset-grid` : vider PUIS recopier le modèle de saison (« reprendre la grille du
+ *    planning principal ») ;
+ *  - `clear-grid` : vider seulement (« partir d'une grille vierge »).
  *
- * Le geste existait déjà, mais seulement en creux : supprimer une ligne VIERGE vidait
- * puis recopiait. Sur un gymnase sans ligne — le cas courant, puisque « hériter » est le
- * défaut et ne stocke rien — il n'y avait rien à supprimer, donc rien à recopier. Le
- * contourner côté client aurait demandé deux appels (poser VIERGE, puis supprimer) : si
- * le second échoue, le gestionnaire reste avec une grille VIDÉE, exactement la perte
- * silencieuse que le round 4 de revue a servi à éliminer. D'où une action atomique.
+ * Ce sont des ACTIONS, pas des états. Router « vider » par un PUT de mode BLANK serait
+ * piégé : au build, seul DISABLED agit — BLANK est un no-op — et le processeur ignore
+ * volontairement un PUT de mode INCHANGÉ (garde d'idempotence, revue #8 round 4). Vider
+ * un gymnase déjà « vierge » ne ferait donc RIEN, tout en affichant « vidé » : un mensonge
+ * d'écran (revue #8 PR-B). Une action dédiée, atomique et idempotente, l'évite par
+ * construction — elle vide à chaque appel, quel que soit le mode en place.
  *
- * DESTRUCTIF et assumé : reprendre la grille emporte les créneaux du gymnase pour cette
+ * DESTRUCTIF et assumé : vider ou reprendre emporte les créneaux du gymnase pour cette
  * période, donc leurs réservations et les verrous qu'elles avaient matérialisés. C'est
- * l'UI qui l'annonce avant (« un changement de créneau de gymnase supprime tous les
- * créneaux réservés du gymnase » — décision fondateur).
- *
- * Idempotent : rejouer la reprise redonne la même grille, jamais des doublons.
+ * l'UI qui l'annonce avant.
  */
 #[AsController]
-final class ResetVenuePeriodGridController extends AbstractController implements SeasonScopedWriteInterface
+final class VenuePeriodGridActionController extends AbstractController implements SeasonScopedWriteInterface
 {
     public function __construct(
         private readonly RequestStack $requestStack,
@@ -60,20 +61,23 @@ final class ResetVenuePeriodGridController extends AbstractController implements
         }
 
         // Le club vient du PLAN, jamais du corps de la requête : accepter un plan d'un
-        // autre club recopierait sa grille chez nous (et inversement).
+        // autre club recopierait/viderait sa grille chez nous (et inversement).
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $context['clubId'] !== $currentClubId) {
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
         // Invariant fondateur n°1 : le planning principal n'est JAMAIS modifié par une
-        // période. Visé sur le plan de SAISON, ce geste viderait la grille du club puis
-        // recopierait ses propres créneaux par-dessus eux-mêmes.
+        // période. Visées sur le plan de SAISON, ces actions videraient la grille du club.
         if (SchedulePlanType::SEASON === $context['type']) {
-            return $this->json(['error' => 'La grille se reprend sur une période, pas sur le planning de la saison.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->json(['error' => 'La grille se règle sur une période, pas sur le planning de la saison.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $this->venuePeriodGrid->resetFromSeason($schedulePlanId, $venueId);
+        if ('reset_venue_period_grid' === $request?->attributes->get('_route')) {
+            $this->venuePeriodGrid->resetFromSeason($schedulePlanId, $venueId);
+        } else {
+            $this->venuePeriodGrid->clearInTransaction($schedulePlanId, $venueId);
+        }
 
         return $this->json(['schedulePlanId' => $schedulePlanId, 'venueId' => $venueId], Response::HTTP_OK);
     }

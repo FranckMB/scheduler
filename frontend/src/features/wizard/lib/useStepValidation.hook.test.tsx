@@ -23,6 +23,8 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => q([]),
   useConstraintValidation: () => q(undefined),
   useReservations: () => q([]),
+  usePeriodSlots: () => q([]),
+  useVenuePeriodOverrides: () => q([]),
 }));
 vi.mock("../store", () => ({
   useWizardStore: (selector: (s: unknown) => unknown) => selector({ reservations: [], mode: "season", calendarEntryId: null }),

@@ -49,6 +49,18 @@ final class VenuePeriodGrid
     }
 
     /**
+     * « Vider la grille » comme ACTION autonome (endpoint clear-grid) : même effet que
+     * clear(), mais dans sa propre transaction. Idempotent — vider une grille déjà vide
+     * ne fait rien et ne lève pas.
+     */
+    public function clearInTransaction(string $schedulePlanId, string $venueId): void
+    {
+        $this->entityManager->wrapInTransaction(function () use ($schedulePlanId, $venueId): void {
+            $this->clear($schedulePlanId, $venueId);
+        });
+    }
+
+    /**
      * Reprend la grille du planning principal pour ce gymnase : on vide, puis on RECOPIE.
      * L'ordre importe — recopier avant de vider supprimerait la copie fraîche.
      *
