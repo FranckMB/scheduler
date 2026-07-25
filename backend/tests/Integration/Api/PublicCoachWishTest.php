@@ -171,6 +171,41 @@ final class PublicCoachWishTest extends WebTestCase
         self::assertCount(0, $this->em->getRepository(CoachWish::class)->findBy(['teamId' => $this->team->getId()]), 'rien écrit dans une saison archivée');
     }
 
+    public function testACalendarRolledSeasonClosesTheLinkEvenWhenStatusStaysActive(): void
+    {
+        // Revue sécu #10 C2 : le read-only d'une saison est DÉRIVÉ DU CALENDRIER (pivot
+        // 15-juillet), pas du statut (jamais posé à 'archived' au roulement). La saison de la
+        // campagne (2025) est encore 'active' mais, une saison 2026 existant, elle est gelée
+        // → le lien public doit fermer (410), comme le chemin authentifié via _season_readonly.
+        $this->scopeGucToClub($this->club->getId());
+        $next = (new Season)->setClubId($this->club->getId())->setName('2026-2027')
+            ->setStartDate(new DateTimeImmutable('2026-09-01'))->setEndDate(new DateTimeImmutable('2027-06-30'))->setStatus('active');
+        $this->em->persist($next);
+        $this->em->flush();
+        self::assertSame('active', $this->season->getStatus(), 'la saison de la campagne reste active (statut jamais roulé)');
+
+        $this->client->request('GET', '/api/coach-wishes/public/' . $this->token);
+        self::assertResponseStatusCodeSame(410);
+
+        $this->client->request('POST', '/api/coach-wishes/public/' . $this->token, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'submissions' => [['teamId' => $this->team->getId(), 'weekStart' => '2026-02-16', 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => null]],
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(410);
+
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertCount(0, $this->em->getRepository(CoachWish::class)->findBy(['teamId' => $this->team->getId()]), 'rien écrit dans une saison gelée par le calendrier');
+    }
+
+    public function testAnOversizedSubmissionsArrayIsRejected(): void
+    {
+        // Revue sécu #10 C2 : borne de cardinalité AVANT itération — un tableau géant sur un
+        // endpoint sans login est refusé (abus O(N)).
+        $items = array_fill(0, 201, ['teamId' => $this->team->getId(), 'weekStart' => '2026-02-16', 'slotsWanted' => 1, 'unavailableDays' => [], 'comment' => null]);
+        $this->client->request('POST', '/api/coach-wishes/public/' . $this->token, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['submissions' => $items], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     public function testDuplicateTeamWeekSubmissionsMergeInsteadOf500(): void
     {
         // Revue #10 C2 : deux lignes du même (équipe, semaine) partageraient la clé naturelle
