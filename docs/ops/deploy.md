@@ -13,7 +13,12 @@
 - La VM ne contient QUE : `docker-compose.prod.yml`, `.env.prod` (les secrets),
   le dossier `jwt/`, et les volumes de données. **Jamais le code source.**
 - Déployer = la VM télécharge les images taguées `vX.Y.Z` et redémarre dessus.
-- Revenir en arrière = redéployer le tag précédent (les images restent sur ghcr).
+  Le deploy **ré-envoie aussi `docker-compose.prod.yml` + le script** sur la VM
+  à chaque passage — ne les édite jamais directement sur la VM (écrasés au
+  prochain deploy) ; seul `.env.prod` appartient à la VM.
+- Revenir en arrière = redéployer le tag précédent : le workflow détecte que
+  ses images existent déjà sur ghcr et les **réutilise telles quelles** (jamais
+  de rebuild qui écraserait l'artefact d'origine).
 - Le workflow (`.github/workflows/deploy.yml`) a deux moitiés : *build-push*
   (toujours active) et *deploy SSH* (dormante tant que la variable repo
   `DEPLOY_ENABLED` n'est pas à `true` — donc rien ne casse tant que la VM
@@ -171,8 +176,10 @@ make deploy VERSION=v1.2.0     # re-déployer un tag existant
 make deploy VERSION=v1.1.0     # la version d'avant — les images sont toujours sur ghcr
 ```
 
-Le workflow **checkout le tag demandé** : il reconstruit le code de v1.1.0
-depuis le commit v1.1.0 (jamais le main courant sous une vieille étiquette).
+Les images v1.1.0 existent déjà sur ghcr → le workflow **saute le build** et
+redéploie **exactement les artefacts qui tournaient** (pas un rebuild aux
+couches de base dérivées). Marche aussi pour un hotfix sha :
+`make deploy VERSION=sha-abc1234`.
 
 ⚠ Le rollback rejoue le code d'avant mais **ne dé-migre pas la base**. Si la
 release fautive contenait une migration destructive : restaurer le dump pris

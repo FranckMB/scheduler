@@ -19,7 +19,9 @@ if [ -z "$VERSION" ]; then
   fi
 fi
 
-STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# 60s slack: createdAt is GitHub's clock — a locally-fast workstation clock
+# must not hide the run we just dispatched. `first` still picks the newest.
+STARTED=$(date -u -d '60 seconds ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-60S +%Y-%m-%dT%H:%M:%SZ)
 if [ -n "$VERSION" ]; then
   gh workflow run deploy.yml -f "version=$VERSION"
 else

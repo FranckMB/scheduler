@@ -1,65 +1,88 @@
 #!/usr/bin/env bash
-# Runs ON the production VM (piped over SSH by .github/workflows/deploy.yml —
-# never executed locally). Rolls the stack to $VERSION, fail-closed:
+# Runs ON the production VM (uploaded by .github/workflows/deploy.yml, executed
+# as a FILE — never piped into `bash -s`: `docker compose run` keeps stdin
+# attached and would eat the rest of a piped script, turning a half-run deploy
+# green). Every compose run/exec below still takes </dev/null as belt-and-braces.
 #
-#   1. first-install detection (no postgres container yet = nothing to dump)
-#   2. pre-migration dump — MANDATORY otherwise: runs even if php-fpm is
-#      crashed (compose run --rm on the CURRENT images); failure ABORTS
-#   3. pull the new images ($VERSION as process env — compose gives process
-#      env precedence over --env-file, so .env.prod is not touched yet)
-#   4. migrations FIRST, via the NEW image (compose run --rm), while the old
-#      stack still serves — a failed migration leaves prod untouched.
-#      Convention: migrations are backward-compatible one release back
-#      (docs/ops/deploy.md), so old-code-on-new-schema is safe for the
-#      seconds the roll takes.
-#   5. recreate services, wait healthy, probe /health + /api/health
-#   6. only THEN pin VERSION into .env.prod (a failed deploy never leaves
-#      .env.prod pointing at images the VM doesn't have)
+# Fail-closed sequence (existing install):
+#   1. docker daemon reachable, else abort (so a daemon error can never be
+#      mistaken for a first install)
+#   2. postgres DATA VOLUME exists → the pre-migration dump is MANDATORY:
+#      run --rm --no-deps on the CURRENT images; failure aborts, prod untouched
+#   3. pull the new images (VERSION as process env; .env.prod not touched)
+#   4. migrate via the NEW php image, --no-deps (the OLD postgres/redis keep
+#      running untouched — without --no-deps compose would recreate them on
+#      the new images BEFORE the migration proved itself)
+#   5. up -d --wait + health probes
+#   6. only then pin VERSION into .env.prod
 #
-# Expects on the VM (first-install runbook, docs/ops/deploy.md):
-#   $DEPLOY_PATH/docker-compose.prod.yml + .env.prod + jwt/ + ghcr login
+# First install (no postgres data volume): nothing to protect — pull,
+# up -d --wait (init scripts create the cluster), then migrate via exec.
+#
+# Convention: migrations are backward-compatible one release back
+# (docs/ops/deploy.md) — old code runs on the new schema for the seconds
+# between migrate and the roll.
 set -euo pipefail
 
 : "${DEPLOY_PATH:?DEPLOY_PATH not set}"
 : "${VERSION:?VERSION not set}"
-# Defense in depth: the workflow already regex-validates VERSION, but this
-# script also runs it through sed/compose — refuse anything exotic.
+# Defense in depth: the workflow already regex-validates VERSION.
 [[ "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "FATAL: invalid VERSION '$VERSION'" >&2; exit 1; }
 
 cd "$DEPLOY_PATH"
 export VERSION  # process env beats --env-file in compose interpolation
 COMPOSE=(docker compose -f docker-compose.prod.yml --env-file .env.prod)
 
+# Any failure past the pull may leave new containers running while .env.prod
+# still pins the previous version — say it loudly instead of dying silent.
+trap 'echo "FATAL: deploy ${VERSION} FAILED (line $LINENO). La stack peut tourner partiellement en ${VERSION} alors que .env.prod pinne encore l ancienne version — relancer ce deploy, ou redeployer le tag precedent (docs/ops/deploy.md, rollback)." >&2' ERR
+
 echo "==> Deploying $VERSION to $DEPLOY_PATH"
 
-# 1+2. Pre-migration dump, fail-closed. `run --rm` works even when php-fpm is
-# crash-looping (a state where `exec` is impossible and skipping the dump
-# before a destructive migration would be unforgivable). Only a genuine first
-# install (no postgres container at all) may skip.
-if "${COMPOSE[@]}" ps -a postgres --format '{{.Names}}' 2>/dev/null | grep -q .; then
-  echo "==> Pre-migration backup (mandatory — failure aborts the deploy)"
-  # env -u VERSION: the dump must run on the CURRENT images (.env.prod's
-  # pinned version), not the one being deployed — the new images aren't
-  # pulled yet.
-  env -u VERSION docker compose -f docker-compose.prod.yml --env-file .env.prod \
-    run --rm --no-TTY php-fpm php bin/console app:db:backup --force
+# 1. Daemon reachable — a docker error must abort, never masquerade as a
+# first install.
+docker info >/dev/null
+
+# 2. First-install detection on the DATA VOLUME (not on containers: a routine
+# `compose down` removes containers but keeps volumes — the data still needs
+# its pre-migration dump).
+PROJECT_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]')
+if docker volume inspect "${PROJECT_NAME}_postgres_data" >/dev/null 2>&1; then
+  FIRST_INSTALL=0
 else
-  echo "==> First install detected (no postgres container) — nothing to dump."
+  FIRST_INSTALL=1
 fi
 
-# 3. Pull the new images (VERSION from the process env).
-echo "==> Pulling images ($VERSION)"
-"${COMPOSE[@]}" pull --quiet
+if [ "$FIRST_INSTALL" = "0" ]; then
+  echo "==> Pre-migration backup (mandatory — failure aborts the deploy)"
+  # env -u VERSION: dump with the CURRENT images (.env.prod's pinned version),
+  # the new ones aren't pulled yet. --no-deps: never touch running services.
+  env -u VERSION docker compose -f docker-compose.prod.yml --env-file .env.prod \
+    run --rm --no-deps --no-TTY php-fpm \
+    php bin/console app:db:backup --force </dev/null
 
-# 4. Migrations from the NEW image while the OLD stack still serves.
-echo "==> Running migrations (new image, old stack untouched on failure)"
-"${COMPOSE[@]}" run --rm --no-TTY php-fpm php bin/console doctrine:migrations:migrate --no-interaction
+  echo "==> Pulling images ($VERSION)"
+  "${COMPOSE[@]}" pull --quiet </dev/null
 
-# 5. Roll + probe.
-echo "==> Recreating services"
-"${COMPOSE[@]}" up -d --wait
+  echo "==> Running migrations (new image, --no-deps: old stack untouched on failure)"
+  "${COMPOSE[@]}" run --rm --no-deps --no-TTY php-fpm \
+    php bin/console doctrine:migrations:migrate --no-interaction </dev/null
 
-FRONTEND_PORT=$(grep -oP '^FRONTEND_PORT=\K[0-9]+' .env.prod | head -1 || true)
+  echo "==> Recreating services"
+  "${COMPOSE[@]}" up -d --wait </dev/null
+else
+  echo "==> First install (no ${PROJECT_NAME}_postgres_data volume) — bootstrap order"
+  echo "==> Pulling images ($VERSION)"
+  "${COMPOSE[@]}" pull --quiet </dev/null
+  echo "==> Starting the stack (postgres init scripts run here)"
+  "${COMPOSE[@]}" up -d --wait </dev/null
+  echo "==> Running migrations"
+  "${COMPOSE[@]}" exec -T php-fpm \
+    php bin/console doctrine:migrations:migrate --no-interaction </dev/null
+fi
+
+# 5. Health through the edge. Accept optional quotes around the value.
+FRONTEND_PORT=$(grep -oP '^FRONTEND_PORT="?\K[0-9]+' .env.prod | head -1 || true)
 FRONTEND_PORT=${FRONTEND_PORT:-8081}
 echo "==> Health probe (:${FRONTEND_PORT})"
 curl -fsS "http://127.0.0.1:${FRONTEND_PORT}/health" >/dev/null
