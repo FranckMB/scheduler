@@ -78,10 +78,12 @@ mais **tous les logins renvoient 500**.
 ⬜ GitHub → *Settings → Developer settings → Personal access tokens →
 Tokens (classic)* → générer un token **`read:packages` uniquement**, expiration 1 an.
 
-⬜ Sur la VM :
+⬜ Sur la VM (`--password-stdin` : le token ne doit jamais apparaître dans
+l'historique shell ni dans la liste des process) :
 
 ```bash
-docker login ghcr.io -u <ton-user-github> -p <le-token>
+echo '<le-token>' | docker login ghcr.io -u <ton-user-github> --password-stdin
+history -d $(history 1 | awk '{print $1}')   # efface la ligne du token de l'historique
 ```
 
 ### 1.5 TLS + domaine (Caddy)
@@ -169,10 +171,22 @@ make deploy VERSION=v1.2.0     # re-déployer un tag existant
 make deploy VERSION=v1.1.0     # la version d'avant — les images sont toujours sur ghcr
 ```
 
+Le workflow **checkout le tag demandé** : il reconstruit le code de v1.1.0
+depuis le commit v1.1.0 (jamais le main courant sous une vieille étiquette).
+
 ⚠ Le rollback rejoue le code d'avant mais **ne dé-migre pas la base**. Si la
 release fautive contenait une migration destructive : restaurer le dump pris
-automatiquement AVANT la migration (`backup-restore.md` §3 — c'est exactement
-pour ça que le script fait `app:db:backup --force` avant chaque `migrate`).
+automatiquement AVANT la migration (`backup-restore.md` §3 — le script refuse
+de migrer sans ce dump, il est fail-closed).
+
+### Règle d'écriture des migrations (convention, à respecter dans les PRs)
+
+Le deploy migre **avant** de basculer les conteneurs : pendant quelques
+secondes l'ancien code tourne sur le nouveau schéma. Toute migration doit donc
+être **rétro-compatible une release en arrière** — ajouter une colonne
+nullable/DEFAULT : oui ; supprimer/renommer une colonne encore lue par la
+release précédente : non (faire en deux releases : arrêter de lire, puis
+supprimer).
 
 ### Vérifier l'état
 

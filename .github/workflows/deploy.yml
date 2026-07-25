@@ -38,17 +38,31 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       owner: ${{ steps.meta.outputs.owner }}
     steps:
+      # Dispatch with version=<existing tag> checks out THAT tag: a rollback
+      # rebuilds the OLD code from the old commit (bit-identical images), it
+      # never rebuilds current main under the old label — the historical
+      # images in the registry are only ever overwritten by themselves.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version || github.ref }}
 
       - name: Resolve version + lowercase owner
         id: meta
+        env:
+          # Never interpolate the raw input into shell text (script injection);
+          # it arrives as an env var and is strictly validated before use.
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             VERSION="${GITHUB_REF_NAME}"
-          elif [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
+          elif [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
           else
             VERSION="sha-$(git rev-parse --short HEAD)"
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+            echo "FATAL: invalid version '$VERSION' (allowed: alphanumerics, dot, dash, underscore)" >&2
+            exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
