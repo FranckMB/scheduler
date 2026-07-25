@@ -107,4 +107,4 @@ services:
 ## See Also
 
 - `backend/docs/RLS.md` — PostgreSQL RLS setup and troubleshooting
-- `docker/postgres/init/02-users.sql` — `app_user` / `migration_user` creation
+- `docker/postgres/init/02-users.sh` — `app_user` / `migration_user` creation

@@ -78,3 +78,7 @@ pnpm-debug.log*
 # code-review-graph local artifact
 /backend/.codegraph
 /backend/.omo/
+
+# Prod runtime files (VM-side; only the .dist template is tracked)
+/.env.prod
+/jwt/
