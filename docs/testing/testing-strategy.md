@@ -16,7 +16,7 @@ engine-tests ──────────────────────�
 blocking-tests ─────────────────────────────────┘
 frontend            (tsc -b + vite build + vitest)  — parallel, no needs, does NOT gate build-docker
 dependency-audit    (composer/npm/pip audit, A18)    — parallel, no needs, does NOT gate build-docker
-engine-perf         (dense solve < 180 s)            — main only
+engine-perf         (dense solve < 60 s)             — main only
 ```
 
 All PHP test jobs first **create + migrate the test DB** (`doctrine:database:create --if-not-exists` + `migrations:migrate`, `--env=test`) and run phpunit with `-e APP_ENV=test` on the `docker compose exec` — the containers default to `APP_ENV=dev` (root `.env` env_file) and `phpunit.xml.dist`'s `<server APP_ENV=test>` is not `force`d, so the real env var must be set explicitly.
@@ -25,7 +25,7 @@ All PHP test jobs first **create + migrate the test DB** (`doctrine:database:cre
 |-----|--------------|
 | `lint` | `docker compose config` + `make -n help` |
 | `phpstan` | `composer phpstan` (level 8) — needs postgres + redis |
-| `blocking-tests` | the `--group phase1` security/queue/contract tests — **gate for the rest of the PHP suite**. Full list (13 steps): `TenantIsolationTest`, `SeasonIsolationTest`, `SeasonReadonlyTest`, `MatchTenantIsolationTest`, `TenantCacheIsolationTest`, `ConcurrentGenerationTest`, `ContractSchemaTest`, `RlsIsolationTest`, `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06), `ManagementRoleTest` (SEC-07), `ApiRateLimitTest` (SEC-11), `SuperAdminAccessTest` (SA0) — canonical list in `CLAUDE.md` §4 |
+| `blocking-tests` | the `--group phase1` security/queue/contract tests — **gate for the rest of the PHP suite**. `TenantIsolationTest`, `SeasonIsolationTest`, `SeasonReadonlyTest`, `MatchTenantIsolationTest`, `TenantCacheIsolationTest`, `ConcurrentGenerationTest`, `ContractSchemaTest`, `RlsIsolationTest`, `ClubAccessTest`/`UserSelfOnlyTest`/`ImportAuthorizationTest` (SEC-01/02/04), `MercureHardeningTest` (SEC-05/06), `ManagementRoleTest` (SEC-07), `ApiRateLimitTest` (SEC-11), `SuperAdminAccessTest` (SA0), `EngagedTeamGuardTest` (périmètre engagé), `PeriodPlanBirthTest` (ADR-0002) — **`CLAUDE.md` §4 est la liste canonique** (ne pas figer un compte ici, il dérive) |
 | `unit-tests` | full PHPUnit `tests/` (does NOT gate build-docker) |
 | `e2e` | Playwright (full stack + Vite), needs blocking-tests |
 | `engine-tests` | `pytest` + `ruff check .` + `mypy` (in the engine container) |
@@ -71,8 +71,9 @@ Run: `cd engine && make test` (pytest + ruff + mypy, inside the engine container
 
 ```bash
 make start                                   # bring the stack up first (tests need postgres/redis/engine)
-cd backend && make test                      # CS-Fixer + PHPStan + PHPUnit (phase1)
-cd backend && make phpunit                   # PHPUnit only, already scoped to --group phase1
+cd backend && make test                      # PHPStan + CS-Fixer + PHPUnit --testsuite Unit (PAS le gate phase1)
+cd backend && make phpunit                   # PHPUnit --group phase1 (le gate bloquant)
+cd backend && make tests-complete            # phpstan + cs + phpunit tests/ (miroir CI complet — à passer avant push)
 cd engine  && make test                      # pytest + ruff + mypy
 ```
 

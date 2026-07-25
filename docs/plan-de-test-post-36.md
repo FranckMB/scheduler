@@ -1,5 +1,7 @@
 # Plan de test manuel — validation du travail depuis la PR #36
 
+> ⚠️ **OBSOLÈTE (point-in-time)** — ce plan couvre les PRs #37 → #57 ; le projet est à ~#296. Conservé pour trace historique uniquement. La stratégie de test vivante est [`testing/testing-strategy.md`](testing/testing-strategy.md). Ne pas s'y fier pour un test manuel courant.
+>
 > Périmètre : PRs #37 → #57 (série QW, série BCK, cockpit paliers A/B/C) + corrections de l'audit du 2026-07-05 (PR `fix/audit-post-36`).
 > **Extension (depuis le samedi 2026-07-04, PRs #58 → #100)** — §7 à §12 : calendriers (vacances/fériés/coupure), transition de saison, module matchs, sémantique des contraintes, perf/UX, sécurité + corrections de l'**audit 2026-07-06**.
 > À dérouler **dans l'ordre** : chaque section s'appuie sur l'état laissé par la précédente.

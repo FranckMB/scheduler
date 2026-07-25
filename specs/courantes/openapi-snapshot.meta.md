@@ -1,7 +1,16 @@
-Last verified @ feat/week-period-plans 2026-07-18
+Last verified @ docs/audit-drift-2026-07 2026-07-25
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **82 paths.**
+Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **92 paths.**
 Changements récents :
+- **Feature #10 doléances coachs (C1/C2/C3, 2026-07-25)** : +`/api/coach_wishes` (CRUD todo-list),
+  +`/api/coach_wish_campaigns` (CRUD + actions `POST /{id}/send-links` et `POST /{id}/remind`,
+  exportées car déclarées comme opérations de la ressource). ⚠ La page **publique**
+  `GET|POST /api/coach-wishes/public/{token}` (controller pur, PUBLIC_ACCESS) reste **hors export**
+  (non déclarée dans `CustomRoutesOpenApiFactory`) — même gap que les autres routes controller.
+- **Console super-admin onglets + monitoring (2026-07-25)** : `/api/admin/health` étendu
+  (append-only : `containers[]`, `externalDependencies[]`). Les endpoints journaux
+  (`/api/admin/audit-log`, `/api/admin/messenger/failed`, `/api/admin/system-errors`) sont des
+  controllers purs → **hors export** (gap `CustomRoutesOpenApiFactory`, tracké roadmap §9).
 - **P2-5 E1 — plans de période à la semaine (2026-07-18)** : aucun path touché (82).
   `CalendarEntry` gagne **`parentEntryId`** (lecture + écriture au POST seulement) — une
   semaine ENFANT d'une période mère, qui naît avec son propre plan (rail 1 entrée = 1 plan).

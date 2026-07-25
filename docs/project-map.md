@@ -117,7 +117,7 @@ All services share the Docker network `clubscheduler_network`.
 parse `ScheduleInputSchema` → `build_model()` → `parse_v2_constraints()` → `add_level_1_hard_constraints()` + time-window constraints → `add_level_2_objective()` → solve (`max_time_in_seconds = solver_timeout_seconds` default **650 s**, `random_seed = solver_seed`) → `build_result()` → `ScheduleOutputSchema` with diagnostics. Per-club serialization via `_club_locks: dict[str, asyncio.Lock]` (+ `_club_locks_guard`).
 
 ### 3.3 Contract
-`engine/CONTRACT_VERSION` holds the version (e.g. `2.0`). Backend syncs the version via `GET /` and enabled implicit rules via `POST /implicit-constraints`. No codegen — Pydantic (engine) ⇄ payload (backend) are kept in sync manually; `ContractSchemaTest` (backend) is the guardrail.
+`engine/CONTRACT_VERSION` holds the version (currently `2.1` — bumped for coach hour-window fields, #195). Backend syncs the version via `GET /` and enabled implicit rules via `POST /implicit-constraints`. No codegen — Pydantic (engine) ⇄ payload (backend) are kept in sync manually; `ContractSchemaTest` (backend) is the guardrail.
 
 ### 3.4 Tooling (verified) — see `pyproject.toml`
 ruff (line 120, py312, double quotes, LF) · mypy `strict` + `pydantic.mypy` (`ortools.*` ignored) · pytest `-ra` + pytest-timeout + pytest-cov + hypothesis · bandit (excludes `tests`). Runtime deps: `fastapi`, `pydantic`, `pydantic-settings`, `ortools 9.11.x`, `uvicorn[standard]`.

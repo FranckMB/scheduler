@@ -91,10 +91,11 @@
   - **Toussaint** : 2 semaines différentes → **2 plannings**.
   - **Noël** : 1 semaine blanche (aucun planning) + 1 semaine de reprise → **1 planning**.
   - **Été** : rien pendant l'été, puis **2 semaines de reprise dégradée** → **2 plannings**.
-- **Futur (documenté, pas construit)** : un bouton ouvre une **modale « Demandes des
-  coachs »** (aujourd'hui vide) — la TODO-list des envies des coachs pour les vacances,
-  **commune à toute la période de vacances**, que le gestionnaire **barre ou non**
-  (accepte/refuse). Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
+- **Collecte des doléances coachs (LIVRÉ #10, 2026-07-25)** : bouton **« Doléances »**
+  (todo-list par équipe × semaine, coche « traité ») + **« Solliciter les coachs »**
+  (campagne → lien tokenisé sans login `/doleances/{token}` → page publique pré-remplie →
+  emails + digest quotidien + relance) + **badge radar** « X/Y répondu · N à traiter ».
+  Un souhait, jamais une contrainte. Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md) §9-10.
 - **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
   équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
   modèle de saison, éditable gymnase par gymnase à l'écran), **choix des semaines** (E1), été inclus (E2),

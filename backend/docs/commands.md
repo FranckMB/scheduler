@@ -9,9 +9,9 @@
 | Cible | Effet |
 |-------|-------|
 | `make install` | `composer install` dans le container |
-| `make test` | PHPStan + CS-Fixer (dry-run) + PHPUnit `--group phase1` |
-| `make tests-complete` | Suites unit **et** integration complètes |
-| `make phpunit` | PHPUnit `--group phase1` seul (`APP_ENV=test` injecté) |
+| `make test` | PHPStan + CS-Fixer + PHPUnit **`--testsuite Unit`** (⚠️ PAS le gate bloquant : ni `--group phase1`, ni `tests/` entier) |
+| `make tests-complete` | PHPStan + CS-Fixer + **`phpunit tests/`** (le DOSSIER entier — miroir EXACT du job CI `Unit Tests` ; seule cible qui voit Api/Command/Double/EventListener/MessageHandler/OpenApi/Validator) |
+| `make phpunit` | PHPUnit **`--group phase1`** seul (le gate bloquant, `APP_ENV=test` injecté) |
 | `make db-init-test` | Crée + migre la base de test (**pré-requis de toute suite**) |
 | `make db-reset` / `make db-reset-test` | Drop + recreate + migrate (dev / test) |
 | `make fixtures` | Fixtures dev + seed jours fériés/vacances — **injecte l'URL admin** (RLS : ne JAMAIS lancer `doctrine:fixtures:load` à la main, le purge silencieux casse) |

@@ -42,7 +42,7 @@ Colonnes : le **front** l'émet-il ? · le **backend** le transmet/transforme-t-
 | `unavailableDays` | ✅ coach « indisponible » | passe | ✅ union, dur | ✅ **aligné** |
 | `availableDays` (coach « disponible **uniquement** ») | ✅ coach *(depuis ALIGN)* | passe | ✅ whitelist (intersection) | ✅ **aligné** |
 | `maxTeams` | ❌ (l'écran Gymnases n'émet pas de contrainte) | `canSplit` → `trainingSlots[].capacity` par créneau | ✅ cap `min(capacité, maxTeams)` **si** contrainte `FACILITY_CAPACITY` explicite | 🟠 la divisibilité passe par la capacité des créneaux ; `maxTeams` n'est honoré que via une contrainte explicite, que l'écran n'émet pas |
-| `venue_closed` (période) | ✅ (cockpit) | → `forbiddenVenueId`/équipe | ✅ | ✅ **aligné** *(via expansion backend)* |
+| `venue_closed` (période) | ✅ (cockpit) | → **retrait des créneaux** du gymnase les jours fermés (`VenueClosureDays`, P2-5 5b #263) | ✅ | ✅ **aligné** *(plus d'expansion `forbiddenVenueId` : `expandClosedVenues` supprimé — le créneau fermé est retiré du payload à la source)* |
 | `targetTag` (groupe) | ✅ | → N contraintes TEAM | ✅ (par équipe) | ✅ **aligné** |
 | `orToolsWeight` (tier) | ❌ jamais émis (nulle part dans `frontend/src`) | ❌ ne l'envoie pas (retiré volontairement) | poids **fixes codés en dur** (`LEVEL_2_OBJECTIVE_WEIGHTS`) | ✅ **sans objet** : la priorité S≫A≫B≫C≫D est garantie côté engine sans transport du poids |
 | **`forcedDays`** (« au moins une séance tel jour ») | ❌ non émis | — | ✅ compris | 🟠 **scission A** : engine sait, le front n'expose pas |
