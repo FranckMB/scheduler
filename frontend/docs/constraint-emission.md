@@ -23,7 +23,7 @@
 | **COACH_AVAILABILITY** « indisponible » | `coachId` + `unavailableDays` (+ `fromTime`/`untilTime` optionnels, Lot C) | **HARD** (épinglé) | Lionel indispo vendredi ; indispo mardi à partir de 20:00 |
 | **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) (+ `fromTime`/`untilTime` optionnels) | **HARD** (épinglé) | coach dispo seulement le mardi de 20:00 à 22:00 |
 | **Cible** | `targetTag` si groupe (sinon `scope`/`scopeTargetId`) | — | groupe FEMININE / REGIONAL |
-| **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** | — | épingle 1 séance sur un créneau |
+| **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** — verrouille le **créneau entier**, divisible ou non (ALIGN-07) ; partager = co-épingler les N équipes (picker borné à `capacity`) | — | épingle 1 séance ; SM1 seul, ou SM1+SM2 co-épinglés |
 | **Écran Gymnases** (hors onglet contraintes) | *aucune contrainte* — `canSplit` devient `trainingSlots[].capacity` côté backend (`canSplit ? capacity : 1`) | — | ADN divisible |
 | **Classement équipes** (hors onglet) | `PRIORITY_TIER` **sans** `orToolsWeight` (poids fixes codés en dur côté engine) | — | rangs S/A/B/C/D |
 
