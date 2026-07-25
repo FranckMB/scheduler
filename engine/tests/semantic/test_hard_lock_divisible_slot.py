@@ -40,8 +40,8 @@ def _placed_on(result: dict[str, Any], team_id: str, day: int, start: str) -> bo
     )
 
 
-def test_hard_lock_takes_whole_divisible_slot_D1() -> None:
-    """D1: SM1 pinned HARD on a capacity-2 slot → SM1 alone; SM2 cannot slip into the other half.
+def test_hard_lock_takes_whole_divisible_slot_T1() -> None:
+    """T1 (D1): SM1 pinned HARD on a capacity-2 slot → SM1 alone; SM2 cannot slip into the other half.
 
     Single slot on purpose: the ONLY way SM2 could land here is if the lock left the
     other capacity half open. It must not — SM2 ends up unplaced.
@@ -62,8 +62,8 @@ def test_hard_lock_takes_whole_divisible_slot_D1() -> None:
     assert "SM2" in result["unplaced"], "SM2 has no other slot → unplaced, not silently co-located"
 
 
-def test_explicit_double_pin_shares_slot_no_conflict_D2() -> None:
-    """D2: pin SM1 AND SM2 HARD on the same capacity-2 slot → both placed, zero over-capacity diagnostic."""
+def test_explicit_double_pin_shares_slot_no_conflict_T2() -> None:
+    """T2 (D2): pin SM1 AND SM2 HARD on the same capacity-2 slot → both placed, zero over-capacity diagnostic."""
     payload = make_payload(
         teams=[make_team("SM1", sessions_per_week=1), make_team("SM2", sessions_per_week=1)],
         venues=[make_venue("gym", [(6, "18:00")], capacity=2)],
@@ -88,8 +88,8 @@ def test_explicit_double_pin_shares_slot_no_conflict_D2() -> None:
     )
 
 
-def test_hard_lock_on_indivisible_slot_unchanged_D1_baseline() -> None:
-    """T3: capacity=1 slot + HARD lock → historical behaviour unchanged (SM1 alone, SM2 out)."""
+def test_hard_lock_on_indivisible_slot_unchanged_T3() -> None:
+    """T3 (baseline): capacity=1 slot + HARD lock → historical behaviour unchanged (SM1 alone, SM2 out)."""
     payload = make_payload(
         teams=[make_team("SM1", sessions_per_week=1), make_team("SM2", sessions_per_week=1)],
         venues=[make_venue("gym", [(6, "18:00")], capacity=1)],
