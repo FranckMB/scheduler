@@ -9,7 +9,7 @@
 
 ## 1. Le besoin (reformulé)
 
-Aujourd'hui : `POST /api/register` prend un **code ARA + nom de club**, crée le club et fait de l'inscrivant un `admin` (`AuthController.php:344`) — **aucune preuve** que la personne gère réellement ce club, **aucune protection** contre un 2ᵉ inscrivant qui recréerait ou squatterait un club existant.
+Aujourd'hui (**post-A3**, #153) : `POST /api/register` renvoie **202 uniforme** (anti-énumération), envoie un **lien de vérification par email**, et c'est `/api/register/verify` qui **matérialise le club** + connecte (JWT) ; à la création, `FfbbClubPopulator` **auto-remplit** les coordonnées club/ligue/comité + logos depuis le code FFBB (lot C, livré). **Ce qui manque encore** (l'objet de ce doc) : **aucune preuve que l'inscrivant gère réellement CE club**, et **aucune protection anti-squatting** contre un 2ᵉ inscrivant qui recréerait/réclamerait un club existant — la vérification FFBB + le flux d'approbation ci-dessous restent à construire.
 
 On veut un enregistrement qui répond à **deux questions** :
 1. **La personne est-elle un vrai gestionnaire du club ?** — via le **code club FFBB** (à vérifier) **ou** l'**import d'un document FFBB** qui renseigne l'essentiel du club. *Fait posé : tous les gestionnaires de club ont accès au portail FFBB* → on peut s'appuyer dessus comme source de légitimité.
