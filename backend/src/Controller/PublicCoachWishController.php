@@ -12,7 +12,9 @@ use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Repository\CoachWishTokenRepository;
+use App\Repository\SeasonRepository;
 use App\Service\CoachWishUpserter;
+use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -45,6 +47,9 @@ use Symfony\Component\Routing\Attribute\Route;
 #[AsController]
 final class PublicCoachWishController extends AbstractController
 {
+    /** Plafond dur du nombre de sections soumises — largement au-dessus d'un périmètre réel. */
+    private const MAX_SUBMISSIONS = 200;
+
     public function __construct(
         private readonly CoachWishTokenRepository $tokenRepository,
         private readonly EntityManagerInterface $entityManager,
@@ -52,15 +57,15 @@ final class PublicCoachWishController extends AbstractController
         private readonly CoachWishUpserter $upserter,
         private readonly ClockInterface $clock,
         private readonly RateLimiterFactory $coachWishPublicLimiter,
+        private readonly SeasonRepository $seasonRepository,
     ) {}
 
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_get', methods: ['GET'])]
     public function show(string $token, Request $request): JsonResponse
     {
-        // Clé PAR IP. `getClientIp()` peut être null (pas de REMOTE_ADDR) → repli explicite,
-        // sinon toutes ces requêtes tomberaient dans le même compartiment. ⚠️ Derrière le
-        // reverse-proxy, `trusted_proxies` (env SYMFONY_TRUSTED_PROXIES) DOIT être configuré,
-        // sinon l'IP vue est celle de la passerelle et la fenêtre devient un compartiment global.
+        // Clé PAR IP. `getClientIp()` peut être null → repli explicite, sinon toutes ces
+        // requêtes tomberaient dans le même compartiment. L'IP réelle derrière le reverse-proxy
+        // dépend de `trusted_proxies` (framework.yaml, repli `private_ranges`).
         if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
             return $this->json(['error' => 'Too many attempts, please try again later'], 429);
         }
@@ -136,10 +141,9 @@ final class PublicCoachWishController extends AbstractController
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_post', methods: ['POST'])]
     public function submit(string $token, Request $request): JsonResponse
     {
-        // Clé PAR IP. `getClientIp()` peut être null (pas de REMOTE_ADDR) → repli explicite,
-        // sinon toutes ces requêtes tomberaient dans le même compartiment. ⚠️ Derrière le
-        // reverse-proxy, `trusted_proxies` (env SYMFONY_TRUSTED_PROXIES) DOIT être configuré,
-        // sinon l'IP vue est celle de la passerelle et la fenêtre devient un compartiment global.
+        // Clé PAR IP. `getClientIp()` peut être null → repli explicite, sinon toutes ces
+        // requêtes tomberaient dans le même compartiment. L'IP réelle derrière le reverse-proxy
+        // dépend de `trusted_proxies` (framework.yaml, repli `private_ranges`).
         if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
             return $this->json(['error' => 'Too many attempts, please try again later'], 429);
         }
@@ -152,6 +156,13 @@ final class PublicCoachWishController extends AbstractController
         $submissions = \is_array($payload) && isset($payload['submissions']) && \is_array($payload['submissions']) ? $payload['submissions'] : null;
         if (null === $submissions) {
             return $this->json(['error' => 'submissions requis.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        // Borne de cardinalité AVANT toute itération : le périmètre réel d'un coach est petit
+        // (ses équipes × les semaines de la campagne). Un plafond large mais fini coupe l'abus
+        // O(N) d'un tableau géant sur un endpoint sans login (le reste est déjà borné par le
+        // rate-limit et post_max_size).
+        if (\count($submissions) > self::MAX_SUBMISSIONS) {
+            return $this->json(['error' => 'Trop de lignes.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         try {
@@ -236,16 +247,30 @@ final class PublicCoachWishController extends AbstractController
     }
 
     /**
-     * La saison de la campagne est-elle close (archivée) ? Le chemin public n'a pas de JWT :
-     * le listener ne pose jamais `_season_readonly`, donc `SeasonAccessGuard` ne peut pas
-     * intercepter. On lit le statut directement — une saison archivée est en lecture seule
-     * (invariant SeasonReadonly) : le lien est traité comme expiré (410), aucune écriture.
+     * La saison de la campagne est-elle en lecture seule ? Le chemin public n'a pas de JWT :
+     * le `TenantFilterListener` ne pose jamais `_season_readonly`, donc `SeasonAccessGuard`
+     * ne peut pas intercepter. On reproduit sa dérivation EXACTE : une saison est gelée
+     * quand elle n'est plus la saison courante du calendrier (`isReadonlyAmong`, pivot
+     * 15-juillet) — le statut `archived` n'est PAS posé au roulement, c'est un flag manuel.
+     * On ajoute donc l'archivage/clôture MANUEL. Gelée → lien traité comme expiré (410),
+     * aucune écriture dans une saison figée (invariant SeasonReadonly, blocking-tests).
      */
     private function isSeasonClosed(CoachWishCampaign $campaign): bool
     {
         $season = $this->entityManager->getRepository(Season::class)->find($campaign->getSeasonId());
+        if (null === $season) {
+            return true;
+        }
+        if (\in_array($season->getStatus(), ['archived', 'closed'], true)) {
+            return true;
+        }
+        $clubId = $campaign->getClubId();
+        if (null === $clubId) {
+            return true; // campagne sans club (impossible en pratique) → fail-closed
+        }
+        $seasons = $this->seasonRepository->findAllByClubId($clubId);
 
-        return null === $season || \in_array($season->getStatus(), ['archived', 'closed'], true);
+        return SeasonResolver::isReadonlyAmong($season, $seasons, $this->clock->now());
     }
 
     /** La semaine (lundi→dimanche) recoupe-t-elle encore la période mère, date à date ? */
