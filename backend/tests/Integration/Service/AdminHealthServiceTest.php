@@ -8,6 +8,7 @@ use App\Service\AdminHealthService;
 use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
 use Psr\Cache\CacheItemPoolInterface;
+use Redis;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -64,12 +65,11 @@ final class AdminHealthServiceTest extends KernelTestCase
         $httpClient = new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
         $cache = new ArrayAdapter;
 
-        // Pre-seed the three heartbeat keys with the current timestamp so the probe
-        // reads an "up" status with a fresh age.
+        // messenger + cron lisent le pool cache.app (écrits côté PHP) — seedés via le cache.
+        // pdf-worker lit Redis EN BRUT (écrit par Node) : couvert par son propre test.
         foreach ([
             'admin_monitoring.messenger.heartbeat' => 30,
             'admin_monitoring.cron_runner.heartbeat' => 180,
-            'admin_monitoring.pdf_worker.heartbeat' => 60,
         ] as $cacheKey => $ttl) {
             $item = $cache->getItem($cacheKey);
             $item->set(time())->expiresAfter($ttl);
@@ -84,12 +84,34 @@ final class AdminHealthServiceTest extends KernelTestCase
             $byKey[$entry['key']] = $entry;
         }
 
-        foreach (['messenger-worker', 'cron-runner', 'pdf-worker'] as $key) {
+        foreach (['messenger-worker', 'cron-runner'] as $key) {
             self::assertSame('up', $byKey[$key]['status'], "Container $key should be up with fresh heartbeat");
             self::assertIsString($byKey[$key]['lastHeartbeatAt']);
             self::assertIsInt($byKey[$key]['ageSeconds']);
             self::assertLessThanOrEqual(1, $byKey[$key]['ageSeconds']);
         }
+    }
+
+    public function testPdfWorkerHeartbeatIsReadRawFromRedisInSeconds(): void
+    {
+        // pdf-worker écrit HORS cache.app (clé brute, secondes) : le probe lit Redis direct.
+        // Reproduit l'écriture Node → probe = up ; clé absente → unknown.
+        $redisUrl = 'redis://redis:6379';
+        $redis = new Redis;
+        $redis->connect('redis', 6379, 1.0);
+        $key = 'admin_monitoring.pdf_worker.heartbeat';
+
+        $redis->set($key, (string) time(), ['EX' => 120]);
+        $httpClient = new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
+        $service = $this->buildService($httpClient, new ArrayAdapter, $redisUrl);
+        $pdf = $this->containerByKey($service->health(), 'pdf-worker');
+        self::assertSame('up', $pdf['status'], 'pdf-worker up avec un heartbeat brut frais');
+        self::assertLessThanOrEqual(1, $pdf['ageSeconds']);
+
+        $redis->del($key);
+        $pdf = $this->containerByKey($this->buildService($httpClient, new ArrayAdapter, $redisUrl)->health(), 'pdf-worker');
+        self::assertSame('unknown', $pdf['status'], 'clé absente → unknown');
+        $redis->close();
     }
 
     public function testExternalDependenciesReturnsThreeEntries(): void
@@ -106,7 +128,22 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::assertSame('etalab', $deps[2]['key']);
     }
 
-    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null): AdminHealthService
+    /**
+     * @param array<string, mixed> $health
+     *
+     * @return array<string, mixed>
+     */
+    private function containerByKey(array $health, string $key): array
+    {
+        foreach ($health['containers'] as $entry) {
+            if ($entry['key'] === $key) {
+                return $entry;
+            }
+        }
+        self::fail("Container $key absent");
+    }
+
+    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null, string $redisUrl = 'redis://localhost:6379'): AdminHealthService
     {
         return new AdminHealthService(
             $this->createMock(ManagerRegistry::class),
@@ -114,7 +151,7 @@ final class AdminHealthServiceTest extends KernelTestCase
             $this->createMock(TransportInterface::class),
             $this->createMock(TransportInterface::class),
             $cache ?? $this->createMock(CacheItemPoolInterface::class),
-            'redis://localhost:6379',
+            $redisUrl,
             '',
         );
     }

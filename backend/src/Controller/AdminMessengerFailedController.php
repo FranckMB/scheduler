@@ -43,15 +43,23 @@ final readonly class AdminMessengerFailedController
         $limit = max(1, min(self::MAX_LIMIT, (int) $request->query->get('limit', (string) self::DEFAULT_LIMIT)));
 
         if ($this->failedTransport instanceof ListableReceiverInterface) {
-            $items = $this->fromListableTransport($page, $limit);
+            ['items' => $items, 'total' => $total] = $this->fromListableTransport($page, $limit);
         } else {
-            $items = $this->fromRedisStream($page, $limit);
+            ['items' => $items, 'total' => $total] = $this->fromRedisStream($page, $limit);
         }
 
-        return new JsonResponse(['items' => $items]);
+        return new JsonResponse([
+            'items' => $items,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => (int) ceil($total / $limit),
+            ],
+        ]);
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array{items: list<array<string, mixed>>, total: int} */
     private function fromListableTransport(int $page, int $limit): array
     {
         \assert($this->failedTransport instanceof ListableReceiverInterface);
@@ -60,6 +68,8 @@ final readonly class AdminMessengerFailedController
         $items = [];
         $index = 0;
 
+        // Le transport « failed » est normalement minuscule (idéalement vide) : on l'itère en
+        // entier pour connaître le total (pagination), en ne matérialisant que la page demandée.
         foreach ($this->failedTransport->all() as $envelope) {
             if ($index >= $offset && \count($items) < $limit) {
                 $item = $this->extractItem($envelope);
@@ -68,15 +78,12 @@ final readonly class AdminMessengerFailedController
                 }
             }
             ++$index;
-            if (\count($items) >= $limit) {
-                break;
-            }
         }
 
-        return $items;
+        return ['items' => $items, 'total' => $index];
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array{items: list<array<string, mixed>>, total: int} */
     private function fromRedisStream(int $page, int $limit): array
     {
         $stream = $this->resolveStreamName();
@@ -108,7 +115,7 @@ final readonly class AdminMessengerFailedController
             }
         }
 
-        return $items;
+        return ['items' => $items, 'total' => \count($messages)];
     }
 
     private function resolveStreamName(): string

@@ -64,7 +64,8 @@ final readonly class AdminHealthService
             ],
             'messenger' => $messenger,
             'externalDependencies' => $externalDependencies,
-            'containers' => $this->containers(),
+            // Réutilise les 4 sondes déjà faites (db/redis/engine/mercure) — pas de re-probe.
+            'containers' => $this->containers($database, $redis, $engine, $mercure),
         ];
     }
 
@@ -159,19 +160,24 @@ final readonly class AdminHealthService
         return $results;
     }
 
-    /** @return list<array{key: string, name: string, status: string, lastHeartbeatAt?: ?string, ageSeconds?: ?int, latencyMs?: int}> */
-    private function containers(): array
+    /**
+     * @param array{status: string, latencyMs: int} $database
+     * @param array{status: string, latencyMs: int} $redis
+     * @param array{status: string, latencyMs: int} $engine
+     * @param array{status: string, latencyMs: int} $mercure
+     *
+     * @return list<array{key: string, name: string, status: string, lastHeartbeatAt?: ?string, ageSeconds?: ?int, latencyMs?: int}>
+     */
+    private function containers(array $database, array $redis, array $engine, array $mercure): array
     {
-        $database = $this->database();
-        $redis = $this->redis();
-        $engine = $this->http(self::ENGINE_HEALTH_URL, true);
-        $mercure = '' === $this->mercureUrl ? $this->unknownProbe() : $this->http($this->mercureUrl, false);
         $nginx = $this->http('http://nginx/api/health', true, 1.0, 1.5);
         $frontend = $this->http('http://frontend/health', false, 1.0, 1.5);
         $mailpit = $this->http('http://mailpit:8025/', false, 1.0, 1.5);
         $messengerWorker = $this->heartbeatProbe('admin_monitoring.messenger.heartbeat', 30);
         $cronRunner = $this->heartbeatProbe('admin_monitoring.cron_runner.heartbeat', 180);
-        $pdfWorker = $this->heartbeatProbe('admin_monitoring.pdf_worker.heartbeat', 60);
+        // pdf-worker écrit son heartbeat depuis NODE (clé RAW, secondes) — hors du pool
+        // cache.app (qui namespace+sérialise) : lecture Redis brute dédiée.
+        $pdfWorker = $this->rawHeartbeatProbe('admin_monitoring.pdf_worker.heartbeat', 60);
 
         return [
             ['key' => 'postgres', 'name' => 'PostgreSQL', 'status' => $database['status'], 'latencyMs' => $database['latencyMs']],
@@ -196,20 +202,75 @@ final readonly class AdminHealthService
         try {
             $item = $this->cache->getItem($cacheKey);
             $timestamp = $item->isHit() && \is_int($item->get()) ? $item->get() : null;
-            if (null === $timestamp) {
-                return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
-            }
 
-            $age = max(0, time() - $timestamp);
-
-            return [
-                'status' => $age <= $maxAgeSeconds ? 'up' : 'down',
-                'lastHeartbeatAt' => (new DateTimeImmutable)->setTimestamp($timestamp)->format(DateTimeInterface::ATOM),
-                'ageSeconds' => $age,
-            ];
+            return $this->heartbeatResult($timestamp, $maxAgeSeconds);
         } catch (Throwable) {
             return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
         }
+    }
+
+    /**
+     * Heartbeat écrit HORS du pool cache.app — clé Redis BRUTE, valeur = timestamp UNIX en
+     * SECONDES (le pdf-worker Node ne peut pas produire la clé namespacée/sérialisée de
+     * Symfony). Lecture Redis directe, mêmes règles d'âge que `heartbeatProbe`.
+     *
+     * @return array{status: string, lastHeartbeatAt: ?string, ageSeconds: ?int}
+     */
+    private function rawHeartbeatProbe(string $key, int $maxAgeSeconds): array
+    {
+        $redis = null;
+        $connected = false;
+        try {
+            $parts = parse_url($this->redisUrl);
+            if (!\is_array($parts) || !isset($parts['host'])) {
+                return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
+            }
+            $redis = new Redis;
+            $redis->connect($parts['host'], (int) ($parts['port'] ?? 6379), 1.0);
+            $connected = true;
+            $redis->setOption(Redis::OPT_READ_TIMEOUT, 1.0);
+            if (isset($parts['pass'])) {
+                $redis->auth(isset($parts['user']) && '' !== $parts['user'] ? [$parts['user'], $parts['pass']] : $parts['pass']);
+            }
+            if (isset($parts['path']) && ctype_digit($database = ltrim($parts['path'], '/'))) {
+                $redis->select((int) $database);
+            }
+            $raw = $redis->get($key);
+            $timestamp = \is_string($raw) && ctype_digit($raw) ? (int) $raw : null;
+
+            return $this->heartbeatResult($timestamp, $maxAgeSeconds);
+        } catch (Throwable) {
+            return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
+        } finally {
+            if ($connected) {
+                try {
+                    $redis?->close();
+                } catch (Throwable) {
+                    // résultat déjà connu ; la fermeture ne doit jamais casser l'endpoint.
+                }
+            }
+        }
+    }
+
+    /**
+     * Mappe un timestamp de heartbeat (secondes UNIX, ou null si absent) en état. « down »
+     * n'est atteignable que si le TTL de la clé DÉPASSE `maxAge` (sinon la clé disparaît pile
+     * à maxAge → on saute up→unknown). Absent → 'unknown'.
+     *
+     * @return array{status: string, lastHeartbeatAt: ?string, ageSeconds: ?int}
+     */
+    private function heartbeatResult(?int $timestamp, int $maxAgeSeconds): array
+    {
+        if (null === $timestamp) {
+            return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
+        }
+        $age = max(0, time() - $timestamp);
+
+        return [
+            'status' => $age <= $maxAgeSeconds ? 'up' : 'down',
+            'lastHeartbeatAt' => (new DateTimeImmutable)->setTimestamp($timestamp)->format(DateTimeInterface::ATOM),
+            'ageSeconds' => $age,
+        ];
     }
 
     /** @return array{status: string, lastHeartbeatAt: ?string, ageSeconds: ?int} */

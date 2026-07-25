@@ -19,24 +19,26 @@ const dateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
   minute: "2-digit",
 });
 
-type AuditStatus = "success" | "error";
+type AuditStatus = "success" | "error" | "unknown";
 
 const STATUS_LABELS: Record<AuditStatus, string> = {
   success: "Succès",
   error: "Erreur",
+  unknown: "—",
 };
 
 const STATUS_STYLES: Record<AuditStatus, string> = {
   success: "bg-emerald-500/15 text-emerald-300",
   error: "bg-red-500/15 text-red-300",
+  unknown: "bg-white/10 text-slate-400",
 };
 
-function isAuditStatus(value: string): value is AuditStatus {
-  return value === "success" || value === "error";
-}
-
-function statusOf(value: string): AuditStatus {
-  return isAuditStatus(value) ? value : "success";
+/** Le statut vient du CODE HTTP (status_code) : <400 = succès, ≥400 = erreur, null = inconnu. */
+function statusOf(code: number | null): AuditStatus {
+  if (null === code) {
+    return "unknown";
+  }
+  return code >= 400 ? "error" : "success";
 }
 
 export function AuditSubtab() {
@@ -140,14 +142,15 @@ function AuditRow({ item }: { item: AdminAuditLogItem }) {
   return (
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
       <td className="px-5 py-5">
-        <p className="text-slate-200">{item.actorEmail}</p>
+        <p className="text-slate-200">{item.actorEmail ?? "—"}</p>
       </td>
       <td className="px-4 py-5">
-        <p className="font-mono text-xs text-slate-400">{item.route}</p>
+        <p className="font-mono text-xs text-slate-400">{item.route ?? "—"}</p>
       </td>
       <td className="px-4 py-5">
-        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold", STATUS_STYLES[status])}>
+        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold", STATUS_STYLES[status])}>
           {STATUS_LABELS[status]}
+          {null !== item.status ? <span className="tabular-nums opacity-70">{item.status}</span> : null}
         </span>
       </td>
       <td className="px-4 py-5 tabular-nums text-slate-400">{dateTimeFormatter.format(new Date(item.createdAt))}</td>

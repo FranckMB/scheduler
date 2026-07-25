@@ -22,8 +22,8 @@ function makeItem(overrides: Partial<AdminAuditLogResponse["items"][number]> = {
     actorId: "actor-1",
     actorEmail: "root@club.test",
     route: "POST /api/admin/clubs",
-    context: "",
-    status: "success",
+    context: null,
+    status: 200,
     createdAt: "2026-07-21T10:30:00.000Z",
     ...overrides,
   };
@@ -119,7 +119,7 @@ describe("AuditSubtab", () => {
   });
 
   it("renders an error status chip with the red style", () => {
-    mockHook(makeResponse([makeItem({ id: "err-1", status: "error" })], 1, 1));
+    mockHook(makeResponse([makeItem({ id: "err-1", status: 403 })], 1, 1));
 
     render(<AuditSubtab />);
 
@@ -131,7 +131,7 @@ describe("AuditSubtab", () => {
   });
 
   it("renders a success status chip with the green style", () => {
-    mockHook(makeResponse([makeItem({ id: "ok-1", status: "success" })], 1, 1));
+    mockHook(makeResponse([makeItem({ id: "ok-1", status: 200 })], 1, 1));
 
     render(<AuditSubtab />);
 
@@ -139,6 +139,21 @@ describe("AuditSubtab", () => {
     expect(chip).toBeInTheDocument();
     expect(chip.className).toContain("bg-emerald-500/15");
     expect(chip.className).toContain("text-emerald-300");
+  });
+
+  it("maps a >=400 status code to Erreur and shows the code (never a false Succès)", () => {
+    mockHook(makeResponse([makeItem({ id: "denied", status: 403 })], 1, 1));
+    render(<AuditSubtab />);
+    expect(screen.getByText("Erreur")).toBeInTheDocument();
+    expect(screen.getByText("403")).toBeInTheDocument();
+    expect(screen.queryByText("Succès")).not.toBeInTheDocument();
+  });
+
+  it("maps a null status code to the neutral unknown chip, not Succès", () => {
+    mockHook(makeResponse([makeItem({ id: "no-code", status: null })], 1, 1));
+    render(<AuditSubtab />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("Succès")).not.toBeInTheDocument();
   });
 
   it("formats the createdAt date in fr-FR with the expected options", () => {

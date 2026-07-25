@@ -48,6 +48,12 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
         $body = $this->responseBody();
         self::assertArrayHasKey('items', $body);
         self::assertSame([], $body['items']);
+        // La réponse DOIT porter `pagination` (le front la déstructure — sinon crash).
+        self::assertArrayHasKey('pagination', $body);
+        foreach (['page', 'limit', 'total', 'pages'] as $key) {
+            self::assertArrayHasKey($key, $body['pagination']);
+        }
+        self::assertSame(0, $body['pagination']['total']);
     }
 
     public function testOneFailedMessageReturnsCorrectFieldsAndNoBody(): void

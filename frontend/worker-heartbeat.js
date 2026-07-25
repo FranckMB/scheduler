@@ -14,7 +14,9 @@ import net from 'net';
  */
 export const HEARTBEAT_KEY = 'admin_monitoring.pdf_worker.heartbeat';
 export const HEARTBEAT_INTERVAL_MS = 30000;
-export const HEARTBEAT_TTL_S = 60;
+// TTL > maxAge (60 s côté probe) : la clé survit assez pour que l'état « down » soit
+// atteignable (sinon elle expire pile à maxAge → on saute up→unknown, cf. revue).
+export const HEARTBEAT_TTL_S = 120;
 
 /** redis://host:port(/db) → {host, port}. Repli sur le service compose. */
 export function parseRedisUrl(url) {
@@ -37,10 +39,11 @@ export function encodeRespCommand(args) {
 }
 
 /**
- * Écrit UN battement (SET … EX ttl) sur une connexion éphémère. Résout toujours
- * (true = ack Redis reçu, false = n'importe quel échec) — jamais de rejet.
+ * Écrit UN battement (SET … EX ttl) sur une connexion éphémère. La valeur est un timestamp
+ * UNIX en SECONDES (le probe backend fait `time() - valeur` en secondes ; envoyer des ms
+ * fausserait l'âge). Résout toujours (true = ack Redis, false = échec) — jamais de rejet.
  */
-export function writeHeartbeat({ host, port }, now = Date.now()) {
+export function writeHeartbeat({ host, port }, nowSeconds = Math.floor(Date.now() / 1000)) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
     const done = (ok) => {
@@ -50,7 +53,7 @@ export function writeHeartbeat({ host, port }, now = Date.now()) {
     socket.setTimeout(2000, () => done(false));
     socket.on('error', () => done(false));
     socket.on('connect', () => {
-      socket.write(encodeRespCommand(['SET', HEARTBEAT_KEY, String(now), 'EX', String(HEARTBEAT_TTL_S)]));
+      socket.write(encodeRespCommand(['SET', HEARTBEAT_KEY, String(nowSeconds), 'EX', String(HEARTBEAT_TTL_S)]));
     });
     socket.on('data', (chunk) => done(chunk.toString().startsWith('+OK')));
   });

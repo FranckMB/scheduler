@@ -16,7 +16,9 @@ final class CronRunnerHealthSubscriber implements EventSubscriberInterface
 {
     public const HEARTBEAT_KEY = 'admin_monitoring.cron_runner.heartbeat';
 
-    private const HEARTBEAT_TTL_SECONDS = 180;
+    // TTL > maxAge du probe (180 s) : la clé doit survivre AU-DELÀ de maxAge pour que l'état
+    // « down » soit atteignable (TTL == maxAge ferait sauter up→unknown directement).
+    private const HEARTBEAT_TTL_SECONDS = 360;
 
     public function __construct(
         #[Autowire(service: 'cache.app')]

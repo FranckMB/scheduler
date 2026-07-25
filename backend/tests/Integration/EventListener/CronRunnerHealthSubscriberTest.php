@@ -33,10 +33,10 @@ final class CronRunnerHealthSubscriberTest extends TestCase
         self::assertIsInt($heartbeat->get());
         self::assertLessThanOrEqual(1, abs(time() - $heartbeat->get()));
 
-        // Verify TTL is 180 seconds by checking expiration
+        // TTL = 360 s (> maxAge 180 du probe) pour que l'état « down » soit atteignable.
         $metadata = $heartbeat->getMetadata();
         self::assertArrayHasKey('expiry', $metadata);
-        $expectedExpiry = time() + 180;
+        $expectedExpiry = time() + 360;
         self::assertLessThanOrEqual(1, abs($expectedExpiry - $metadata['expiry']));
     }
 

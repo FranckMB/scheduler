@@ -195,11 +195,13 @@ export interface AdminFreshnessResponse {
 
 export interface AdminAuditLogItem {
   id: string;
-  actorId: string;
-  actorEmail: string;
-  route: string;
-  context: string;
-  status: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  route: string | null;
+  /** `details` JSON du log d'audit — objet arbitraire, ou null. */
+  context: Record<string, unknown> | null;
+  /** Code HTTP de l'action auditée (status_code), ou null si non enregistré. */
+  status: number | null;
   createdAt: string;
 }
 
