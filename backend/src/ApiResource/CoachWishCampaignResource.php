@@ -28,6 +28,23 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post,
     new Put,
     new Delete,
+    // C3 — actions d'envoi (patron reset-grid : ACTION, pas état ; SEC-07 dans le contrôleur).
+    // « Envoyer les liens » : coachs à email PAS ENCORE servis, ou coachIds ciblés (D2).
+    new Post(
+        uriTemplate: '/coach_wish_campaigns/{id}/send-links',
+        controller: 'App\\Controller\\CoachWishCampaignActionController',
+        input: false,
+        read: false,
+        name: 'send_links_coach_wish_campaign',
+    ),
+    // « Relancer les silencieux » : une relance par jour Europe/Paris (D3) → 422 sinon.
+    new Post(
+        uriTemplate: '/coach_wish_campaigns/{id}/remind',
+        controller: 'App\\Controller\\CoachWishCampaignActionController',
+        input: false,
+        read: false,
+        name: 'remind_coach_wish_campaign',
+    ),
 ], input: CoachWishCampaignInput::class, paginationEnabled: false, provider: CoachWishCampaignStateProvider::class, processor: CoachWishCampaignStateProcessor::class)]
 #[ApiFilter(SearchFilter::class, properties: ['calendarEntryId' => 'exact'])]
 class CoachWishCampaignResource
@@ -62,8 +79,12 @@ class CoachWishCampaignResource
     #[Groups(['read'])]
     public int $openWishCount = 0;
 
+    /** Dernière relance manuelle (C3) — le bouton se bloque le reste de la journée. */
+    #[Groups(['read'])]
+    public ?string $lastReminderAt = null;
+
     /**
-     * @var list<array{coachId: string, firstName: string, lastName: string, email: string|null, token: string, respondedAt: string|null}>
+     * @var list<array{coachId: string, firstName: string, lastName: string, email: string|null, token: string, respondedAt: string|null, sentAt: string|null}>
      */
     #[Groups(['read'])]
     public array $coaches = [];

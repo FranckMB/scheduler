@@ -17,6 +17,8 @@ export interface CampaignCoach {
   token: string;
   /** ISO 8601, ou null si le coach n'a pas encore répondu. */
   respondedAt: string | null;
+  /** Dernier envoi du lien par email (C3) — null = jamais envoyé. */
+  sentAt: string | null;
 }
 
 export interface CoachWishCampaign {
@@ -31,6 +33,8 @@ export interface CoachWishCampaign {
   totalCoachCount: number;
   respondedCoachCount: number;
   openWishCount: number;
+  /** Dernière relance manuelle (C3) — le bouton se bloque le reste de la journée. */
+  lastReminderAt: string | null;
   coaches: CampaignCoach[];
 }
 
@@ -49,3 +53,16 @@ export const updateCoachWishCampaign = (id: string, body: CoachWishCampaignPaylo
 
 /** Construit le lien public personnel d'un coach à partir de son token. */
 export const doleancesLink = (token: string): string => `${window.location.origin}/doleances/${token}`;
+
+/** Réponse des actions d'envoi (C3) : nombre d'emails partis + la campagne re-projetée. */
+export interface CampaignActionResult {
+  sent: number;
+  campaign: CoachWishCampaign;
+}
+
+/** Envoie les liens par email — sans coachIds : tous les coachs à email pas encore servis. */
+export const sendCampaignLinks = (id: string, coachIds?: string[]): Promise<CampaignActionResult> =>
+  api.post(`coach_wish_campaigns/${id}/send-links`, { json: coachIds ? { coachIds } : {} }).json();
+
+/** Relance les silencieux (1×/jour — 422 si déjà relancé aujourd'hui). */
+export const remindCampaignSilent = (id: string): Promise<CampaignActionResult> => api.post(`coach_wish_campaigns/${id}/remind`, { json: {} }).json();

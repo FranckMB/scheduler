@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
 import { periodAdjustWeeks } from "@/features/cockpit/lib/date";
@@ -11,7 +11,7 @@ import { Spinner } from "@/shared/components/ui/spinner";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 
 import { doleancesLink, type CampaignCoach, type CoachWishCampaign } from "./campaignApi";
-import { useCreateCoachWishCampaign, useUpdateCoachWishCampaign } from "./campaignQueries";
+import { useCreateCoachWishCampaign, useRemindCampaignSilent, useSendCampaignLinks, useUpdateCoachWishCampaign } from "./campaignQueries";
 
 interface CampaignDialogProps {
   /** Entrée MÈRE des vacances à laquelle la campagne s'ancre. */
@@ -136,23 +136,63 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
         </Button>
       </div>
 
-      {null !== campaign ? <CoachLinks campaign={campaign} onEmailSaved={(coachId, email) => setCampaign((c) => (null === c ? c : { ...c, coaches: c.coaches.map((k) => (k.coachId === coachId ? { ...k, email } : k)) }))} /> : null}
+      {null !== campaign ? (
+        <CoachLinks
+          campaign={campaign}
+          onEmailSaved={(coachId, email) => setCampaign((c) => (null === c ? c : { ...c, coaches: c.coaches.map((k) => (k.coachId === coachId ? { ...k, email } : k)) }))}
+          onCampaignRefreshed={setCampaign}
+        />
+      ) : null}
     </Modal>
   );
 }
 
-function CoachLinks({ campaign, onEmailSaved }: { campaign: CoachWishCampaign; onEmailSaved: (coachId: string, email: string) => void }) {
+/** Le lastReminderAt (ISO) est-il du même jour calendaire que maintenant ? */
+const isSameDay = (iso: string | null): boolean => null !== iso && new Date(iso).toDateString() === new Date().toDateString();
+
+function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign: CoachWishCampaign; onEmailSaved: (coachId: string, email: string) => void; onCampaignRefreshed: (c: CoachWishCampaign) => void }) {
+  const sendLinks = useSendCampaignLinks();
+  const remind = useRemindCampaignSilent();
+
+  // Envoi global : les coachs à email PAS ENCORE servis (le bouton n'est pas un renvoi — D2).
+  const unsentWithEmail = campaign.coaches.filter((c) => null !== c.email && "" !== c.email && null === c.sentAt);
+  // Relance : silencieux à email — et une seule fois par jour (D3).
+  const silentWithEmail = campaign.coaches.filter((c) => null !== c.email && "" !== c.email && null === c.respondedAt);
+  const remindedToday = isSameDay(campaign.lastReminderAt);
+
   return (
     <div className="mt-5 border-t border-border pt-4">
       <p className="text-sm font-medium">
         Liens des coachs · {campaign.respondedCoachCount}/{campaign.totalCoachCount} ont répondu
       </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={0 === unsentWithEmail.length || sendLinks.isPending}
+          title={0 === unsentWithEmail.length ? "Tous les coachs avec un email ont déjà reçu leur lien" : undefined}
+          onClick={() => sendLinks.mutate({ id: campaign.id }, { onSuccess: (r) => onCampaignRefreshed(r.campaign) })}
+        >
+          {sendLinks.isPending ? <Spinner className="size-4" /> : <Send className="size-4" />}
+          Envoyer les liens par email
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={remindedToday || 0 === silentWithEmail.length || remind.isPending}
+          title={remindedToday ? "Déjà relancés aujourd'hui — pas deux fois le même jour" : 0 === silentWithEmail.length ? "Aucun coach silencieux avec un email" : undefined}
+          onClick={() => remind.mutate(campaign.id, { onSuccess: (r) => onCampaignRefreshed(r.campaign) })}
+        >
+          {remind.isPending ? <Spinner className="size-4" /> : null}
+          Relancer les silencieux
+        </Button>
+      </div>
       {0 === campaign.coaches.length ? (
         <p className="mt-1 text-sm text-muted-foreground">Aucun coach sur le périmètre choisi.</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {campaign.coaches.map((coach) => (
-            <CoachRow key={coach.coachId} coach={coach} onEmailSaved={onEmailSaved} />
+            <CoachRow key={coach.coachId} coach={coach} campaignId={campaign.id} onEmailSaved={onEmailSaved} onCampaignRefreshed={onCampaignRefreshed} />
           ))}
         </ul>
       )}
@@ -160,10 +200,11 @@ function CoachLinks({ campaign, onEmailSaved }: { campaign: CoachWishCampaign; o
   );
 }
 
-function CoachRow({ coach, onEmailSaved }: { coach: CampaignCoach; onEmailSaved: (coachId: string, email: string) => void }) {
+function CoachRow({ coach, campaignId, onEmailSaved, onCampaignRefreshed }: { coach: CampaignCoach; campaignId: string; onEmailSaved: (coachId: string, email: string) => void; onCampaignRefreshed: (c: CoachWishCampaign) => void }) {
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState(coach.email ?? "");
   const updateCoach = useUpdateCoach();
+  const sendLinks = useSendCampaignLinks();
 
   const copy = async () => {
     if (await copyToClipboard(doleancesLink(coach.token))) {
@@ -180,6 +221,8 @@ function CoachRow({ coach, onEmailSaved }: { coach: CampaignCoach; onEmailSaved:
     updateCoach.mutate({ id: coach.coachId, body: { firstName: coach.firstName, lastName: coach.lastName, email: trimmed } }, { onSuccess: () => onEmailSaved(coach.coachId, trimmed) });
   };
 
+  const hasEmail = null !== coach.email && "" !== coach.email;
+
   return (
     <li className="rounded-md border border-border p-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -187,13 +230,22 @@ function CoachRow({ coach, onEmailSaved }: { coach: CampaignCoach; onEmailSaved:
           {coach.firstName} {coach.lastName}
         </span>
         {null !== coach.respondedAt ? <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">✓ répondu le {frDate(coach.respondedAt.slice(0, 10))}</span> : null}
+        {hasEmail ? null : <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">pas d'email</span>}
+        {null !== coach.sentAt ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">envoyé le {frDate(coach.sentAt.slice(0, 10))}</span> : null}
+        {hasEmail ? (
+          // Envoi CIBLÉ (ajout tardif d'un email, ou renvoi volontaire à CE coach — D1).
+          <Button variant="ghost" size="sm" disabled={sendLinks.isPending} onClick={() => sendLinks.mutate({ id: campaignId, coachIds: [coach.coachId] }, { onSuccess: (r) => onCampaignRefreshed(r.campaign) })}>
+            <Send className="size-4" />
+            {null === coach.sentAt ? "Envoyer" : "Renvoyer"}
+          </Button>
+        ) : null}
         <Button variant="outline" size="sm" className="ml-auto" onClick={copy}>
           {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           {copied ? "Copié" : "Copier le lien"}
         </Button>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <Input type="email" placeholder="email (optionnel, pour l'envoi automatique à venir)" className="h-8 flex-1 text-xs" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={saveEmail} aria-label={`Email de ${coach.firstName} ${coach.lastName}`} />
+        <Input type="email" placeholder="email (pour l'envoi du lien)" className="h-8 flex-1 text-xs" value={email} onChange={(e) => setEmail(e.target.value)} onBlur={saveEmail} aria-label={`Email de ${coach.firstName} ${coach.lastName}`} />
       </div>
     </li>
   );

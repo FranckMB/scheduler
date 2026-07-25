@@ -36,6 +36,7 @@ final class CoachWishCampaignPresenter
         $dto->deadline = $campaign->getDeadline()->format('Y-m-d');
         $dto->weeks = $campaign->getWeeks();
         $dto->teamIds = $campaign->getTeamIds();
+        $dto->lastReminderAt = $campaign->getLastReminderAt()?->format(DateTimeInterface::ATOM);
 
         // Coachs distincts du périmètre courant (les équipes actuellement retenues).
         $perimeterCoachIds = [];
@@ -82,6 +83,7 @@ final class CoachWishCampaignPresenter
                 'email' => $coach->getEmail(),
                 'token' => $token->getToken(),
                 'respondedAt' => $respondedAt?->format(DateTimeInterface::ATOM),
+                'sentAt' => $token->getSentAt()?->format(DateTimeInterface::ATOM),
             ];
         }
 
