@@ -59,6 +59,22 @@ export interface AdminOverviewResponse {
 
 type HealthStatus = "up" | "down" | "unknown";
 
+export interface AdminHealthContainer {
+  key: string;
+  name: string;
+  status: "up" | "down" | "unknown";
+  lastHeartbeatAt?: string;
+  ageSeconds?: number;
+  latencyMs?: number;
+}
+
+export interface AdminHealthExternalDependency {
+  key: string;
+  name: string;
+  status: "up" | "down";
+  latencyMs?: number;
+}
+
 export interface AdminHealthResponse {
   status: "healthy" | "degraded";
   checkedAt: string;
@@ -80,6 +96,8 @@ export interface AdminHealthResponse {
     retriesToday: number | null;
     backlogWarningThreshold: number;
   };
+  containers: AdminHealthContainer[];
+  externalDependencies: AdminHealthExternalDependency[];
 }
 
 export interface AdminClub {
@@ -175,6 +193,47 @@ export interface AdminFreshnessResponse {
   items: AdminFreshnessItem[];
 }
 
+export interface AdminAuditLogItem {
+  id: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  route: string | null;
+  /** `details` JSON du log d'audit — objet arbitraire, ou null. */
+  context: Record<string, unknown> | null;
+  /** Code HTTP de l'action auditée (status_code), ou null si non enregistré. */
+  status: number | null;
+  createdAt: string;
+}
+
+export interface AdminAuditLogResponse {
+  items: AdminAuditLogItem[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export interface AdminMessengerFailedItem {
+  id: string;
+  class: string;
+  failedAt: string;
+  lastErrorMessage: string;
+}
+
+export interface AdminMessengerFailedResponse {
+  items: AdminMessengerFailedItem[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export interface AdminSystemErrorItem {
+  source: string;
+  message: string;
+  severity: string;
+  createdAt: string;
+}
+
+export interface AdminSystemErrorsResponse {
+  items: AdminSystemErrorItem[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -227,4 +286,16 @@ export function runAdminClubAction(clubId: string, key: string, csrfToken: strin
 
 export function logoutAdmin(csrfToken: string): Promise<void> {
   return adminApi.post("auth/logout", { headers: { "X-CSRF-Token": csrfToken } }).then(() => undefined);
+}
+
+export function getAdminAuditLog(page: number, limit: number): Promise<AdminAuditLogResponse> {
+  return adminApi.get("audit-log", { searchParams: { page, limit } }).json();
+}
+
+export function getAdminMessengerFailed(page: number, limit: number): Promise<AdminMessengerFailedResponse> {
+  return adminApi.get("messenger/failed", { searchParams: { page, limit } }).json();
+}
+
+export function getAdminSystemErrors(page: number, limit: number): Promise<AdminSystemErrorsResponse> {
+  return adminApi.get("system-errors", { searchParams: { page, limit } }).json();
 }

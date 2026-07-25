@@ -12,5 +12,7 @@ RUN mkdir -p node_modules \
     && ln -s /home/pptruser/node_modules/puppeteer node_modules/puppeteer
 
 COPY frontend/worker.js ./worker.js
+# Heartbeat admin (builtins uniquement — AUCUNE dépendance npm, voir worker-heartbeat.js).
+COPY frontend/worker-heartbeat.js ./worker-heartbeat.js
 
 CMD ["node", "worker.js"]

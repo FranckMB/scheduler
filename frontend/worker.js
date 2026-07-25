@@ -2,6 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
+import { startHeartbeat } from './worker-heartbeat.js';
 
 const PORT = 3000;
 const OUTPUT_DIR = '/app/backend/public/exports';
@@ -102,6 +103,15 @@ const server = http.createServer(async (req, res) => {
   res.end();
 });
 
-server.listen(PORT, () => {
-  console.log(`pdf-worker listening on port ${PORT}`);
-});
+function startWorker() {
+  // Heartbeat admin — module builtins-only (aucune dépendance npm dans ce conteneur).
+  startHeartbeat();
+
+  server.listen(PORT, () => {
+    console.log(`pdf-worker listening on port ${PORT}`);
+  });
+}
+
+if (process.argv[1]?.endsWith('worker.js')) {
+  startWorker();
+}
