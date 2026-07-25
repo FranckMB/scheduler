@@ -75,6 +75,13 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          # :latest only moves FORWARD, on tag releases — a dispatch that
+          # rebuilds an old ref must never drag latest backwards.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "push_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push_latest=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "Deploying version: ${VERSION}"
 
       - uses: docker/setup-buildx-action@v3
@@ -89,16 +96,22 @@ jobs:
       # Rollback short-circuit: if this version's images already exist in the
       # registry, DO NOT rebuild — reuse the exact artifacts that ran. A fresh
       # rebuild of an old tag would resolve newer base layers/apt packages and
-      # overwrite the known-good images. scheduler-php is the witness (all 6
-      # are pushed together by this same job).
+      # overwrite the known-good images. ALL SIX images must exist: a run that
+      # died after pushing only some of them must NOT poison the version into
+      # "published forever but unpullable" — a partial set rebuilds everything.
       - name: Check registry for existing images
         id: existing
         run: |
-          if docker manifest inspect "ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "Images for ${{ steps.meta.outputs.version }} already published — skipping build, deploying as-is."
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
+          FOUND=true
+          for IMG in php nginx frontend postgres engine pdf-worker; do
+            if ! docker manifest inspect "ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-${IMG}:${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+              FOUND=false
+              echo "scheduler-${IMG}:${{ steps.meta.outputs.version }} missing from the registry"
+            fi
+          done
+          echo "found=${FOUND}" >> "$GITHUB_OUTPUT"
+          if [ "$FOUND" = "true" ]; then
+            echo "All 6 images for ${{ steps.meta.outputs.version }} already published — skipping build, deploying as-is."
           fi
 
       # One step per image — same targets as the CI "Build prod images" step
@@ -113,7 +126,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-php:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=php
           cache-to: type=gha,scope=php,mode=max
 
@@ -127,7 +140,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-nginx:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-nginx:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-nginx:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=php
           cache-to: type=gha,scope=php,mode=max
 
@@ -141,7 +154,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-frontend:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-frontend:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-frontend:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
 
@@ -154,7 +167,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-postgres:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-postgres:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-postgres:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=postgres
           cache-to: type=gha,scope=postgres,mode=max
 
@@ -167,7 +180,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-engine:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-engine:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-engine:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=engine
           cache-to: type=gha,scope=engine,mode=max
 
@@ -180,7 +193,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-pdf-worker:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-pdf-worker:latest
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-pdf-worker:latest', steps.meta.outputs.owner) || '' }}
           cache-from: type=gha,scope=pdf-worker
           cache-to: type=gha,scope=pdf-worker,mode=max
 
@@ -208,6 +221,12 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/clubscheduler' }}
           VERSION: ${{ needs.build-push.outputs.version }}
         run: |
+          # DEPLOY_PATH lands inside the remote command line — same strict
+          # validation discipline as VERSION (absolute path, safe charset).
+          if ! printf '%s' "$DEPLOY_PATH" | grep -Eq '^/[A-Za-z0-9._/-]+$'; then
+            echo "FATAL: invalid DEPLOY_PATH '$DEPLOY_PATH'" >&2
+            exit 1
+          fi
           if printf '%s' "$VERSION" | grep -Eq '^sha-[0-9a-f]{7,40}$'; then
             git checkout "${VERSION#sha-}"
           fi

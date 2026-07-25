@@ -87,7 +87,7 @@ reset-install: ## Force next make start to reinstall dependencies
 services: .env ## List Docker Compose services
 	$(DOCKER_COMPOSE) config --services
 
-# Release helper — the normal path is `git tag vX.Y.Z && git push --tags`
+# Release helper — the normal path is `git tag vX.Y.Z && git push origin vX.Y.Z`
 # (the tag push triggers .github/workflows/deploy.yml by itself). This target
 # is the manual/hotfix path: refuses an out-of-sync HEAD, dispatches, then
 # follows the run it just created (fails red if the run fails).

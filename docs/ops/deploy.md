@@ -128,7 +128,7 @@ localhost uniquement.)
 ⬜ Depuis ta machine :
 
 ```bash
-git tag v1.0.0 && git push --tags
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
 Suivre dans GitHub → *Actions → Deploy*. Le script distant saute le backup
@@ -155,7 +155,7 @@ le SMTP doit donc être bon dans `MAILER_DSN`).
 ### Déployer une release
 
 ```bash
-git tag v1.2.0 && git push --tags
+git tag v1.2.0 && git push origin v1.2.0
 ```
 
 Rien d'autre. Le workflow build → push → déploie → migre → sonde. Vert dans

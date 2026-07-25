@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local wrapper behind `make deploy [VERSION=vX.Y.Z]` — dispatches the deploy
 # workflow and follows THE run it just created (not whatever ran last).
-# The normal release path stays `git tag vX.Y.Z && git push --tags`.
+# The normal release path stays `git tag vX.Y.Z && git push origin vX.Y.Z`.
 set -euo pipefail
 
 VERSION="${1:-}"
@@ -33,9 +33,11 @@ fi
 echo "==> Waiting for the run to appear..."
 RUN_ID=""
 for _ in $(seq 1 30); do
+  # event filter: a concurrent tag-push deploy must not be mistaken for OUR
+  # dispatch (both runs share the workflow; only ours is workflow_dispatch).
   RUN_ID=$(gh run list --workflow=deploy.yml --limit 5 \
-    --json databaseId,createdAt \
-    --jq "[.[] | select(.createdAt >= \"$STARTED\")] | first | .databaseId" 2>/dev/null || true)
+    --json databaseId,createdAt,event \
+    --jq "[.[] | select(.event == \"workflow_dispatch\" and .createdAt >= \"$STARTED\")] | first | .databaseId" 2>/dev/null || true)
   [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ] && break
   sleep 2
 done
