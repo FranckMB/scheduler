@@ -14,6 +14,8 @@ import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
 import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
+import { RadarCoachWishAction } from "@/features/coach-wishes/RadarCoachWishAction";
+import { useCoachWishCampaigns } from "@/features/coach-wishes/campaignQueries";
 import { useState } from "react";
 
 /** Public holidays further out than this are noise, not a to-do. */
@@ -68,6 +70,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
   // #10 — la todo-list des doléances d'une période de vacances (ouverte sur la MÈRE).
   const [wishesEntry, setWishesEntry] = useState<CalendarEntry | null>(null);
+  // #10 C2 — les campagnes de collecte, indexées par période (une requête pour tout le
+  // radar : bouton « Solliciter les coachs » + badge de suivi par carte vacances).
+  const campaignsQuery = useCoachWishCampaigns();
+  const campaignByEntry = new Map((campaignsQuery.data ?? []).map((c) => [c.calendarEntryId, c]));
 
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
@@ -361,6 +367,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 Doléances
               </Button>
             ) : null}
+            {"holiday" === m.periodType ? <RadarCoachWishAction entry={m} season={workingSeason} campaign={campaignByEntry.get(m.id) ?? null} /> : null}
             {slots.map(({ week, child }) => {
               if (null === child) {
                 return (
@@ -412,6 +419,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 Doléances
               </Button>
             ) : null}
+            {undefined !== entry ? <RadarCoachWishAction entry={entry} season={workingSeason} campaign={campaignByEntry.get(entry.id) ?? null} /> : null}
             {stateUnknown ? null : null !== activeId ? (
               <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
                 Voir le planning

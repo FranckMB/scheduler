@@ -81,6 +81,9 @@ final class ManagementRoleTest extends WebTestCase
             // UUID valide-en-forme (le nil-uuid échoue la validation Uuid stricte AVANT le
             // processor) : le corps passe la validation, atteint le guard, qui 403.
             ['POST', '/api/coach_wishes', '{"calendarEntryId":"11111111-1111-4111-8111-111111111111","weekStart":"2026-02-16","teamId":"11111111-1111-4111-8111-111111111111","coachId":"11111111-1111-4111-8111-111111111111","slotsWanted":1}'],
+            // #10 C2 — la campagne de collecte est management-only (SEC-07), même patron : le
+            // guard tire AVANT tout lookup, un corps valide-en-forme atteint le processor.
+            ['POST', '/api/coach_wish_campaigns', '{"calendarEntryId":"11111111-1111-4111-8111-111111111111","deadline":"2027-06-30","weeks":["2026-02-16"],"teamIds":["11111111-1111-4111-8111-111111111111"]}'],
         ];
     }
 

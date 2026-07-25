@@ -50,6 +50,7 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
 
   const [first, setFirst] = useState(coach.firstName);
   const [last, setLast] = useState(coach.lastName);
+  const [email, setEmail] = useState(coach.email ?? "");
   const [linkTeam, setLinkTeam] = useState("");
   const [linkRole, setLinkRole] = useState<TeamCoachRole | "PLAYER">("MAIN");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -98,6 +99,16 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
             value={last}
             onChange={(e) => setLast(e.target.value)}
             onBlur={() => last !== coach.lastName && update.mutate({ id: coach.id, body: payload(coach, { lastName: last }) })}
+          />
+          {/* #10 C2 — email éditable ici (préparation C3 : envoi automatique du lien). Sans effet en C2. */}
+          <Input
+            type="email"
+            aria-label="Email"
+            placeholder="email (optionnel)"
+            className="h-8 w-52"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => email.trim() !== (coach.email ?? "") && update.mutate({ id: coach.id, body: payload(coach, { email: email.trim() || null }) })}
           />
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />

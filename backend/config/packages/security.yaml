@@ -56,6 +56,9 @@ security:
         - { path: ^/api/clubs/[^/]+/logo$, methods: [GET], roles: PUBLIC_ACCESS }
         # Lot C: rehosted FFBB league/committee logos — public brand assets, GET only (same SEC-10 rationale).
         - { path: ^/api/ffbb-logos/, methods: [GET], roles: PUBLIC_ACCESS }
+        # #10 C2 : page publique de collecte des doléances — le token (pas de JWT) porte
+        # l'identité et le club. GET+POST publics ; tiret (coach-wishes) != /api/coach_wishes.
+        - { path: ^/api/coach-wishes/public/, methods: [GET, POST], roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:

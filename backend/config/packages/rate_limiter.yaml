@@ -18,6 +18,13 @@ framework:
             policy: 'sliding_window'
             limit: 5
             interval: '15 minutes'
+        # #10 C2 : la page publique de collecte des doléances (GET pré-remplissage +
+        # POST soumission), par IP. 20/15min — large pour un coach (quelques soumissions),
+        # borne réelle contre l'énumération de tokens.
+        coach_wish_public:
+            policy: 'sliding_window'
+            limit: 20
+            interval: '15 minutes'
         # SEC-11: global throttle on the authenticated API, keyed PER USER (JWT),
         # applied by ApiRateLimitSubscriber on ^/api. 300/min = 5 req/s — well
         # above legitimate use (the frontend polls a schedule every few seconds)
@@ -52,6 +59,10 @@ when@dev:
                 policy: 'sliding_window'
                 limit: 100
                 interval: '15 minutes'
+            coach_wish_public:
+                policy: 'sliding_window'
+                limit: 1000
+                interval: '15 minutes'
 
 # Test: a small API bound so ApiRateLimitTest can trip the 429 in a handful of
 # requests. Keyed per user, so it never leaks across the other functional tests
@@ -63,3 +74,7 @@ when@test:
                 policy: 'sliding_window'
                 limit: 30
                 interval: '1 minute'
+            coach_wish_public:
+                policy: 'sliding_window'
+                limit: 1000
+                interval: '15 minutes'

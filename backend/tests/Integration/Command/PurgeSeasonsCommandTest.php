@@ -33,6 +33,10 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
 
     private string $oldWishId;
 
+    private string $oldCampaignId;
+
+    private string $oldTokenId;
+
     public function testDryRunDeletesNothing(): void
     {
         [$club, $seasons] = $this->createClubWithSeasons();
@@ -67,6 +71,8 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         self::assertCount(0, $this->em->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $old->getId()]));
         // #10 — la doléance coach de la saison purgée est partie.
         self::assertNull($this->em->getRepository(\App\Entity\CoachWish::class)->find($this->oldWishId));
+        self::assertNull($this->em->getRepository(\App\Entity\CoachWishCampaign::class)->find($this->oldCampaignId), 'la campagne de collecte N-2 est purgée');
+        self::assertNull($this->em->getRepository(\App\Entity\CoachWishToken::class)->find($this->oldTokenId), 'son token part par la FK CASCADE');
         // planning-versions D2: the structure photos die with their season.
         self::assertCount(0, $this->em->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['seasonId' => $old->getId()]));
         // current, N-1 and the future draft survive.
@@ -170,6 +176,35 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->persist($wish);
         $this->em->flush();
         $this->oldWishId = $wish->getId();
+
+        // #10 C2 — une campagne de collecte (+ son token) ancrée à la même entrée N-2 : la
+        // purge la supprime par sous-requête calendarEntryId (le token part par la FK CASCADE).
+        $campaign = new \App\Entity\CoachWishCampaign;
+        $campaign->setClubId($club->getId());
+        $campaign->setSeasonId($old->getId());
+        $campaign->setCalendarEntryId($entry->getId());
+        $campaign->setDeadline(new DateTimeImmutable(($year - 2) . '-02-10'));
+        $campaign->setWeeks([($year - 2) . '-02-16']);
+        $campaign->setTeamIds([$team->getId()]);
+        $this->em->persist($campaign);
+        $this->em->flush();
+        $this->oldCampaignId = $campaign->getId();
+
+        $coach = new \App\Entity\Coach;
+        $coach->setClubId($club->getId());
+        $coach->setSeasonId($old->getId());
+        $coach->setFirstName('Vieux');
+        $coach->setLastName('Coach');
+        $this->em->persist($coach);
+        $this->em->flush();
+
+        $token = (new \App\Entity\CoachWishToken)
+            ->setCampaignId($campaign->getId())
+            ->setCoachId($coach->getId())
+            ->setClubId($club->getId());
+        $this->em->persist($token);
+        $this->em->flush();
+        $this->oldTokenId = $token->getId();
 
         return [$club, [$old, $past, $current, $draft]];
     }
