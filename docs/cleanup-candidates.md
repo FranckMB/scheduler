@@ -13,7 +13,7 @@ Concrete, **proof-backed** removal/simplification candidates surfaced by the onb
 ## Explicitly NOT cleanup candidates (proven fine)
 - `DevScheduleReportWriter` autowiring exclusion (`backend/config/services.yaml:22`) — intentional dev tool.
 - The 6 solver helpers (roadmap §Dette, E2 résolu) — **refactor**, not deletion; they carry behavioural differences that must be reconciled deliberately, not dropped.
-- The 4 `phase1` blocking tests — keep (guardrails); `TenantCacheIsolationTest` needs *implementing*, not removing.
+- The `phase1` blocking tests — keep (guardrails). `TenantCacheIsolationTest` is **implemented and runs in CI** (part of the blocking-tests gate — `CLAUDE.md` §4 is the canonical list). ⚠ Ne pas figer un compte ici (la liste bloquante s'allonge).
 
 ## Process reminder
 Any deletion goes through the normal feature cycle: `/plan` with the scope checklist → optional `contrarian-review` → your validation → implement → `validation-runner` → `/code-review`. No opportunistic removal.

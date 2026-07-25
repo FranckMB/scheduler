@@ -108,7 +108,7 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
 4. Frontend is rebuilt + **active** — indexed by the graph (only its build artifacts `dist`/`node_modules`/`storybook-static` are ignored). Tenant is resolved server-side from the JWT: the frontend sends **no** `X-Club-Id` header.
 
-**Pointers:** `docs/project-map.md` · `docs/glossary.md` (termes & clés de payload) · `docs/testing/testing-strategy.md` · `specs/evolution/roadmap.md` (suivi unique : carte + backlog priorisé + dette) · `docs/cleanup-candidates.md` · `docs/architecture/adr-index.md` · `specs/README.md` · commandes backend : `backend/docs/commands.md` · routes FFBB : `backend/docs/ffbb-api.md`
+**Pointers:** `docs/project-map.md` · `docs/glossary.md` (termes & clés de payload) · `docs/testing/testing-strategy.md` · `specs/evolution/roadmap.md` (suivi unique : carte + backlog priorisé + dette) · `docs/cleanup-candidates.md` · `docs/architecture/adr-index.md` · `specs/README.md` · commandes backend : `backend/docs/commands.md` · routes FFBB : `backend/docs/ffbb-api.md` · **ops (backups `pg_dump`/restore-check + activation Sentry 3 zones)** : `docs/ops/backup-restore.md`
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

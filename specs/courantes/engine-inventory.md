@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-07-10 (bornes payload A10 #156 · politique de bump CONTRACT_VERSION)
+Last verified @ 2026-07-25 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -14,7 +14,7 @@ Last verified @ 2026-07-10 (bornes payload A10 #156 · politique de bump CONTRAC
 - **Solver** : Google OR-Tools CP-SAT (`from ortools.sat.python import cp_model`).
 - **Validation** : Pydantic v2 (`BaseModel`, `ConfigDict`, `Field`, `populate_by_name=True`).
 - **Settings** : `pydantic-settings` (`engine/app/core/config.py`), prefix env `ENGINE_`, `.env` lu. Defaults : `app_name="engine"`, `app_version="1.0"`, `contract_version="2.0"`, `environment="dev"`, `log_level="info"`.
-- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (fichier = `2.0`), fallback `settings.contract_version`.
+- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.1`** — source de vérité), fallback `settings.contract_version` (default `2.0`). Le **`2.0→2.1`** a été posé par les **fenêtres horaires d'indisponibilité coach** (lot C, #195) — nouveaux champs, donc bump.
 - **Structure interne** :
   - `app/main.py` — endpoints FastAPI + pipeline solver.
   - `app/core/config.py` — settings.
@@ -69,13 +69,13 @@ Quatre endpoints exposés par `app/main.py` :
 
 ### ScheduleInputSchema (`engine/app/schemas/input_schema.py`)
 
-Version contrat : `"2.0"` (default). `ConfigDict(extra="forbid", populate_by_name=True)`.
+Version contrat active : **`"2.1"`** (fichier `CONTRACT_VERSION` ; `2.0` = default Pydantic de repli). `ConfigDict(extra="forbid", populate_by_name=True)`.
 
-**Bornes A10** (#156, anti-bombe de génération) : la plupart des listes portent un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). **`constraints` n'a PAS de cap engine** (ENG-23 corrigé) : le backend éclate 1 règle CLUB en N rangées/équipe, donc la taille étendue = brut(≤500)×équipes(≤200) — aucun nombre fixe ne peut à la fois borner une bombe et ne jamais faux-bloquer un club légitime ; les vraies bornes sont le cap **brut** backend (≤500) + la limite de body nginx (20 m) + le timeout solveur. Le backend (`GenerationComplexityGuard`) pré-vérifie teams/venues/coaches/contraintes permanentes/total créneaux (=3000) **plus** `teams×venues` ≤2000, **avant dispatch**. ⚠ Ce durcissement de validation n'a **pas** bumpé `CONTRACT_VERSION` (2.0) : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias).
+**Bornes A10** (#156, anti-bombe de génération) : la plupart des listes portent un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). **`constraints` n'a PAS de cap engine** (ENG-23 corrigé) : le backend éclate 1 règle CLUB en N rangées/équipe, donc la taille étendue = brut(≤500)×équipes(≤200) — aucun nombre fixe ne peut à la fois borner une bombe et ne jamais faux-bloquer un club légitime ; les vraies bornes sont le cap **brut** backend (≤500) + la limite de body nginx (20 m) + le timeout solveur. Le backend (`GenerationComplexityGuard`) pré-vérifie teams/venues/coaches/contraintes permanentes/total créneaux (=3000) **plus** `teams×venues` ≤2000, **avant dispatch**. ⚠ Ce durcissement de validation (#156) n'a **pas** bumpé `CONTRACT_VERSION` : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias). Le seul bump depuis 2.0 est **2.1** (#195, fenêtres horaires coach — nouveaux champs).
 
 | Champ | Alias JSON | Type | Default |
 |-------|-------------|------|---------|
-| `version` | — | `str` | `"2.0"` |
+| `version` | — | `str` | `"2.1"` |
 | `club_id` | `clubId` | `str` | requis |
 | `season_id` | `seasonId` | `str` | requis |
 | `schedule_name` | `scheduleName` | `str \| None` | `None` |

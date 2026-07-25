@@ -1,9 +1,14 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-16)** : SA0, SA1, la console read-only SA2, le socle
+> **État courant (2026-07-25)** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
-> les relances d'imports SA3-D sont livrés. Les actions cross-tenant restent dans
-> [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
+> les relances d'imports SA3-D sont livrés — **plus SA2-stats (usage produit),
+> SA4 v1 (catalogue d'actions support), l'alerting santé + data-freshness (2026-07-18),
+> et la console en 6 onglets avec monitoring conteneurs/dépendances externes + 3 journaux
+> read-only (audit / échecs async / erreurs système) + heartbeats cron & pdf-worker
+> (2026-07-25)**. Le redémarrage de conteneur depuis l'UI a été étudié puis **retiré**
+> (socle `docker.sock` non transposable en prod — voir console-superadmin.md). Les actions
+> cross-tenant restent dans [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
 Le frontend React SA0 est désormais livré sur `/admin` : client HTTP à cookie de session
 séparé, store admin en mémoire uniquement, login mot de passe/TOTP, garde de route, shell

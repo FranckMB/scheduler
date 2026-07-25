@@ -23,7 +23,7 @@ Trois usages :
 | # | Décision |
 |---|---|
 | 1 | **Qui = compte superadmin SÉPARÉ + MFA.** Un compte distinct des `User`/`ClubUser`, **hors multi-tenant**, MFA obligatoire. Jamais un simple flag sur un compte gestionnaire (pas de mélange god-mode / usage normal). |
-| 2 | **SA0, SA1, SA2 et SA3-A/B/C/D sont livrés ; la suite commence par SA4.** |
+| 2 | **SA0, SA1, SA2 (+ SA2-stats), SA3-A/B/C/D, SA4 v1 (catalogue d'actions) + alerting/data-freshness + console onglets/monitoring sont LIVRÉS** (détail : `courantes/superadmin-auth.md`). Reste : **SA4 v2** (suspendre/approuver, au premier cas réel) et **SA5** (impersonation). |
 | 3 | **Read-only d'abord.** La 1re version **monitore** et **supervise les jobs** ; **aucune action mutante** sur les clubs au départ. Les actions support (SA4) et l'impersonation (SA5) viennent après durcissement. |
 | 4 | **Sécurité = priorité absolue** (surface cross-tenant assumée, bypass RLS via `admin`). Firewall dédié `/admin/**`, **chaque accès et action audité**, périmètre minimal, jamais exposée au réseau public sans garde. Croise A15/A16/A17. |
 
@@ -104,6 +104,7 @@ y compris sur les tentatives refusées.
   `MembershipController` suffit tant qu'aucun club n'a de gestionnaire injoignable).
 
 ### Reste à implémenter
+- **SA4 v2 — actions support restantes** *(au premier cas réel, décision 2026-07-18)* : suspendre/désactiver un club (effet exact à trancher) + approuver un gestionnaire en fallback.
 - **SA5 — impersonation support** : lecture bornée dans le temps, bannière visible, audit complet, aucune écriture tant qu'elle n'est pas décidée séparément.
 - **Hygiène de la console** : ~~partitionnement mensuel + purge 6 mois de `solver_metrics`~~ **abandonnés (2026-07-18)** — télémétrie append-only, rétention **≥ 13 mois** (une saison + marge, décision, sans mécanique de purge au volume cible ; le partitionnement n'est pas nécessaire, l'index `(club_id, created_at)` suffit). Reste : arbitrage de la rétention / des filtres de l'audit viewer.
 - **Data ops FFBB** : le refresh club existe, mais le mode batch de rattrapage des ligues / comités périmés reste à cadrer si on le garde dans le lot.

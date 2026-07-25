@@ -36,7 +36,7 @@
 | « Éviter tel gymnase » (dur) | FACILITY `forbiddenVenueId` (HARD) | ✅ | Vétérans interdits sur 5 gymnases |
 | « Préférer tel gymnase » | FACILITY `preferredVenueId` (PREFERRED, +60) | ✅ soft | Matéo préféré aux Régionales |
 | « Pas ce type d'équipe dans ce gymnase » | FACILITY `forbiddenVenueId` + `targetTag` | ✅ | Jean Vilar pas de féminines |
-| « Gymnase fermé sur une période » | période cockpit `venue_closed` → `forbiddenVenueId` daté | ✅ | (calendrier cockpit) |
+| « Gymnase fermé sur une période » | période cockpit `venue_closed` → **retrait des créneaux** du gymnase les jours fermés (`VenueClosureDays`, 5b #263 ; l'ancienne expansion `forbiddenVenueId` est supprimée) — sur-ferme sur tout le bloc si un jour se répète, jamais sous-ferme | ✅ | (calendrier cockpit) |
 | **« Au moins une séance dans tel gymnase »** | FACILITY `minAtVenueId` + `minAtVenueCount` (HARD, mode « au moins N ») — plancher, ≠ forçage ; les autres séances restent libres | ✅ *(ALIGN-05)* | « au moins 1 séance à Armand » ; fail-fast backend si N > séances/semaine |
 | « Nb max d'équipes par créneau d'un gymnase » | FACILITY_CAPACITY `maxTeams` (écran Gymnases, `canSplit`) | ✅ | ADN divisible en 3 |
 

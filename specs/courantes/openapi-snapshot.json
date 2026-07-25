@@ -3207,6 +3207,980 @@
                 ]
             }
         },
+        "/api/coach_wishes": {
+            "get": {
+                "operationId": "api_coach_wishes_get_collection",
+                "tags": [
+                    "CoachWish"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWish collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "CoachWish.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CoachWish.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CoachWish"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CoachWish.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of CoachWish resources.",
+                "description": "Retrieves the collection of CoachWish resources.",
+                "parameters": []
+            },
+            "post": {
+                "operationId": "api_coach_wishes_post",
+                "tags": [
+                    "CoachWish"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "CoachWish resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a CoachWish resource.",
+                "description": "Creates a CoachWish resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new CoachWish resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coach_wishes/{id}": {
+            "get": {
+                "operationId": "api_coach_wishes_id_get",
+                "tags": [
+                    "CoachWish"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWish resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a CoachWish resource.",
+                "description": "Retrieves a CoachWish resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWish identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_coach_wishes_id_put",
+                "tags": [
+                    "CoachWish"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWish resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWish.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the CoachWish resource.",
+                "description": "Replaces the CoachWish resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWish identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated CoachWish resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWish.CoachWishInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_coach_wishes_id_delete",
+                "tags": [
+                    "CoachWish"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "CoachWish resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the CoachWish resource.",
+                "description": "Removes the CoachWish resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWish identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/coach_wish_campaigns": {
+            "get": {
+                "operationId": "api_coach_wish_campaigns_get_collection",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWishCampaign collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "CoachWishCampaign.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CoachWishCampaign"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of CoachWishCampaign resources.",
+                "description": "Retrieves the collection of CoachWishCampaign resources.",
+                "parameters": []
+            },
+            "post": {
+                "operationId": "api_coach_wish_campaigns_post",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "CoachWishCampaign resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a CoachWishCampaign resource.",
+                "description": "Creates a CoachWishCampaign resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new CoachWishCampaign resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coach_wish_campaigns/{id}": {
+            "get": {
+                "operationId": "api_coach_wish_campaigns_id_get",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWishCampaign resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a CoachWishCampaign resource.",
+                "description": "Retrieves a CoachWishCampaign resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWishCampaign identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_coach_wish_campaigns_id_put",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CoachWishCampaign resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the CoachWishCampaign resource.",
+                "description": "Replaces the CoachWishCampaign resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWishCampaign identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated CoachWishCampaign resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CoachWishCampaign.CoachWishCampaignInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_coach_wish_campaigns_id_delete",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "CoachWishCampaign resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the CoachWishCampaign resource.",
+                "description": "Removes the CoachWishCampaign resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWishCampaign identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/coach_wish_campaigns/{id}/remind": {
+            "post": {
+                "operationId": "remind_coach_wish_campaign",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "CoachWishCampaign resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a CoachWishCampaign resource.",
+                "description": "Creates a CoachWishCampaign resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWishCampaign identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/coach_wish_campaigns/{id}/send-links": {
+            "post": {
+                "operationId": "send_links_coach_wish_campaign",
+                "tags": [
+                    "CoachWishCampaign"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "CoachWishCampaign resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoachWishCampaign.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a CoachWishCampaign resource.",
+                "description": "Creates a CoachWishCampaign resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "CoachWishCampaign identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/competitions": {
             "get": {
                 "operationId": "api_competitions_get_collection",
@@ -6830,6 +7804,101 @@
                 "summary": "Retrieves the collection of SchedulePlan resources.",
                 "description": "Retrieves the collection of SchedulePlan resources.",
                 "parameters": []
+            },
+            "post": {
+                "operationId": "api_schedule_plans_post",
+                "tags": [
+                    "SchedulePlan"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "SchedulePlan resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SchedulePlan.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a SchedulePlan resource.",
+                "description": "Creates a SchedulePlan resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new SchedulePlan resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.CreatePeriodPlanInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.CreatePeriodPlanInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SchedulePlan.CreatePeriodPlanInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/api/schedule_plans/{id}": {
@@ -10829,6 +11898,556 @@
                 ]
             }
         },
+        "/api/venue_period_overrides": {
+            "get": {
+                "operationId": "api_venue_period_overrides_get_collection",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenuePeriodOverride collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "VenuePeriodOverride.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenuePeriodOverride"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of VenuePeriodOverride resources.",
+                "description": "Retrieves the collection of VenuePeriodOverride resources.",
+                "parameters": []
+            },
+            "post": {
+                "operationId": "api_venue_period_overrides_post",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "VenuePeriodOverride resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a VenuePeriodOverride resource.",
+                "description": "Creates a VenuePeriodOverride resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new VenuePeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/venue_period_overrides/clear-grid": {
+            "post": {
+                "operationId": "clear_venue_period_grid",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "VenuePeriodOverride resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a VenuePeriodOverride resource.",
+                "description": "Creates a VenuePeriodOverride resource.",
+                "parameters": []
+            }
+        },
+        "/api/venue_period_overrides/reset-grid": {
+            "post": {
+                "operationId": "reset_venue_period_grid",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "VenuePeriodOverride resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a VenuePeriodOverride resource.",
+                "description": "Creates a VenuePeriodOverride resource.",
+                "parameters": []
+            }
+        },
+        "/api/venue_period_overrides/{id}": {
+            "get": {
+                "operationId": "api_venue_period_overrides_id_get",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenuePeriodOverride resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a VenuePeriodOverride resource.",
+                "description": "Retrieves a VenuePeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenuePeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_venue_period_overrides_id_put",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenuePeriodOverride resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenuePeriodOverride.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the VenuePeriodOverride resource.",
+                "description": "Replaces the VenuePeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenuePeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated VenuePeriodOverride resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenuePeriodOverride.VenuePeriodOverrideInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_venue_period_overrides_id_delete",
+                "tags": [
+                    "VenuePeriodOverride"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "VenuePeriodOverride resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the VenuePeriodOverride resource.",
+                "description": "Removes the VenuePeriodOverride resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenuePeriodOverride identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/venue_training_slots": {
             "get": {
                 "operationId": "api_venue_training_slots_get_collection",
@@ -12529,6 +14148,527 @@
                         }
                     }
                 ]
+            },
+            "CoachWish": {
+                "type": "object",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "weekStart": {
+                        "description": "Expos\u00e9 en Y-m-d (une DATE, pas un instant) pour un aller-retour propre c\u00f4t\u00e9 front.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "coachId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "slotsWanted": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "unavailableDays": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "comment": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "done": {
+                        "default": false,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "CoachWish.CoachWishInput": {
+                "type": "object",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "required": [
+                    "calendarEntryId",
+                    "weekStart",
+                    "teamId",
+                    "slotsWanted"
+                ],
+                "properties": {
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "weekStart": {
+                        "description": "Le lundi de la semaine vis\u00e9e, format Y-m-d (valid\u00e9 lundi + fen\u00eatre c\u00f4t\u00e9 processor).",
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "teamId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "coachId": {
+                        "format": "uuid",
+                        "description": "Requis \u00e0 la CR\u00c9ATION (\u00ab au nom d'un coach \u00bb, impos\u00e9 par le processor), mais NULLABLE\nen \u00e9criture : une dol\u00e9ance d\u00e9-attribu\u00e9e (le coach a \u00e9t\u00e9 supprim\u00e9, coachId=null)\ndoit pouvoir \u00eatre re-coch\u00e9e \u00ab trait\u00e9 \u00bb ou \u00e9dit\u00e9e sans qu'un NotBlank la bloque\n(revue #10 C1). NotBlank retir\u00e9, Uuid ignore null.",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "slotsWanted": {
+                        "minimum": 0,
+                        "maximum": 7,
+                        "default": 0,
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "unavailableDays": {
+                        "uniqueItems": true,
+                        "maxItems": 7,
+                        "description": "Jours indisponibles, jours ISO 1\u20137 (1 = lundi), sans doublon.",
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "comment": {
+                        "maxLength": 1000,
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "done": {
+                        "default": false,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "CoachWish.html": {
+                "type": "object",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "weekStart": {
+                        "description": "Expos\u00e9 en Y-m-d (une DATE, pas un instant) pour un aller-retour propre c\u00f4t\u00e9 front.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "teamId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "coachId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "slotsWanted": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "unavailableDays": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "comment": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "done": {
+                        "default": false,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "CoachWish.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "calendarEntryId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "weekStart": {
+                                "description": "Expos\u00e9 en Y-m-d (une DATE, pas un instant) pour un aller-retour propre c\u00f4t\u00e9 front.",
+                                "default": "",
+                                "type": "string"
+                            },
+                            "teamId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "coachId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "slotsWanted": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "unavailableDays": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer"
+                                }
+                            },
+                            "comment": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "done": {
+                                "default": false,
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                ],
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor)."
+            },
+            "CoachWishCampaign": {
+                "type": "object",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "deadline": {
+                        "description": "Y-m-d.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "weeks": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "teamIds": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "totalCoachCount": {
+                        "description": "Coachs distincts du p\u00e9rim\u00e8tre COURANT.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "respondedCoachCount": {
+                        "description": "Ceux qui ont soumis au moins une fois.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "openWishCount": {
+                        "description": "Dol\u00e9ances non trait\u00e9es (done=false) de la p\u00e9riode \u2014 le \u00ab \u00e0 traiter \u00bb du radar.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "lastReminderAt": {
+                        "description": "Derni\u00e8re relance manuelle (C3) \u2014 le bouton se bloque le reste de la journ\u00e9e.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "coaches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            "CoachWishCampaign.CoachWishCampaignInput": {
+                "type": "object",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "required": [
+                    "calendarEntryId",
+                    "deadline"
+                ],
+                "properties": {
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "deadline": {
+                        "description": "Date limite, format Y-m-d.",
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "weeks": {
+                        "minItems": 1,
+                        "description": "Semaines retenues (lundis Y-m-d ; valid\u00e9s lundi + fen\u00eatre c\u00f4t\u00e9 processor).",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "teamIds": {
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "description": "\u00c9quipes retenues.",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "CoachWishCampaign.html": {
+                "type": "object",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "calendarEntryId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "deadline": {
+                        "description": "Y-m-d.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "weeks": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "teamIds": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "totalCoachCount": {
+                        "description": "Coachs distincts du p\u00e9rim\u00e8tre COURANT.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "respondedCoachCount": {
+                        "description": "Ceux qui ont soumis au moins une fois.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "openWishCount": {
+                        "description": "Dol\u00e9ances non trait\u00e9es (done=false) de la p\u00e9riode \u2014 le \u00ab \u00e0 traiter \u00bb du radar.",
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "lastReminderAt": {
+                        "description": "Derni\u00e8re relance manuelle (C3) \u2014 le bouton se bloque le reste de la journ\u00e9e.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "coaches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            "CoachWishCampaign.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "calendarEntryId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "deadline": {
+                                "description": "Y-m-d.",
+                                "default": "",
+                                "type": "string"
+                            },
+                            "weeks": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "teamIds": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "totalCoachCount": {
+                                "description": "Coachs distincts du p\u00e9rim\u00e8tre COURANT.",
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "respondedCoachCount": {
+                                "description": "Ceux qui ont soumis au moins une fois.",
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "openWishCount": {
+                                "description": "Dol\u00e9ances non trait\u00e9es (done=false) de la p\u00e9riode \u2014 le \u00ab \u00e0 traiter \u00bb du radar.",
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "lastReminderAt": {
+                                "description": "Derni\u00e8re relance manuelle (C3) \u2014 le bouton se bloque le reste de la journ\u00e9e.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "coaches": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ],
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
             },
             "Competition": {
                 "type": "object",
@@ -15141,7 +17281,7 @@
             },
             "SchedulePlan": {
                 "type": "object",
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -15202,9 +17342,26 @@
                     }
                 }
             },
+            "SchedulePlan.CreatePeriodPlanInput": {
+                "type": "object",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable.",
+                "required": [
+                    "calendarEntryId"
+                ],
+                "properties": {
+                    "calendarEntryId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
             "SchedulePlan.SchedulePlanInput": {
                 "type": "object",
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable.",
                 "required": [
                     "name"
                 ],
@@ -15218,7 +17375,7 @@
             },
             "SchedulePlan.html": {
                 "type": "object",
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable.",
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -15347,7 +17504,7 @@
                         }
                     }
                 ],
-                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable."
+                "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable."
             },
             "ScheduleSlotTemplate": {
                 "type": "object",
@@ -17882,6 +20039,157 @@
                     }
                 ]
             },
+            "VenuePeriodOverride": {
+                "type": "object",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "schedulePlanId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "mode": {
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "VenuePeriodOverride.VenuePeriodOverrideInput": {
+                "type": "object",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "required": [
+                    "schedulePlanId",
+                    "venueId",
+                    "mode"
+                ],
+                "properties": {
+                    "schedulePlanId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "venueId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "mode": {
+                        "enum": [
+                            "DISABLED",
+                            "BLANK"
+                        ],
+                        "description": "INHERIT n'est pas une valeur accept\u00e9e : c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par l'ABSENCE\nde ligne. Pour revenir aux cr\u00e9neaux de saison on supprime l'override (DELETE).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "VenuePeriodOverride.html": {
+                "type": "object",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "schedulePlanId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "mode": {
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "VenuePeriodOverride.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "schedulePlanId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "venueId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "mode": {
+                                "default": "",
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact."
+            },
             "VenueTrainingSlot": {
                 "type": "object",
                 "properties": {
@@ -18135,6 +20443,14 @@
             "description": "Resource 'Coach' operations."
         },
         {
+            "name": "CoachWishCampaign",
+            "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
+        },
+        {
+            "name": "CoachWish",
+            "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor)."
+        },
+        {
             "name": "Competition",
             "description": "Resource 'Competition' operations."
         },
@@ -18164,7 +20480,7 @@
         },
         {
             "name": "SchedulePlan",
-            "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nUn plan est cr\u00e9\u00e9 et supprim\u00e9 par le serveur, et sa version choisie est d\u00e9sign\u00e9e\nen validant cette version. Seul son nom est \u00e9ditable."
+            "description": "Le Plan \u2014 le conteneur nomm\u00e9 des versions d'une saison ou d'une p\u00e9riode. Le plan\nde saison et sa version choisie sont le calendrier de base de la saison.\n\nPOST cr\u00e9e le plan d'une p\u00e9riode closure/holiday : c'est le geste \u00ab adapter cette\np\u00e9riode \u00bb (idempotent \u2014 la p\u00e9riode a d\u00e9j\u00e0 son plan \u2192 il est rendu tel quel).\nLe plan de saison, lui, est cr\u00e9\u00e9 par le serveur. La version choisie se d\u00e9signe\nen validant cette version ; seul le nom est \u00e9ditable."
         },
         {
             "name": "Schedule",
@@ -18213,6 +20529,10 @@
         {
             "name": "User",
             "description": "Resource 'User' operations."
+        },
+        {
+            "name": "VenuePeriodOverride",
+            "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact."
         },
         {
             "name": "Venue",
