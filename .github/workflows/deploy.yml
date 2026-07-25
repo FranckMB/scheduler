@@ -1,0 +1,244 @@
+# Deploy — build the prod images, push them to ghcr.io, then (if the VM is
+# configured) roll the production stack to the new version over SSH.
+#
+# Two triggers, same pipeline (docs/ops/deploy.md):
+#   - push of a v* tag        → normal release   (VERSION = the tag)
+#   - workflow_dispatch       → hotfix/manual    (VERSION = input or short sha)
+#
+# Re-deploying an EXISTING version (rollback) never rebuilds: if the images
+# for that version are already in the registry they are reused as-is — the
+# artifact that actually ran is what comes back, and history is never
+# overwritten by a fresh build with drifted base layers.
+#
+# The deploy job is gated on the repo variable DEPLOY_ENABLED == 'true' so the
+# whole workflow is mergeable and the image-publishing half works BEFORE any
+# VM exists; flipping the variable (plus the DEPLOY_* secrets) arms it.
+
+name: Deploy
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deploy (existing tag or sha-<short> = redeploy those images; empty = build this commit as its short sha)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: Build & push prod images
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      owner: ${{ steps.meta.outputs.owner }}
+    steps:
+      # Dispatch with version=<existing tag> checks out THAT tag (a rollback
+      # builds the OLD code if it must build at all — see the registry
+      # short-circuit below). A sha-<short> version can't be a checkout ref:
+      # it is resolved to its commit in the meta step (hence fetch-depth: 0).
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ (inputs.version != '' && !startsWith(inputs.version, 'sha-')) && inputs.version || '' }}
+          fetch-depth: 0
+
+      - name: Resolve version + lowercase owner
+        id: meta
+        env:
+          # Never interpolate the raw input into shell text (script injection);
+          # it arrives as an env var and is strictly validated before use.
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          elif [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            VERSION="sha-$(git rev-parse --short HEAD)"
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+            echo "FATAL: invalid version '$VERSION' (allowed: alphanumerics, dot, dash, underscore)" >&2
+            exit 1
+          fi
+          # Redeploy of a sha-labelled build: point the workspace at that commit.
+          if printf '%s' "$VERSION" | grep -Eq '^sha-[0-9a-f]{7,40}$'; then
+            git checkout "${VERSION#sha-}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          # :latest only moves FORWARD, on tag releases — a dispatch that
+          # rebuilds an old ref must never drag latest backwards.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "push_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Deploying version: ${VERSION}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Rollback short-circuit: if this version's images already exist in the
+      # registry, DO NOT rebuild — reuse the exact artifacts that ran. A fresh
+      # rebuild of an old tag would resolve newer base layers/apt packages and
+      # overwrite the known-good images. ALL SIX images must exist: a run that
+      # died after pushing only some of them must NOT poison the version into
+      # "published forever but unpullable" — a partial set rebuilds everything.
+      - name: Check registry for existing images
+        id: existing
+        run: |
+          FOUND=true
+          for IMG in php nginx frontend postgres engine pdf-worker; do
+            if ! docker manifest inspect "ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-${IMG}:${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+              FOUND=false
+              echo "scheduler-${IMG}:${{ steps.meta.outputs.version }} missing from the registry"
+            fi
+          done
+          echo "found=${FOUND}" >> "$GITHUB_OUTPUT"
+          if [ "$FOUND" = "true" ]; then
+            echo "All 6 images for ${{ steps.meta.outputs.version }} already published — skipping build, deploying as-is."
+          fi
+
+      # One step per image — same targets as the CI "Build prod images" step
+      # (anti-rot pair: CI proves they build, this one publishes them).
+      - name: Build & push scheduler-php
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-php:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=php
+          cache-to: type=gha,scope=php,mode=max
+
+      - name: Build & push scheduler-nginx
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          target: nginx-prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-nginx:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-nginx:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=php
+          cache-to: type=gha,scope=php,mode=max
+
+      - name: Build & push scheduler-frontend
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-frontend:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-frontend:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Build & push scheduler-postgres
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/postgres/Dockerfile.prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-postgres:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-postgres:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,scope=postgres,mode=max
+
+      - name: Build & push scheduler-engine
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/engine/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-engine:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-engine:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=engine
+          cache-to: type=gha,scope=engine,mode=max
+
+      - name: Build & push scheduler-pdf-worker
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/pdf-worker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-pdf-worker:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('ghcr.io/{0}/scheduler-pdf-worker:latest', steps.meta.outputs.owner) || '' }}
+          cache-from: type=gha,scope=pdf-worker
+          cache-to: type=gha,scope=pdf-worker,mode=max
+
+  deploy:
+    name: Roll the VM to ${{ needs.build-push.outputs.version }}
+    runs-on: ubuntu-latest
+    needs: build-push
+    # Armed the day the VM exists: repo variable DEPLOY_ENABLED='true' +
+    # secrets DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY (see docs/ops/deploy.md).
+    # Until then the job is skipped and a release only publishes images.
+    if: vars.DEPLOY_ENABLED == 'true'
+    steps:
+      # Same ref logic as build-push: the compose file shipped to the VM must
+      # be the one matching the deployed version.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ (inputs.version != '' && !startsWith(inputs.version, 'sha-')) && inputs.version || '' }}
+          fetch-depth: 0
+
+      - name: SSH deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/clubscheduler' }}
+          VERSION: ${{ needs.build-push.outputs.version }}
+        run: |
+          # DEPLOY_PATH lands inside the remote command line — same strict
+          # validation discipline as VERSION (absolute path, safe charset).
+          if ! printf '%s' "$DEPLOY_PATH" | grep -Eq '^/[A-Za-z0-9._/-]+$'; then
+            echo "FATAL: invalid DEPLOY_PATH '$DEPLOY_PATH'" >&2
+            exit 1
+          fi
+          if printf '%s' "$VERSION" | grep -Eq '^sha-[0-9a-f]{7,40}$'; then
+            git checkout "${VERSION#sha-}"
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH=(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST")
+          SCP=(scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new)
+          # Ship the version-matched compose file + deploy script every time:
+          # the VM's copy must never drift from the code being deployed (the
+          # first-install copy would otherwise be frozen forever).
+          "${SCP[@]}" docker-compose.prod.yml scripts/remote-deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+          # Executed as a FILE, never piped: `docker compose run` reads stdin
+          # and would swallow the rest of a piped script (silent half-deploy).
+          "${SSH[@]}" "DEPLOY_PATH='$DEPLOY_PATH' VERSION='$VERSION' bash '$DEPLOY_PATH/remote-deploy.sh'"
