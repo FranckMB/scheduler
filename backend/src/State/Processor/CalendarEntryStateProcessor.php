@@ -432,6 +432,10 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             foreach ($this->entityManager->getRepository(\App\Entity\CoachWish::class)->findBy(['calendarEntryId' => $id]) as $wish) {
                 $this->entityManager->remove($wish);
             }
+            // #10 C2 — et la campagne de collecte de la période (ses tokens partent par FK CASCADE).
+            foreach ($this->entityManager->getRepository(\App\Entity\CoachWishCampaign::class)->findBy(['calendarEntryId' => $id]) as $campaign) {
+                $this->entityManager->remove($campaign);
+            }
             $this->entityManager->flush();
         }
     }

@@ -12,6 +12,7 @@ import { RegisterPage } from "@/features/auth/RegisterPage";
 import { ResetPasswordPage } from "@/features/auth/ResetPasswordPage";
 import { VerifyEmailPage } from "@/features/auth/VerifyEmailPage";
 import { WaitingApprovalPage } from "@/features/auth/WaitingApprovalPage";
+import { PublicWishPage } from "@/features/coach-wishes/PublicWishPage";
 import { PrivacyPage } from "@/features/legal/PrivacyPage";
 import { ClubPage } from "@/features/club/ClubPage";
 import { CockpitPage } from "@/features/cockpit/CockpitPage";
@@ -42,6 +43,9 @@ const router = createBrowserRouter([
   { path: "/verify-email/:token", element: <VerifyEmailPage /> },
   { path: "/waiting", element: <WaitingApprovalPage /> },
   { path: "/confidentialite", element: <PrivacyPage /> },
+  // #10 C2 — page publique SANS login : le coach saisit ses disponibilités via son
+  // lien personnel. Route plate, hors AuthGuard (aucune session requise).
+  { path: "/doleances/:token", element: <PublicWishPage /> },
   {
     element: <AuthGuard />,
     children: [
