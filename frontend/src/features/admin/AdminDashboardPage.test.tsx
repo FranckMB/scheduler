@@ -74,6 +74,8 @@ const health: AdminHealthResponse = {
     worker: { status: "up", lastHeartbeatAt: "2026-07-16T10:29:55+00:00", ageSeconds: 5 },
   },
   messenger: { status: "up", backlog: 3, failed: 0, retriesToday: 1, backlogWarningThreshold: 100 },
+  containers: [],
+  externalDependencies: [],
 };
 
 const clubs: AdminClubsResponse = {
@@ -174,6 +176,7 @@ const mockFreshness = vi.mocked(getAdminFreshness);
 
 describe("AdminDashboardPage", () => {
   beforeEach(() => {
+    localStorage.clear();
     mockOverview.mockReset().mockResolvedValue(overview);
     mockHealth.mockReset().mockResolvedValue(health);
     mockJobs.mockReset().mockResolvedValue(jobs);
@@ -194,7 +197,7 @@ describe("AdminDashboardPage", () => {
     expect(screen.getByText("Découverte")).toBeInTheDocument();
     expect(screen.getByText("Rappels de périodes")).toBeInTheDocument();
     expect(screen.getByText("Quotidien")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Prochain passage" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Prochain passage", hidden: true })).toBeInTheDocument();
     expect(screen.getByText("Réussi")).toBeInTheDocument();
     expect(screen.getAllByText("Jamais exécuté")).toHaveLength(2);
     expect(mockOverview).toHaveBeenCalledOnce();
@@ -245,7 +248,7 @@ describe("AdminDashboardPage", () => {
 
   it("runs a non-dangerous support action from the club row after a simple confirm (SA4)", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
 
     await user.click(await screen.findByRole("button", { name: "Actions" }));
     await user.click(await screen.findByRole("button", { name: /Réinitialiser le quota de générations/ }));
@@ -257,7 +260,7 @@ describe("AdminDashboardPage", () => {
 
   it("gates a dangerous support action behind typing the exact club name (SA4)", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
 
     await user.click(await screen.findByRole("button", { name: "Actions" }));
     await user.click(await screen.findByRole("button", { name: /Réinitialiser la saison courante/ }));
@@ -279,7 +282,7 @@ describe("AdminDashboardPage", () => {
 
   it("searches and paginates through the clubs API", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
     await screen.findByText("Basket Club des Lacs");
 
     await user.type(screen.getByRole("searchbox", { name: /rechercher un club/i }), "  Lacs  ");
@@ -307,7 +310,7 @@ describe("AdminDashboardPage", () => {
 
   it("confirms and runs only a manually allowed reference import", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=jobs" });
     await screen.findByText("Import des vacances scolaires");
 
     expect(screen.getAllByText("Supervision seule")).toHaveLength(2);
@@ -341,7 +344,7 @@ describe("AdminDashboardPage", () => {
   it("shows an explicit empty search result", async () => {
     mockClubs.mockResolvedValue({ ...clubs, items: [], pagination: { ...clubs.pagination, total: 0, pages: 0 } });
     const user = userEvent.setup();
-    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
 
     await user.type(screen.getByRole("searchbox", { name: /rechercher un club/i }), "introuvable");
     await user.click(screen.getByRole("button", { name: "Rechercher" }));

@@ -67,6 +67,14 @@ pnpm-debug.log*
 /volumes/
 *.pid
 *.sock
+# Local dev Compose override (binds docker.sock + ADMIN_RESTART_ALLOWED for the
+# DEV-only container restart feature — see plan admin-console-tabs-and-containers
+# todo 12, docker-compose.override.yml at the project root).
+/docker-compose.override.yml
 # Added by code-review-graph
 .code-review-graph/
 /.installed
+
+# code-review-graph local artifact
+/backend/.codegraph
+/backend/.omo/

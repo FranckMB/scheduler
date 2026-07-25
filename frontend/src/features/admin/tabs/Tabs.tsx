@@ -1,0 +1,132 @@
+import { type KeyboardEvent, type ReactNode, useRef } from "react";
+
+import { cn } from "@/shared/lib/utils";
+
+export interface TabItem {
+  id: string;
+  label: string;
+  icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+}
+
+export interface TabsProps {
+  tabs: TabItem[];
+  activeTab: string;
+  onTabChange: (id: string) => void;
+  ariaLabel: string;
+  /** Prefix for tab/panel IDs — must be unique per tablist (avoids collisions with nested sub-tabs). */
+  idPrefix: string;
+}
+
+/**
+ * WAI-ARIA tabs pattern with roving tabindex + automatic activation.
+ *
+ * - `role="tablist"` on the container, `role="tab"` on each button.
+ * - Active tab has `tabIndex={0}`, others `-1` (roving tabindex).
+ * - Arrow Left/Right move focus AND activate (circular), Home/End jump to first/last.
+ * - Enter/Space activates the focused tab (redundant with auto-activation, but
+ *   required by the WAI-ARIA spec for the manual-activation fallback).
+ * - Tab key exits to the panel (browser default with roving tabindex).
+ */
+export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, idPrefix }: TabsProps) {
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const activeIndex = Math.max(
+    0,
+    tabs.findIndex((t) => t.id === activeTab),
+  );
+
+  function activateAndFocus(index: number) {
+    const tab = tabs[index];
+    if (!tab) return;
+    onTabChange(tab.id);
+    refs.current[tab.id]?.focus();
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    const lastIndex = tabs.length - 1;
+
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        activateAndFocus(activeIndex + 1 > lastIndex ? 0 : activeIndex + 1);
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        activateAndFocus(activeIndex - 1 < 0 ? lastIndex : activeIndex - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        activateAndFocus(0);
+        break;
+      case "End":
+        event.preventDefault();
+        activateAndFocus(lastIndex);
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        onTabChange(tabs[activeIndex].id);
+        break;
+    }
+  }
+
+  return (
+    <div role="tablist" aria-label={ariaLabel} className="flex flex-wrap gap-1 border-b border-white/10">
+      {tabs.map((tab) => {
+        const isActive = tab.id === activeTab;
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.id}
+            ref={(el) => {
+              refs.current[tab.id] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-tab-${tab.id}`}
+            aria-controls={`${idPrefix}-panel-${tab.id}`}
+            aria-selected={isActive}
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => onTabChange(tab.id)}
+            onKeyDown={onKeyDown}
+            className={cn(
+              "flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+              isActive
+                ? "border-cyan-300 text-white"
+                : "border-transparent text-slate-400 hover:text-white hover:border-white/10",
+            )}
+          >
+            {Icon ? <Icon className="size-4" aria-hidden={true} /> : null}
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export interface TabPanelProps {
+  tabId: string;
+  idPrefix: string;
+  active: boolean;
+  children: ReactNode;
+  /** Optional label for screen readers when the panel has no visible heading. */
+  ariaLabel?: string;
+  className?: string;
+}
+
+export function TabPanel({ tabId, idPrefix, active, children, ariaLabel, className }: TabPanelProps) {
+  return (
+    <div
+      role="tabpanel"
+      id={`${idPrefix}-panel-${tabId}`}
+      aria-labelledby={`${idPrefix}-tab-${tabId}`}
+      aria-label={ariaLabel}
+      hidden={!active}
+      tabIndex={active ? 0 : -1}
+      className={cn("focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/20", className)}
+    >
+      {children}
+    </div>
+  );
+}

@@ -18,7 +18,8 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -29,6 +30,13 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { AdminAction, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
 import { useAdminActions, useAdminClubs, useAdminFreshness, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
+import { ContainersSection } from "./sections/ContainersSection";
+import { ExternalDepsSection } from "./sections/ExternalDepsSection";
+import { AuditSubtab } from "./Journaux/AuditSubtab";
+import { MessengerFailedSubtab } from "./Journaux/MessengerFailedSubtab";
+import { SystemErrorsSubtab } from "./Journaux/SystemErrorsSubtab";
+import { ADMIN_TABS, DEFAULT_SUBTAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "./tabs/tabsConfig";
+import { TabPanel, Tabs } from "./tabs/Tabs";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -47,6 +55,48 @@ export function AdminDashboardPage() {
   const clubs = useAdminClubs(page, CLUBS_PER_PAGE, query);
   const refreshing = overview.isFetching || health.isFetching || jobs.isFetching || clubs.isFetching || freshness.isFetching;
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = resolveActiveTab(searchParams.get("tab"), localStorage.getItem(STORAGE_KEY));
+  const activeSubTab = resolveActiveSubTab(activeTab === "journaux" ? searchParams.get("sub") : null);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, activeTab);
+  }, [activeTab]);
+
+  // On mount, sync URL if the tab param is missing/invalid (localStorage → URL, replace — no history entry).
+  useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    if (urlTab !== activeTab) {
+      setSearchParams(
+        (prev) => {
+          prev.set("tab", activeTab);
+          if (activeTab === "journaux") prev.set("sub", activeSubTab);
+          else prev.delete("sub");
+          return prev;
+        },
+        { replace: true },
+      );
+    }
+    // mount-only — we don't want to replace-history on every tab change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleTabChange(id: string) {
+    setSearchParams((prev) => {
+      prev.set("tab", id);
+      if (id === "journaux") prev.set("sub", DEFAULT_SUBTAB);
+      else prev.delete("sub");
+      return prev;
+    });
+  }
+
+  function handleSubTabChange(id: string) {
+    setSearchParams((prev) => {
+      prev.set("sub", id);
+      return prev;
+    });
+  }
+
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
@@ -56,6 +106,9 @@ export function AdminDashboardPage() {
   function refreshAll() {
     void Promise.all([overview.refetch(), health.refetch(), jobs.refetch(), clubs.refetch(), freshness.refetch()]);
   }
+
+  const journauxSubTabs =
+    ADMIN_TABS.find((t) => t.id === "journaux")?.subTabs?.map((s) => ({ id: s.id, label: s.label })) ?? [];
 
   return (
     <div className="space-y-8">
@@ -81,50 +134,80 @@ export function AdminDashboardPage() {
         </Button>
       </section>
 
-      <OverviewSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
-      <UsageSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
-      <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
-      <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
-      <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
+      <Tabs tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={handleTabChange} ariaLabel="Sections admin" idPrefix="admin" />
 
-      <section aria-labelledby="clubs-heading" className="space-y-4">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Parc client</p>
-            <h2 id="clubs-heading" className="mt-2 text-xl font-semibold text-white">Comptes clubs</h2>
-          </div>
-          <form className="flex w-full gap-2 md:max-w-md" role="search" onSubmit={submitSearch}>
-            <label className="sr-only" htmlFor="club-search">Rechercher un club</label>
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-              <input
-                id="club-search"
-                type="search"
-                value={queryDraft}
-                maxLength={100}
-                onChange={(event) => setQueryDraft(event.target.value)}
-                placeholder="Nom, slug ou code FFBB"
-                className="h-10 w-full rounded-md border border-white/15 bg-white/[0.04] pl-10 pr-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20"
-              />
+      <TabPanel tabId="vue-densemble" idPrefix="admin" active={activeTab === "vue-densemble"} className="space-y-8 pt-6">
+        <OverviewSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
+        <UsageSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
+      </TabPanel>
+
+      <TabPanel tabId="infrastructure" idPrefix="admin" active={activeTab === "infrastructure"} className="space-y-8 pt-6">
+        <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
+        <ContainersSection />
+        <ExternalDepsSection />
+      </TabPanel>
+
+      <TabPanel tabId="jobs" idPrefix="admin" active={activeTab === "jobs"} className="space-y-8 pt-6">
+        <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
+      </TabPanel>
+
+      <TabPanel tabId="referentiels" idPrefix="admin" active={activeTab === "referentiels"} className="space-y-8 pt-6">
+        <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
+      </TabPanel>
+
+      <TabPanel tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-4 pt-6">
+        <section aria-labelledby="clubs-heading" className="space-y-4">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Parc client</p>
+              <h2 id="clubs-heading" className="mt-2 text-xl font-semibold text-white">Comptes clubs</h2>
             </div>
-            <Button type="submit" className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">Rechercher</Button>
-          </form>
-        </div>
+            <form className="flex w-full gap-2 md:max-w-md" role="search" onSubmit={submitSearch}>
+              <label className="sr-only" htmlFor="club-search">Rechercher un club</label>
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+                <input
+                  id="club-search"
+                  type="search"
+                  value={queryDraft}
+                  maxLength={100}
+                  onChange={(event) => setQueryDraft(event.target.value)}
+                  placeholder="Nom, slug ou code FFBB"
+                  className="h-10 w-full rounded-md border border-white/15 bg-white/[0.04] pl-10 pr-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20"
+                />
+              </div>
+              <Button type="submit" className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">Rechercher</Button>
+            </form>
+          </div>
 
-        {clubs.isPending ? <PanelLoading label="Chargement des clubs" /> : null}
-        {clubs.isError ? <PanelError label="Les comptes clubs sont indisponibles." retry={() => void clubs.refetch()} /> : null}
-        {clubs.data ? (
-          <ClubsTable
-            clubs={clubs.data.items}
-            page={clubs.data.pagination.page}
-            pages={clubs.data.pagination.pages}
-            total={clubs.data.pagination.total}
-            query={query}
-            loading={clubs.isFetching}
-            onPageChange={setPage}
-          />
-        ) : null}
-      </section>
+          {clubs.isPending ? <PanelLoading label="Chargement des clubs" /> : null}
+          {clubs.isError ? <PanelError label="Les comptes clubs sont indisponibles." retry={() => void clubs.refetch()} /> : null}
+          {clubs.data ? (
+            <ClubsTable
+              clubs={clubs.data.items}
+              page={clubs.data.pagination.page}
+              pages={clubs.data.pagination.pages}
+              total={clubs.data.pagination.total}
+              query={query}
+              loading={clubs.isFetching}
+              onPageChange={setPage}
+            />
+          ) : null}
+        </section>
+      </TabPanel>
+
+      <TabPanel tabId="journaux" idPrefix="admin" active={activeTab === "journaux"} className="space-y-6 pt-6">
+        <Tabs tabs={journauxSubTabs} activeTab={activeSubTab} onTabChange={handleSubTabChange} ariaLabel="Journaux" idPrefix="admin-journaux" />
+        <TabPanel tabId="audit" idPrefix="admin-journaux" active={activeSubTab === "audit"}>
+          <AuditSubtab />
+        </TabPanel>
+        <TabPanel tabId="messenger" idPrefix="admin-journaux" active={activeSubTab === "messenger"}>
+          <MessengerFailedSubtab />
+        </TabPanel>
+        <TabPanel tabId="errors" idPrefix="admin-journaux" active={activeSubTab === "errors"}>
+          <SystemErrorsSubtab />
+        </TabPanel>
+      </TabPanel>
     </div>
   );
 }

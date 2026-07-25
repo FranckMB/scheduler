@@ -49,6 +49,7 @@ final readonly class AdminHealthService
         $mercure = '' === $this->mercureUrl ? $this->unknownProbe() : $this->http($this->mercureUrl, false);
         $worker = $this->worker();
         $messenger = $this->messenger();
+        $externalDependencies = $this->externalDeps();
         $statuses = [$database['status'], $redis['status'], $engine['status'], $mercure['status'], $worker['status'], $messenger['status']];
 
         return [
@@ -62,6 +63,8 @@ final readonly class AdminHealthService
                 'mercure' => $mercure,
             ],
             'messenger' => $messenger,
+            'externalDependencies' => $externalDependencies,
+            'containers' => $this->containers(),
         ];
     }
 
@@ -120,16 +123,92 @@ final readonly class AdminHealthService
     }
 
     /** @return array{status: string, latencyMs: int} */
-    private function http(string $url, bool $requireSuccess): array
+    private function http(string $url, bool $requireSuccess, float $timeout = 1.0, float $maxDuration = 1.5): array
     {
         $startedAt = hrtime(true);
         try {
-            $statusCode = $this->httpClient->request('GET', $url, ['timeout' => 1.0, 'max_duration' => 1.5])->getStatusCode();
+            $statusCode = $this->httpClient->request('GET', $url, ['timeout' => $timeout, 'max_duration' => $maxDuration])->getStatusCode();
             $up = $requireSuccess ? 200 === $statusCode : $statusCode < 500;
 
             return ['status' => $up ? 'up' : 'down', 'latencyMs' => $this->elapsed($startedAt)];
         } catch (Throwable) {
             return ['status' => 'down', 'latencyMs' => $this->elapsed($startedAt)];
+        }
+    }
+
+    /** @return array<int, array{key: string, name: string, status: string, latencyMs: int}> */
+    private function externalDeps(): array
+    {
+        $deps = [
+            ['key' => 'ffbb-meilisearch', 'name' => 'FFBB Meilisearch', 'url' => 'https://meilisearch-prod.ffbb.app', 'requireSuccess' => false],
+            ['key' => 'ods', 'name' => 'OpenDataSoft (Éducation nationale)', 'url' => 'https://data.education.gouv.fr', 'requireSuccess' => true],
+            ['key' => 'etalab', 'name' => 'Etalab Calendrier', 'url' => 'https://calendrier.api.gouv.fr', 'requireSuccess' => true],
+        ];
+
+        $results = [];
+        foreach ($deps as $dep) {
+            $probe = $this->http($dep['url'], $dep['requireSuccess'], 2.0, 2.5);
+            $results[] = [
+                'key' => $dep['key'],
+                'name' => $dep['name'],
+                'status' => $probe['status'],
+                'latencyMs' => $probe['latencyMs'],
+            ];
+        }
+
+        return $results;
+    }
+
+    /** @return list<array{key: string, name: string, status: string, lastHeartbeatAt?: ?string, ageSeconds?: ?int, latencyMs?: int}> */
+    private function containers(): array
+    {
+        $database = $this->database();
+        $redis = $this->redis();
+        $engine = $this->http(self::ENGINE_HEALTH_URL, true);
+        $mercure = '' === $this->mercureUrl ? $this->unknownProbe() : $this->http($this->mercureUrl, false);
+        $nginx = $this->http('http://nginx/api/health', true, 1.0, 1.5);
+        $frontend = $this->http('http://frontend/health', false, 1.0, 1.5);
+        $mailpit = $this->http('http://mailpit:8025/', false, 1.0, 1.5);
+        $messengerWorker = $this->heartbeatProbe('admin_monitoring.messenger.heartbeat', 30);
+        $cronRunner = $this->heartbeatProbe('admin_monitoring.cron_runner.heartbeat', 180);
+        $pdfWorker = $this->heartbeatProbe('admin_monitoring.pdf_worker.heartbeat', 60);
+
+        return [
+            ['key' => 'postgres', 'name' => 'PostgreSQL', 'status' => $database['status'], 'latencyMs' => $database['latencyMs']],
+            ['key' => 'redis', 'name' => 'Redis', 'status' => $redis['status'], 'latencyMs' => $redis['latencyMs']],
+            ['key' => 'nginx', 'name' => 'Nginx', 'status' => $nginx['status'], 'latencyMs' => $nginx['latencyMs']],
+            ['key' => 'frontend', 'name' => 'Frontend', 'status' => $frontend['status'], 'latencyMs' => $frontend['latencyMs']],
+            ['key' => 'engine', 'name' => 'Engine', 'status' => $engine['status'], 'latencyMs' => $engine['latencyMs']],
+            ['key' => 'mercure', 'name' => 'Mercure', 'status' => $mercure['status'], 'latencyMs' => $mercure['latencyMs']],
+            ['key' => 'mailpit', 'name' => 'Mailpit', 'status' => $mailpit['status'], 'latencyMs' => $mailpit['latencyMs']],
+            ['key' => 'php-fpm', 'name' => 'PHP-FPM', 'status' => 'up', 'latencyMs' => 0],
+            ['key' => 'messenger-worker', 'name' => 'Messenger Worker', 'status' => $messengerWorker['status'], 'lastHeartbeatAt' => $messengerWorker['lastHeartbeatAt'], 'ageSeconds' => $messengerWorker['ageSeconds']],
+            ['key' => 'cron-runner', 'name' => 'Cron Runner', 'status' => $cronRunner['status'], 'lastHeartbeatAt' => $cronRunner['lastHeartbeatAt'], 'ageSeconds' => $cronRunner['ageSeconds']],
+            ['key' => 'pdf-worker', 'name' => 'PDF Worker', 'status' => $pdfWorker['status'], 'lastHeartbeatAt' => $pdfWorker['lastHeartbeatAt'], 'ageSeconds' => $pdfWorker['ageSeconds']],
+        ];
+    }
+
+    /**
+     * @return array{status: string, lastHeartbeatAt: ?string, ageSeconds: ?int}
+     */
+    private function heartbeatProbe(string $cacheKey, int $maxAgeSeconds): array
+    {
+        try {
+            $item = $this->cache->getItem($cacheKey);
+            $timestamp = $item->isHit() && \is_int($item->get()) ? $item->get() : null;
+            if (null === $timestamp) {
+                return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
+            }
+
+            $age = max(0, time() - $timestamp);
+
+            return [
+                'status' => $age <= $maxAgeSeconds ? 'up' : 'down',
+                'lastHeartbeatAt' => (new DateTimeImmutable)->setTimestamp($timestamp)->format(DateTimeInterface::ATOM),
+                'ageSeconds' => $age,
+            ];
+        } catch (Throwable) {
+            return ['status' => 'unknown', 'lastHeartbeatAt' => null, 'ageSeconds' => null];
         }
     }
 

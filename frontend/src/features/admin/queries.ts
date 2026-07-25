@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAdminActions, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminOverview, getAdminSession, runAdminClubAction, runAdminJob } from "./api";
+import { getAdminActions, getAdminAuditLog, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -102,3 +102,34 @@ export function useRunAdminClubAction() {
     },
   });
 }
+
+/** Journal d'audit super-admin — refetch 60s comme les jobs. */
+export function useAdminAuditLog(page: number, limit: number) {
+  return useQuery({
+    queryKey: ["admin-audit-log", { page, limit }],
+    queryFn: () => getAdminAuditLog(page, limit),
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000,
+  });
+}
+
+/** Messenger failed transport — refetch 60s. */
+export function useAdminMessengerFailed(page: number, limit: number) {
+  return useQuery({
+    queryKey: ["admin-messenger-failed", { page, limit }],
+    queryFn: () => getAdminMessengerFailed(page, limit),
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000,
+  });
+}
+
+/** Erreurs système agrégées — refetch 60s. */
+export function useAdminSystemErrors(page: number, limit: number) {
+  return useQuery({
+    queryKey: ["admin-system-errors", { page, limit }],
+    queryFn: () => getAdminSystemErrors(page, limit),
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000,
+  });
+}
+
