@@ -9,7 +9,6 @@ use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
 use App\Entity\CoachWishToken;
-use App\Entity\TeamCoach;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -26,6 +25,7 @@ final class CoachWishCampaignPresenter
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly CoachWishPerimeter $perimeter,
     ) {}
 
     public function toResource(CoachWishCampaign $campaign): CoachWishCampaignResource
@@ -38,13 +38,8 @@ final class CoachWishCampaignPresenter
         $dto->teamIds = $campaign->getTeamIds();
         $dto->lastReminderAt = $campaign->getLastReminderAt()?->format(DateTimeInterface::ATOM);
 
-        // Coachs distincts du périmètre courant (les équipes actuellement retenues).
-        $perimeterCoachIds = [];
-        if ([] !== $campaign->getTeamIds()) {
-            foreach ($this->entityManager->getRepository(TeamCoach::class)->findBy(['teamId' => $campaign->getTeamIds()]) as $link) {
-                $perimeterCoachIds[$link->getCoachId()] = true;
-            }
-        }
+        // Coachs distincts du périmètre courant (source unique partagée avec digest/token-sync).
+        $perimeterCoachIds = $this->perimeter->coachIdSet($campaign);
 
         // Les tokens de cette campagne, indexés par coach (respondedAt).
         $tokenByCoach = [];

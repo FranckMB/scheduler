@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
@@ -153,10 +154,17 @@ const parisDay = (d: Date): string => new Intl.DateTimeFormat("fr-CA", { timeZon
 /** lastReminderAt (ISO) est-il le MÊME jour Europe/Paris que maintenant ? (parité back, D3). */
 const isSameParisDay = (iso: string | null): boolean => null !== iso && parisDay(new Date(iso)) === parisDay(new Date());
 
+/** Message d'erreur d'une action d'envoi : 409 = saison close (jamais réessayable), sinon défaut. */
+const errorMessage = (error: unknown, fallback: string): string => (error instanceof HTTPError && 409 === error.response.status ? "Cette saison est archivée — la collecte est close." : fallback);
+
 type CoachStatus = "responded" | "pending" | "no-email";
 
-/** Statut mutuellement exclusif d'un coach (D2) : répondu / en attente (joignable) / pas d'email. */
-const coachStatus = (c: CampaignCoach): CoachStatus => (null === c.email || "" === c.email ? "no-email" : null !== c.respondedAt ? "responded" : "pending");
+/**
+ * Statut mutuellement exclusif d'un coach (D2). « Répondu » PRIME : un coach répond souvent
+ * via WhatsApp SANS email (respondedAt posé, email null) — il reste « répondu », jamais rangé
+ * en « pas d'email » (sinon le filtre le cacherait alors que le badge le compte répondant).
+ */
+const coachStatus = (c: CampaignCoach): CoachStatus => (null !== c.respondedAt ? "responded" : null === c.email || "" === c.email ? "no-email" : "pending");
 
 const STATUS_LABELS: { key: CoachStatus; label: string }[] = [
   { key: "responded", label: "Répondu" },
@@ -235,9 +243,10 @@ function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign:
           Relancer les silencieux
         </Button>
       </div>
-      {/* Sans ceci un 422 (déjà relancé aujourd'hui — cache périmé, autre onglet) resterait muet. */}
-      {sendLinks.isError ? <p className="mt-2 text-sm text-destructive">Envoi impossible pour le moment. Réessayez.</p> : null}
-      {remind.isError ? <p className="mt-2 text-sm text-destructive">Relance impossible — les coachs ont peut-être déjà été relancés aujourd'hui.</p> : null}
+      {/* Sans ceci un 422/409 resterait muet ; on distingue « saison close » (409) de « déjà
+          relancé aujourd'hui » (422 — cache périmé, autre onglet) pour ne pas mal expliquer. */}
+      {sendLinks.isError ? <p className="mt-2 text-sm text-destructive">{errorMessage(sendLinks.error, "Envoi impossible pour le moment. Réessayez.")}</p> : null}
+      {remind.isError ? <p className="mt-2 text-sm text-destructive">{errorMessage(remind.error, "Relance impossible — les coachs ont peut-être déjà été relancés aujourd'hui.")}</p> : null}
 
       {/* Filtres — n'affectent QUE la liste ci-dessous (les boutons gardent leur périmètre, D4). */}
       {campaign.coaches.length > 0 ? (

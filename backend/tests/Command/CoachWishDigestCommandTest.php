@@ -284,6 +284,7 @@ final class CoachWishDigestCommandTest extends KernelTestCase
             $container->get(ClubUserRepository::class),
             $container->get(CoachWishTokenRepository::class),
             new CoachWishMailBuilder('http://localhost:5173'),
+            $container->get(\App\Service\CoachWishPerimeter::class),
             $container->get(ClockInterface::class),
         );
 

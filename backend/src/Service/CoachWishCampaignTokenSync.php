@@ -6,7 +6,6 @@ namespace App\Service;
 
 use App\Entity\CoachWishCampaign;
 use App\Entity\CoachWishToken;
-use App\Entity\TeamCoach;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -22,19 +21,15 @@ final class CoachWishCampaignTokenSync
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly CoachWishPerimeter $perimeter,
     ) {}
 
     public function sync(CoachWishCampaign $campaign): void
     {
-        $teamIds = $campaign->getTeamIds();
-        if ([] === $teamIds) {
+        // Coachs distincts des équipes retenues (source unique partagée avec presenter/digest).
+        $coachIds = $this->perimeter->coachIdSet($campaign);
+        if ([] === $coachIds) {
             return;
-        }
-
-        // Les coachs distincts des équipes retenues (MAIN comme ASSISTANT).
-        $coachIds = [];
-        foreach ($this->entityManager->getRepository(TeamCoach::class)->findBy(['teamId' => $teamIds]) as $link) {
-            $coachIds[$link->getCoachId()] = true;
         }
 
         // Les tokens déjà émis pour cette campagne (par coach) — on ne recrée pas.

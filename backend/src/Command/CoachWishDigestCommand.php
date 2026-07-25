@@ -9,10 +9,10 @@ use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
-use App\Entity\TeamCoach;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
 use App\Service\CoachWishMailBuilder;
+use App\Service\CoachWishPerimeter;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -55,6 +55,7 @@ final class CoachWishDigestCommand extends Command
         private readonly ClubUserRepository $clubUserRepository,
         private readonly CoachWishTokenRepository $tokenRepository,
         private readonly CoachWishMailBuilder $mailBuilder,
+        private readonly CoachWishPerimeter $perimeter,
         private readonly ClockInterface $clock,
     ) {
         parent::__construct();
@@ -232,7 +233,7 @@ final class CoachWishDigestCommand extends Command
      */
     private function splitCoaches(CoachWishCampaign $campaign): array
     {
-        $perimeter = $this->perimeterCoachIds($campaign);
+        $perimeter = $this->perimeter->coachIdSet($campaign);
         $lastDigestAt = $campaign->getLastDigestAt();
         $new = $responded = $silent = [];
         foreach ($this->tokenRepository->findByCampaign($campaign->getId()) as $token) {
@@ -256,24 +257,6 @@ final class CoachWishDigestCommand extends Command
         }
 
         return [$new, $responded, $silent];
-    }
-
-    /**
-     * Coachs des équipes actuellement retenues (TeamCoach ∩ campaign.teamIds), en set indexé.
-     *
-     * @return array<string, true>
-     */
-    private function perimeterCoachIds(CoachWishCampaign $campaign): array
-    {
-        $set = [];
-        if ([] === $campaign->getTeamIds()) {
-            return $set;
-        }
-        foreach ($this->entityManager->getRepository(TeamCoach::class)->findBy(['teamId' => $campaign->getTeamIds()]) as $link) {
-            $set[$link->getCoachId()] = true;
-        }
-
-        return $set;
     }
 
     private function periodTitle(CoachWishCampaign $campaign): string

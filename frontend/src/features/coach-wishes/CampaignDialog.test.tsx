@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HTTPError } from "ky";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
@@ -16,13 +17,13 @@ const createMut = vi.fn();
 const updateMut = vi.fn();
 const sendMut = vi.fn();
 const remindMut = vi.fn();
-const sendState = { isError: false };
-const remindState = { isError: false };
+const sendState: { isError: boolean; error: unknown } = { isError: false, error: null };
+const remindState: { isError: boolean; error: unknown } = { isError: false, error: null };
 vi.mock("./campaignQueries", () => ({
   useCreateCoachWishCampaign: () => ({ mutate: createMut, isPending: false, isError: false }),
   useUpdateCoachWishCampaign: () => ({ mutate: updateMut, isPending: false, isError: false }),
-  useSendCampaignLinks: () => ({ mutate: sendMut, isPending: false, isError: sendState.isError }),
-  useRemindCampaignSilent: () => ({ mutate: remindMut, isPending: false, isError: remindState.isError }),
+  useSendCampaignLinks: () => ({ mutate: sendMut, isPending: false, isError: sendState.isError, error: sendState.error }),
+  useRemindCampaignSilent: () => ({ mutate: remindMut, isPending: false, isError: remindState.isError, error: remindState.error }),
 }));
 
 const copyMock = vi.fn().mockResolvedValue(true);
@@ -53,7 +54,9 @@ describe("CampaignDialog", () => {
     remindMut.mockReset();
     copyMock.mockClear();
     sendState.isError = false;
+    sendState.error = null;
     remindState.isError = false;
+    remindState.error = null;
   });
 
   it("crée une campagne avec les semaines et équipes choisies", async () => {
@@ -151,6 +154,52 @@ describe("CampaignDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Pas d'email" }));
     expect(screen.getByText("Mara U13")).toBeInTheDocument();
     expect(screen.queryByText("Maxime SM1")).not.toBeInTheDocument();
+  });
+
+  it("classe un répondant SANS email en « Répondu », pas « Pas d'email » (WhatsApp)", async () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1", "t2"],
+      totalCoachCount: 2,
+      respondedCoachCount: 1,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [
+        { coachId: "c1", firstName: "Maxime", lastName: "SM1", email: "max@test.fr", token: "a".repeat(64), respondedAt: null, sentAt: null },
+        // Répond via WhatsApp, aucun email en fiche : doit rester « Répondu ».
+        { coachId: "c2", firstName: "Wanda", lastName: "U13", email: null, token: "b".repeat(64), respondedAt: "2026-02-01T10:00:00Z", sentAt: null },
+      ],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Répondu" }));
+    expect(screen.getByText("Wanda U13")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Répondu", pressed: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Pas d'email" }));
+    expect(screen.queryByText("Wanda U13")).not.toBeInTheDocument();
+  });
+
+  it("affiche « saison archivée » sur un 409, pas « déjà relancé »", () => {
+    remindState.isError = true;
+    remindState.error = new HTTPError(new Response(null, { status: 409 }), new Request("http://x/api/coach_wish_campaigns/camp1/remind"), {} as never);
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [{ coachId: "c1", firstName: "Maxime", lastName: "SM1", email: "max@test.fr", token: "a".repeat(64), respondedAt: null, sentAt: "2026-01-01T08:00:00Z" }],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+    expect(screen.getByText(/saison est archivée/)).toBeInTheDocument();
   });
 
   it("affiche une erreur si la relance échoue (feedback, pas muet)", () => {

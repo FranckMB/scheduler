@@ -8,13 +8,11 @@ use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachWishCampaign;
-use App\Entity\Season;
 use App\Repository\CoachWishTokenRepository;
-use App\Repository\SeasonRepository;
 use App\Service\CoachWishCampaignPresenter;
 use App\Service\CoachWishMailBuilder;
+use App\Service\CoachWishSeasonGuard;
 use App\Service\ManagementAccessGuard;
-use App\Service\SeasonResolver;
 use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -54,7 +52,7 @@ final class CoachWishCampaignActionController extends AbstractController
         private readonly CoachWishCampaignPresenter $presenter,
         private readonly MailerInterface $mailer,
         private readonly ClockInterface $clock,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly CoachWishSeasonGuard $seasonGuard,
     ) {}
 
     public function __invoke(string $id): JsonResponse
@@ -78,7 +76,7 @@ final class CoachWishCampaignActionController extends AbstractController
         // écrivent (sentAt/lastReminderAt), donc elles doivent 409 comme le chemin processor.
         // Dérivation calendaire (isReadonlyAmong) + archivage manuel — même règle que la page
         // publique (le read-only n'est PAS posé sur le statut au roulement du 15-juillet).
-        if ($this->isSeasonReadonly($campaign)) {
+        if ($this->seasonGuard->isReadonly($campaign)) {
             return $this->json(['error' => 'This season is archived (read-only).'], Response::HTTP_CONFLICT);
         }
 
@@ -177,23 +175,6 @@ final class CoachWishCampaignActionController extends AbstractController
         $coach = $this->entityManager->getRepository(Coach::class)->find($coachId);
 
         return $coach instanceof Coach ? $coach : null;
-    }
-
-    private function isSeasonReadonly(CoachWishCampaign $campaign): bool
-    {
-        $season = $this->entityManager->getRepository(Season::class)->find($campaign->getSeasonId());
-        if (null === $season) {
-            return true;
-        }
-        if (\in_array($season->getStatus(), ['archived', 'closed'], true)) {
-            return true;
-        }
-        $clubId = $campaign->getClubId();
-        if (null === $clubId) {
-            return true;
-        }
-
-        return SeasonResolver::isReadonlyAmong($season, $this->seasonRepository->findAllByClubId($clubId), $this->clock->now());
     }
 
     private function resolveCurrentClubId(): ?string
