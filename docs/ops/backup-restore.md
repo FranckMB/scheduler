@@ -104,7 +104,11 @@ d'env (pas de fichier de conf rclone à gérer) :
    RCLONE_S3_SECRET_ACCESS_KEY=<secret-key>
    ```
 
-4. `docker compose ... up -d php-fpm` (recharge l'env), puis preuve immédiate :
+4. `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d` (SANS
+   nom de service : compose recrée TOUS les conteneurs dont l'env a changé —
+   php-fpm mais aussi **cron-runner**, l'exécuteur du backup nocturne, et
+   messenger-worker ; en recréer un seul laisserait les autres sur l'ancien env
+   et nginx sur une IP php-fpm périmée). Puis preuve immédiate :
 
    ```bash
    docker compose -f docker-compose.prod.yml --env-file .env.prod \

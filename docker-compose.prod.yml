@@ -85,9 +85,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    # 640m > v3 §2.2's 512M: sized to the FPM memory model (2×192M children +
+    # 1g > v3 §2.2's 512M: sized to the FPM memory model (4×192M children +
     # 192M opcache shm + master — see docker/php/Dockerfile zz-prod-pool).
-    mem_limit: 640m
+    mem_limit: 1g
     restart: unless-stopped
     <<: *logging
     networks:
@@ -237,7 +237,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit((time() - (int) @file_get_contents(\"/tmp/last-tick-ok\")) < 300 ? 0 : 1);'"]
+      # 30 min threshold: the nightly backup tick (pg_dump + off-site rclone
+      # upload, inline) can legitimately run several minutes on a grown DB —
+      # 5 min would red the board every night and train the operator to ignore
+      # it. A permanently-failing run-due still goes red within the half hour.
+      test: ["CMD-SHELL", "php -r 'exit((time() - (int) @file_get_contents(\"/tmp/last-tick-ok\")) < 1800 ? 0 : 1);'"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -312,7 +316,9 @@ services:
       - clubscheduler_network
 
   mercure:
-    image: dunglas/mercure:latest
+    # Pinned (dev uses :latest): same immutability contract as our own images —
+    # a routine `docker compose pull` must never silently swap the hub version.
+    image: dunglas/mercure:v0.19
     container_name: clubscheduler-mercure
     environment:
       SERVER_NAME: ":80"

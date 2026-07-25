@@ -88,6 +88,14 @@ n'existe pas. Preuve du 2026-07-25 : 10/10 healthy, migrations sur cluster
 vierge, génération **COMPLETED** bout-en-bout, hook off-site exécuté, limites et
 rotation vérifiées (`docker inspect`), `/engine/` renvoie le SPA (plus de proxy).
 
+## Limites connues
+
+- **Board superadmin : mailpit affiché down en prod** — `AdminHealthService`
+  sonde `http://mailpit:8025/` inconditionnellement or mailpit n'existe qu'en
+  dev. Cosmétique (le statut global passe `degraded`, rien ne casse). Correctif
+  = code applicatif (sonde conditionnelle), hors scope de cette PR — tracé
+  roadmap P4.
+
 ## Ce qui reste à l'hébergeur / au runbook deploy
 
 TLS + domaine (Caddy), snapshots disque de la VM (couche « disque mort » des

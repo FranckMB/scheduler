@@ -18,3 +18,8 @@ backend/.env.test
 backend/config/jwt
 backend/var
 backend/vendor
+# assets:install output — regenerated INSIDE the prod build; excluding it keeps
+# local builds identical to clean-checkout CI builds (no working-tree leftovers
+# masking a broken assets step).
+backend/public/bundles
+backend/public/exports

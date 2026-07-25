@@ -75,9 +75,12 @@ RUN apt-get update \
 # Prod PHP overrides (zz-prod sorts after zz-memory, so these win): bounded
 # execution instead of the dev max_execution_time=0, and opcache that never
 # re-stats files — safe ONLY because the code in this image cannot change.
+# NB: NO global memory_limit here — the CLI SAPI (messenger-worker, cron jobs,
+# pg_dump ticks) keeps the base image's 512M so Messenger's --memory-limit=256M
+# graceful stop stays reachable. The 192M request cap is FPM-only, set as
+# php_admin_value in the pool below.
 RUN { \
         echo "max_execution_time = 60"; \
-        echo "memory_limit = 192M"; \
         echo "opcache.enable = 1"; \
         echo "opcache.validate_timestamps = 0"; \
         echo "opcache.memory_consumption = 192"; \
@@ -87,15 +90,17 @@ RUN { \
     && { \
         echo "[www]"; \
         echo "pm = dynamic"; \
-        echo "pm.max_children = 2"; \
+        echo "pm.max_children = 4"; \
         echo "pm.start_servers = 2"; \
         echo "pm.min_spare_servers = 1"; \
-        echo "pm.max_spare_servers = 2"; \
+        echo "pm.max_spare_servers = 3"; \
+        echo "php_admin_value[memory_limit] = 192M"; \
     } > /usr/local/etc/php-fpm.d/zz-prod-pool.conf
-# Memory model (worst case fits the cgroup): 2 children × 192M request limit
-# + 192M opcache shm + ~30M master ≈ 606M < the 640m container cap
+# Memory model (worst case fits the cgroup): 4 children × 192M request limit
+# + 192M opcache shm + ~30M master ≈ 990M < the 1g container cap
 # (docker-compose.prod.yml) — a heavy request dies with a clean PHP memory
-# error; the OOM-killer never takes down the FPM master.
+# error, the OOM-killer never takes the FPM master, and 4 children keep two
+# slow 60s requests from freezing the whole API.
 
 # .dockerignore keeps var/, vendor/, config/jwt and every *.local env file out
 # of the build context — only committed code and safe env defaults get in.
@@ -104,9 +109,21 @@ WORKDIR /app/backend
 
 ENV APP_ENV=prod
 # --no-scripts: flex auto-scripts (cache:clear) would need runtime env/DB.
-# Warmup is best-effort — Symfony rebuilds whatever is missing at first boot.
-RUN composer install --no-dev --classmap-authoritative --no-interaction --no-progress --no-scripts \
-    && php bin/console assets:install public --env=prod --no-interaction || true
+# Both steps are STRICT (no fail-open): a failed composer install must never
+# ship a vendor-less image, and a failed assets:install would silently strip
+# public/bundles from the nginx-prod stage below.
+RUN composer install --no-dev --classmap-authoritative --no-interaction --no-progress --no-scripts
+# assets:install just copies bundle assets but boots the kernel, and
+# ProdSecretGuard rightly refuses every committed dev secret in prod (its 5
+# GUARDED_KEYS). Throwaway build-time values satisfy it; they protect nothing
+# (assets:install produces no state, opens no connection) and the real secrets
+# come from the runtime env at deploy.
+RUN APP_SECRET=build-throwaway \
+    JWT_PASSPHRASE=build-throwaway \
+    MERCURE_JWT_SECRET=build-throwaway \
+    DATABASE_URL=postgresql://build:build@build:5432/build?serverVersion=16 \
+    DATABASE_ADMIN_URL=postgresql://build:build@build:5432/build?serverVersion=16 \
+    php bin/console assets:install public --env=prod --no-interaction
 
 # Runtime-written dirs (volumes mount over most of them in the prod compose):
 # var/backups (dumps), var/storage/logos, public/exports (pdf-worker), var
