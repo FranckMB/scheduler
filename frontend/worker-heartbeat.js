@@ -18,13 +18,25 @@ export const HEARTBEAT_INTERVAL_MS = 30000;
 // atteignable (sinon elle expire pile à maxAge → on saute up→unknown, cf. revue).
 export const HEARTBEAT_TTL_S = 120;
 
-/** redis://host:port(/db) → {host, port}. Repli sur le service compose. */
+/**
+ * redis://[user][:pass]@host:port(/db) → {host, port, username, password, db}.
+ * Le probe PHP applique AUTH + SELECT depuis la MÊME URL : il faut donc les propager,
+ * sinon writer (Node) et reader (PHP) tapent des contextes Redis différents dès qu'il y a
+ * un mot de passe ou une DB ≠ 0 (prod managée) → pdf-worker faussement « Inconnu ».
+ */
 export function parseRedisUrl(url) {
   try {
     const u = new URL(url);
-    return { host: u.hostname || 'redis', port: Number(u.port) || 6379 };
+    const db = u.pathname.replace(/^\//, '');
+    return {
+      host: u.hostname || 'redis',
+      port: Number(u.port) || 6379,
+      username: u.username ? decodeURIComponent(u.username) : '',
+      password: u.password ? decodeURIComponent(u.password) : '',
+      db: /^\d+$/.test(db) ? Number(db) : 0,
+    };
   } catch {
-    return { host: 'redis', port: 6379 };
+    return { host: 'redis', port: 6379, username: '', password: '', db: 0 };
   }
 }
 
@@ -43,19 +55,41 @@ export function encodeRespCommand(args) {
  * UNIX en SECONDES (le probe backend fait `time() - valeur` en secondes ; envoyer des ms
  * fausserait l'âge). Résout toujours (true = ack Redis, false = échec) — jamais de rejet.
  */
-export function writeHeartbeat({ host, port }, nowSeconds = Math.floor(Date.now() / 1000)) {
+export function writeHeartbeat({ host, port, username = '', password = '', db = 0 }, nowSeconds = Math.floor(Date.now() / 1000)) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
     const done = (ok) => {
       socket.destroy();
       resolve(ok);
     };
+    // Pipeline AUTH? + SELECT? + SET, dans le MÊME ordre que le probe PHP. Succès = autant de
+    // +OK que de commandes envoyées, aucune erreur (-). Réponses RESP dans l'ordre d'envoi.
+    const commands = [];
+    if (password) {
+      commands.push(username ? ['AUTH', username, password] : ['AUTH', password]);
+    }
+    if (db > 0) {
+      commands.push(['SELECT', String(db)]);
+    }
+    commands.push(['SET', HEARTBEAT_KEY, String(nowSeconds), 'EX', String(HEARTBEAT_TTL_S)]);
+
+    let buffer = '';
     socket.setTimeout(2000, () => done(false));
     socket.on('error', () => done(false));
     socket.on('connect', () => {
-      socket.write(encodeRespCommand(['SET', HEARTBEAT_KEY, String(nowSeconds), 'EX', String(HEARTBEAT_TTL_S)]));
+      socket.write(commands.map(encodeRespCommand).join(''));
     });
-    socket.on('data', (chunk) => done(chunk.toString().startsWith('+OK')));
+    socket.on('data', (chunk) => {
+      buffer += chunk.toString();
+      if (buffer.includes('-')) {
+        done(false); // -ERR / -NOAUTH quelque part → échec
+        return;
+      }
+      // Toutes les commandes ont répondu +OK (une ligne \r\n par réponse).
+      if ((buffer.match(/\+OK\r\n/g) || []).length >= commands.length) {
+        done(true);
+      }
+    });
   });
 }
 

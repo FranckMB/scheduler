@@ -73,6 +73,9 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
         $body = $this->responseBody();
         self::assertArrayHasKey('items', $body);
         self::assertCount(1, $body['items']);
+        // total DOIT refléter le rendu (pas de page fantôme) — revue #296 round 2.
+        self::assertSame(1, $body['pagination']['total']);
+        self::assertSame(1, $body['pagination']['pages']);
 
         $item = $body['items'][0];
         self::assertArrayHasKey('id', $item);

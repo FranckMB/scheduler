@@ -16,6 +16,7 @@ use Symfony\Component\Messenger\Stamp\ErrorDetailsStamp;
 use Symfony\Component\Messenger\Stamp\RedeliveryStamp;
 use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 use Symfony\Component\Messenger\Transport\Receiver\ListableReceiverInterface;
+use Symfony\Component\Messenger\Transport\Receiver\MessageCountAwareInterface;
 use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\TransportInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -64,23 +65,29 @@ final readonly class AdminMessengerFailedController
     {
         \assert($this->failedTransport instanceof ListableReceiverInterface);
 
+        // Total via getMessageCount (pas de désérialisation du backlog entier) quand le
+        // transport le sait ; sinon repli sur un comptage. extractItem ne DROPant plus rien,
+        // items sur toutes les pages == total → pas de page fantôme.
+        $total = $this->failedTransport instanceof MessageCountAwareInterface
+            ? $this->failedTransport->getMessageCount()
+            : iterator_count((function (): iterable {
+                yield from $this->failedTransport->all();
+            })());
+
         $offset = ($page - 1) * $limit;
         $items = [];
         $index = 0;
-
-        // Le transport « failed » est normalement minuscule (idéalement vide) : on l'itère en
-        // entier pour connaître le total (pagination), en ne matérialisant que la page demandée.
         foreach ($this->failedTransport->all() as $envelope) {
-            if ($index >= $offset && \count($items) < $limit) {
-                $item = $this->extractItem($envelope);
-                if (null !== $item) {
-                    $items[] = $item;
-                }
+            if ($index >= $offset) {
+                $items[] = $this->extractItem($envelope);
             }
             ++$index;
+            if (\count($items) >= $limit) {
+                break; // page remplie — on ne matérialise que la fenêtre demandée.
+            }
         }
 
-        return ['items' => $items, 'total' => $index];
+        return ['items' => $items, 'total' => $total];
     }
 
     /** @return array{items: list<array<string, mixed>>, total: int} */
@@ -199,7 +206,8 @@ final readonly class AdminMessengerFailedController
     }
 
     /** @return array<string, mixed>|null */
-    private function extractItem(Envelope $envelope, ?string $fallbackId = null): ?array
+    /** @return array<string, mixed> */
+    private function extractItem(Envelope $envelope, ?string $fallbackId = null): array
     {
         /** @var TransportMessageIdStamp|null $idStamp */
         $idStamp = $envelope->last(TransportMessageIdStamp::class);
@@ -209,17 +217,16 @@ final readonly class AdminMessengerFailedController
         $errorStamp = $envelope->last(ErrorDetailsStamp::class);
 
         $message = $envelope->getMessage();
-        if ($message instanceof __PHP_Incomplete_Class) {
-            return null;
-        }
-
+        // Message dont la classe n'existe plus dans le code (__PHP_Incomplete_Class) : on ne
+        // le DROP pas — sinon items < total et une page fantôme apparaît (revue #296 round 2).
+        // On le rend avec un libellé de classe neutre ; les stamps d'erreur restent lisibles.
         $failedAt = null !== $redeliveryStamp
             ? $redeliveryStamp->getRedeliveredAt()->format(DateTimeInterface::ATOM)
             : null;
 
         return [
             'id' => $idStamp?->getId() ?? $fallbackId ?? 'unknown',
-            'class' => $message::class,
+            'class' => $message instanceof __PHP_Incomplete_Class ? '(classe inconnue)' : $message::class,
             'failedAt' => $failedAt,
             'lastErrorMessage' => $errorStamp?->getExceptionMessage() ?? '',
         ];
