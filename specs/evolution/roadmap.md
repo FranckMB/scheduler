@@ -267,7 +267,7 @@ Polish frontend discuté, non structurant mais confort d'usage.
 
 ### P0 — Bloquants GA & intégrité (à solder AVANT de vendre)
 
-**Tous soldés** (P0-1 RGPD 2026-07-11, P0-3/P0-4 2026-07-18, P0-2 config prod 2026-07-25 — cf. §Livrés). Reste le pipeline de déploiement une-commande (ghcr.io + runbook), cadré à la suite de P0-2 — PR « deploy » à venir.
+**Tous soldés** (P0-1 RGPD 2026-07-11, P0-3/P0-4 2026-07-18, P0-2 config prod + pipeline de déploiement 2026-07-25/26 — cf. §Livrés).
 
 ### P1 — Enablers à fort levier
 
@@ -388,6 +388,7 @@ TODOs PREFERRED TIME) — tous résolus le 2026-07-01.
 
 | Date | Id | Sujet | Documenté dans |
 |------|----|-------|----------------|
+| 2026-07-26 | P0-2 (suite) — deploy | **Déploiement une commande** : workflow `deploy.yml` (tag `v*` OU `make deploy`/`gh workflow run`) → build+push des 6 images prod sur **ghcr.io** (cache gha) → job SSH dormant tant que `DEPLOY_ENABLED≠true` (mergeable avant toute VM) → `scripts/remote-deploy.sh` sur la VM : pin VERSION dans `.env.prod` → `app:db:backup --force` pré-migration → pull → `up -d --wait` → migrate → sonde `/health`+`/api/health`. Rollback = redéployer le tag précédent. **Runbook fondateur pas-à-pas** (VM, Caddy TLS, ghcr, secrets, premier deploy, quotidien). | [`docs/ops/deploy.md`](../../docs/ops/deploy.md) |
 | 2026-07-25 | P0-2 + INF-03 | **Stack de production** : `docker-compose.prod.yml` autonome (images immuables ghcr.io, zéro bind-mount, un seul port publié), stage `prod` php (COPY + `--no-dev` + opcache + rclone), edge prod **sans `/engine/`**, init postgres paramétré (`02-users.sh`, plus de mot de passe en dur), `mem_limit` v3 §2.2 + rotation logs + `restart` (INF-03 fermé), `.env.prod.dist`, hook off-site opérationnel (rclone dans l'image, doc pas-à-pas). Répétition locale : 10/10 healthy, génération COMPLETED, hook exécuté. CI build les targets prod (anti-rot). | [`docs/ops/prod-stack.md`](../../docs/ops/prod-stack.md) · [`docs/ops/backup-restore.md`](../../docs/ops/backup-restore.md) §4bis |
 | 2026-07-25 | ALIGN-07 (audit 2026-07-19) | **Verrou HARD sur créneau divisible = comportement assumé** (pas un bug) : une réservation HARD prend le **créneau entier** même si `capacity>1` (`blocked_venue_slots`, model.py) — l'équipe épinglée est seule, décision gestionnaire ; partager = co-épingler explicitement les N équipes (picker borné à `capacity`, aucun diagnostic tant que N ≤ capacity). Aucun changement solveur ; figé par 3 NR sémantiques + mutation-testés. | [`constraint-coverage.md`](../../backend/docs/constraint-coverage.md) · [`engine-inventory.md`](../courantes/engine-inventory.md) · `engine/tests/semantic/test_hard_lock_divisible_slot.py` |
 | 2026-07-25 | P2-1 (collecte coach, #10) | **Doléances coachs C1/C2/C3** : todo-list (`CoachWish`, 2 vues) · collecte tokenisée SANS login (`CoachWishCampaign`/`CoachWishToken`, page publique `/doleances/{token}`, badge radar) · emails (envoi liens, digest quotidien 7h conditionnel, récap final, relance 1×/jour). Sécurité durcie (token en clair assumé, saison read-only calendaire, périmètre borné, anti-énumération). | [`types-de-planning.md`](../courantes/types-de-planning.md) E5 · [`plan-vacances-collecte-coach.md`](plan-vacances-collecte-coach.md) §9-10 · [`backend-inventory.md`](../courantes/backend-inventory.md) |

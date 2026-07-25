@@ -87,5 +87,13 @@ reset-install: ## Force next make start to reinstall dependencies
 services: .env ## List Docker Compose services
 	$(DOCKER_COMPOSE) config --services
 
+# Release helper — the normal path is `git tag vX.Y.Z && git push --tags`
+# (the tag push triggers .github/workflows/deploy.yml by itself). This target
+# is the manual/hotfix path: dispatch the same workflow on any commit of main.
+deploy: ## Deploy VERSION=vX.Y.Z (or current commit if omitted) via the deploy workflow
+	gh workflow run deploy.yml $(if $(VERSION),-f version=$(VERSION),)
+	@sleep 3
+	gh run watch $$(gh run list --workflow=deploy.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+
 help: ## Display this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_.-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)

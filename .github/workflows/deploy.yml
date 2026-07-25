@@ -1,0 +1,168 @@
+# Deploy — build the prod images, push them to ghcr.io, then (if the VM is
+# configured) roll the production stack to the new version over SSH.
+#
+# Two triggers, same pipeline (docs/ops/deploy.md):
+#   - push of a v* tag        → normal release   (VERSION = the tag)
+#   - workflow_dispatch       → hotfix/manual    (VERSION = input or short sha)
+#
+# The deploy job is gated on the repo variable DEPLOY_ENABLED == 'true' so the
+# whole workflow is mergeable and the image-publishing half works BEFORE any
+# VM exists; flipping the variable (plus the DEPLOY_* secrets) arms it.
+# Rollback = re-run with a previous version (images stay in the registry).
+
+name: Deploy
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deploy (existing tag, or empty = build this commit as its short sha)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: Build & push prod images
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      owner: ${{ steps.meta.outputs.owner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve version + lowercase owner
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="sha-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "Deploying version: ${VERSION}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One step per image — same targets as the CI "Build prod images" step
+      # (anti-rot pair: CI proves they build, this one publishes them).
+      - name: Build & push scheduler-php
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-php:latest
+          cache-from: type=gha,scope=php
+          cache-to: type=gha,scope=php,mode=max
+
+      - name: Build & push scheduler-nginx
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile
+          target: nginx-prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-nginx:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-nginx:latest
+          cache-from: type=gha,scope=php
+          cache-to: type=gha,scope=php,mode=max
+
+      - name: Build & push scheduler-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/frontend/Dockerfile
+          target: prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-frontend:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Build & push scheduler-postgres
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/postgres/Dockerfile.prod
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-postgres:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-postgres:latest
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,scope=postgres,mode=max
+
+      - name: Build & push scheduler-engine
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/engine/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-engine:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-engine:latest
+          cache-from: type=gha,scope=engine
+          cache-to: type=gha,scope=engine,mode=max
+
+      - name: Build & push scheduler-pdf-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/pdf-worker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-pdf-worker:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/scheduler-pdf-worker:latest
+          cache-from: type=gha,scope=pdf-worker
+          cache-to: type=gha,scope=pdf-worker,mode=max
+
+  deploy:
+    name: Roll the VM to ${{ needs.build-push.outputs.version }}
+    runs-on: ubuntu-latest
+    needs: build-push
+    # Armed the day the VM exists: repo variable DEPLOY_ENABLED='true' +
+    # secrets DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY (see docs/ops/deploy.md).
+    # Until then the job is skipped and a release only publishes images.
+    if: vars.DEPLOY_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: SSH deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/clubscheduler' }}
+          VERSION: ${{ needs.build-push.outputs.version }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' VERSION='$VERSION' bash -s" \
+            < scripts/remote-deploy.sh
