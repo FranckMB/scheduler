@@ -84,6 +84,39 @@ php bin/console app:db:restore-check     # PREUVE que le dernier dump est restau
 ⚠️ Les snapshots restent chez le MÊME fournisseur (compte compromis/suspendu = tout perdu) :
 `BACKUP_SYNC_COMMAND` vers un bucket B2/S3 indépendant est la 3e patte du « 3-2-1 ».
 
+## 4bis. Off-site — configuration pas-à-pas (prod)
+
+`rclone` est dans l'image php prod (`docker/php/Dockerfile` stage `prod`) ; le hook
+`BACKUP_SYNC_COMMAND` est exécuté par `app:db:backup` après chaque dump réussi —
+échec = warning, jamais bloquant (le dump local reste la référence).
+
+Exemple **Scaleway Object Storage** (S3-compatible), credentials par variables
+d'env (pas de fichier de conf rclone à gérer) :
+
+1. Console Scaleway → *Object Storage* → créer un bucket (ex. `clubscheduler-backups`,
+   région `fr-par`, privé).
+2. *IAM → API Keys* → créer une clé dédiée backups (droits Object Storage seulement).
+3. Dans `.env.prod` sur la VM :
+
+   ```bash
+   BACKUP_SYNC_COMMAND=rclone copyto /app/backend/var/backups :s3:clubscheduler-backups/db --s3-provider=Scaleway --s3-endpoint=s3.fr-par.scw.cloud --s3-region=fr-par
+   RCLONE_S3_ACCESS_KEY_ID=<access-key>
+   RCLONE_S3_SECRET_ACCESS_KEY=<secret-key>
+   ```
+
+4. `docker compose ... up -d php-fpm` (recharge l'env), puis preuve immédiate :
+
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.prod \
+     exec php-fpm php bin/console app:db:backup --force
+   # sortie attendue : "Dump written: ..." puis "Off-site sync done."
+   ```
+
+5. Vérifier que le dump apparaît dans le bucket, et que la ligne « Sauvegarde
+   base de données » du board fraîcheur reste verte les jours suivants
+   (l'alerte `freshness:db-backup` couvre le dump local, pas le bucket — un œil
+   humain sur le bucket 1×/mois).
+
 ## 5. Sentry — activation (le code est déjà câblé, DSN vide = inactif)
 
 1. Créer le compte sur sentry.io (free tier) + **3 projets** : `backend` (PHP), `engine`

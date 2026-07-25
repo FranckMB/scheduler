@@ -1,0 +1,7 @@
+# Backend nginx, prod — immutable image carrying backend/public (index.php +
+# static entry files), which dev gets from the ./:/app bind mount instead.
+# public/exports stays a shared volume (pdf-worker writes it at runtime).
+FROM nginx:1.27-alpine
+
+COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY backend/public /app/backend/public

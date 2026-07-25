@@ -1,0 +1,333 @@
+# ClubScheduler — PROD stack. Standalone on purpose (NOT an overlay of the dev
+# docker-compose.yml): no bind-mounted code, no dev-only services (mailpit,
+# frontend-dev, frontend-tooling), every image is self-contained and pulled
+# from ghcr.io by tag. The VM only needs this file, a filled .env.prod, the
+# JWT keypair directory, and Docker.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# `build:` sections are kept so the whole stack can be built and rehearsed
+# locally (docker compose -f docker-compose.prod.yml build); the VM never
+# builds — it pulls (deploy workflow, docs/ops/deploy.md).
+#
+# RAM limits per service come from specs/initiales/ClubScheduler_v3.md §2.2
+# (INF-03). Log rotation: json-file 10m × 3 per service (x-logging).
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env.prod}/scheduler-frontend:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      target: prod
+    container_name: clubscheduler-frontend
+    # Only published port of the whole stack — bound to localhost, the host
+    # reverse-proxy (Caddy, TLS) is the actual internet-facing edge.
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      nginx:
+        condition: service_healthy
+      mercure:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 64m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  php-fpm:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-php:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: prod
+    container_name: clubscheduler-php-fpm
+    working_dir: /app/backend
+    env_file:
+      - ./.env.prod
+    environment:
+      APP_ENV: prod
+      MERCURE_PUBLIC_URL: "${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env.prod}/.well-known/mercure"
+    volumes:
+      # JWT keypair generated ON the VM at first install (runbook) — never in the image.
+      - ./jwt:/app/backend/config/jwt:ro
+      - backups:/app/backend/var/backups
+      - logo_storage:/app/backend/var/storage
+      - exports:/app/backend/public/exports
+    expose:
+      - "9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mercure:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  nginx:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-nginx:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile.prod
+    container_name: clubscheduler-nginx
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+    volumes:
+      # pdf-worker writes exports at runtime; nginx serves them (/exports/).
+      - exports:/app/backend/public/exports:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  postgres:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-postgres:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile.prod
+    container_name: clubscheduler-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      # Consumed once by the 02-users.sh init script (first cluster init only).
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?}
+      MIGRATION_USER_PASSWORD: ${MIGRATION_USER_PASSWORD:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 512m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: clubscheduler-redis
+    # AOF + a named volume: the Messenger queue and rate-limiter state survive
+    # a container restart (dev deliberately has no redis volume — prod must).
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 256m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  messenger-worker:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-php:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: prod
+    container_name: clubscheduler-messenger-worker
+    working_dir: /app/backend
+    env_file:
+      - ./.env.prod
+    environment:
+      APP_ENV: prod
+    volumes:
+      - ./jwt:/app/backend/config/jwt:ro
+      - backups:/app/backend/var/backups
+      - logo_storage:/app/backend/var/storage
+      - exports:/app/backend/public/exports
+    command: >-
+      php bin/console messenger:consume async --time-limit=3600 --memory-limit=256M --no-interaction
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"messenger:consume\") === false ? 1 : 0);'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 256m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  # Minute scheduler tick (app:jobs:run-due, Europe/Paris cadences — SA3-C).
+  cron-runner:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-php:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: prod
+    container_name: clubscheduler-cron-runner
+    working_dir: /app/backend
+    env_file:
+      - ./.env.prod
+    environment:
+      APP_ENV: prod
+    volumes:
+      - ./jwt:/app/backend/config/jwt:ro
+      - backups:/app/backend/var/backups
+      - logo_storage:/app/backend/var/storage
+    command: >-
+      sh -lc 'while true; do
+        php bin/console app:jobs:run-due --no-interaction || true;
+        sleep 60;
+      done'
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"sleep 60\") === false ? 1 : 0);'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 256m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  engine:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-engine:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/engine/Dockerfile
+    container_name: clubscheduler-engine
+    working_dir: /app/engine
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ENGINE_ENVIRONMENT: prod
+      ENGINE_SENTRY_DSN: ${ENGINE_SENTRY_DSN:-}
+    # NO published port: the engine is only reachable from the backend on the
+    # internal network (and the prod edge conf has no /engine/ proxy).
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/').read()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  pdf-worker:
+    image: ghcr.io/${GHCR_OWNER:?}/scheduler-pdf-worker:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: docker/pdf-worker/Dockerfile
+    container_name: clubscheduler-pdf-worker
+    working_dir: /app/frontend
+    # Same uid as the php image's www-data (usermod'ed to 1000 at build): both
+    # write/read the shared exports volume without a chown dance.
+    user: "1000:1000"
+    volumes:
+      - exports:/app/backend/public/exports
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      # Chrome needs a writable $HOME (crashpad/profile) for an arbitrary uid,
+      # while the browser binary stays in the image's puppeteer cache.
+      HOME: /tmp
+      PUPPETEER_CACHE_DIR: /home/pptruser/.cache/puppeteer
+    command: ["node", "worker.js"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -fa 'node worker.js' >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+  mercure:
+    image: dunglas/mercure:latest
+    container_name: clubscheduler-mercure
+    environment:
+      SERVER_NAME: ":80"
+      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET:?}
+      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_JWT_SECRET:?}
+      # Browser subscribers connect through the frontend proxy on the public
+      # origin — that origin is the only one allowed (no dev localhost list).
+      MERCURE_EXTRA_DIRECTIVES: |
+        cors_origins ${PUBLIC_BASE_URL:?}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 128m
+    restart: unless-stopped
+    <<: *logging
+    networks:
+      - clubscheduler_network
+
+networks:
+  clubscheduler_network:
+    name: clubscheduler_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backups:
+  logo_storage:
+  exports:

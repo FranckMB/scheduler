@@ -379,3 +379,14 @@ jobs:
 
       - name: Build all images
         run: docker compose build
+
+      # Prod images (docker-compose.prod.yml) — built here so the prod stack
+      # cannot rot silently: a change that breaks the php prod stage (COPY +
+      # composer --no-dev), the prod edge conf or the postgres init image reds
+      # this job even though no dev build uses those targets.
+      - name: Build prod images
+        run: |
+          docker build --target prod -f docker/php/Dockerfile .
+          docker build --target prod -f docker/frontend/Dockerfile .
+          docker build -f docker/nginx/Dockerfile.prod .
+          docker build -f docker/postgres/Dockerfile.prod .

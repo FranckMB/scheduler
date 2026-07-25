@@ -1,6 +1,20 @@
--- ClubScheduler database users
--- Created after 01-rls.sql so the app_security schema already exists.
+#!/bin/bash
+# ClubScheduler database users — runs after 01-rls.sql (app_security exists).
+#
+# Shell wrapper (was 02-users.sql) so the passwords come from the environment:
+# dev compose sets nothing and gets the historical dev defaults; prod compose
+# passes APP_USER_PASSWORD / MIGRATION_USER_PASSWORD from .env.prod so no
+# hard-coded credential ever reaches a production cluster. Runs ONCE, on first
+# cluster init only (docker-entrypoint-initdb.d contract).
+set -euo pipefail
 
+APP_USER_PASSWORD="${APP_USER_PASSWORD:-app_user_password}"
+MIGRATION_USER_PASSWORD="${MIGRATION_USER_PASSWORD:-migration_user_password}"
+
+psql -v ON_ERROR_STOP=1 \
+     -v app_user_password="$APP_USER_PASSWORD" \
+     -v migration_user_password="$MIGRATION_USER_PASSWORD" \
+     --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'EOSQL'
 -- =============================================================================
 -- 1. APPLICATION USER (app_user)
 -- =============================================================================
@@ -8,7 +22,7 @@
 -- NO DDL privileges, NO SUPERUSER.
 -- Can only read/write data in the public schema.
 
-CREATE USER app_user WITH PASSWORD 'app_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE USER app_user WITH PASSWORD :'app_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
 
 -- Grant usage on the public schema
 GRANT USAGE ON SCHEMA public TO app_user;
@@ -29,7 +43,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO app_user;
 -- Used by Doctrine Migrations / Symfony console only during deploy/migrate.
 -- Needs DDL privileges to create/alter/drop tables, but NOT SUPERUSER.
 
-CREATE USER migration_user WITH PASSWORD 'migration_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE USER migration_user WITH PASSWORD :'migration_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
 
 -- Full access to public schema for DDL operations
 GRANT ALL PRIVILEGES ON SCHEMA public TO migration_user;
@@ -62,3 +76,4 @@ COMMENT ON FUNCTION app_security.set_club_id(uuid) IS
 
 GRANT EXECUTE ON FUNCTION app_security.set_club_id(uuid) TO app_user;
 GRANT EXECUTE ON FUNCTION app_security.set_club_id(uuid) TO migration_user;
+EOSQL
