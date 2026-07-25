@@ -31,3 +31,21 @@ export function useUpdateCoachWishCampaign() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["coach-wish-campaigns"] }),
   });
 }
+
+/** C3 — envoi des liens par email (global sans coachIds, ciblé avec). */
+export function useSendCampaignLinks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, coachIds }: { id: string; coachIds?: string[] }) => campaignApi.sendCampaignLinks(id, coachIds),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["coach-wish-campaigns"] }),
+  });
+}
+
+/** C3 — relance des silencieux (bloquée le reste de la journée après un clic). */
+export function useRemindCampaignSilent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => campaignApi.remindCampaignSilent(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["coach-wish-campaigns"] }),
+  });
+}

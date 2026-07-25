@@ -39,6 +39,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:purge-orphans` | Nettoie les orphelins logiques pré-cascade (réservations orphelines, liens pendants) — manuel |
 | `app:users:purge-unverified` | Supprime les comptes non vérifiés > 7 j — **auto, quotidien à 02:00** |
 | `app:clubs:purge-erased` | RGPD : purge le workspace des clubs dont le délai de grâce d'effacement (30 j) est échu — l'identité publique FFBB survit — **auto, quotidien à 02:15** |
+| `app:coach-wishes:digest` | Digest quotidien des doléances (#10 C3) aux gestionnaires : email **seulement si nouvelle réponse depuis la veille** (silence = rien) + récap **une fois** le lendemain de la deadline, quel que soit l'état — **auto, quotidien à 07:00** ; `--dry-run` / `--date` |
 | `app:periods:remind` | Emails J-14/J-7/J-3 aux gestionnaires : période sans plan overlay — n'agit jamais seul — **auto, quotidien à 08:00** |
 | `app:seasons:remind-transition` | Emails J-61/J-30/J-14 avant le pivot du 15 juillet : saison N+1 non préparée — **auto, quotidien à 08:00** |
 | `app:public-holidays:seed` / `app:public-holidays:import` | Jours fériés : seed offline (JSON embarqué) / import API etalab — idempotents ; import **auto trimestriel (1er janv./avr./juil./oct. à 04:30)** |

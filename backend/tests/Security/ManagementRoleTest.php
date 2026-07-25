@@ -84,6 +84,9 @@ final class ManagementRoleTest extends WebTestCase
             // #10 C2 — la campagne de collecte est management-only (SEC-07), même patron : le
             // guard tire AVANT tout lookup, un corps valide-en-forme atteint le processor.
             ['POST', '/api/coach_wish_campaigns', '{"calendarEntryId":"11111111-1111-4111-8111-111111111111","deadline":"2027-06-30","weeks":["2026-02-16"],"teamIds":["11111111-1111-4111-8111-111111111111"]}'],
+            // #10 C3 — actions d'envoi : assertManager() tire AVANT le lookup → un id bidon suffit.
+            ['POST', '/api/coach_wish_campaigns/' . self::DUMMY_ID . '/send-links', '{}'],
+            ['POST', '/api/coach_wish_campaigns/' . self::DUMMY_ID . '/remind', '{}'],
         ];
     }
 

@@ -33,6 +33,7 @@ const campaign = (over: Partial<CoachWishCampaign> = {}): CoachWishCampaign => (
   totalCoachCount: 3,
   respondedCoachCount: 2,
   openWishCount: 1,
+  lastReminderAt: null,
   coaches: [],
   ...over,
 });

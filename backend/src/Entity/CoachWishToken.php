@@ -49,6 +49,10 @@ class CoachWishToken implements TenantOwnedInterface
     #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
     private ?DateTimeImmutable $respondedAt = null;
 
+    /** Dernier envoi du lien par email (C3, décision D1 : par token) ; null = jamais envoyé. */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $sentAt = null;
+
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $createdAt;
 
@@ -102,6 +106,19 @@ class CoachWishToken implements TenantOwnedInterface
     public function setClubId(string $clubId): self
     {
         $this->clubId = $clubId;
+
+        return $this;
+    }
+
+    public function getSentAt(): ?DateTimeImmutable
+    {
+        return $this->sentAt;
+    }
+
+    /** Horodatage du DERNIER envoi du lien par email (C3) — null = jamais envoyé. */
+    public function markSent(DateTimeImmutable $at): self
+    {
+        $this->sentAt = $at;
 
         return $this;
     }

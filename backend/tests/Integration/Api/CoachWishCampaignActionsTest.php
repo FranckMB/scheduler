@@ -1,0 +1,208 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration\Api;
+
+use App\Entity\CalendarEntry;
+use App\Entity\Club;
+use App\Entity\ClubUser;
+use App\Entity\Coach;
+use App\Entity\CoachWishCampaign;
+use App\Entity\CoachWishToken;
+use App\Entity\Season;
+use App\Entity\Team;
+use App\Entity\TeamCoach;
+use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\TeamCoachRole;
+use App\Tests\TenantGucTrait;
+use DateTimeImmutable;
+use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+
+/**
+ * Actions d'envoi d'une campagne (feature #10, lot C3) : « send-links » n'envoie qu'aux
+ * coachs à email PAS ENCORE servis (D2 : pas un renvoi général) et stampe sentAt ;
+ * « remind » ne vise que les silencieux et se bloque le reste de la journée (D3).
+ * Les emails sont capturés par le profiler (transport null en test).
+ */
+#[Group('phase1')]
+final class CoachWishCampaignActionsTest extends WebTestCase
+{
+    use TenantGucTrait;
+
+    private KernelBrowser $client;
+
+    private EntityManagerInterface $em;
+
+    private Club $club;
+
+    private Season $season;
+
+    private string $jwt;
+
+    private CalendarEntry $mother;
+
+    private CoachWishCampaign $campaign;
+
+    private Coach $withEmail;
+
+    private Coach $noEmail;
+
+    private CoachWishToken $tokenWithEmail;
+
+    private CoachWishToken $tokenNoEmail;
+
+    public function testSendLinksMailsOnlyUnsentCoachesWithEmailAndStampsSentAt(): void
+    {
+        $this->client->enableProfiler();
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/send-links', [], [], $this->headers(), '{}');
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(1, $body['sent'], 'seul le coach À EMAIL est servi (l\'autre = badge « pas d\'email »)');
+
+        self::assertEmailCount(1);
+        $email = self::getMailerMessage();
+        self::assertNotNull($email);
+        self::assertEmailHeaderSame($email, 'To', 'maxime@test.com');
+        self::assertEmailTextBodyContains($email, '/doleances/' . $this->tokenWithEmail->getToken());
+
+        // sentAt stampé — visible aussi dans la ressource retournée.
+        $coaches = array_column($body['campaign']['coaches'], 'sentAt', 'coachId');
+        self::assertNotNull($coaches[$this->withEmail->getId()]);
+        self::assertNull($coaches[$this->noEmail->getId()]);
+
+        // Second clic global : personne de neuf → 0 envoi (D2, pas un renvoi général).
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/send-links', [], [], $this->headers(), '{}');
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(0, $body['sent'], 'un coach déjà servi n\'est pas re-servi par le bouton global');
+    }
+
+    public function testSendLinksTargetedResendsToTheListedCoach(): void
+    {
+        // Ajout tardif d'un email (D1) : l'envoi CIBLÉ re-sert même un coach déjà servi.
+        $this->scopeGucToClub($this->club->getId());
+        $this->tokenWithEmail->markSent(new DateTimeImmutable('-1 day'));
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/send-links', [], [], $this->headers(), json_encode([
+            'coachIds' => [$this->withEmail->getId()],
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(1, $body['sent'], 'le ciblage explicite re-sert le coach listé');
+    }
+
+    public function testRemindTargetsSilentCoachesAndBlocksASecondCallTheSameDay(): void
+    {
+        // Le coach à email a RÉPONDU → plus personne à relancer parmi les emails valides ?
+        // Non : on le laisse silencieux ici pour vérifier le ciblage, puis le verrou du jour.
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/remind', [], [], $this->headers(), '{}');
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(1, $body['sent'], 'le silencieux à email est relancé');
+        self::assertNotNull($body['campaign']['lastReminderAt']);
+
+        // Deuxième relance le MÊME jour → 422 (« c'est du harcèlement », D3).
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/remind', [], [], $this->headers(), '{}');
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testRemindSkipsCoachesWhoAlreadyResponded(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+        $this->tokenWithEmail->markResponded(new DateTimeImmutable);
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/remind', [], [], $this->headers(), '{}');
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(0, $body['sent'], 'un répondant n\'est jamais relancé');
+    }
+
+    public function testActionsAreRefusedOnAnArchivedSeason(): void
+    {
+        // Revue C3 #3 : une saison gelée est en lecture seule — send-links/remind écrivent
+        // (sentAt/lastReminderAt), elles doivent 409 comme le chemin processor.
+        $this->scopeGucToClub($this->club->getId());
+        $this->season->setStatus('archived');
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/send-links', [], [], $this->headers(), '{}');
+        self::assertResponseStatusCodeSame(409);
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/remind', [], [], $this->headers(), '{}');
+        self::assertResponseStatusCodeSame(409);
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $container = self::getContainer();
+        $this->em = $container->get(EntityManagerInterface::class);
+        $hasher = $container->get('security.user_password_hasher');
+        $uid = uniqid('', true);
+
+        $this->club = (new Club)->setName('CWA ' . $uid)->setSlug('cwa-' . $uid)->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
+        $this->em->persist($this->club);
+        $user = (new User)->setEmail('cwa' . $uid . '@test.com')->setFirstName('C')->setLastName('A');
+        $user->setPasswordHash($hasher->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+
+        $this->scopeGucToClub($this->club->getId());
+        $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
+        $this->season = (new Season)->setClubId($this->club->getId())->setName('2025-2026')
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+        $this->em->persist($this->season);
+
+        $team = (new Team)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSportCategoryId('11111111-1111-4111-8111-111111111111')->setPriorityTierId(1)->setName('SM1');
+        $this->em->persist($team);
+        $this->withEmail = (new Coach)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setFirstName('Maxime')->setLastName('Durand')->setEmail('maxime@test.com');
+        $this->noEmail = (new Coach)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setFirstName('Mara')->setLastName('Petit');
+        $this->em->persist($this->withEmail);
+        $this->em->persist($this->noEmail);
+        $this->em->flush();
+        foreach ([$this->withEmail, $this->noEmail] as $coach) {
+            $this->em->persist((new TeamCoach)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+                ->setTeamId($team->getId())->setCoachId($coach->getId())->setRole(TeamCoachRole::MAIN));
+        }
+
+        $this->mother = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Toussaint')
+            ->setStartDate(new DateTimeImmutable('2026-02-16'))->setEndDate(new DateTimeImmutable('2026-03-01'));
+        $this->em->persist($this->mother);
+
+        $this->campaign = (new CoachWishCampaign)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setCalendarEntryId($this->mother->getId())->setDeadline(new DateTimeImmutable('2027-06-30'))
+            ->setWeeks(['2026-02-16'])->setTeamIds([$team->getId()]);
+        $this->em->persist($this->campaign);
+
+        $this->tokenWithEmail = (new CoachWishToken)->setCampaignId($this->campaign->getId())->setCoachId($this->withEmail->getId())->setClubId($this->club->getId());
+        $this->tokenNoEmail = (new CoachWishToken)->setCampaignId($this->campaign->getId())->setCoachId($this->noEmail->getId())->setClubId($this->club->getId());
+        $this->em->persist($this->tokenWithEmail);
+        $this->em->persist($this->tokenNoEmail);
+        $this->em->flush();
+
+        $this->jwt = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /** @return array<string, string> */
+    private function headers(): array
+    {
+        return [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_X-Season-Id' => $this->season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt,
+            'CONTENT_TYPE' => 'application/json',
+        ];
+    }
+}

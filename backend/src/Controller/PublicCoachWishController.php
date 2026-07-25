@@ -8,13 +8,11 @@ use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
-use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Repository\CoachWishTokenRepository;
-use App\Repository\SeasonRepository;
+use App\Service\CoachWishSeasonGuard;
 use App\Service\CoachWishUpserter;
-use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -57,7 +55,7 @@ final class PublicCoachWishController extends AbstractController
         private readonly CoachWishUpserter $upserter,
         private readonly ClockInterface $clock,
         private readonly RateLimiterFactory $coachWishPublicLimiter,
-        private readonly SeasonRepository $seasonRepository,
+        private readonly CoachWishSeasonGuard $seasonGuard,
     ) {}
 
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_get', methods: ['GET'])]
@@ -80,7 +78,7 @@ final class PublicCoachWishController extends AbstractController
             if (!$campaign instanceof CoachWishCampaign) {
                 return $this->notFound();
             }
-            if ($this->isExpired($campaign) || $this->isSeasonClosed($campaign)) {
+            if ($this->isExpired($campaign) || $this->seasonGuard->isReadonly($campaign)) {
                 return $this->json(['error' => 'expired'], Response::HTTP_GONE);
             }
             $coach = $this->entityManager->getRepository(Coach::class)->find($entity['token']->getCoachId());
@@ -171,7 +169,7 @@ final class PublicCoachWishController extends AbstractController
             if (!$campaign instanceof CoachWishCampaign) {
                 return $this->notFound();
             }
-            if ($this->isExpired($campaign) || $this->isSeasonClosed($campaign)) {
+            if ($this->isExpired($campaign) || $this->seasonGuard->isReadonly($campaign)) {
                 return $this->json(['error' => 'expired'], Response::HTTP_GONE);
             }
             $coachId = $entity['token']->getCoachId();
@@ -244,33 +242,6 @@ final class PublicCoachWishController extends AbstractController
     {
         // Deadline INCLUSIVE : le jour même est encore ouvert. Comparaison date à date.
         return $this->clock->now()->format('Y-m-d') > $campaign->getDeadline()->format('Y-m-d');
-    }
-
-    /**
-     * La saison de la campagne est-elle en lecture seule ? Le chemin public n'a pas de JWT :
-     * le `TenantFilterListener` ne pose jamais `_season_readonly`, donc `SeasonAccessGuard`
-     * ne peut pas intercepter. On reproduit sa dérivation EXACTE : une saison est gelée
-     * quand elle n'est plus la saison courante du calendrier (`isReadonlyAmong`, pivot
-     * 15-juillet) — le statut `archived` n'est PAS posé au roulement, c'est un flag manuel.
-     * On ajoute donc l'archivage/clôture MANUEL. Gelée → lien traité comme expiré (410),
-     * aucune écriture dans une saison figée (invariant SeasonReadonly, blocking-tests).
-     */
-    private function isSeasonClosed(CoachWishCampaign $campaign): bool
-    {
-        $season = $this->entityManager->getRepository(Season::class)->find($campaign->getSeasonId());
-        if (null === $season) {
-            return true;
-        }
-        if (\in_array($season->getStatus(), ['archived', 'closed'], true)) {
-            return true;
-        }
-        $clubId = $campaign->getClubId();
-        if (null === $clubId) {
-            return true; // campagne sans club (impossible en pratique) → fail-closed
-        }
-        $seasons = $this->seasonRepository->findAllByClubId($clubId);
-
-        return SeasonResolver::isReadonlyAmong($season, $seasons, $this->clock->now());
     }
 
     /** La semaine (lundi→dimanche) recoupe-t-elle encore la période mère, date à date ? */

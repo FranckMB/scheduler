@@ -64,6 +64,18 @@ class CoachWishCampaign implements TenantOwnedInterface
     #[ORM\Column(type: 'json')]
     private array $teamIds = [];
 
+    /** Dernier digest 7h (C3) — le prochain ne part que si une réponse lui est postérieure. */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $lastDigestAt = null;
+
+    /** Dernière relance manuelle (C3) — une seule par jour Europe/Paris (anti-harcèlement). */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $lastReminderAt = null;
+
+    /** Récap final (C3) — envoyé UNE fois après la deadline, quel que soit l'état (D5). */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $finalRecapSentAt = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -186,6 +198,42 @@ class CoachWishCampaign implements TenantOwnedInterface
     public function setTeamIds(array $teamIds): self
     {
         $this->teamIds = $teamIds;
+
+        return $this;
+    }
+
+    public function getLastDigestAt(): ?DateTimeImmutable
+    {
+        return $this->lastDigestAt;
+    }
+
+    public function markDigestSent(DateTimeImmutable $at): self
+    {
+        $this->lastDigestAt = $at;
+
+        return $this;
+    }
+
+    public function getLastReminderAt(): ?DateTimeImmutable
+    {
+        return $this->lastReminderAt;
+    }
+
+    public function markReminderSent(DateTimeImmutable $at): self
+    {
+        $this->lastReminderAt = $at;
+
+        return $this;
+    }
+
+    public function getFinalRecapSentAt(): ?DateTimeImmutable
+    {
+        return $this->finalRecapSentAt;
+    }
+
+    public function markFinalRecapSent(DateTimeImmutable $at): self
+    {
+        $this->finalRecapSentAt = $at;
 
         return $this;
     }
