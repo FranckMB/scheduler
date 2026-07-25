@@ -149,6 +149,66 @@ final class PublicCoachWishTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
+    public function testAnArchivedSeasonClosesTheLink(): void
+    {
+        // Revue #10 C2 : le chemin public n'a pas de JWT, `SeasonAccessGuard` ne peut pas
+        // intercepter — une saison archivée (lecture seule) doit fermer le lien (410),
+        // jamais laisser écrire dans une saison gelée.
+        $this->scopeGucToClub($this->club->getId());
+        $this->season->setStatus('archived');
+        $this->em->flush();
+
+        $this->client->request('GET', '/api/coach-wishes/public/' . $this->token);
+        self::assertResponseStatusCodeSame(410);
+
+        $this->client->request('POST', '/api/coach-wishes/public/' . $this->token, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'submissions' => [['teamId' => $this->team->getId(), 'weekStart' => '2026-02-16', 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => null]],
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(410);
+
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertCount(0, $this->em->getRepository(CoachWish::class)->findBy(['teamId' => $this->team->getId()]), 'rien écrit dans une saison archivée');
+    }
+
+    public function testDuplicateTeamWeekSubmissionsMergeInsteadOf500(): void
+    {
+        // Revue #10 C2 : deux lignes du même (équipe, semaine) partageraient la clé naturelle
+        // de CoachWish (violation d'unicité → 500). On déduplique, la dernière l'emporte.
+        $this->client->request('POST', '/api/coach-wishes/public/' . $this->token, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'submissions' => [
+                ['teamId' => $this->team->getId(), 'weekStart' => '2026-02-16', 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => 'premier'],
+                ['teamId' => $this->team->getId(), 'weekStart' => '2026-02-16', 'slotsWanted' => 5, 'unavailableDays' => [], 'comment' => 'dernier'],
+            ],
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        $rows = $this->em->getRepository(CoachWish::class)->findBy(['calendarEntryId' => $this->mother->getId(), 'teamId' => $this->team->getId(), 'weekStart' => new DateTimeImmutable('2026-02-16 00:00:00')]);
+        self::assertCount(1, $rows, 'une seule ligne pour (équipe, semaine)');
+        self::assertSame(5, $rows[0]->getSlotsWanted(), 'la dernière soumission l’emporte');
+    }
+
+    public function testAWeekNoLongerIntersectingTheShrunkPeriodIsRejected(): void
+    {
+        // Revue #10 C2 : `campaign.weeks` est un instantané. Si le gestionnaire raccourcit la
+        // période après le lancement, une semaine encore listée mais hors de la fenêtre doit
+        // être refusée à l'écriture (parité avec le chemin authentifié `assertValidAnchor`).
+        $this->scopeGucToClub($this->club->getId());
+        $this->mother->setEndDate(new DateTimeImmutable('2026-02-20')); // la 2e semaine (23/02) ne recoupe plus
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/coach-wishes/public/' . $this->token, [], [], ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'submissions' => [['teamId' => $this->team->getId(), 'weekStart' => '2026-02-23', 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => null]],
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        $this->em->clear();
+        $this->scopeGucToClub($this->club->getId());
+        self::assertCount(0, $this->em->getRepository(CoachWish::class)->findBy(['weekStart' => new DateTimeImmutable('2026-02-23 00:00:00')]), 'rien écrit hors fenêtre');
+    }
+
     public function testATokenOfClubANeverWritesIntoClubB(): void
     {
         // Le token du club courant ne peut jamais faire écrire une doléance dans un AUTRE

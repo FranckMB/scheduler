@@ -8,6 +8,8 @@ use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
+use App\Entity\Season;
+use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Repository\CoachWishTokenRepository;
 use App\Service\CoachWishUpserter;
@@ -55,7 +57,11 @@ final class PublicCoachWishController extends AbstractController
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_get', methods: ['GET'])]
     public function show(string $token, Request $request): JsonResponse
     {
-        if (!$this->coachWishPublicLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
+        // Clé PAR IP. `getClientIp()` peut être null (pas de REMOTE_ADDR) → repli explicite,
+        // sinon toutes ces requêtes tomberaient dans le même compartiment. ⚠️ Derrière le
+        // reverse-proxy, `trusted_proxies` (env SYMFONY_TRUSTED_PROXIES) DOIT être configuré,
+        // sinon l'IP vue est celle de la passerelle et la fenêtre devient un compartiment global.
+        if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
             return $this->json(['error' => 'Too many attempts, please try again later'], 429);
         }
         $entity = $this->resolveToken($token);
@@ -69,7 +75,7 @@ final class PublicCoachWishController extends AbstractController
             if (!$campaign instanceof CoachWishCampaign) {
                 return $this->notFound();
             }
-            if ($this->isExpired($campaign)) {
+            if ($this->isExpired($campaign) || $this->isSeasonClosed($campaign)) {
                 return $this->json(['error' => 'expired'], Response::HTTP_GONE);
             }
             $coach = $this->entityManager->getRepository(Coach::class)->find($entity['token']->getCoachId());
@@ -79,11 +85,18 @@ final class PublicCoachWishController extends AbstractController
             $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($campaign->getCalendarEntryId());
             $teamIds = $this->perimeterTeamIds($coach->getId(), $campaign);
 
+            // Chargement groupé (une requête) plutôt qu'un find() par équipe — page publique,
+            // rate-limitée : on évite le N+1. On préserve l'ordre du périmètre.
+            $teamsById = [];
+            if ([] !== $teamIds) {
+                foreach ($this->entityManager->getRepository(Team::class)->findBy(['id' => $teamIds]) as $team) {
+                    $teamsById[$team->getId()] = $team;
+                }
+            }
             $teams = [];
             foreach ($teamIds as $teamId) {
-                $team = $this->entityManager->getRepository(\App\Entity\Team::class)->find($teamId);
-                if (null !== $team) {
-                    $teams[] = ['id' => $teamId, 'name' => $team->getName()];
+                if (isset($teamsById[$teamId])) {
+                    $teams[] = ['id' => $teamId, 'name' => $teamsById[$teamId]->getName()];
                 }
             }
 
@@ -123,7 +136,11 @@ final class PublicCoachWishController extends AbstractController
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_post', methods: ['POST'])]
     public function submit(string $token, Request $request): JsonResponse
     {
-        if (!$this->coachWishPublicLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
+        // Clé PAR IP. `getClientIp()` peut être null (pas de REMOTE_ADDR) → repli explicite,
+        // sinon toutes ces requêtes tomberaient dans le même compartiment. ⚠️ Derrière le
+        // reverse-proxy, `trusted_proxies` (env SYMFONY_TRUSTED_PROXIES) DOIT être configuré,
+        // sinon l'IP vue est celle de la passerelle et la fenêtre devient un compartiment global.
+        if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
             return $this->json(['error' => 'Too many attempts, please try again later'], 429);
         }
         $entity = $this->resolveToken($token);
@@ -143,13 +160,20 @@ final class PublicCoachWishController extends AbstractController
             if (!$campaign instanceof CoachWishCampaign) {
                 return $this->notFound();
             }
-            if ($this->isExpired($campaign)) {
+            if ($this->isExpired($campaign) || $this->isSeasonClosed($campaign)) {
                 return $this->json(['error' => 'expired'], Response::HTTP_GONE);
             }
             $coachId = $entity['token']->getCoachId();
             $perimeter = array_flip($this->perimeterTeamIds($coachId, $campaign));
+            // La semaine doit encore recouper la période mère À L'ÉCRITURE (parité avec le
+            // chemin authentifié) : `campaign.weeks` est un instantané non re-purgé si le
+            // gestionnaire raccourcit la période après le lancement.
+            $entry = $this->entityManager->getRepository(CalendarEntry::class)->find($campaign->getCalendarEntryId());
 
             // Validation COMPLÈTE avant toute écriture : une violation → 422, rien d'écrit.
+            // Clé par (équipe, semaine) : deux lignes du même couple partageraient la clé
+            // naturelle de CoachWish (violation d'unicité au flush → 500). On déduplique, la
+            // dernière l'emporte (idempotent, cohérent avec « écrase »).
             $clean = [];
             foreach ($submissions as $item) {
                 $teamId = \is_array($item) && \is_string($item['teamId'] ?? null) ? $item['teamId'] : '';
@@ -157,7 +181,7 @@ final class PublicCoachWishController extends AbstractController
                 if (!isset($perimeter[$teamId])) {
                     return $this->json(['error' => 'Équipe hors de votre périmètre.'], Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
-                if (!\in_array($weekStart, $campaign->getWeeks(), true)) {
+                if (!\in_array($weekStart, $campaign->getWeeks(), true) || !$this->weekIntersectsPeriod($weekStart, $entry)) {
                     return $this->json(['error' => 'Semaine hors de la collecte.'], Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
                 $slots = \is_array($item) ? (int) ($item['slotsWanted'] ?? 0) : 0;
@@ -173,7 +197,7 @@ final class PublicCoachWishController extends AbstractController
                     $days[] = $d;
                 }
                 $comment = \is_array($item) && \is_string($item['comment'] ?? null) ? mb_substr($item['comment'], 0, 2000) : null;
-                $clean[] = ['teamId' => $teamId, 'weekStart' => $weekStart, 'slots' => $slots, 'days' => array_values(array_unique($days)), 'comment' => $comment];
+                $clean[$teamId . '|' . $weekStart] = ['teamId' => $teamId, 'weekStart' => $weekStart, 'slots' => $slots, 'days' => array_values(array_unique($days)), 'comment' => $comment];
             }
 
             $this->entityManager->wrapInTransaction(function () use ($clean, $campaign, $coachId, $entity): void {
@@ -209,6 +233,31 @@ final class PublicCoachWishController extends AbstractController
     {
         // Deadline INCLUSIVE : le jour même est encore ouvert. Comparaison date à date.
         return $this->clock->now()->format('Y-m-d') > $campaign->getDeadline()->format('Y-m-d');
+    }
+
+    /**
+     * La saison de la campagne est-elle close (archivée) ? Le chemin public n'a pas de JWT :
+     * le listener ne pose jamais `_season_readonly`, donc `SeasonAccessGuard` ne peut pas
+     * intercepter. On lit le statut directement — une saison archivée est en lecture seule
+     * (invariant SeasonReadonly) : le lien est traité comme expiré (410), aucune écriture.
+     */
+    private function isSeasonClosed(CoachWishCampaign $campaign): bool
+    {
+        $season = $this->entityManager->getRepository(Season::class)->find($campaign->getSeasonId());
+
+        return null === $season || \in_array($season->getStatus(), ['archived', 'closed'], true);
+    }
+
+    /** La semaine (lundi→dimanche) recoupe-t-elle encore la période mère, date à date ? */
+    private function weekIntersectsPeriod(string $weekStart, ?CalendarEntry $entry): bool
+    {
+        if (!$entry instanceof CalendarEntry) {
+            return false;
+        }
+        $monday = new DateTimeImmutable($weekStart . ' 00:00:00');
+        $sunday = $monday->modify('+6 days');
+
+        return $monday <= $entry->getEndDate() && $sunday >= $entry->getStartDate();
     }
 
     /**

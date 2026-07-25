@@ -9,6 +9,7 @@ use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\CoachWishCampaignResource;
 use App\Entity\CoachWishCampaign;
 use App\Service\CoachWishCampaignPresenter;
+use App\Service\ManagementAccessGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -23,8 +24,24 @@ class CoachWishCampaignStateProvider extends AbstractStateProvider
         RequestStack $requestStack,
         Pagination $pagination,
         private readonly CoachWishCampaignPresenter $presenter,
+        private readonly ManagementAccessGuard $managementAccessGuard,
     ) {
         parent::__construct($entityManager, $requestStack, $pagination);
+    }
+
+    /**
+     * La ressource expose `coaches[].token` — le SECRET du lien public de chaque coach. La
+     * LECTURE est donc management-only (SEC-07), au même titre que l'écriture : sans cette
+     * garde, tout membre authentifié lirait les tokens et pourrait usurper les réponses.
+     *
+     * @param array<string, mixed> $uriVariables
+     * @param array<string, mixed> $context
+     */
+    public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
+    {
+        $this->managementAccessGuard->assertManager();
+
+        return parent::provide($operation, $uriVariables, $context);
     }
 
     protected function getEntityClass(): string

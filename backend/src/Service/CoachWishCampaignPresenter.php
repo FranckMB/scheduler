@@ -51,6 +51,15 @@ final class CoachWishCampaignPresenter
             $tokenByCoach[$token->getCoachId()] = $token;
         }
 
+        // Chargement groupé des coachs du périmètre (une requête) — évite un find() par coach
+        // (N+1 amplifié par le provider de collection qui projette toutes les campagnes).
+        $coachById = [];
+        if ([] !== $perimeterCoachIds) {
+            foreach ($this->entityManager->getRepository(Coach::class)->findBy(['id' => array_keys($perimeterCoachIds)]) as $coach) {
+                $coachById[$coach->getId()] = $coach;
+            }
+        }
+
         $coaches = [];
         $responded = 0;
         foreach (array_keys($perimeterCoachIds) as $coachId) {
@@ -58,7 +67,7 @@ final class CoachWishCampaignPresenter
             if (null === $token) {
                 continue; // token pas encore synchronisé (transitoire) — sans lien, on n'affiche rien
             }
-            $coach = $this->entityManager->getRepository(Coach::class)->find($coachId);
+            $coach = $coachById[$coachId] ?? null;
             if (!$coach instanceof Coach) {
                 continue;
             }
@@ -79,8 +88,12 @@ final class CoachWishCampaignPresenter
         $dto->coaches = $coaches;
         $dto->totalCoachCount = \count($coaches);
         $dto->respondedCoachCount = $responded;
-        $dto->openWishCount = (int) $this->entityManager->getRepository(CoachWish::class)
-            ->count(['calendarEntryId' => $campaign->getCalendarEntryId(), 'done' => false]);
+        // « À traiter » de CETTE campagne : les doléances non traitées de ses ÉQUIPES, pas de
+        // toute la période (une saisie « au nom de » sur une équipe hors campagne ne compte pas).
+        $dto->openWishCount = [] === $campaign->getTeamIds()
+            ? 0
+            : (int) $this->entityManager->getRepository(CoachWish::class)
+                ->count(['calendarEntryId' => $campaign->getCalendarEntryId(), 'teamId' => $campaign->getTeamIds(), 'done' => false]);
 
         return $dto;
     }

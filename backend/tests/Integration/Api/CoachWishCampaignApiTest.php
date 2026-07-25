@@ -185,6 +185,35 @@ final class CoachWishCampaignApiTest extends WebTestCase
         self::assertCount(0, $this->em->getRepository(CoachWishToken::class)->findBy(['campaignId' => $created['id']]));
     }
 
+    public function testNonManagementMemberCannotReadCampaignsAndTheirTokens(): void
+    {
+        // Revue #10 C2 : la ressource expose coaches[].token (secret du lien public). La
+        // LECTURE est management-only — sinon un simple membre lirait les tokens et usurperait.
+        $this->post($this->payload(['teamIds' => [$this->teamA->getId()]]));
+        self::assertResponseStatusCodeSame(201);
+
+        $jwt = $this->memberJwt('editor'); // rôle non-management
+        $this->client->request('GET', '/api/coach_wish_campaigns', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_X-Season-Id' => $this->season->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $jwt,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    public function testOpenWishCountIsScopedToTheCampaignTeams(): void
+    {
+        // Revue #10 C2 : « N à traiter » ne compte QUE les équipes de la campagne — une saisie
+        // « au nom de » sur une équipe hors campagne ne doit pas gonfler le badge.
+        $this->seedWish($this->teamA->getId(), '2026-02-16', false); // dans la campagne
+        $this->seedWish($this->teamB->getId(), '2026-02-16', false); // HORS campagne (teamA seule)
+
+        $body = $this->post($this->payload(['teamIds' => [$this->teamA->getId()]]));
+        self::assertResponseStatusCodeSame(201);
+        self::assertSame(1, $body['openWishCount'], 'seule la doléance d’une équipe de la campagne compte');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -226,6 +255,22 @@ final class CoachWishCampaignApiTest extends WebTestCase
         $this->em->flush();
 
         $this->jwt = $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    private function memberJwt(string $role): string
+    {
+        $container = self::getContainer();
+        $hasher = $container->get('security.user_password_hasher');
+        $uid = uniqid('', true);
+        $user = (new User)->setEmail('m' . $uid . '@test.com')->setFirstName('M')->setLastName('R');
+        $user->setPasswordHash($hasher->hashPassword($user, 'Password123!'));
+        $this->em->persist($user);
+        $this->em->flush();
+        $this->scopeGucToClub($this->club->getId());
+        $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole($role)->setIsActive(true));
+        $this->em->flush();
+
+        return $container->get(JWTTokenManagerInterface::class)->create($user);
     }
 
     private function newTeam(string $name): Team
