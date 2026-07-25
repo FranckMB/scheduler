@@ -147,18 +147,66 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   );
 }
 
-/** Le lastReminderAt (ISO) est-il du même jour calendaire que maintenant ? */
-const isSameDay = (iso: string | null): boolean => null !== iso && new Date(iso).toDateString() === new Date().toDateString();
+/** Jour calendaire Europe/Paris d'une date (YYYY-MM-DD) — le back throttle sur CE fuseau. */
+const parisDay = (d: Date): string => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+
+/** lastReminderAt (ISO) est-il le MÊME jour Europe/Paris que maintenant ? (parité back, D3). */
+const isSameParisDay = (iso: string | null): boolean => null !== iso && parisDay(new Date(iso)) === parisDay(new Date());
+
+type CoachStatus = "responded" | "pending" | "no-email";
+
+/** Statut mutuellement exclusif d'un coach (D2) : répondu / en attente (joignable) / pas d'email. */
+const coachStatus = (c: CampaignCoach): CoachStatus => (null === c.email || "" === c.email ? "no-email" : null !== c.respondedAt ? "responded" : "pending");
+
+const STATUS_LABELS: { key: CoachStatus; label: string }[] = [
+  { key: "responded", label: "Répondu" },
+  { key: "pending", label: "En attente" },
+  { key: "no-email", label: "Pas d'email" },
+];
 
 function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign: CoachWishCampaign; onEmailSaved: (coachId: string, email: string) => void; onCampaignRefreshed: (c: CoachWishCampaign) => void }) {
   const sendLinks = useSendCampaignLinks();
   const remind = useRemindCampaignSilent();
+  const teamsQuery = useWizardTeams();
+  const teamCoachesQuery = useWizardTeamCoaches();
+
+  // Filtres (D1/D2/D3) : par ÉQUIPE (celles de la campagne) et par STATUT, additifs dans
+  // chaque axe, combinés en ET entre axes. N'affectent QUE la liste, jamais les boutons (D4).
+  const [teamFilter, setTeamFilter] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<Set<CoachStatus>>(new Set());
+
+  // Équipes de la campagne (id + nom) pour les boutons de filtre.
+  const campaignTeamIds = new Set(campaign.teamIds);
+  const campaignTeams = (teamsQuery.data ?? []).filter((t) => campaignTeamIds.has(t.id));
+  // coachId → équipes de la campagne qu'il coache (D1 : TeamCoach ∩ teamIds campagne).
+  const coachTeams = new Map<string, Set<string>>();
+  for (const tc of teamCoachesQuery.data ?? []) {
+    if (campaignTeamIds.has(tc.teamId)) {
+      coachTeams.set(tc.coachId, (coachTeams.get(tc.coachId) ?? new Set()).add(tc.teamId));
+    }
+  }
+
+  const toggle = <T,>(set: Set<T>, value: T, apply: (n: Set<T>) => void) => {
+    const next = new Set(set);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    apply(next);
+  };
+
+  const visibleCoaches = campaign.coaches.filter((c) => {
+    const okTeam = 0 === teamFilter.size || [...(coachTeams.get(c.coachId) ?? new Set<string>())].some((t) => teamFilter.has(t));
+    const okStatus = 0 === statusFilter.size || statusFilter.has(coachStatus(c));
+    return okTeam && okStatus;
+  });
 
   // Envoi global : les coachs à email PAS ENCORE servis (le bouton n'est pas un renvoi — D2).
   const unsentWithEmail = campaign.coaches.filter((c) => null !== c.email && "" !== c.email && null === c.sentAt);
   // Relance : silencieux à email — et une seule fois par jour (D3).
   const silentWithEmail = campaign.coaches.filter((c) => null !== c.email && "" !== c.email && null === c.respondedAt);
-  const remindedToday = isSameDay(campaign.lastReminderAt);
+  const remindedToday = isSameParisDay(campaign.lastReminderAt);
 
   return (
     <div className="mt-5 border-t border-border pt-4">
@@ -187,11 +235,53 @@ function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign:
           Relancer les silencieux
         </Button>
       </div>
+      {/* Sans ceci un 422 (déjà relancé aujourd'hui — cache périmé, autre onglet) resterait muet. */}
+      {sendLinks.isError ? <p className="mt-2 text-sm text-destructive">Envoi impossible pour le moment. Réessayez.</p> : null}
+      {remind.isError ? <p className="mt-2 text-sm text-destructive">Relance impossible — les coachs ont peut-être déjà été relancés aujourd'hui.</p> : null}
+
+      {/* Filtres — n'affectent QUE la liste ci-dessous (les boutons gardent leur périmètre, D4). */}
+      {campaign.coaches.length > 0 ? (
+        <div className="mt-3 space-y-1.5">
+          {campaignTeams.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Équipe&nbsp;:</span>
+              {campaignTeams.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={teamFilter.has(t.id)}
+                  className={`rounded-full border px-2 py-0.5 text-xs ${teamFilter.has(t.id) ? "border-accent bg-accent/15 text-accent" : "border-border text-muted-foreground"}`}
+                  onClick={() => toggle(teamFilter, t.id, setTeamFilter)}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Statut&nbsp;:</span>
+            {STATUS_LABELS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                aria-pressed={statusFilter.has(s.key)}
+                className={`rounded-full border px-2 py-0.5 text-xs ${statusFilter.has(s.key) ? "border-accent bg-accent/15 text-accent" : "border-border text-muted-foreground"}`}
+                onClick={() => toggle(statusFilter, s.key, setStatusFilter)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {0 === campaign.coaches.length ? (
         <p className="mt-1 text-sm text-muted-foreground">Aucun coach sur le périmètre choisi.</p>
+      ) : 0 === visibleCoaches.length ? (
+        <p className="mt-2 text-sm text-muted-foreground">Aucun coach pour ce filtre.</p>
       ) : (
         <ul className="mt-2 space-y-2">
-          {campaign.coaches.map((coach) => (
+          {visibleCoaches.map((coach) => (
             <CoachRow key={coach.coachId} coach={coach} campaignId={campaign.id} onEmailSaved={onEmailSaved} onCampaignRefreshed={onCampaignRefreshed} />
           ))}
         </ul>

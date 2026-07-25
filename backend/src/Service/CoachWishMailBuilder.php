@@ -37,11 +37,16 @@ final class CoachWishMailBuilder
             '',
             \sprintf('%s prépare le planning de « %s » et a besoin de vos souhaits d\'entraînement.', $clubName, $periodTitle),
             \sprintf('Merci de répondre avant le %s — le lien reste modifiable jusque-là.', $campaign->getDeadline()->format('d/m/Y')),
-            '',
-            $this->publicLink($token),
-            '',
-            'C\'est un souhait, pas un engagement : le club arbitre ensuite.',
         ];
+        // Sans base front configurée, un chemin nu « /doleances/… » n'est pas cliquable :
+        // on OMET le lien plutôt que d'envoyer une URL inutilisable (précédent des crons).
+        $link = $this->publicLink($token);
+        if (null !== $link) {
+            $lines[] = '';
+            $lines[] = $link;
+        }
+        $lines[] = '';
+        $lines[] = 'C\'est un souhait, pas un engagement : le club arbitre ensuite.';
 
         return $this->email($to, $subject, $lines);
     }
@@ -97,11 +102,14 @@ final class CoachWishMailBuilder
         return $this->email($to, $subject, $lines);
     }
 
-    private function publicLink(string $token): string
+    /** Lien public absolu, ou null si aucune base front n'est configurée (lien non cliquable). */
+    private function publicLink(string $token): ?string
     {
-        $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : '';
+        if ('' === $this->frontendBaseUrl) {
+            return null;
+        }
 
-        return $base . '/doleances/' . $token;
+        return rtrim($this->frontendBaseUrl, '/') . '/doleances/' . $token;
     }
 
     /** @return list<string> */

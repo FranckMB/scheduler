@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
+use App\Entity\TeamCoach;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
 use App\Service\CoachWishMailBuilder;
@@ -125,14 +126,15 @@ final class CoachWishDigestCommand extends Command
 
             if (!$deadlinePassed) {
                 $sent += $this->dailyDigest($campaign, $club, $dryRun, $io, $emails);
-                continue;
-            }
-            if (null === $campaign->getFinalRecapSentAt()) {
+            } elseif (null === $campaign->getFinalRecapSentAt()) {
                 $sent += $this->finalRecap($campaign, $club, $dryRun, $io, $emails);
             }
-        }
-        if (!$dryRun) {
-            $this->entityManager->flush();
+            // Flush PAR campagne : un stamp d'idempotence gagné (envoi réussi) est persisté
+            // avant de passer à la suivante — l'échec de flush d'une campagne ne ré-émet pas
+            // les emails déjà partis d'une autre.
+            if (!$dryRun) {
+                $this->entityManager->flush();
+            }
         }
 
         return $sent;
@@ -145,6 +147,10 @@ final class CoachWishDigestCommand extends Command
      */
     private function dailyDigest(CoachWishCampaign $campaign, Club $club, bool $dryRun, SymfonyStyle $io, ?array &$emails): int
     {
+        // Horodatage du stamp capturé AVANT la lecture des tokens : une réponse qui tombe
+        // pendant l'envoi (après la lecture) reste > lastDigestAt au run suivant, jamais
+        // perdue. Stamper avec l'heure POST-envoi la ferait disparaître.
+        $stampAt = $this->clock->now();
         [$newNames, $respondedNames, $silentNames] = $this->splitCoaches($campaign);
         if ([] === $newNames) {
             return 0; // Silence depuis le dernier digest → aucun email (décision fondateur).
@@ -166,7 +172,11 @@ final class CoachWishDigestCommand extends Command
         foreach ($emails as $to) {
             $sent += $this->send($this->mailBuilder->buildDigest($to, $club->getName(), $periodTitle, $newNames, $respondedNames, $silentNames), $io);
         }
-        $campaign->markDigestSent($this->clock->now());
+        // On n'avance lastDigestAt QUE si au moins un gestionnaire a été atteint — sinon
+        // (SMTP mort) le digest de cette réponse serait perdu à jamais (jamais retenté).
+        if ($sent > 0) {
+            $campaign->markDigestSent($stampAt);
+        }
 
         return $sent;
     }
@@ -178,13 +188,14 @@ final class CoachWishDigestCommand extends Command
      */
     private function finalRecap(CoachWishCampaign $campaign, Club $club, bool $dryRun, SymfonyStyle $io, ?array &$emails): int
     {
+        $stampAt = $this->clock->now();
         [, $respondedNames, $silentNames] = $this->splitCoaches($campaign);
 
         $emails ??= $this->clubUserRepository->findManagementEmails((string) $campaign->getClubId());
         if ([] === $emails) {
-            // Récap marqué envoyé quand même : sans gestionnaire à prévenir, re-tenter
-            // chaque matin ne produirait jamais rien de plus.
-            $campaign->markFinalRecapSent($this->clock->now());
+            // Récap marqué envoyé quand même : sans AUCUN gestionnaire à prévenir, re-tenter
+            // chaque matin ne produirait jamais rien de plus (à distinguer d'un SMTP mort).
+            $campaign->markFinalRecapSent($stampAt);
 
             return 0;
         }
@@ -203,22 +214,31 @@ final class CoachWishDigestCommand extends Command
         foreach ($emails as $to) {
             $sent += $this->send($this->mailBuilder->buildFinalRecap($to, $club->getName(), $periodTitle, $respondedNames, $silentNames, $openWishCount), $io);
         }
-        $campaign->markFinalRecapSent($this->clock->now());
+        // Récap une seule fois — mais seulement s'il est PARTI : un échec total ne grille pas
+        // la clôture (elle sera retentée le lendemain).
+        if ($sent > 0) {
+            $campaign->markFinalRecapSent($stampAt);
+        }
 
         return $sent;
     }
 
     /**
-     * Répartit les coachs porteurs d'un token : [nouveaux répondants depuis le dernier
-     * digest, tous les répondants, les silencieux]. Noms « Prénom Nom ».
+     * Répartit les coachs du PÉRIMÈTRE COURANT (équipes retenues ∩ TeamCoach) porteurs d'un
+     * token : [nouveaux répondants depuis le dernier digest, tous les répondants, silencieux].
+     * Même périmètre que le presenter du cockpit — les noms de l'email et de l'écran coïncident.
      *
      * @return array{0: list<string>, 1: list<string>, 2: list<string>}
      */
     private function splitCoaches(CoachWishCampaign $campaign): array
     {
+        $perimeter = $this->perimeterCoachIds($campaign);
         $lastDigestAt = $campaign->getLastDigestAt();
         $new = $responded = $silent = [];
         foreach ($this->tokenRepository->findByCampaign($campaign->getId()) as $token) {
+            if (!isset($perimeter[$token->getCoachId()])) {
+                continue; // coach sorti du périmètre courant — invisible au cockpit, donc ici aussi.
+            }
             $coach = $this->entityManager->getRepository(Coach::class)->find($token->getCoachId());
             if (!$coach instanceof Coach) {
                 continue;
@@ -236,6 +256,24 @@ final class CoachWishDigestCommand extends Command
         }
 
         return [$new, $responded, $silent];
+    }
+
+    /**
+     * Coachs des équipes actuellement retenues (TeamCoach ∩ campaign.teamIds), en set indexé.
+     *
+     * @return array<string, true>
+     */
+    private function perimeterCoachIds(CoachWishCampaign $campaign): array
+    {
+        $set = [];
+        if ([] === $campaign->getTeamIds()) {
+            return $set;
+        }
+        foreach ($this->entityManager->getRepository(TeamCoach::class)->findBy(['teamId' => $campaign->getTeamIds()]) as $link) {
+            $set[$link->getCoachId()] = true;
+        }
+
+        return $set;
     }
 
     private function periodTitle(CoachWishCampaign $campaign): string

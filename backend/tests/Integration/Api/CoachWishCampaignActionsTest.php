@@ -125,6 +125,21 @@ final class CoachWishCampaignActionsTest extends WebTestCase
         self::assertSame(0, $body['sent'], 'un répondant n\'est jamais relancé');
     }
 
+    public function testActionsAreRefusedOnAnArchivedSeason(): void
+    {
+        // Revue C3 #3 : une saison gelée est en lecture seule — send-links/remind écrivent
+        // (sentAt/lastReminderAt), elles doivent 409 comme le chemin processor.
+        $this->scopeGucToClub($this->club->getId());
+        $this->season->setStatus('archived');
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/send-links', [], [], $this->headers(), '{}');
+        self::assertResponseStatusCodeSame(409);
+
+        $this->client->request('POST', '/api/coach_wish_campaigns/' . $this->campaign->getId() . '/remind', [], [], $this->headers(), '{}');
+        self::assertResponseStatusCodeSame(409);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

@@ -12,9 +12,12 @@ use App\Entity\Coach;
 use App\Entity\CoachWishCampaign;
 use App\Entity\CoachWishToken;
 use App\Entity\Season;
+use App\Entity\Team;
+use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\TeamCoachRole;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
 use App\Service\CoachWishMailBuilder;
@@ -23,6 +26,7 @@ use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
+use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -126,6 +130,61 @@ final class CoachWishDigestCommandTest extends KernelTestCase
         self::assertStringNotContainsString('close', $this->sentSubjects[0] ?? '', 'le jour de la deadline est encore un digest, pas le récap');
     }
 
+    public function testDigestStampNotAdvancedWhenEverySendFails(): void
+    {
+        // SMTP mort : le digest d'une nouvelle réponse ne doit PAS être perdu — lastDigestAt
+        // reste inchangé pour être retenté le lendemain (fix code-review #1).
+        [$club, $season] = $this->seedClub('FAIL');
+        $campaign = $this->campaign($club, $season, deadline: '2026-02-20');
+        $this->token($campaign, $club, 'Maxime', respondedAt: new DateTimeImmutable('2026-01-31 18:00:00'));
+        $this->em->flush();
+
+        $this->runCommand(failing: true);
+        self::assertSame([], $this->sentTo, 'aucun email parti (SMTP mort)');
+
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        $reloaded = $this->em->getRepository(CoachWishCampaign::class)->find($campaign->getId());
+        self::assertNull($reloaded?->getLastDigestAt(), 'le stamp n’avance pas sur échec total → digest retentable');
+
+        // Le lendemain, mailer OK → le digest part enfin.
+        $this->runCommand();
+        self::assertNotSame([], $this->sentTo, 'le digest est bien retenté et délivré');
+    }
+
+    public function testFinalRecapStampNotAdvancedWhenSendFails(): void
+    {
+        [$club, $season] = $this->seedClub('RFAIL');
+        $campaign = $this->campaign($club, $season, deadline: '2026-01-30');
+        $this->token($campaign, $club, 'Maxime', respondedAt: null);
+        $this->em->flush();
+
+        $this->runCommand(failing: true);
+        $this->em->clear();
+        $this->scopeGucToClub($club->getId());
+        $reloaded = $this->em->getRepository(CoachWishCampaign::class)->find($campaign->getId());
+        self::assertNull($reloaded?->getFinalRecapSentAt(), 'le récap n’est pas grillé par un échec d’envoi');
+    }
+
+    public function testACoachOutsideTheCurrentPerimeterIsNotCounted(): void
+    {
+        // Fix #6 : un coach dont l'équipe n'est plus dans teamIds ne doit pas figurer au digest.
+        [$club, $season, $adminEmail] = $this->seedClub('PERIM');
+        $campaign = $this->campaign($club, $season, deadline: '2026-02-20');
+        $this->token($campaign, $club, 'Maxime', respondedAt: new DateTimeImmutable('2026-01-31 18:00:00'));
+
+        // Un coach avec token mais SANS TeamCoach dans le périmètre → hors périmètre.
+        $ghost = (new Coach)->setClubId($club->getId())->setSeasonId($season->getId())->setFirstName('Fantome')->setLastName('X');
+        $this->em->persist($ghost);
+        $this->em->flush();
+        $this->em->persist((new CoachWishToken)->setCampaignId($campaign->getId())->setCoachId($ghost->getId())->setClubId($club->getId())->markResponded(new DateTimeImmutable('2026-01-31 19:00:00')));
+        $this->em->flush();
+
+        $this->runCommand();
+        self::assertContains($adminEmail, $this->sentTo);
+        self::assertStringNotContainsString('Fantome', implode(' ', $this->sentSubjects), 'un coach hors périmètre ne remonte pas');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -167,9 +226,15 @@ final class CoachWishDigestCommandTest extends KernelTestCase
         $this->em->persist($entry);
         $this->em->flush();
 
+        // Une équipe réelle : le digest ne compte que le PÉRIMÈTRE (TeamCoach ∩ teamIds).
+        $team = (new Team)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setSportCategoryId('11111111-1111-4111-8111-111111111111')->setPriorityTierId(1)->setName('SM1');
+        $this->em->persist($team);
+        $this->em->flush();
+
         $campaign = (new CoachWishCampaign)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setCalendarEntryId($entry->getId())->setDeadline(new DateTimeImmutable($deadline))
-            ->setWeeks(['2026-02-16'])->setTeamIds([]);
+            ->setWeeks(['2026-02-16'])->setTeamIds([$team->getId()]);
         $this->em->persist($campaign);
         $this->em->flush();
 
@@ -183,6 +248,11 @@ final class CoachWishDigestCommandTest extends KernelTestCase
         $this->em->persist($coach);
         $this->em->flush();
 
+        // Rattache le coach à l'équipe de la campagne — sinon il est hors périmètre (D6/fix #6).
+        $teamId = $campaign->getTeamIds()[0];
+        $this->em->persist((new TeamCoach)->setClubId($club->getId())->setSeasonId($campaign->getSeasonId())
+            ->setTeamId($teamId)->setCoachId($coach->getId())->setRole(TeamCoachRole::MAIN));
+
         $token = (new CoachWishToken)->setCampaignId($campaign->getId())->setCoachId($coach->getId())->setClubId($club->getId());
         if (null !== $respondedAt) {
             $token->markResponded($respondedAt);
@@ -193,11 +263,14 @@ final class CoachWishDigestCommandTest extends KernelTestCase
         return $token;
     }
 
-    private function runCommand(): CommandTester
+    private function runCommand(bool $failing = false): CommandTester
     {
         $container = self::getContainer();
         $mailer = $this->createMock(MailerInterface::class);
-        $mailer->method('send')->willReturnCallback(function (RawMessage $message): void {
+        $mailer->method('send')->willReturnCallback(function (RawMessage $message) use ($failing): void {
+            if ($failing) {
+                throw new RuntimeException('smtp down');
+            }
             if ($message instanceof Email) {
                 $this->sentTo[] = $message->getTo()[0]->getAddress();
                 $this->sentSubjects[] = (string) $message->getSubject();
@@ -216,7 +289,9 @@ final class CoachWishDigestCommandTest extends KernelTestCase
 
         $tester = new CommandTester($command);
         $tester->execute(['--date' => self::TODAY]);
-        $tester->assertCommandIsSuccessful();
+        if (!$failing) {
+            $tester->assertCommandIsSuccessful();
+        }
 
         return $tester;
     }
