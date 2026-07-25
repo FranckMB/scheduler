@@ -20,6 +20,7 @@ final class AdminHealthServiceTest extends KernelTestCase
 {
     public function testContainersReturnsElevenEntries(): void
     {
+        // MAILER_DSN pointe mailpit (dev) → la sonde mailpit est listée.
         $httpClient = new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
         $service = $this->buildService($httpClient);
         $health = $service->health();
@@ -38,6 +39,25 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::assertContains('php-fpm', $keys);
         self::assertContains('messenger-worker', $keys);
         self::assertContains('cron-runner', $keys);
+        self::assertContains('pdf-worker', $keys);
+    }
+
+    /**
+     * P4-29 — la prod n'embarque PAS mailpit (MAILER_DSN = SMTP réel) : le sonder
+     * afficherait un conteneur « down » permanent et un statut global degraded.
+     * La sonde n'existe que si le déploiement fait réellement tourner mailpit.
+     */
+    public function testMailpitIsAbsentWhenTheDeploymentDoesNotRunIt(): void
+    {
+        $httpClient = new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
+        $service = $this->buildService($httpClient, null, 'redis://localhost:6379', 'smtp://smtp.example.com:587');
+        $health = $service->health();
+
+        $keys = array_column($health['containers'], 'key');
+        self::assertNotContains('mailpit', $keys, 'aucune sonde mailpit hors dev');
+        self::assertCount(10, $health['containers']);
+        // Les autres conteneurs restent listés : on retire une sonde, pas la liste.
+        self::assertContains('php-fpm', $keys);
         self::assertContains('pdf-worker', $keys);
     }
 
@@ -143,7 +163,7 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::fail("Container $key absent");
     }
 
-    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null, string $redisUrl = 'redis://localhost:6379'): AdminHealthService
+    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null, string $redisUrl = 'redis://localhost:6379', string $mailerDsn = 'smtp://mailpit:1025'): AdminHealthService
     {
         return new AdminHealthService(
             $this->createMock(ManagerRegistry::class),
@@ -153,6 +173,7 @@ final class AdminHealthServiceTest extends KernelTestCase
             $cache ?? $this->createMock(CacheItemPoolInterface::class),
             $redisUrl,
             '',
+            $mailerDsn,
         );
     }
 }

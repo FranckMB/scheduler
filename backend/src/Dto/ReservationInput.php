@@ -34,6 +34,7 @@ class ReservationInput
     public ?int $durationMinutes = 90;
 
     /** NULL = base plan; set = a period overlay. */
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $schedulePlanId = null;
 }

@@ -10,6 +10,7 @@ use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -23,6 +24,7 @@ final class MembershipController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
+        private readonly RequestStack $requestStack,
     ) {}
 
     #[Route('/api/memberships/pending', name: 'api_memberships_pending', methods: ['GET'])]
@@ -92,7 +94,23 @@ final class MembershipController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $membership = $this->clubUserRepository->findOneBy(['userId' => $user->getId(), 'isActive' => true]);
+        // BCK-10 — the membership is resolved for the request's club, like
+        // everywhere else (ManagementAccessGuard): listener attribute, then
+        // header. The previous findOneBy(userId, isActive) picked "any" active
+        // membership of the user; RLS on club_user already narrowed that to the
+        // request's club, so this is defense in depth (and readability), NOT a
+        // behaviour change — which is why no non-regression test guards it:
+        // no mutation of this line can be observed through the API.
+        $request = $this->requestStack->getCurrentRequest();
+        $clubId = $request?->attributes->get('_club_id');
+        if (!\is_string($clubId) || '' === $clubId) {
+            $clubId = $request?->headers->get('X-Club-Id');
+        }
+        if (!\is_string($clubId) || '' === $clubId) {
+            return $this->json(['error' => 'Forbidden'], 403);
+        }
+
+        $membership = $this->clubUserRepository->findActiveMembership($user->getId(), $clubId);
         // isManagementRole (owner|admin), not a hardcoded 'admin' — an owner
         // must be able to approve members too (review note, PR SEC-07).
         if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {

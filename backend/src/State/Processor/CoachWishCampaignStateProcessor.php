@@ -59,20 +59,9 @@ class CoachWishCampaignStateProcessor extends AbstractStateProcessor
      */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
-        return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
-            /** @var CoachWishCampaignResource $output */
-            $output = parent::processPost($input, $clubId, $seasonId);
-            $campaign = $this->entityManager->getRepository(CoachWishCampaign::class)->find($output->id);
-            if ($campaign instanceof CoachWishCampaign) {
-                $this->tokenSync->sync($campaign);
-
-                // Les tokens viennent d'être synchronisés : re-projeter pour que la réponse
-                // expose déjà les liens (le presenter de parent:: a tourné avant la sync).
-                return $this->presenter->toResource($campaign);
-            }
-
-            return $output;
-        });
+        return $this->entityManager->wrapInTransaction(
+            fn (): object => parent::processPost($input, $clubId, $seasonId),
+        );
     }
 
     /**
@@ -81,18 +70,23 @@ class CoachWishCampaignStateProcessor extends AbstractStateProcessor
      */
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
-        return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId): object {
-            /** @var CoachWishCampaignResource $output */
-            $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
-            $campaign = $this->entityManager->getRepository(CoachWishCampaign::class)->find($output->id);
-            if ($campaign instanceof CoachWishCampaign) {
-                $this->tokenSync->sync($campaign);
+        return $this->entityManager->wrapInTransaction(
+            fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId),
+        );
+    }
 
-                return $this->presenter->toResource($campaign);
-            }
-
-            return $output;
-        });
+    /**
+     * Les tokens doivent exister AVANT la projection de la réponse (ils n'existent
+     * pas encore au moment du persist). Le faire dans ce hook — appelé par le
+     * parent juste avant `mapEntityToOutput` — laisse le presenter tourner UNE
+     * SEULE fois (P4-27 : POST/PUT le lançaient deux fois, la 1re projection
+     * étant jetée parce qu'elle précédait la sync).
+     */
+    protected function afterPersist(object $entity): void
+    {
+        if ($entity instanceof CoachWishCampaign) {
+            $this->tokenSync->sync($entity);
+        }
     }
 
     /**
