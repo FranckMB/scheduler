@@ -98,7 +98,10 @@ export function WizardPage() {
   const wishesMother = periodEntry?.parentEntryId ? (motherEntry ?? null) : periodEntry ?? null;
   const wishesFilter = wishesWeekFilter(periodEntry);
   const [wishesOpen, setWishesOpen] = useState(false);
-  const canWishes = periodMode && canOpenWishes(periodEntry);
+  // Le bouton n'apparaît QUE quand la mère est résolue : sur une semaine enfant, wishesMother
+  // reste null un instant le temps du fetch ; l'afficher avant rendrait le clic mort (la
+  // modale est gardée sur wishesMother non-null) sans retour (revue #10 C1 round 2).
+  const canWishes = periodMode && canOpenWishes(periodEntry) && null !== wishesMother;
   const validation = useStepValidation(stepId);
   // The generation step is gated by the SAME blockers as the Récap "Continuer"
   // button — otherwise the left nav lets an onboarded club (nav never locked)

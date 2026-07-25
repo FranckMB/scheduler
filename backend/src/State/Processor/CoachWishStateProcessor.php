@@ -78,6 +78,12 @@ class CoachWishStateProcessor extends AbstractStateProcessor
     {
         // calendarEntryId + teamId + weekStart identifient la ligne — jamais remappés.
         $this->applyEditableFields($entity, $input);
+        // PUT défensif : un coachId qui ne désigne plus aucun coach (supprimé entre-temps,
+        // cache client périmé re-poussé par un toggle) → DÉ-ATTRIBUTION, jamais une
+        // résurrection d'un coach mort (revue #10 C1 round 2).
+        if (null !== $input->coachId && null === $this->entityManager->getRepository(Coach::class)->find($input->coachId)) {
+            $entity->setCoachId(null);
+        }
     }
 
     /**

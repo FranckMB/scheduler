@@ -173,6 +173,23 @@ final class CoachWishApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
+    public function testPutWithAStaleDeletedCoachIdDetachesInsteadOfResurrecting(): void
+    {
+        // Revue #10 C1 round 2 : un cache client périmé peut re-pousser (via toggle) un
+        // coachId dont le coach a été supprimé depuis. Le PUT ne doit pas ressusciter ce
+        // coach mort : il dé-attribue.
+        $created = $this->post($this->payload(['weekStart' => '2026-02-16']));
+        self::assertResponseStatusCodeSame(201);
+        $ghost = '99999999-9999-4999-8999-999999999999'; // aucun coach de ce id
+
+        $this->client->request('PUT', '/api/coach_wishes/' . $created['id'], [], [], $this->headers(), json_encode([
+            'calendarEntryId' => $this->mother->getId(), 'weekStart' => '2026-02-16', 'teamId' => $this->team->getId(),
+            'coachId' => $ghost, 'slotsWanted' => 2, 'unavailableDays' => [], 'comment' => null, 'done' => true,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        self::assertNull(json_decode((string) $this->client->getResponse()->getContent(), true)['coachId'], 'un coachId supprimé dé-attribue, ne ressuscite pas');
+    }
+
     public function testDeletingTheMotherEntryPurgesItsWishes(): void
     {
         $created = $this->post($this->payload(['weekStart' => '2026-02-16']));

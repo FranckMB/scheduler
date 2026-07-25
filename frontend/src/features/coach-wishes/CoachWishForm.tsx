@@ -49,9 +49,13 @@ export function CoachWishForm({
   const [comment, setComment] = useState(editing?.comment ?? "");
 
   const isEdit = null !== editing;
+  // Une doléance DÉ-ATTRIBUÉE (coach supprimé) : seule elle peut rester sans coach. On ne
+  // dé-attribue JAMAIS par l'édition une doléance attribuée (revue #10 C1 round 2) — c'est
+  // réservé à la suppression d'un coach.
+  const wasDetached = isEdit && null === editing?.coachId;
   // Défaut coach = le coach MAIN de l'équipe, mais À LA CRÉATION seulement. En édition on
-  // garde ce qui est là — y compris "" pour une doléance DÉ-ATTRIBUÉE (coach supprimé) :
-  // retomber sur le MAIN actuel la ré-attribuerait en silence à un autre auteur (revue #10 C1).
+  // garde ce qui est là — y compris "" pour une doléance déjà dé-attribuée : retomber sur le
+  // MAIN actuel la ré-attribuerait en silence à un autre auteur.
   const mainCoachId = (t: string): string => teamCoaches.find((tc) => tc.teamId === t && "MAIN" === tc.role)?.coachId ?? "";
   const resolvedCoachId = "" !== coachId ? coachId : isEdit ? "" : mainCoachId(teamId);
 
@@ -59,10 +63,9 @@ export function CoachWishForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    // La CRÉATION exige un coach (« au nom d'un coach ») ; l'ÉDITION accepte une doléance
-    // dé-attribuée (coachId null) — on ne force pas le gestionnaire à lui rattacher un coach
-    // juste pour corriger un commentaire.
-    if ("" === teamId || "" === weekStart || (!isEdit && "" === resolvedCoachId)) {
+    // Un coach est requis SAUF sur une doléance déjà dé-attribuée : ni la création ni
+    // l'édition d'une doléance attribuée ne peuvent la laisser sans coach.
+    if ("" === teamId || "" === weekStart || ("" === resolvedCoachId && !wasDetached)) {
       return;
     }
     onSubmit({
@@ -102,7 +105,7 @@ export function CoachWishForm({
         <label className="text-xs text-muted-foreground">
           Coach
           <Select aria-label="Coach" className={cn(fieldClass, "mt-0.5 block w-40")} value={resolvedCoachId} onChange={(e) => setCoachId(e.target.value)}>
-            <option value="">Coach…</option>
+            {!isEdit || wasDetached ? <option value="">Coach…</option> : null}
             {coaches.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.firstName} {c.lastName}
@@ -163,7 +166,7 @@ export function CoachWishForm({
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           Annuler
         </Button>
-        <Button type="submit" size="sm" disabled={pending || (!isEdit && "" === resolvedCoachId)}>
+        <Button type="submit" size="sm" disabled={pending || ("" === resolvedCoachId && !wasDetached)}>
           {null !== editing ? "Enregistrer" : "Ajouter la doléance"}
         </Button>
       </div>
