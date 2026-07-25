@@ -74,6 +74,8 @@ final class EntityCascadeDeleter
             $this->deleteByField(TeamTagAssignment::class, 'teamId', $teamId, null, $seasonId);
             // Period-editable structure (B1): a team's per-period overrides key on teamId.
             $this->deleteByField(\App\Entity\TeamPeriodOverride::class, 'teamId', $teamId, $clubId, $seasonId);
+            // #10 — sans équipe, une doléance n'a plus de sens : elle part.
+            $this->deleteByField(\App\Entity\CoachWish::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
             $this->clearParentRef(Team::class, 'parentTeamId', $teamId, $clubId, $seasonId);
         });
@@ -114,6 +116,9 @@ final class EntityCascadeDeleter
             // A slot placement keeps existing without its (now-deleted) coach —
             // the engine leaves slot.coachId empty anyway, so null it out.
             $this->clearParentRef(ScheduleSlotTemplate::class, 'coachId', $coachId, $clubId, $seasonId);
+            // #10 — la doléance SURVIT au coach supprimé, dé-attribuée : son info d'équipe
+            // reste utile au plan de vacances.
+            $this->clearParentRef(\App\Entity\CoachWish::class, 'coachId', $coachId, $clubId, $seasonId);
             $this->clearParentRef(Coach::class, 'parentCoachId', $coachId, $clubId, $seasonId);
         });
     }

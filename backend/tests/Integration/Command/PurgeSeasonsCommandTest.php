@@ -31,6 +31,8 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
 
     private EntityManagerInterface $em;
 
+    private string $oldWishId;
+
     public function testDryRunDeletesNothing(): void
     {
         [$club, $seasons] = $this->createClubWithSeasons();
@@ -63,6 +65,8 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         self::assertNull($this->em->getRepository(Season::class)->find($old->getId()));
         self::assertCount(0, $this->em->getRepository(Team::class)->findBy(['seasonId' => $old->getId()]));
         self::assertCount(0, $this->em->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $old->getId()]));
+        // #10 — la doléance coach de la saison purgée est partie.
+        self::assertNull($this->em->getRepository(\App\Entity\CoachWish::class)->find($this->oldWishId));
         // planning-versions D2: the structure photos die with their season.
         self::assertCount(0, $this->em->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['seasonId' => $old->getId()]));
         // current, N-1 and the future draft survive.
@@ -143,6 +147,29 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $assignment->setTagId($tag->getId());
         $this->em->persist($assignment);
         $this->em->flush();
+
+        // #10 — une doléance coach dans la saison N-2, ancrée à une entrée vacances : la
+        // purge de rétention doit l'emporter (SeasonDataPurger, sous-requête calendarEntryId).
+        $entry = new \App\Entity\CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($old->getId());
+        $entry->setKind(\App\Enum\CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(\App\Enum\CalendarEntryPeriodType::HOLIDAY);
+        $entry->setTitle('Vacances N-2');
+        $entry->setStartDate(new DateTimeImmutable(($year - 2) . '-02-16'));
+        $entry->setEndDate(new DateTimeImmutable(($year - 2) . '-02-22'));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        $wish = new \App\Entity\CoachWish;
+        $wish->setClubId($club->getId());
+        $wish->setSeasonId($old->getId());
+        $wish->setCalendarEntryId($entry->getId());
+        $wish->setWeekStart(new DateTimeImmutable(($year - 2) . '-02-16'));
+        $wish->setTeamId($team->getId());
+        $this->em->persist($wish);
+        $this->em->flush();
+        $this->oldWishId = $wish->getId();
 
         return [$club, [$old, $past, $current, $draft]];
     }

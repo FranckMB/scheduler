@@ -426,6 +426,12 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             foreach ($this->entityManager->getRepository(PeriodReminderLog::class)->findBy(['calendarEntryId' => $id]) as $log) {
                 $this->entityManager->remove($log);
             }
+            // #10 — les doléances coachs pendent à l'entrée MÈRE des vacances. Supprimer une
+            // SEMAINE enfant n'en emporte aucune (elles ne vivent que sur la mère, voulu) ;
+            // supprimer la mère les emporte toutes.
+            foreach ($this->entityManager->getRepository(\App\Entity\CoachWish::class)->findBy(['calendarEntryId' => $id]) as $wish) {
+                $this->entityManager->remove($wish);
+            }
             $this->entityManager->flush();
         }
     }

@@ -1,5 +1,5 @@
 import { HTTPError } from "ky";
-import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router";
 
@@ -8,6 +8,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMe } from "@/features/auth/queries";
 import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { frDateNumeric } from "@/features/cockpit/lib/date";
+import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
+import { canOpenWishes, wishesMotherId, wishesWeekFilter } from "@/features/coach-wishes/wishesTarget";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { listSchedules } from "@/features/planning/api";
 import { useSchedules } from "@/features/planning/queries";
@@ -86,6 +88,20 @@ export function WizardPage() {
   const navigate = useNavigate();
   const periodMode = "period" === mode;
   const { data: periodEntry, error: periodEntryError } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  // #10 — les doléances vivent sur l'entrée MÈRE des vacances ; le store peut porter une
+  // SEMAINE enfant. On résout la mère et on filtre la todo-list sur la semaine du plan
+  // courant (plan de bloc → parentEntryId null → toutes les semaines).
+  const { data: motherEntry } = useCalendarEntry(wishesMotherId(periodEntry));
+  // Ne JAMAIS retomber sur l'ENFANT tant que la mère charge : la modale s'ancrerait à
+  // l'id enfant → liste vide + ajout refusé en 422 (revue #10 C1). On n'utilise periodEntry
+  // directement que s'il EST la mère (pas de parent) ; sinon on attend motherEntry.
+  const wishesMother = periodEntry?.parentEntryId ? (motherEntry ?? null) : periodEntry ?? null;
+  const wishesFilter = wishesWeekFilter(periodEntry);
+  const [wishesOpen, setWishesOpen] = useState(false);
+  // Le bouton n'apparaît QUE quand la mère est résolue : sur une semaine enfant, wishesMother
+  // reste null un instant le temps du fetch ; l'afficher avant rendrait le clic mort (la
+  // modale est gardée sur wishesMother non-null) sans retour (revue #10 C1 round 2).
+  const canWishes = periodMode && canOpenWishes(periodEntry) && null !== wishesMother;
   const validation = useStepValidation(stepId);
   // The generation step is gated by the SAME blockers as the Récap "Continuer"
   // button — otherwise the left nav lets an onboarded club (nav never locked)
@@ -284,6 +300,12 @@ export function WizardPage() {
             {null !== calendarEntryId && "generate" !== stepId ? (
               <DeletePlanningButton calendarEntryId={calendarEntryId} title={periodEntry?.title ?? "ce planning"} onDeleted={() => { leavingRef.current = true; exitPeriodMode(); navigate("/"); }} />
             ) : null}
+            {canWishes ? (
+              <Button variant="ghost" size="sm" onClick={() => setWishesOpen(true)}>
+                <MessageSquare className="size-4" />
+                Doléances
+              </Button>
+            ) : null}
             <Button variant="ghost" size="sm" onClick={quitPeriod}>
               <X className="size-4" />
               Quitter
@@ -401,6 +423,9 @@ export function WizardPage() {
       </div>
       </div>
       <ScrollJumpButtons suppressed={suppressScrollJump} />
+      {wishesOpen && null !== wishesMother ? (
+        <CoachWishesModal mother={wishesMother} weekFilter={wishesFilter} onClose={() => setWishesOpen(false)} />
+      ) : null}
     </WizardFooterContext.Provider>
   );
 }

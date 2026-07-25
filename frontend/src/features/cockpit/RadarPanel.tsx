@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, CalendarOff, MapPin, OctagonX, PartyPopper, Pencil } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarOff, MapPin, MessageSquare, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
 import { useWorkingSeason } from "@/features/auth/queries";
@@ -13,6 +13,8 @@ import { clampRangeToSeason, daysUntil, frDateShort, periodAdjustWeeks, todayISO
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
+import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
+import { useState } from "react";
 
 /** Public holidays further out than this are noise, not a to-do. */
 export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
@@ -64,6 +66,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
   // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
   const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
+  // #10 — la todo-list des doléances d'une période de vacances (ouverte sur la MÈRE).
+  const [wishesEntry, setWishesEntry] = useState<CalendarEntry | null>(null);
 
   // ADR-0002 lot D-b : la « version active » d'une période = chosenScheduleId de son
   // plan (binaire — plan validé → on montre, non validé → on ajuste). Un seul appel,
@@ -351,6 +355,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""}` : ""}`;
         return (
           <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={coverageDetail}>
+            {"holiday" === m.periodType ? (
+              <Button variant="ghost" size="sm" onClick={() => setWishesEntry(m)}>
+                <MessageSquare className="size-4" />
+                Doléances
+              </Button>
+            ) : null}
             {slots.map(({ week, child }) => {
               if (null === child) {
                 return (
@@ -396,6 +406,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         const stateUnknown = undefined !== entry && plansUnresolved;
         return (
           <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${null !== activeId ? "planning validé" : stateUnknown ? "chargement…" : "pas de planning"}`}>
+            {undefined !== entry ? (
+              <Button variant="ghost" size="sm" onClick={() => setWishesEntry(entry)}>
+                <MessageSquare className="size-4" />
+                Doléances
+              </Button>
+            ) : null}
             {stateUnknown ? null : null !== activeId ? (
               <Button variant="outline" size="sm" onClick={() => viewOverlay(activeId)}>
                 Voir le planning
@@ -490,6 +506,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           onClose={() => setPickerFor(null)}
         />
       ) : null}
+      {null !== wishesEntry ? <CoachWishesModal mother={wishesEntry} weekFilter={null} onClose={() => setWishesEntry(null)} /> : null}
     </aside>
   );
 }
