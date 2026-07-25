@@ -214,7 +214,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 
 - `UNPLACED_PENALTY = 100 000` (par team non placée, sauf `hard_satisfied_team_ids`).
 - **Chaining bonus** (phase 2 uniquement) : `CHAINING_TIER_WEIGHTS = {S:8, A:6, B:4, C:2, D:1}` — bonus entier pour sessions back-to-back même venue même coach, poids du tier le plus haut de la paire. Plafonné à 8 par construction : < 21 (valeur minimale d'une session placée) pour ne jamais sacrifier un placement, et ≤ 8 (écart C−D = 9) pour ne jamais voler un slot à un tier supérieur.
-- **Hard locks** : `HARD_LOCK_LEVEL = "HARD"` (model.py). Slots `lockLevel == "HARD"` → variable forcée à 1, venue bloquée pour autres teams sur ces créneaux.
+- **Hard locks** : `HARD_LOCK_LEVEL = "HARD"` (model.py). Slots `lockLevel == "HARD"` → variable forcée à 1, venue bloquée pour autres teams sur ces créneaux. `blocked_venue_slots` retire le `(venue,day,start)` pour **toutes** les autres équipes : un verrou prend le **créneau entier**, même divisible (`capacity>1`) — ALIGN-07, comportement assumé (décision gestionnaire). Partager un créneau divisible = co-épingler explicitement les N équipes ; le diagnostic over-capacity (`result_builder.py`) ne se déclenche qu'au-delà de `capacity`. Gardé par `engine/tests/semantic/test_hard_lock_divisible_slot.py`.
 
 ### Per-club asyncio locks
 

@@ -39,6 +39,7 @@
 | « Gymnase fermé sur une période » | période cockpit `venue_closed` → **retrait des créneaux** du gymnase les jours fermés (`VenueClosureDays`, 5b #263 ; l'ancienne expansion `forbiddenVenueId` est supprimée) — sur-ferme sur tout le bloc si un jour se répète, jamais sous-ferme | ✅ | (calendrier cockpit) |
 | **« Au moins une séance dans tel gymnase »** | FACILITY `minAtVenueId` + `minAtVenueCount` (HARD, mode « au moins N ») — plancher, ≠ forçage ; les autres séances restent libres | ✅ *(ALIGN-05)* | « au moins 1 séance à Armand » ; fail-fast backend si N > séances/semaine |
 | « Nb max d'équipes par créneau d'un gymnase » | FACILITY_CAPACITY `maxTeams` (écran Gymnases, `canSplit`) | ✅ | ADN divisible en 3 |
+| « Réserver un créneau à une équipe (verrou) » | onglet « Réserver » → `ScheduleSlotTemplate` `lockLevel=HARD` (pin durable, pas une contrainte) — verrouille le **créneau entier**, divisible ou non : l'équipe épinglée est **seule**, le solveur ne remplit jamais l'autre moitié. Partager = **explicite** : réserver les N équipes (la modal borne le picker à `capacity`) — décision gestionnaire | ✅ *(ALIGN-07)* | SM1 seul sur samedi 18h (cap 2) ; SM1+SM2 co-épinglés = partage assumé |
 
 ## Axe COACH
 
@@ -65,6 +66,7 @@ Les 3 angles morts historiques d'alignement sont désormais couverts :
 - **ALIGN-04 « Finir avant X h »** → TIME `maxEndTime` (HARD, mode « Fini avant »).
 - **ALIGN-05 « Au moins une séance dans tel gymnase »** → FACILITY `minAtVenueId` + `minAtVenueCount` (plancher HARD, fail-soft si inatteignable, fail-fast backend si N > séances/semaine).
 - **ALIGN-06 espacement des séances** → règle implicite soft `spacing` (malus jours consécutifs, jamais bloquant).
+- **ALIGN-07 verrou HARD sur créneau divisible** → **comportement assumé** : une réservation HARD prend le créneau entier même si `capacity>1` (`blocked_venue_slots`, model.py) ; le partage se déclare en co-épinglant les équipes (aucun diagnostic tant que N ≤ `capacity`). Gardé par `engine/tests/semantic/test_hard_lock_divisible_slot.py` (T1/T2/T3).
 
 ## Synthèse des trous restants (❌ / 🟡)
 
