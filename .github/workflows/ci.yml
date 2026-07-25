@@ -387,6 +387,6 @@ jobs:
       - name: Build prod images
         run: |
           docker build --target prod -f docker/php/Dockerfile .
+          docker build --target nginx-prod -f docker/php/Dockerfile .
           docker build --target prod -f docker/frontend/Dockerfile .
-          docker build -f docker/nginx/Dockerfile.prod .
           docker build -f docker/postgres/Dockerfile.prod .

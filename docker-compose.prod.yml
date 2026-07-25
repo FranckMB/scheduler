@@ -78,12 +78,16 @@ services:
       mercure:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php-fpm -t"]
+      # Real liveness: the FPM master must ACCEPT FastCGI connections — a mere
+      # config parse (php-fpm -t) can never fail at runtime in an immutable image.
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", 9000) ? 0 : 1);'"]
       interval: 20s
       timeout: 5s
       retries: 5
       start_period: 20s
-    mem_limit: 512m
+    # 640m > v3 §2.2's 512M: sized to the FPM memory model (2×192M children +
+    # 192M opcache shm + master — see docker/php/Dockerfile zz-prod-pool).
+    mem_limit: 640m
     restart: unless-stopped
     <<: *logging
     networks:
@@ -93,7 +97,8 @@ services:
     image: ghcr.io/${GHCR_OWNER:?}/scheduler-nginx:${VERSION:-latest}
     build:
       context: .
-      dockerfile: docker/nginx/Dockerfile.prod
+      dockerfile: docker/php/Dockerfile
+      target: nginx-prod
     container_name: clubscheduler-nginx
     depends_on:
       php-fpm:
@@ -192,7 +197,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    mem_limit: 256m
+    # Above the worker's PHP --memory-limit=256M so Messenger's graceful stop
+    # fires before the kernel OOM-killer (which would SIGKILL mid-message).
+    mem_limit: 384m
     restart: unless-stopped
     <<: *logging
     networks:
@@ -215,9 +222,13 @@ services:
       - ./jwt:/app/backend/config/jwt:ro
       - backups:/app/backend/var/backups
       - logo_storage:/app/backend/var/storage
+    # `|| true` keeps ONE failed tick from killing the loop, but each success
+    # touches a witness file — the healthcheck goes red when no tick has
+    # SUCCEEDED for 5 minutes, so a permanently-failing run-due (bad DSN,
+    # missed migration) cannot hide behind an always-green "loop is alive".
     command: >-
       sh -lc 'while true; do
-        php bin/console app:jobs:run-due --no-interaction || true;
+        (php bin/console app:jobs:run-due --no-interaction && date +%s > /tmp/last-tick-ok) || true;
         sleep 60;
       done'
     depends_on:
@@ -226,12 +237,14 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php -r '$$cmd = @file_get_contents(\"/proc/1/cmdline\"); exit(strpos($$cmd, \"sleep 60\") === false ? 1 : 0);'"]
+      test: ["CMD-SHELL", "php -r 'exit((time() - (int) @file_get_contents(\"/tmp/last-tick-ok\")) < 300 ? 0 : 1);'"]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    mem_limit: 256m
+      start_period: 120s
+    # Jobs run pg_dump (nightly backup) in the same cgroup as the PHP tick —
+    # headroom over the 192M request limit.
+    mem_limit: 384m
     restart: unless-stopped
     <<: *logging
     networks:

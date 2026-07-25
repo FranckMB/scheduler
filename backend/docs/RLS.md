@@ -123,7 +123,7 @@ SELECT * FROM public.event;
 | File | Purpose |
 |------|---------|
 | `docker/postgres/init/01-rls.sql` | Helper function to batch-enable RLS on existing tables |
-| `docker/postgres/init/02-users.sql` | Creates `app_user` and `migration_user` with correct grants |
+| `docker/postgres/init/02-users.sh` | Creates `app_user` and `migration_user` with correct grants |
 | `docker/postgres/init/03-rls-template.sql` | Copy-paste templates for `ALTER TABLE ... ENABLE RLS` and `CREATE POLICY` |
 
 ## Troubleshooting
@@ -131,6 +131,6 @@ SELECT * FROM public.event;
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `0 rows returned` for a table that has data | `app.club_id` not set | In `psql`: run `SELECT set_config('app.club_id', '<uuid>', false)` (or the `app_security.set_club_id(...)` helper). In the app: the context is set automatically by `TenantConnectionContext` |
-| `permission denied for table` | `app_user` lacks `GRANT` | Re-run `02-users.sql` or check `GRANT` statements |
+| `permission denied for table` | `app_user` lacks `GRANT` | Re-run `02-users.sh` or check `GRANT` statements |
 | Policy not enforced for table owner | `FORCE ROW LEVEL SECURITY` missing | Run `ALTER TABLE ... FORCE ROW LEVEL SECURITY` |
 | Migration fails with RLS error | Migration runs as `app_user` (or `migration_user` — no bypass either) | Run migrations on the `admin` connection (`clubscheduler`, superuser) |

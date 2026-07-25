@@ -28,7 +28,7 @@ conteneurs PHP (`env_file`). Template exhaustif : `.env.prod.dist` (racine).
 | Image | Build | Contenu spécifique prod |
 |---|---|---|
 | `scheduler-php` | `docker/php/Dockerfile` target `prod` | code + `composer install --no-dev`, opcache `validate_timestamps=0`, `max_execution_time=60`, **rclone** (hook off-site), USER www-data |
-| `scheduler-nginx` | `docker/nginx/Dockerfile.prod` | `backend/public` copié (dev le lit du mount) |
+| `scheduler-nginx` | `docker/php/Dockerfile` target `nginx-prod` | `backend/public` copié **depuis le stage php prod** (inclut `public/bundles` d'`assets:install`, gitignoré — un COPY du contexte le raterait en CI et casserait `/api/docs`) |
 | `scheduler-frontend` | `docker/frontend/Dockerfile` target `prod` | conf edge **sans `location /engine/`** — le solveur n'a pas d'auth, il ne doit JAMAIS être joignable de l'extérieur (`nginx.prod.conf`) |
 | `scheduler-postgres` | `docker/postgres/Dockerfile.prod` | scripts init RLS/rôles copiés (la VM n'a pas le repo) ; `02-users.sh` lit `APP_USER_PASSWORD`/`MIGRATION_USER_PASSWORD` de l'env — plus de mot de passe en dur au premier init |
 | `scheduler-engine` / `scheduler-pdf-worker` | Dockerfiles existants | déjà self-contained (identiques dev) |
@@ -46,11 +46,17 @@ stage prod red le job même si aucun build dev ne l'utilise.
 
 ## Limites RAM (INF-03) & logs
 
-`mem_limit` par service, valeurs de la spec v3 §2.2 : php-fpm 512M · nginx 64M ·
-postgres 512M · redis 256M · messenger-worker 256M · cron-runner 256M ·
-engine 512M · pdf-worker 512M · mercure 128M · frontend 64M.
+`mem_limit` par service (base v3 §2.2, ajustés pour laisser la limite PHP mordre
+AVANT l'OOM-killer) : **php-fpm 640M** (2 children × `memory_limit` 192M +
+opcache 192M + master — pool `zz-prod-pool.conf`) · nginx 64M · postgres 512M ·
+redis 256M · **messenger-worker 384M** et **cron-runner 384M** (au-dessus du
+`--memory-limit=256M` applicatif / du pg_dump des jobs) · engine 512M ·
+pdf-worker 512M · mercure 128M · frontend 64M.
 Rotation logs : `json-file` 10 Mo × 3 par service (ancre `x-logging`).
-`restart: unless-stopped` partout.
+`restart: unless-stopped` partout. Healthchecks réels : php-fpm = accept
+FastCGI (`fsockopen :9000`, pas un parse de conf) ; cron-runner = témoin de
+**succès** (`/tmp/last-tick-ok` < 5 min — un `run-due` qui échoue en boucle
+passe rouge au lieu de se cacher derrière « la boucle tourne »).
 
 ## Persistance (volumes nommés)
 
@@ -60,10 +66,13 @@ Rotation logs : `json-file` 10 Mo × 3 par service (ancre `x-logging`).
 | `redis_data` | redis (AOF) | queue Messenger + rate-limiters (survit au restart — le dev n'en a volontairement pas) |
 | `backups` | php, worker, cron | dumps `pg_dump` (`var/backups`) |
 | `logo_storage` | php, worker, cron | logos clubs (`var/storage`) |
-| `exports` | pdf-worker (rw), php (rw), nginx (ro) | PDF générés (`public/exports`) — uid 1000 partagé php/pdf-worker, vérifié |
+| `exports` | pdf-worker (rw), php + worker (rw), nginx (ro) | PDF générés (`public/exports`) — uid 1000 partagé php/pdf-worker, vérifié |
 
 `./jwt` est un bind **read-only** vers `config/jwt` (le keypair ne vit jamais
-dans une image ni dans git).
+dans une image ni dans git). ⚠ Les conteneurs php tournent en **uid 1000** :
+après génération du keypair sur la VM, `chown -R 1000:1000 jwt && chmod 600
+jwt/private.pem && chmod 644 jwt/public.pem` — sinon stack verte mais **tous
+les logins en 500** (commandes complètes dans `.env.prod.dist`).
 
 ## Répétition locale (validée 2026-07-25)
 

@@ -77,12 +77,25 @@ RUN apt-get update \
 # re-stats files — safe ONLY because the code in this image cannot change.
 RUN { \
         echo "max_execution_time = 60"; \
+        echo "memory_limit = 192M"; \
         echo "opcache.enable = 1"; \
         echo "opcache.validate_timestamps = 0"; \
         echo "opcache.memory_consumption = 192"; \
         echo "opcache.max_accelerated_files = 20000"; \
         echo "expose_php = Off"; \
-    } > /usr/local/etc/php/conf.d/zz-prod.ini
+    } > /usr/local/etc/php/conf.d/zz-prod.ini \
+    && { \
+        echo "[www]"; \
+        echo "pm = dynamic"; \
+        echo "pm.max_children = 2"; \
+        echo "pm.start_servers = 2"; \
+        echo "pm.min_spare_servers = 1"; \
+        echo "pm.max_spare_servers = 2"; \
+    } > /usr/local/etc/php-fpm.d/zz-prod-pool.conf
+# Memory model (worst case fits the cgroup): 2 children × 192M request limit
+# + 192M opcache shm + ~30M master ≈ 606M < the 640m container cap
+# (docker-compose.prod.yml) — a heavy request dies with a clean PHP memory
+# error; the OOM-killer never takes down the FPM master.
 
 # .dockerignore keeps var/, vendor/, config/jwt and every *.local env file out
 # of the build context — only committed code and safe env defaults get in.
@@ -102,3 +115,18 @@ RUN mkdir -p var/cache var/log var/backups var/storage/logos public/exports conf
     && chown -R www-data:www-data var public/exports
 
 USER www-data
+
+# ---------------------------------------------------------------------------
+# nginx-prod — the backend edge, built FROM the prod stage's public/ so it
+# ships the assets:install output (public/bundles is gitignored: a COPY from
+# the build context would silently miss it in a clean CI checkout, breaking
+# /api/docs assets in every ghcr-built image).
+FROM nginx:1.27-alpine AS nginx-prod
+
+COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --from=prod /app/backend/public /app/backend/public
+
+# Default (last) stage = base, so a target-less build — the dev compose's
+# php-fpm/messenger-worker/cron-runner services — still gets the dev runtime.
+# Prod builds pick their stage explicitly (--target prod / nginx-prod).
+FROM base

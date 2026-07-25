@@ -1,15 +1,16 @@
 #!/bin/bash
 # ClubScheduler database users — runs after 01-rls.sql (app_security exists).
 #
-# Shell wrapper (was 02-users.sql) so the passwords come from the environment:
-# dev compose sets nothing and gets the historical dev defaults; prod compose
-# passes APP_USER_PASSWORD / MIGRATION_USER_PASSWORD from .env.prod so no
-# hard-coded credential ever reaches a production cluster. Runs ONCE, on first
-# cluster init only (docker-entrypoint-initdb.d contract).
+# Shell wrapper (was 02-users.sql) so the passwords come from the environment.
+# FAIL-CLOSED: no fallback defaults here — a cluster initialised without these
+# vars would permanently carry the publicly-committed dev passwords (initdb.d
+# never re-runs). The DEV compose passes the historical dev values explicitly;
+# prod compose passes them from .env.prod. Any other path (bare `docker run`,
+# a compose refactor that drops the mappings) aborts the init instead.
 set -euo pipefail
 
-APP_USER_PASSWORD="${APP_USER_PASSWORD:-app_user_password}"
-MIGRATION_USER_PASSWORD="${MIGRATION_USER_PASSWORD:-migration_user_password}"
+: "${APP_USER_PASSWORD:?02-users.sh: APP_USER_PASSWORD must be set (dev compose provides the dev default; prod .env.prod provides the real one)}"
+: "${MIGRATION_USER_PASSWORD:?02-users.sh: MIGRATION_USER_PASSWORD must be set}"
 
 psql -v ON_ERROR_STOP=1 \
      -v app_user_password="$APP_USER_PASSWORD" \
