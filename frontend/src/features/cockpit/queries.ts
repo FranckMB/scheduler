@@ -85,10 +85,16 @@ export function useSchedulePlans() {
  * en quatre revues, dont une en tentant de corriger la ligne par un `isError` ajouté au
  * tuple — même contrat facultatif, même oubli. Ici l'appelant doit NOMMER le cas :
  *
- *  - `loading` — la réponse n'est pas encore là (ou la période n'a pas été adaptée) ;
+ *  - `loading` — la réponse n'est pas encore là ;
  *  - `failed`  — le GET a échoué ; `retry` relance ;
+ *  - `absent`  — le GET a RÉUSSI et cette période n'a aucun plan (jamais adaptée) ;
  *  - `base`    — hors mode période : `null` EST la bonne ancre (structure partagée) ;
  *  - `period`  — l'ancre est certaine.
+ *
+ * `absent` est distinct de `loading` À DESSEIN : les confondre rendait un spinner
+ * ÉTERNEL sur une période sans plan (une semaine-enfant dont la ligne manque, une
+ * entrée rouverte depuis un cache périmé) — le cul-de-sac même que la ligne visait.
+ * Une attente qui ne finit jamais est un bug, pas un état.
  *
  * **Écrire n'est licite que sur `period` (ou `base` hors période)** — cf. `anchorIsWritable`.
  * Lire est sans risque (la requête est désactivée), mais l'écran doit alors dire LEQUEL
@@ -99,6 +105,7 @@ export function useSchedulePlans() {
 export type PeriodAnchor =
   | { state: "loading"; planId: null }
   | { state: "failed"; planId: null; retry: () => void }
+  | { state: "absent"; planId: null }
   | { state: "base"; planId: null }
   | { state: "period"; planId: string };
 
@@ -126,11 +133,14 @@ export function usePeriodAnchor(calendarEntryId: string | null): PeriodAnchor {
       },
     };
   }
-  // Requête réglée sans plan et sans erreur = période pas encore adaptée : écrire y est
-  // aussi interdit qu'en chargement (ancre `null` = socle), donc même état.
-  void isLoading;
+  if (isLoading) {
+    return { state: "loading", planId: null };
+  }
 
-  return { state: "loading", planId: null };
+  // Requête RÉGLÉE, sans plan et sans erreur : la période n'a pas d'espace de travail.
+  // Écrire y est interdit (ancre `null` = socle), mais ce n'est PAS un chargement —
+  // l'annoncer comme tel produisait un spinner éternel sans issue.
+  return { state: "absent", planId: null };
 }
 
 /** L'écriture d'un réglage n'est licite que sur une ancre CERTAINE. */

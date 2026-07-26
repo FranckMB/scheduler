@@ -17,7 +17,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
-import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
+import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -64,13 +64,17 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
 
 export function ConstraintsStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  // Mode période SANS entrée résolue (état rehydraté possible : `mode` et
+  // `calendarEntryId` sont persistés indépendamment) : l'ancre vaudrait `base`, donc
+  // « écrivable » — et la réservation partirait sur le SOCLE du club alors que l'écran
+  // annonce une période. On exige donc `period` en mode période, jamais `base`.
+  const periodMode = useWizardStore((s) => "period" === s.mode);
   // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
   // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
   //
   // `usePeriodAnchor` porte le pourquoi : `null` est une ancre LÉGITIME (= base), donc un
   // `?? null` nu poserait la réservation sur le socle pendant le chargement du plan.
   const anchor = usePeriodAnchor(periodEntryId);
-  const schedulePlanId = anchor.planId;
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
@@ -423,10 +427,16 @@ export function ConstraintsStep() {
         // et un ÉCHEC se dit, au lieu d'un « Chargement… » qui ne finit jamais.
         "failed" === anchor.state ? (
           <LoadErrorHint onRetry={anchor.retry}>Impossible de charger le planning de la période.</LoadErrorHint>
-        ) : anchorIsWritable(anchor) ? (
-          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
+        ) : "absent" === anchor.state ? (
+          <EmptyHint>Cette période n’a pas encore d’espace de travail — utilisez « Adapter » pour en créer un.</EmptyHint>
+        ) : periodMode ? (
+          "period" === anchor.state ? (
+            <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={anchor.planId} />
+          ) : (
+            <EmptyHint>Chargement du planning de la période…</EmptyHint>
+          )
         ) : (
-          <EmptyHint>Chargement du planning de la période…</EmptyHint>
+          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={null} />
         )
       ) : (
         <>

@@ -32,6 +32,15 @@ export function PeriodAnchorGate({
   if ("failed" === anchor.state) {
     return <LoadErrorHint onRetry={anchor.retry}>{errorLabel}</LoadErrorHint>;
   }
+  // Réglé SANS plan : ce n'est pas un chargement. L'annoncer comme tel donnait un
+  // spinner éternel ; on dit l'état réel, qui a son propre geste (Adapter la période).
+  if ("absent" === anchor.state) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Cette période n’a pas encore d’espace de travail — utilisez « Adapter » sur la période pour en créer un.
+      </p>
+    );
+  }
   if ("period" !== anchor.state) {
     return <p className="text-xs text-muted-foreground">{loadingLabel}</p>;
   }

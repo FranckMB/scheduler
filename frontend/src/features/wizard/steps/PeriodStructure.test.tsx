@@ -230,6 +230,26 @@ describe("PeriodTeams — default team selection (E3) + toggles", () => {
     expect(createOverride).toHaveBeenCalledTimes(1);
   });
 
+  it("T5 — un GET d'overrides en échec n'écrit RIEN en arrière-plan (seed muselé)", () => {
+    // Le piège : sur une query en ERREUR, `overrides` vaut `[]` et `isLoading` est faux —
+    // le seed passait donc toutes ses gardes et désactivait la moitié du club PENDANT que
+    // l'écran affichait « Impossible de charger la sélection ». Invisible, et le
+    // gestionnaire retrouvait ensuite une sélection qu'il n'avait pas faite.
+    // `holiday` + 3 rangs = la configuration qui seed RÉELLEMENT (une closure ne
+    // désactive personne : le test ne pourrait alors pas échouer).
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
+    teamOverridesErrorState.value = true;
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+
+    render(<PeriodTeams calendarEntryId="fresh-holiday-overrides-ko" />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger la sélection/);
+    expect(createOverride).not.toHaveBeenCalled();
+    teamOverridesErrorState.value = false;
+    entryState.data = { periodType: "closure" };
+  });
+
   it("fermeture (closure): seeds nobody — tout le club reste actif (structure verrouillée)", () => {
     entryState.data = { periodType: "closure" };
     withThreeTiers();

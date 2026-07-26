@@ -103,7 +103,8 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // sans un mot et la période se générait à vide (revue #8 PR-B).
   const periodSlotsQuery = usePeriodSlots(periodMode ? periodAnchor.planId : null);
   const periodSlots = periodSlotsQuery.data ?? [];
-  const { data: periodOverrides = [] } = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
+  const periodOverridesQuery = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
+  const periodOverrides = periodOverridesQuery.data ?? [];
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.
@@ -126,9 +127,19 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   if ("failed" === periodAnchor.state) {
     return { errors: ["La période n'a pas pu être chargée — impossible de vérifier ses réglages."], warnings: [] };
   }
+  if (periodMode && "absent" === periodAnchor.state) {
+    return { errors: ["Cette période n'a pas encore d'espace de travail — utilisez « Adapter » pour en créer un."], warnings: [] };
+  }
   // Ancre encore en vol : neutre mais bloquant, comme les autres premiers chargements.
   if (periodMode && "loading" === periodAnchor.state) {
     return { errors: [], warnings: [], pending: true };
+  }
+  // P4-1 au niveau du VERDICT : la grille de période est ces deux requêtes. Un GET raté
+  // laissait `[]` passer pour une grille vide et fabriquait un blocage « Gymnase(s) sans
+  // créneau » nommant TOUS les gymnases — sur une grille en fait pleine. Le panneau, lui,
+  // affichait correctement l'échec : deux écrans, deux vérités.
+  if (periodMode && (periodSlotsQuery.isError || periodOverridesQuery.isError)) {
+    return { errors: ["La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux."], warnings: [] };
   }
 
   if ("teams" === stepId) {

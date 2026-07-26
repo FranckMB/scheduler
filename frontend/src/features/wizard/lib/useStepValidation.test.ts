@@ -6,7 +6,7 @@ import { computeReservationWarnings, useStepValidation } from "./useStepValidati
 import { useWizardStore } from "../store";
 
 // Pilote l'état de l'ancre de période dans les mocks (union discriminée, P4-20).
-const anchorState = { failed: false };
+const anchorState: { failed: boolean; absent: boolean } = { failed: false, absent: false };
 
 // A gym with NO availability slot — the "sans créneau" rule fires on it in base
 // mode but must stay silent in period mode (slots are inherited & read-only).
@@ -20,7 +20,9 @@ vi.mock("@/features/cockpit/queries", () => ({
       ? { state: "base", planId: null }
       : anchorState.failed
         ? { state: "failed", planId: null, retry: () => {} }
-        : { state: "period", planId: "plan-1" },
+        : anchorState.absent
+          ? { state: "absent", planId: null }
+          : { state: "period", planId: "plan-1" },
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
@@ -32,11 +34,11 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useConstraintValidation: () => ({ data: undefined, isLoading: false }),
   useReservations: () => ({ data: [] }),
-  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading }),
-  useVenuePeriodOverrides: () => ({ data: [] }),
+  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading, isError: periodSlotsState.isError }),
+  useVenuePeriodOverrides: () => ({ data: [], isError: false }),
 }));
 
-const periodSlotsState: { data: unknown[]; isLoading: boolean } = { data: [], isLoading: false };
+const periodSlotsState: { data: unknown[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -161,6 +163,34 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     expect(result.current.errors).toContain("La période n'a pas pu être chargée — impossible de vérifier ses réglages.");
     expect(result.current.pending).not.toBe(true);
     anchorState.failed = false;
+  });
+
+  // NR — une grille de période qui n'a PAS chargé ne doit pas être lue comme vide.
+  // Le panneau disait correctement « Impossible de charger la grille », pendant que le
+  // VERDICT fabriquait « Gymnase(s) sans créneau : … » en nommant tous les gymnases :
+  // deux écrans, deux vérités, et le gestionnaire poussé à re-dessiner des créneaux
+  // qui existent déjà (doublons).
+  it("dit l'échec de la grille au lieu de fabriquer « gymnase sans créneau »", () => {
+    periodSlotsState.isError = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+
+    const { result } = renderHook(() => useStepValidation("venues"));
+
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+    expect(result.current.errors).toContain("La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux.");
+    periodSlotsState.isError = false;
+  });
+
+  // NR — une période SANS espace de travail est un état réel, pas un chargement.
+  it("dit qu'une période sans espace de travail doit être adaptée (pas un pending éternel)", () => {
+    anchorState.absent = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "recap" });
+
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.pending).not.toBe(true);
+    expect(result.current.errors.some((e) => /Adapter/.test(e))).toBe(true);
+    anchorState.absent = false;
   });
 
   it("ne bloque PAS pendant que la query des créneaux de période charge (faux positif)", () => {
