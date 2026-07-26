@@ -60,7 +60,12 @@ const teamOverridesAnchor: { value: string | null } = { value: null };
 const periodSlotsAnchor: { value: string | null } = { value: null };
 const periodSlotWriteAnchor: { value: string | null } = { value: null };
 const constraintOverridesAnchor: { value: string | null } = { value: null };
-const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
+const periodSlotsState = { failed: false, retry: vi.fn() };
+const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined; failed: boolean; retry: () => void } = {
+  data: { id: "plan-1", teamSelectionInitialized: false },
+  failed: false,
+  retry: vi.fn(),
+};
 
 // Teams + tiers stateful : le défaut d'équipes E3 (reprise = 2 premiers rangs, fermeture =
 // tout le club) ne se prouve qu'avec un rang SOUS les importantes → certains tests ajoutent
@@ -78,7 +83,7 @@ vi.mock("../queries", () => ({
   useTeamPeriodOverrides: (anchor: string | null) => {
     teamOverridesAnchor.value = anchor;
 
-    return { data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value };
+    return { data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value, refetch: vi.fn() };
   },
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
@@ -88,7 +93,11 @@ vi.mock("../queries", () => ({
   usePeriodSlots: (anchor: string | null) => {
     periodSlotsAnchor.value = anchor;
 
-    return { data: periodSlotOverride.value ?? [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }] };
+    return {
+      data: periodSlotOverride.value ?? [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }],
+      isError: periodSlotsState.failed,
+      refetch: periodSlotsState.retry,
+    };
   },
   useCreatePeriodSlot: (anchor: string | null) => {
     periodSlotWriteAnchor.value = anchor;
@@ -99,7 +108,7 @@ vi.mock("../queries", () => ({
   useVenuePeriodOverrides: (anchor: string | null) => {
     venuePeriodOverridesAnchor.value = anchor;
 
-    return { data: overridesVenueState.data, isFetching: overridesFetchingState.value };
+    return { data: overridesVenueState.data, isFetching: overridesFetchingState.value, isError: false, refetch: vi.fn() };
   },
   useSetVenuePeriodMode: () => ({ mutate: setMode, isPending: false }),
   useUpdatePeriodSlot: () => ({ mutate: updateSlot, isPending: false }),
@@ -126,11 +135,24 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
   // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
   // encore résolu, et `ready` bascule — c'est ce que le NR d'écriture exerce.
+  // Union discriminée (P4-20) : `planState.failed` simule un GET du plan en ÉCHEC,
+  // distinct de « pas encore résolu » (data undefined) que le NR d'écriture exerce.
   usePeriodAnchor: (calendarEntryId: string | null) => {
     const planId = planState.data?.id ?? null;
 
-    return { planId, ready: null === calendarEntryId || null !== planId, isLoading: false };
+    if (null === calendarEntryId) {
+      return { state: "base", planId: null };
+    }
+    if (null !== planId) {
+      return { state: "period", planId };
+    }
+    if (planState.failed) {
+      return { state: "failed", planId: null, retry: planState.retry };
+    }
+
+    return { state: "loading", planId: null };
   },
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -569,15 +591,88 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
   });
 
-  it("PeriodTeams ne confirme PAS « Sélection appliquée » quand rien n'a été écrit", async () => {
+  // ── NR P4-20 / P4-1 — un écran qui échoue le DIT, et donne une issue ───────────
+  //
+  // Avant la porte, un GET du plan en échec produisait quatre mensonges différents
+  // selon l'écran : « Chargement… » éternel, cases muettes, bouton mort, récap vert.
+  // Le contrat est désormais dans le TYPE (union discriminée) : oublier `failed`
+  // ne compile pas.
+
+  it("T1 — PeriodVenues dit l'échec du plan et propose de réessayer", async () => {
     const user = userEvent.setup();
+    planState.data = undefined;
+    planState.failed = true;
+
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.queryByText(/Chargement des créneaux de la période/)).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger les créneaux/);
+    await user.click(screen.getByRole("button", { name: "Réessayer" }));
+    expect(planState.retry).toHaveBeenCalled();
+
+    planState.failed = false;
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("T1 — PeriodTeams et PeriodConstraints disent l'échec plutôt que d'offrir des gestes muets", () => {
+    planState.data = undefined;
+    planState.failed = true;
+
+    const teams = render(<PeriodTeams calendarEntryId="e1" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/ne seraient pas enregistrées/);
+    expect(screen.queryByRole("button", { name: "Fanion seul" })).toBeNull();
+    teams.unmount();
+
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/ne seraient pas enregistrées/);
+
+    planState.failed = false;
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("T2 — une ancre EN CACHE survit à un refetch raté : l'écran reste fonctionnel", () => {
+    // react-query garde `data` et bascule `status` à error sur un refetch d'arrière-plan.
+    // Basculer l'écran en erreur ici détruirait une vue qui marche (le bug de ma 1re
+    // tentative) : tant qu'on a une ancre, on est en `period`, pas en `failed`.
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+    planState.failed = true;
+
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Lun 18:00" })).toBeInTheDocument();
+
+    planState.failed = false;
+  });
+
+  it("T4 — une grille de période qui n'a pas chargé ne se rend PAS comme une grille vide", async () => {
+    const user = userEvent.setup();
+    // L'ancre est bonne ; ce sont les CRÉNEAUX qui échouent. Coercés en `[]`, ils
+    // affichaient « 0 créneau » : le gestionnaire re-dessine sa semaine → doublons.
+    periodSlotsState.failed = true;
+
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger la grille/);
+    expect(screen.queryByRole("button", { name: "Lun 18:00" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Réessayer" }));
+    expect(periodSlotsState.retry).toHaveBeenCalled();
+
+    periodSlotsState.failed = false;
+  });
+
+  it("PeriodTeams n'offre AUCUN geste tant que le plan n'est pas résolu", () => {
     planState.data = undefined; // plan pas encore résolu → aucune écriture possible
+
     render(<PeriodTeams calendarEntryId="e1" />);
 
-    await user.click(screen.getByRole("button", { name: "Fanion seul" }));
-    // Le piège : sans ancre, chaque upsert bail en Promise.resolve() → zéro rejet → le
-    // toast se déclenchait. Un succès qui ment est pire qu'une erreur : le gestionnaire
-    // croit sa sélection posée, et l'overlay part avec tout le club actif.
+    // Le piège d'origine : sans ancre, chaque upsert bailait en Promise.resolve() → zéro
+    // rejet → « Sélection appliquée » était confirmé alors qu'AUCUNE ligne n'était écrite,
+    // et l'overlay partait ensuite avec tout le club actif. Un succès qui ment est pire
+    // qu'une erreur. Depuis la PORTE (P4-20), la garantie est plus forte que « ne pas
+    // confirmer » : la surface d'écriture n'existe pas du tout.
+    expect(screen.queryByRole("button", { name: "Fanion seul" })).toBeNull();
+    expect(screen.getByText(/Chargement des équipes de la période/)).toBeInTheDocument();
     expect(toast.success).not.toHaveBeenCalledWith("Sélection appliquée");
     expect(createOverride).not.toHaveBeenCalled();
     planState.data = { id: "plan-1", teamSelectionInitialized: false };

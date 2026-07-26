@@ -54,10 +54,19 @@ vi.mock("../queries", () => ({
 // FAUX tant qu'il n'est pas résolu. `periodAnchorReady` est pilotable pour que la garde
 // anchorReady (qui protège les réservations d'un atterrissage sur le socle) reste
 // exerçable par les tests (revue #284 round 2).
+const periodAnchorFailed = { value: false };
+const retryAnchor = vi.fn();
 const periodAnchorReady = vi.hoisted(() => ({ value: true }));
 vi.mock("@/features/cockpit/queries", () => ({
   usePeriodAnchor: (entryId: string | null) =>
-    null === entryId ? { planId: null, ready: true } : { planId: periodAnchorReady.value ? "plan-1" : null, ready: periodAnchorReady.value },
+    null === entryId
+      ? { state: "base", planId: null }
+      : periodAnchorReady.value
+        ? { state: "period", planId: "plan-1" }
+        : periodAnchorFailed.value
+          ? { state: "failed", planId: null, retry: retryAnchor }
+          : { state: "loading", planId: null },
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 // Stub : le comportement interne de PeriodConstraints est couvert par
 // PeriodStructure.test — ici on ne teste que son PLACEMENT par onglet (#9).

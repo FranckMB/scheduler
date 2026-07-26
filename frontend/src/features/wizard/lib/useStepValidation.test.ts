@@ -5,6 +5,9 @@ import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { computeReservationWarnings, useStepValidation } from "./useStepValidation";
 import { useWizardStore } from "../store";
 
+// Pilote l'état de l'ancre de période dans les mocks (union discriminée, P4-20).
+const anchorState = { failed: false };
+
 // A gym with NO availability slot — the "sans créneau" rule fires on it in base
 // mode but must stay silent in period mode (slots are inherited & read-only).
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
@@ -12,7 +15,13 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   // Ancre résolue seulement si une entrée est fournie : mode période sans entrée = plan
   // non résolu (planId null), comme dans le vrai code.
-  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: false, isLoading: false } : { planId: "plan-1", ready: true, isLoading: false }),
+  usePeriodAnchor: (entryId: string | null) =>
+    null === entryId
+      ? { state: "base", planId: null }
+      : anchorState.failed
+        ? { state: "failed", planId: null, retry: () => {} }
+        : { state: "period", planId: "plan-1" },
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),
@@ -137,6 +146,21 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     useWizardStore.setState({ mode: "period", calendarEntryId: null, stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+  });
+
+  // NR T3 (P4-20, décision fondateur option A) — quand l'ancre de la période n'a pas pu
+  // être chargée, on ne sait RIEN de ses réglages. Le récap doit le dire et bloquer :
+  // un verdict vert sur une période cassée est le pire des deux mensonges, et un simple
+  // `pending` ressemblerait à « ça charge » — le travers qu'on corrige.
+  it("BLOQUE et le dit quand l'ancre de la période a échoué (jamais un récap vert)", () => {
+    anchorState.failed = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "recap" });
+
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.errors).toContain("La période n'a pas pu être chargée — impossible de vérifier ses réglages.");
+    expect(result.current.pending).not.toBe(true);
+    anchorState.failed = false;
   });
 
   it("ne bloque PAS pendant que la query des créneaux de période charge (faux positif)", () => {

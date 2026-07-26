@@ -3,7 +3,7 @@ import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import type { ScheduleStatus } from "@/features/planning/api";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
@@ -11,6 +11,7 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
+import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { errorMessage } from "@/shared/lib/errorMessage";
 
 import { useStepValidation } from "../lib/useStepValidation";
@@ -34,7 +35,9 @@ export function GenerateStep() {
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
   // ADR-0002 C4 : une version se crée SOUS le plan de sa période — résolu depuis l'entrée.
-  const { planId: periodPlanId, ready: periodAnchorReady } = usePeriodAnchor(periodMode ? calendarEntryId : null);
+  const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
+  const periodPlanId = periodAnchor.planId;
+  const periodAnchorReady = anchorIsWritable(periodAnchor);
   const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
@@ -195,6 +198,15 @@ export function GenerateStep() {
           <BlockerList blockers={blockers} className="max-w-md text-left" />
           {/* Period mode: wait for the entry to load so an existing overlay is
               regenerated (not duplicated → backend 422). Also gated by blockers. */}
+          {/* P4-20 (option A) : une ancre en échec laissait ce bouton grisé POUR TOUJOURS,
+              sans un mot — le gestionnaire cliquait dans le vide sans jamais savoir
+              pourquoi. On dit l'échec et on offre de réessayer ; Générer ne redevient
+              cliquable que lorsque l'ancre est réellement là. */}
+          {"failed" === periodAnchor.state ? (
+            <LoadErrorHint onRetry={periodAnchor.retry} className="justify-center">
+              Impossible de charger la période — la génération est bloquée.
+            </LoadErrorHint>
+          ) : null}
           <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
             <Rocket className="size-4" />
             {periodMode ? "Générer le planning de période" : "Lancer la génération"}

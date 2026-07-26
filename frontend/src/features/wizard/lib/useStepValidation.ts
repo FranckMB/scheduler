@@ -1,4 +1,4 @@
-import { usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, usePeriodSlots, useReservations, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
@@ -93,9 +93,9 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // Reservations are server-backed now (base vs period overlay), not the client store.
   // Elles pendent au PLAN (inv. 5, lot C3) : le composant tient le déclencheur, il en
   // résout l'ancre.
-  // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
+  // Hors ancre certaine, ne PAS lire : on servirait le socle.
   const periodAnchor = usePeriodAnchor(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, anchorIsWritable(periodAnchor));
   // #8 PR-B — une période POSSÈDE désormais sa grille (elle n'est plus héritée en lecture
   // seule) : la règle « gymnase sans créneau » doit donc s'y appliquer AUSSI, mais sur les
   // créneaux de la PÉRIODE et en épargnant les gymnases explicitement désactivés (dont
@@ -119,6 +119,18 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     return { errors: [], warnings: [], pending: true };
   }
 
+  // P4-20 — l'ancre de la période n'a PAS pu être chargée : on ne sait rien de sa
+  // grille ni de ses réglages. Un verdict « prêt » serait un mensonge vert sur une
+  // période cassée (décision fondateur : dans le doute, on bloque et on le DIT) ;
+  // `pending` seul ressemblerait à « ça charge », le travers qu'on corrige.
+  if ("failed" === periodAnchor.state) {
+    return { errors: ["La période n'a pas pu être chargée — impossible de vérifier ses réglages."], warnings: [] };
+  }
+  // Ancre encore en vol : neutre mais bloquant, comme les autres premiers chargements.
+  if (periodMode && "loading" === periodAnchor.state) {
+    return { errors: [], warnings: [], pending: true };
+  }
+
   if ("teams" === stepId) {
     return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
   }
@@ -134,7 +146,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // faut attendre qu'elle ait CHARGÉ, pas seulement que le plan soit résolu, sinon on
   // confond « pas encore chargé » (undefined→[]) et « vraiment vide » et on crie « sans
   // créneau » sur une grille pleine (revue #8 PR-B round 2).
-  const periodGridReady = periodAnchor.ready && null !== periodAnchor.planId && !periodSlotsQuery.isLoading;
+  const periodGridReady = "period" === periodAnchor.state && !periodSlotsQuery.isLoading;
   const emptyVenues = periodMode
     ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
     : venuesWithoutSlot(venues, slots);

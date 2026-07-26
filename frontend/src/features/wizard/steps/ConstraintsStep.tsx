@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -16,7 +17,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
-import { usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -68,7 +69,8 @@ export function ConstraintsStep() {
   //
   // `usePeriodAnchor` porte le pourquoi : `null` est une ancre LÉGITIME (= base), donc un
   // `?? null` nu poserait la réservation sur le socle pendant le chargement du plan.
-  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(periodEntryId);
+  const anchor = usePeriodAnchor(periodEntryId);
+  const schedulePlanId = anchor.planId;
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
@@ -416,11 +418,14 @@ export function ConstraintsStep() {
       ) : null}
 
       {"reserve" === mode ? (
-        anchorReady ? (
+        // L'union force à nommer les trois issues (P4-20) : hors ancre certaine on
+        // n'écrit pas — une réservation posée sur le socle deviendrait permanente —
+        // et un ÉCHEC se dit, au lieu d'un « Chargement… » qui ne finit jamais.
+        "failed" === anchor.state ? (
+          <LoadErrorHint onRetry={anchor.retry}>Impossible de charger le planning de la période.</LoadErrorHint>
+        ) : anchorIsWritable(anchor) ? (
           <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
         ) : (
-          // Mode période, plan pas encore résolu : on ne sait pas OÙ écrire. Attendre
-          // plutôt que risquer une réservation posée sur le socle (voir anchorReady).
           <EmptyHint>Chargement du planning de la période…</EmptyHint>
         )
       ) : (

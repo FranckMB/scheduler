@@ -20,7 +20,8 @@ let freshSchedules: { schedulePlanId: string }[] = [];
 vi.mock("@/features/cockpit/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/cockpit/queries")>()),
   useCalendarEntry: () => ({ data: { id: "entry-x", title: "Vacances de la Toussaint", startDate: "2026-10-16", endDate: "2026-10-31" }, error: null }),
-  usePeriodAnchor: () => ({ planId: periodPlanId, ready: null !== periodPlanId, isLoading: false }),
+  usePeriodAnchor: () => (null === periodPlanId ? { state: "loading", planId: null } : { state: "period", planId: periodPlanId }),
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
   useDeleteEntry: () => ({ mutate: vi.fn(), mutateAsync: deleteEntryMutateAsync, isPending: false }),
 }));
 vi.mock("@/features/planning/queries", async (orig) => ({
