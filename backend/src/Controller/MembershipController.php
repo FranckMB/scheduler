@@ -21,6 +21,8 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class MembershipController extends AbstractController
 {
+    use ResolvesCurrentClubTrait;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
@@ -94,19 +96,17 @@ final class MembershipController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        // BCK-10 — the membership is resolved for the request's club, like
-        // everywhere else (ManagementAccessGuard): listener attribute, then
-        // header. The previous findOneBy(userId, isActive) picked "any" active
-        // membership of the user; RLS on club_user already narrowed that to the
-        // request's club, so this is defense in depth (and readability), NOT a
-        // behaviour change — which is why no non-regression test guards it:
-        // no mutation of this line can be observed through the API.
-        $request = $this->requestStack->getCurrentRequest();
-        $clubId = $request?->attributes->get('_club_id');
-        if (!\is_string($clubId) || '' === $clubId) {
-            $clubId = $request?->headers->get('X-Club-Id');
-        }
-        if (!\is_string($clubId) || '' === $clubId) {
+        // BCK-10 (partiel) — l'adhésion suit le club de la REQUÊTE, résolu par
+        // le trait partagé, au lieu d'être un second tirage indépendant
+        // (`findOneBy(userId, isActive)`). Ce que ça corrige : deux endroits ne
+        // peuvent plus répondre différemment à « quel club ? » dans une même
+        // requête. Ce que ça NE corrige PAS : pour un gestionnaire multi-club
+        // SANS `X-Club-Id` (le front n'en envoie pas), c'est
+        // `TenantFilterListener::resolveClubId` qui choisit arbitrairement —
+        // le non-déterminisme vit là, et sa résolution est un choix produit
+        // (quel club est « courant » ?) rattaché à P1-1. Voir P4-8 (rouverte).
+        $clubId = $this->resolveCurrentClubId($this->requestStack);
+        if (null === $clubId) {
             return $this->json(['error' => 'Forbidden'], 403);
         }
 

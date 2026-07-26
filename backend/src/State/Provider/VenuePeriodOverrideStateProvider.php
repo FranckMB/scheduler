@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class VenuePeriodOverrideStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return VenuePeriodOverride::class;
@@ -45,13 +47,13 @@ class VenuePeriodOverrideStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // Les réglages sont toujours consultés par période ; un venueId affine encore.
-            $schedulePlanId = $request->query->get('schedulePlanId');
-            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+            $schedulePlanId = $this->uuidQueryParam($request, 'schedulePlanId');
+            if (null !== $schedulePlanId) {
                 $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             }
 
-            $venueId = $request->query->get('venueId');
-            if (null !== $venueId && '' !== $venueId) {
+            $venueId = $this->uuidQueryParam($request, 'venueId');
+            if (null !== $venueId) {
                 $qb->andWhere('e.venueId = :venueId')->setParameter('venueId', $venueId);
             }
         }

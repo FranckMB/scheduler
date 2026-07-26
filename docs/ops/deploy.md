@@ -146,7 +146,6 @@ le SMTP doit donc être bon dans `MAILER_DSN`).
   dans le bucket ;
 - Sentry : poser les 3 DSN (backup-restore.md §5) ;
 - superadmin : `docker compose ... exec php-fpm php bin/console app:superadmin:create <email>`.
-- ⚠ le board superadmin affichera **mailpit down** : normal en prod (P4-29).
 
 ---
 

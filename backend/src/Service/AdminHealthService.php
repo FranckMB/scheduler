@@ -38,10 +38,15 @@ final readonly class AdminHealthService
         private string $redisUrl,
         #[Autowire('%env(default::MERCURE_URL)%')]
         private string $mercureUrl,
-        // Mailpit is a DEV catch-all: the prod stack ships no such container
-        // and MAILER_DSN points at a real SMTP transport. Probing it there
-        // would red the board (and the global status) forever — the DSN tells
-        // us whether the container is supposed to exist at all.
+        // Mailpit est un catch-all de DEV : la stack prod n'embarque pas ce
+        // conteneur. Le sonder là-bas afficherait une carte « Mailpit » rouge à
+        // vie sur le board (le statut GLOBAL, lui, n'agrège que db/redis/engine/
+        // mercure/worker/messenger — mailpit n'y entre pas). Deux conditions pour
+        // fail-closed : l'environnement n'est pas la prod ET le DSN pointe
+        // effectivement mailpit — un `.env.prod` incomplet retomberait sinon sur
+        // le défaut mailpit committé dans backend/.env et on re-sonderait.
+        #[Autowire('%kernel.environment%')]
+        private string $appEnv = 'dev',
         #[Autowire('%env(default::MAILER_DSN)%')]
         private string $mailerDsn = '',
     ) {}
@@ -178,7 +183,7 @@ final readonly class AdminHealthService
     {
         $nginx = $this->http('http://nginx/api/health', true, 1.0, 1.5);
         $frontend = $this->http('http://frontend/health', false, 1.0, 1.5);
-        $mailpitExpected = str_contains($this->mailerDsn, 'mailpit');
+        $mailpitExpected = 'prod' !== $this->appEnv && str_contains($this->mailerDsn, 'mailpit');
         $mailpit = $mailpitExpected ? $this->http('http://mailpit:8025/', false, 1.0, 1.5) : null;
         $messengerWorker = $this->heartbeatProbe('admin_monitoring.messenger.heartbeat', 30);
         $cronRunner = $this->heartbeatProbe('admin_monitoring.cron_runner.heartbeat', 180);
@@ -195,7 +200,7 @@ final readonly class AdminHealthService
             ['key' => 'mercure', 'name' => 'Mercure', 'status' => $mercure['status'], 'latencyMs' => $mercure['latencyMs']],
         ];
 
-        // Listed only when the deployment actually runs it (dev catch-all).
+        // Listé seulement si le déploiement le fait réellement tourner (dev).
         if (null !== $mailpit) {
             $containers[] = ['key' => 'mailpit', 'name' => 'Mailpit', 'status' => $mailpit['status'], 'latencyMs' => $mailpit['latencyMs']];
         }

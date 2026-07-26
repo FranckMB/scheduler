@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class ReservationStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return Reservation::class;
@@ -43,9 +45,10 @@ class ReservationStateProvider extends AbstractStateProvider
         // period overlay's reservations; without it, the base plan (schedulePlanId
         // IS NULL) so the wizard's Réserver tab shows the permanent reservations.
         $request = $this->requestStack->getCurrentRequest();
-        if ($request instanceof Request && $request->query->has('schedulePlanId')) {
+        $schedulePlanId = $request instanceof Request ? $this->uuidQueryParam($request, 'schedulePlanId') : null;
+        if (null !== $schedulePlanId) {
             $qb->andWhere('e.schedulePlanId = :schedulePlanId')
-               ->setParameter('schedulePlanId', $request->query->get('schedulePlanId'));
+               ->setParameter('schedulePlanId', $schedulePlanId);
         } else {
             $qb->andWhere('e.schedulePlanId IS NULL');
         }

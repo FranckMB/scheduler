@@ -13,6 +13,8 @@ use App\Entity\VenueTrainingSlot;
  */
 class VenueTrainingSlotStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return VenueTrainingSlot::class;
@@ -43,21 +45,21 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
 
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
-            $venueId = $request->query->get('venueId');
-            if (null !== $venueId && '' !== $venueId) {
+            $venueId = $this->uuidQueryParam($request, 'venueId');
+            if (null !== $venueId) {
                 $qb->andWhere('e.venueId = :venueId')->setParameter('venueId', $venueId);
             }
 
-            $seasonId = $request->query->get('seasonId');
-            if (null !== $seasonId && '' !== $seasonId) {
+            $seasonId = $this->uuidQueryParam($request, 'seasonId');
+            if (null !== $seasonId) {
                 $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
             }
 
             // Period-editable structure: ?schedulePlanId=<id> lists that period's own
             // slots; ABSENT ⇒ SEASONAL only (schedulePlanId IS NULL) so the wizard's
             // seasonal editor never shows a period's borrowed slots.
-            $schedulePlanId = $request->query->get('schedulePlanId');
-            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+            $schedulePlanId = $this->uuidQueryParam($request, 'schedulePlanId');
+            if (null !== $schedulePlanId) {
                 $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             } else {
                 $qb->andWhere('e.schedulePlanId IS NULL');

@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class TeamPeriodOverrideStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return TeamPeriodOverride::class;
@@ -45,13 +47,13 @@ class TeamPeriodOverrideStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // Overrides are always consulted per period; a teamId narrows further.
-            $schedulePlanId = $request->query->get('schedulePlanId');
-            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+            $schedulePlanId = $this->uuidQueryParam($request, 'schedulePlanId');
+            if (null !== $schedulePlanId) {
                 $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             }
 
-            $teamId = $request->query->get('teamId');
-            if (null !== $teamId && '' !== $teamId) {
+            $teamId = $this->uuidQueryParam($request, 'teamId');
+            if (null !== $teamId) {
                 $qb->andWhere('e.teamId = :teamId')->setParameter('teamId', $teamId);
             }
         }
