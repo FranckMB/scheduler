@@ -57,7 +57,7 @@ vi.mock("../queries", () => ({
 const periodAnchorReady = vi.hoisted(() => ({ value: true }));
 vi.mock("@/features/cockpit/queries", () => ({
   usePeriodAnchor: (entryId: string | null) =>
-    null === entryId ? { planId: null, ready: true } : { planId: periodAnchorReady.value ? "plan-1" : null, ready: periodAnchorReady.value },
+    null === entryId ? { planId: null, ready: true , isLoading: false, isError: false, refetch: () => {}} : { planId: periodAnchorReady.value ? "plan-1" : null, ready: periodAnchorReady.value , isLoading: false, isError: false, refetch: () => {}},
 }));
 // Stub : le comportement interne de PeriodConstraints est couvert par
 // PeriodStructure.test — ici on ne teste que son PLACEMENT par onglet (#9).

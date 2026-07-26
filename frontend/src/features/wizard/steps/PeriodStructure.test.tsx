@@ -60,7 +60,11 @@ const teamOverridesAnchor: { value: string | null } = { value: null };
 const periodSlotsAnchor: { value: string | null } = { value: null };
 const periodSlotWriteAnchor: { value: string | null } = { value: null };
 const constraintOverridesAnchor: { value: string | null } = { value: null };
-const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined } = { data: { id: "plan-1", teamSelectionInitialized: false } };
+const planState: { data: { id: string; teamSelectionInitialized: boolean } | null | undefined; failed?: boolean; refetch: () => void } = {
+  data: { id: "plan-1", teamSelectionInitialized: false },
+  failed: false,
+  refetch: vi.fn(),
+};
 
 // Teams + tiers stateful : le défaut d'équipes E3 (reprise = 2 premiers rangs, fermeture =
 // tout le club) ne se prouve qu'avec un rang SOUS les importantes → certains tests ajoutent
@@ -126,10 +130,18 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
   // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
   // encore résolu, et `ready` bascule — c'est ce que le NR d'écriture exerce.
+  // `planState.failed` simule un GET du plan en ÉCHEC (P4-20) — distinct de
+  // « pas encore résolu » (data undefined), que le NR d'écriture exerce déjà.
   usePeriodAnchor: (calendarEntryId: string | null) => {
     const planId = planState.data?.id ?? null;
 
-    return { planId, ready: null === calendarEntryId || null !== planId, isLoading: false };
+    return {
+      planId,
+      ready: null === calendarEntryId || null !== planId,
+      isLoading: false,
+      isError: planState.failed ?? false,
+      refetch: planState.refetch,
+    };
   },
 }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -566,6 +578,39 @@ describe("PeriodStructure — l'ancre des réglages (ADR-0002 inv. 5, lot C2)", 
     expect(screen.queryByRole("button", { name: "Lun 18:00" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Désactiver" })).toBeNull();
     expect(createSlot).not.toHaveBeenCalled();
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  // NR P4-20 — « ça charge » et « ça a échoué » ne sont pas le même écran.
+  // Avant : un GET du plan en échec laissait `ready` faux, donc « Chargement des
+  // créneaux… » pour toujours, bouton désactivé, aucune issue pour le gestionnaire.
+  it("PeriodVenues DIT l'échec et propose de réessayer (pas un chargement éternel)", async () => {
+    const user = userEvent.setup();
+    planState.data = undefined;
+    planState.failed = true;
+
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.queryByText(/Chargement des créneaux de la période/)).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger les créneaux/);
+
+    await user.click(screen.getByRole("button", { name: "Réessayer" }));
+    expect(planState.refetch).toHaveBeenCalled();
+
+    planState.failed = false;
+    planState.data = { id: "plan-1", teamSelectionInitialized: false };
+  });
+
+  it("PeriodTeams DIT l'échec plutôt que d'offrir des cases qui n'enregistrent rien", () => {
+    planState.data = undefined;
+    planState.failed = true;
+
+    render(<PeriodTeams calendarEntryId="e1" />);
+
+    // Sans ancre, `toggle` bail en silence : la liste aurait l'air interactive.
+    expect(screen.getByRole("alert")).toHaveTextContent(/ne seraient pas enregistrées/);
+
+    planState.failed = false;
     planState.data = { id: "plan-1", teamSelectionInitialized: false };
   });
 

@@ -88,12 +88,31 @@ export function useSchedulePlans() {
  * est simplement désactivée), mais l'appelant doit alors afficher un état de CHARGEMENT —
  * une liste vide affirmerait « aucun réglage », ce qui pousse le gestionnaire à les
  * re-saisir… et donc à déclencher l'écriture corrompue.
+ *
+ * P4-20 — `ready: false` recouvrait TROIS situations distinctes (chargement en cours,
+ * GET en échec, pas de plan) et le hook retenait `isError` : un GET du plan qui échoue
+ * laissait l'écran sur « Chargement… » pour toujours, sans issue. `isError`/`refetch`
+ * sont donc exposés, et l'appelant DOIT distinguer « ça charge » de « ça a échoué ».
  */
-export function usePeriodAnchor(calendarEntryId: string | null): { planId: string | null; ready: boolean; isLoading: boolean } {
-  const { data, isLoading } = useSchedulePlanForEntry(calendarEntryId);
+export function usePeriodAnchor(calendarEntryId: string | null): {
+  planId: string | null;
+  ready: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+} {
+  const { data, isLoading, isError, refetch } = useSchedulePlanForEntry(calendarEntryId);
   const planId = data?.id ?? null;
 
-  return { planId, ready: null === calendarEntryId || null !== planId, isLoading };
+  return {
+    planId,
+    ready: null === calendarEntryId || null !== planId,
+    isLoading,
+    isError,
+    refetch: () => {
+      void refetch();
+    },
+  };
 }
 
 /**
