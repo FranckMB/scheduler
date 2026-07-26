@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 
@@ -46,7 +46,7 @@ export function RecapStep() {
   // lues par l'entrée (elles décrivent le FAIT).
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
   const periodAnchor = usePeriodAnchor(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, anchorIsWritable(periodAnchor));
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la

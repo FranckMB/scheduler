@@ -1,6 +1,7 @@
-import { usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
-import { useConstraintValidation, usePeriodSlots, useReservations, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
@@ -93,9 +94,11 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // Reservations are server-backed now (base vs period overlay), not the client store.
   // Elles pendent au PLAN (inv. 5, lot C3) : le composant tient le déclencheur, il en
   // résout l'ancre.
-  // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
+  // Hors ancre certaine, ne PAS lire : on servirait le socle.
   const periodAnchor = usePeriodAnchor(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodAnchor.ready);
+  // En mode période, seul l'état `period` autorise la lecture : `base` (mode période
+  // rehydraté sans entrée) lirait le SOCLE et le présenterait comme la période.
+  const { data: reservations = [] } = useReservations(periodAnchor.planId, periodMode ? "period" === periodAnchor.state : anchorIsWritable(periodAnchor));
   // #8 PR-B — une période POSSÈDE désormais sa grille (elle n'est plus héritée en lecture
   // seule) : la règle « gymnase sans créneau » doit donc s'y appliquer AUSSI, mais sur les
   // créneaux de la PÉRIODE et en épargnant les gymnases explicitement désactivés (dont
@@ -103,7 +106,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // sans un mot et la période se générait à vide (revue #8 PR-B).
   const periodSlotsQuery = usePeriodSlots(periodMode ? periodAnchor.planId : null);
   const periodSlots = periodSlotsQuery.data ?? [];
-  const { data: periodOverrides = [] } = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
+  const periodOverridesQuery = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
+  const periodOverrides = periodOverridesQuery.data ?? [];
+  // La SÉLECTION d'équipes de la période : le verdict ne la lisait pas, donc le récap
+  // pouvait rester vert pendant que le panneau Équipes affichait « Impossible de charger
+  // la sélection ». Deux écrans, deux vérités — le défaut que cette PR corrige ailleurs.
+  // Même clé react-query que le panneau : pas de requête supplémentaire en pratique.
+  const periodTeamOverridesQuery = useTeamPeriodOverrides(periodMode ? periodAnchor.planId : null);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.
@@ -116,6 +125,44 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // error ("Ajoutez au moins une équipe") before the data arrives. Stay neutral
   // but mark pending so gates stay closed (isLoading = first load only).
   if (teamsQuery.isLoading || venuesQuery.isLoading || slotsQuery.isLoading || coachesQuery.isLoading) {
+    return { errors: [], warnings: [], pending: true };
+  }
+
+  // P4-20 — l'ancre de la période n'a PAS pu être chargée : on ne sait rien de sa
+  // grille ni de ses réglages. Un verdict « prêt » serait un mensonge vert sur une
+  // période cassée (décision fondateur : dans le doute, on bloque et on le DIT) ;
+  // `pending` seul ressemblerait à « ça charge », le travers qu'on corrige.
+  if ("failed" === periodAnchor.state) {
+    return { errors: ["La période n'a pas pu être chargée — impossible de vérifier ses réglages."], warnings: [] };
+  }
+  if (periodMode && "absent" === periodAnchor.state) {
+    return { errors: ["Cette période n'a pas encore d'espace de travail — utilisez « Adapter » pour en créer un."], warnings: [] };
+  }
+  // Mode période SANS entrée résolue (store rehydraté partiellement) : l'ancre vaut
+  // `base`. Sans ce blocage, le verdict sortait VERT — calculé sur le socle — pendant
+  // que ConstraintsStep affichait « Aucune période sélectionnée » : deux vérités.
+  if (periodMode && "base" === periodAnchor.state) {
+    return { errors: ["Aucune période sélectionnée — revenez au calendrier et rouvrez la période."], warnings: [] };
+  }
+  // Ancre encore en vol : neutre mais bloquant, comme les autres premiers chargements.
+  if (periodMode && "loading" === periodAnchor.state) {
+    return { errors: [], warnings: [], pending: true };
+  }
+  // P4-1 au niveau du VERDICT : la grille de période est ces deux requêtes. Un GET raté
+  // laissait `[]` passer pour une grille vide et fabriquait un blocage « Gymnase(s) sans
+  // créneau » nommant TOUS les gymnases — sur une grille en fait pleine. Le panneau, lui,
+  // affichait correctement l'échec : deux écrans, deux vérités.
+  if (periodMode && (readFailed(periodSlotsQuery) || readFailed(periodOverridesQuery))) {
+    return { errors: ["La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux."], warnings: [] };
+  }
+  if (periodMode && readFailed(periodTeamOverridesQuery)) {
+    return { errors: ["La sélection d'équipes de la période n'a pas pu être chargée — impossible de la vérifier."], warnings: [] };
+  }
+  // Grille encore en vol : neutre mais PENDING — le gate de génération reste fermé.
+  // Sans ça, `periodGridReady` faux vidait simplement `emptyVenues` : verdict vert et
+  // « Générer » cliquable pendant la fenêtre de chargement d'une grille peut-être vide —
+  // la faille exacte que la règle « gymnase sans créneau » existe pour fermer.
+  if (periodMode && "period" === periodAnchor.state && (readLoading(periodSlotsQuery) || readLoading(periodOverridesQuery))) {
     return { errors: [], warnings: [], pending: true };
   }
 
@@ -134,7 +181,12 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // faut attendre qu'elle ait CHARGÉ, pas seulement que le plan soit résolu, sinon on
   // confond « pas encore chargé » (undefined→[]) et « vraiment vide » et on crie « sans
   // créneau » sur une grille pleine (revue #8 PR-B round 2).
-  const periodGridReady = periodAnchor.ready && null !== periodAnchor.planId && !periodSlotsQuery.isLoading;
+  // Les DEUX queries portent la grille : `periodSlots` dit les créneaux,
+  // `periodOverrides` dit quels gymnases sont désactivés (donc légitimement sans
+  // créneau). Armer la règle sur l'une sans l'autre criait « gymnase sans créneau »
+  // sur un gymnase volontairement désactivé, le temps que les overrides arrivent.
+  const periodGridReady =
+    "period" === periodAnchor.state && !readLoading(periodSlotsQuery) && !readLoading(periodOverridesQuery);
   const emptyVenues = periodMode
     ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
     : venuesWithoutSlot(venues, slots);
@@ -184,6 +236,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     }
     // Until the pre-solve check resolves, report pending so the generate gate
     // stays closed rather than briefly allowing a launch on an invalid setup.
+    if (constraintNeeded && constraintQuery.isError) {
+      // Le pré-solve n'a pas pu tourner : sans ce blocage le verdict sortait vert et la
+      // génération partait sans la vérification que ce gate existe pour imposer — pour
+      // échouer minutes plus tard en FAILED/INFEASIBLE inexpliqué.
+      errors.push("La vérification des contraintes n'a pas pu être effectuée — réessayez avant de générer.");
+    }
+
     return { errors, warnings: [], pending: constraintNeeded && constraintQuery.isLoading };
   }
   return okValidation();

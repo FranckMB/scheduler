@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { PeriodAnchorGate } from "./PeriodAnchorGate";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -63,12 +64,17 @@ function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) =>
 
 export function ConstraintsStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  // Mode période SANS entrée résolue (état rehydraté possible : `mode` et
+  // `calendarEntryId` sont persistés indépendamment) : l'ancre vaudrait `base`, donc
+  // « écrivable » — et la réservation partirait sur le SOCLE du club alors que l'écran
+  // annonce une période. On exige donc `period` en mode période, jamais `base`.
+  const periodMode = useWizardStore((s) => "period" === s.mode);
   // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
   // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
   //
   // `usePeriodAnchor` porte le pourquoi : `null` est une ancre LÉGITIME (= base), donc un
   // `?? null` nu poserait la réservation sur le socle pendant le chargement du plan.
-  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(periodEntryId);
+  const anchor = usePeriodAnchor(periodEntryId);
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
@@ -416,12 +422,19 @@ export function ConstraintsStep() {
       ) : null}
 
       {"reserve" === mode ? (
-        anchorReady ? (
-          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />
+        // Une seule échelle d'états pour l'ancre — la PORTE. Le premier jet
+        // re-implémentait ses quatre cas en ternaire imbriqué : les libellés
+        // divergeaient déjà entre les deux copies au round suivant.
+        periodMode ? (
+          <PeriodAnchorGate
+            anchor={anchor}
+            loadingLabel="Chargement du planning de la période…"
+            errorLabel="Impossible de charger le planning de la période."
+          >
+            {(schedulePlanId) => <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />}
+          </PeriodAnchorGate>
         ) : (
-          // Mode période, plan pas encore résolu : on ne sait pas OÙ écrire. Attendre
-          // plutôt que risquer une réservation posée sur le socle (voir anchorReady).
-          <EmptyHint>Chargement du planning de la période…</EmptyHint>
+          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={null} />
         )
       ) : (
         <>

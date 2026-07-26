@@ -2,6 +2,8 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -51,6 +53,7 @@ import { WEEK } from "../lib/weekGrid";
 import { CapacitySelect } from "./slotFields";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
+import { PeriodAnchorGate } from "./PeriodAnchorGate";
 
 const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
@@ -68,6 +71,20 @@ const fieldClass = "h-8 rounded-md border border-input bg-background px-2 text-s
  * the top tier (Fanion) trains — the resumption ramp starts there.
  */
 export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
+  const anchor = usePeriodAnchor(calendarEntryId);
+
+  return (
+    <PeriodAnchorGate
+      anchor={anchor}
+      loadingLabel="Chargement des équipes de la période…"
+      errorLabel="Impossible de charger la période : les modifications ne seraient pas enregistrées."
+    >
+      {(schedulePlanId) => <PeriodTeamsPanel calendarEntryId={calendarEntryId} schedulePlanId={schedulePlanId} />}
+    </PeriodAnchorGate>
+  );
+}
+
+function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId: string; schedulePlanId: string }) {
   const { data: teams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
   // Le TYPE de période gouverne le défaut d'équipes (E3) : reprise = Fanion + importantes,
@@ -77,8 +94,9 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // Le PLAN entier est nécessaire ici (le garde de seed lit teamSelectionInitialized) ;
   // `usePeriodAnchor` fournit l'ancre ET son état — ne pas re-dériver un `?? null` nu.
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
-  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
-  const { data: overrides = [], isLoading } = useTeamPeriodOverrides(schedulePlanId);
+  const overridesQueryState = useTeamPeriodOverrides(schedulePlanId);
+  const { data: overrides = [], isLoading, refetch: retryOverrides } = overridesQueryState;
+  const overridesFailed = readFailed(overridesQueryState);
   const create = useCreateTeamPeriodOverride(schedulePlanId);
   const update = useUpdateTeamPeriodOverride(schedulePlanId);
   const del = useDeleteTeamPeriodOverride(schedulePlanId);
@@ -94,21 +112,24 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // Upsert the override, or DELETE it when the state is back to the seasonal default
   // (active + seasonal session count) — keeps the table sparse. Returns the mutation
   // promise so batch actions (seed / ramp) can await the whole set.
-  const upsertAsync = (t: Team, next: { isActive: boolean; sessions: number | null }): Promise<unknown> => {
+  /**
+   * Rend `null` quand il n'y a RIEN à écrire (l'état voulu est déjà celui de la saison,
+   * sans override) — à distinguer d'une écriture réussie : `Promise.allSettled` ne voit
+   * aucune différence entre « zéro requête » et « toutes réussies », et c'est ainsi que
+   * « Sélection appliquée » se confirmait sur zéro ligne écrite.
+   */
+  const upsertAsync = (t: Team, next: { isActive: boolean; sessions: number | null }): Promise<unknown> | null => {
     const existing = overrideOf.get(t.id);
     const backToSeasonal = next.isActive && (null === next.sessions || next.sessions === t.sessionsPerWeek);
     if (backToSeasonal) {
-      return existing ? del.mutateAsync(existing.id) : Promise.resolve();
-    }
-    if (null === schedulePlanId) {
-      return Promise.resolve(); // plan pas encore chargé : pas d'ancre, pas d'écriture
+      return existing ? del.mutateAsync(existing.id) : null;
     }
     const body = { schedulePlanId, teamId: t.id, isActive: next.isActive, sessionsPerWeek: next.sessions };
     return existing ? update.mutateAsync({ id: existing.id, body }) : create.mutateAsync(body);
   };
   // Fire-and-forget for single edits (checkbox/session). Swallow the rejection: the
   // global MutationCache already toasts it — this only avoids an unhandledrejection.
-  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next).catch(() => {});
+  const upsert = (t: Team, next: { isActive: boolean; sessions: number | null }) => void upsertAsync(t, next)?.catch(() => {});
 
   // Default team selection on a FRESH period (no overrides yet, not already seeded this
   // session), ONCE — best-effort. The DEPTH depends on the period type (E3) :
@@ -138,7 +159,12 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // depuis que le geste est atomique (l'entrée et son plan naissent ensemble, ou pas du
     // tout), et le mode période ne s'ouvre que sur ces deux types. Un null ici est donc une
     // anomalie, pas un état neuf : ne rien faire est le choix conservateur.
-    if (isLoading || planLoading || undefined === entry || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
+    // `overridesFailed` fait partie de la garde : sur une query en ERREUR, `overrides`
+    // vaut `[]` et `isLoading` est faux — le seed passait donc toutes ses conditions et
+    // désactivait la moitié du club EN ARRIÈRE-PLAN, pendant que l'écran affichait
+    // « Impossible de charger la sélection ». Le gestionnaire ne voyait rien, et
+    // retrouvait une sélection qu'il n'avait pas faite (ou générait sans le savoir).
+    if (isLoading || overridesFailed || planLoading || undefined === entry || 0 === teams.length || overrides.length > 0 || null === topTierId || false !== plan?.teamSelectionInitialized || periodSeedWasClaimed(calendarEntryId)) {
       return;
     }
     claimPeriodSeed(calendarEntryId);
@@ -158,7 +184,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot: gate the controls while the async default-selection writes settle
     setBusy(true);
     void Promise.allSettled(toDeactivate.map((t) => create.mutateAsync({ schedulePlanId: plan.id, teamId: t.id, isActive: false }))).finally(() => setBusy(false));
-  }, [isLoading, planLoading, plan, entry, isClosure, teams, tiers, overrides, topTierId, calendarEntryId, create]);
+  }, [isLoading, overridesFailed, planLoading, plan, entry, isClosure, teams, tiers, overrides, topTierId, calendarEntryId, create]);
 
   const toggle = (t: Team, value: boolean) => upsert(t, { isActive: value, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null });
   const setSessions = (t: Team, raw: number) => {
@@ -173,18 +199,27 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // Ramp presets: activate every team up to (and including) a tier group index —
   // awaited as a batch, controls disabled meanwhile.
   const rampTo = async (upToIndex: number) => {
-    if (busy || !anchorReady) {
-      return; // sans ancre, on n'écrit pas (et on ne prétend pas l'avoir fait)
+    if (busy) {
+      return;
     }
     setBusy(true);
     try {
-      const results = await Promise.allSettled(groups.flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null }))));
-      // Only confirm when every write landed — failures are toasted by the global net.
-      // `anchorReady` fait partie de la condition : sans ancre, upsertAsync bail en
-      // Promise.resolve() pour chaque équipe → zéro rejet → on confirmait « Sélection
-      // appliquée » alors qu'AUCUNE ligne n'était écrite, et l'overlay partait ensuite avec
-      // tout le club actif. Un succès qui ment est pire qu'une erreur.
-      if (anchorReady && !results.some((r) => "rejected" === r.status)) {
+      const writes = groups
+        .flatMap((g, i) => g.teams.map((t) => upsertAsync(t, { isActive: i <= upToIndex, sessions: overrideOf.get(t.id)?.sessionsPerWeek ?? null })))
+        .filter((w): w is Promise<unknown> => null !== w);
+      const results = await Promise.allSettled(writes);
+      // On ne confirme QUE si des lignes ont réellement été écrites, toutes sans échec.
+      // Sans le premier test, zéro requête (overrides pas encore chargés → tout le monde
+      // « déjà au défaut saison ») donnait zéro rejet, donc « Sélection appliquée » sur
+      // une période intouchée. Un succès qui ment est pire qu'une erreur.
+      if (0 === writes.length) {
+        // Rien à écrire D'APRÈS LA CARTE LOCALE. Elle peut être périmée (un refetch
+        // d'invalidation raté après le seed laisse un [] pré-seed en cache) : on ne
+        // dit donc pas « appliquée », on constate — et on RESYNCHRONISE pour que la
+        // carte re-reflète le serveur au prochain geste.
+        toast.success("Aucune modification à enregistrer");
+        void retryOverrides();
+      } else if (!results.some((r) => "rejected" === r.status)) {
         toast.success("Sélection appliquée");
       }
     } finally {
@@ -192,6 +227,21 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     }
   };
 
+  // P4-1 — un GET d'overrides en échec rendait des cases « par défaut » crédibles :
+  // le gestionnaire re-cochait une sélection déjà posée. L'échec passe avant le vide.
+  // Sans la carte des overrides, `isActive()`/`sessionsOf()` retombent sur les
+  // valeurs de SAISON : une équipe mise en pause s'affiche cochée, et un clic
+  // calcule son écriture contre un état faux (POST sur une ligne existante → 422,
+  // ou DELETE jamais envoyé → équipe qui reste en pause en croyant l'inverse).
+  // Le panneau voisin (`PeriodConstraintsPanel`) garde déjà exactement ça.
+  if (readLoading(overridesQueryState)) {
+    return <p className="text-xs text-muted-foreground">Chargement de la sélection d’équipes…</p>;
+  }
+  if (readFailed(overridesQueryState)) {
+    return (
+      <LoadErrorHint onRetry={() => void retryOverrides()}>Impossible de charger la sélection d’équipes de la période.</LoadErrorHint>
+    );
+  }
   if (0 === groups.length) {
     return <EmptyHint>Aucune équipe.</EmptyHint>;
   }
@@ -283,17 +333,62 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
  * souris ET au clavier, contrairement à un pointer-events-none (revue #8 PR-B).
  */
 export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
+  const anchor = usePeriodAnchor(calendarEntryId);
+
+  return (
+    <PeriodAnchorGate
+      anchor={anchor}
+      loadingLabel="Chargement des créneaux de la période…"
+      errorLabel="Impossible de charger les créneaux de la période."
+    >
+      {(schedulePlanId) => <PeriodVenuesPanel calendarEntryId={calendarEntryId} schedulePlanId={schedulePlanId} />}
+    </PeriodAnchorGate>
+  );
+}
+
+function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId: string; schedulePlanId: string }) {
   const { data: venues = [] } = useWizardVenues();
-  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
   const periodSlotsQuery = usePeriodSlots(schedulePlanId);
   const overridesQuery = useVenuePeriodOverrides(schedulePlanId);
-  const { data: conflicts } = useEntryConflicts(calendarEntryId);
+  const conflictsQuery = useEntryConflicts(calendarEntryId);
+  const conflicts = conflictsQuery.data;
 
   const [selectedId, setSelectedId] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
 
-  if (!anchorReady || null === schedulePlanId) {
-    return <p className="text-xs text-muted-foreground">Chargement des créneaux de la période…</p>;
+  // P4-1 — la grille EST ces deux requêtes : un échec coercé en `[]` afficherait
+  // « 0 créneau », indistinguable d'une période délibérément vidée. Le gestionnaire
+  // re-dessine sa semaine → doublons de créneaux, ou valide une période qu'il croit
+  // sans entraînement. L'échec passe donc avant tout rendu de grille.
+  // `readState` plutôt que les drapeaux bruts : un refetch d'arrière-plan raté
+  // laisse la donnée en cache intacte — céder la place à une erreur détruirait un
+  // écran qui fonctionne. Seul un échec SANS rien à montrer s'affiche.
+  if (readLoading(periodSlotsQuery) || readLoading(overridesQuery) || readLoading(conflictsQuery)) {
+    // Les conflits font partie du chargement : sans eux, la grille se rend avec ZÉRO
+    // badge « INTERDIT cette période » — tout paraît permis, et le gestionnaire pose
+    // des créneaux dans un gymnase fermé (le vide crédible, version interdits).
+    return <p className="text-xs text-muted-foreground">Chargement de la grille de la période…</p>;
+  }
+  // Les conflits portent l'interdit « ce gymnase est fermé cette période » : les
+  // avaler en `[]` rendrait une grille où tout paraît permis.
+  if (readFailed(conflictsQuery)) {
+    return (
+      <LoadErrorHint onRetry={() => void conflictsQuery.refetch()}>
+        Impossible de vérifier les fermetures de gymnase sur cette période.
+      </LoadErrorHint>
+    );
+  }
+  if (readFailed(periodSlotsQuery) || readFailed(overridesQuery)) {
+    return (
+      <LoadErrorHint
+        onRetry={() => {
+          void periodSlotsQuery.refetch();
+          void overridesQuery.refetch();
+        }}
+      >
+        Impossible de charger la grille de la période.
+      </LoadErrorHint>
+    );
   }
   if (0 === venues.length) {
     return <EmptyHint>Aucun gymnase.</EmptyHint>;
@@ -719,11 +814,32 @@ const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FA
  * doit dépendre de l'onglet actif SANS démonter (voir ConstraintsStep).
  */
 export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId: string; family?: Constraint["family"] }) {
+  const anchor = usePeriodAnchor(calendarEntryId);
+
+  return (
+    <PeriodAnchorGate
+      anchor={anchor}
+      loadingLabel="Chargement des contraintes de la période…"
+      errorLabel="Impossible de charger la période : les bascules ne seraient pas enregistrées."
+    >
+      {(schedulePlanId) => <PeriodConstraintsPanel calendarEntryId={calendarEntryId} family={family} schedulePlanId={schedulePlanId} />}
+    </PeriodAnchorGate>
+  );
+}
+
+function PeriodConstraintsPanel({
+  calendarEntryId,
+  family,
+  schedulePlanId,
+}: {
+  calendarEntryId: string;
+  family?: Constraint["family"];
+  schedulePlanId: string;
+}) {
   const { data: entry } = useCalendarEntry(calendarEntryId);
   // Inv. 5 (lot C2) : les bascules de contraintes pendent au PLAN, pas au déclencheur.
-  // Ce composant ne vit qu'en mode période (calendarEntryId requis), donc `ready` équivaut
-  // ici à `null !== planId` — on garde la forme nulle, qui narrow le type pour l'écriture.
-  const { planId: schedulePlanId } = usePeriodAnchor(calendarEntryId);
+  // L'ancre est CERTAINE ici — le panneau ne s'affiche que derrière `PeriodAnchorGate`
+  // (P4-20 : avant, les cases restaient cliquables et chaque bascule bailait en silence).
   const isClosure = "closure" === entry?.periodType;
   const isReprise = "holiday" === entry?.periodType;
   const isOverlay = isClosure || isReprise;
@@ -807,10 +923,10 @@ export function PeriodConstraints({ calendarEntryId, family }: { calendarEntryId
   const toggle = (c: Constraint, desired: boolean) => {
     // overridesError: without the override list we can't tell create-vs-update, so a toggle
     // would POST an existing row → 422. Render read-only until it reloads (P4-1 query-error UX).
-    if (mutating || notApplicable(c) || overridesError || teamStateUnknown(c) || null === schedulePlanId) {
-      // a write is settling, the constraint can't ship / is unknown, overrides are
-      // unavailable — ou le plan n'est pas chargé : sans ancre (inv. 5) il n'y a nulle
-      // part où écrire le réglage.
+    if (mutating || notApplicable(c) || overridesError || teamStateUnknown(c)) {
+      // a write is settling, the constraint can't ship / is unknown, or overrides are
+      // unavailable. L'ancre, elle, n'est plus à tester : ce panneau ne s'affiche que
+      // derrière `PeriodAnchorGate`, donc `schedulePlanId` est un `string` certain.
       return;
     }
     const settle = () =>

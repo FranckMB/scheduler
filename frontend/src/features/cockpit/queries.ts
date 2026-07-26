@@ -80,20 +80,75 @@ export function useSchedulePlans() {
  * vacances devient un créneau permanent, nourrit toutes les générations de la saison, et
  * se transmet à N+1. Aucune erreur, aucun signal.
  *
- * `ready` répond « sait-on où écrire ? » :
- *  - hors mode période (`calendarEntryId` null), `planId` null EST la bonne réponse → prêt ;
- *  - en mode période, il faut le plan → pas prêt tant qu'il n'est pas là.
+ * **UNION DISCRIMINÉE, PAS UN DRAPEAU** (P4-20). Un booléen `ready` recouvrait trois
+ * situations (ça charge / ça a échoué / pas de plan) et se laissait oublier : quatre fois
+ * en quatre revues, dont une en tentant de corriger la ligne par un `isError` ajouté au
+ * tuple — même contrat facultatif, même oubli. Ici l'appelant doit NOMMER le cas :
  *
- * **Ne jamais écrire un réglage quand `ready` est faux.** Lire est sans risque (la requête
- * est simplement désactivée), mais l'appelant doit alors afficher un état de CHARGEMENT —
- * une liste vide affirmerait « aucun réglage », ce qui pousse le gestionnaire à les
- * re-saisir… et donc à déclencher l'écriture corrompue.
+ *  - `loading` — la réponse n'est pas encore là ;
+ *  - `failed`  — le GET a échoué ; `retry` relance ;
+ *  - `absent`  — le GET a RÉUSSI et cette période n'a aucun plan (jamais adaptée) ;
+ *  - `base`    — hors mode période : `null` EST la bonne ancre (structure partagée) ;
+ *  - `period`  — l'ancre est certaine.
+ *
+ * `absent` est distinct de `loading` À DESSEIN : les confondre rendait un spinner
+ * ÉTERNEL sur une période sans plan (une semaine-enfant dont la ligne manque, une
+ * entrée rouverte depuis un cache périmé) — le cul-de-sac même que la ligne visait.
+ * Une attente qui ne finit jamais est un bug, pas un état.
+ *
+ * **Écrire n'est licite que sur `period` (ou `base` hors période)** — cf. `anchorIsWritable`.
+ * Lire est sans risque (la requête est désactivée), mais l'écran doit alors dire LEQUEL
+ * des deux : une liste vide affirmerait « aucun réglage » et pousserait le gestionnaire à
+ * re-saisir… donc à déclencher l'écriture corrompue. Les écrans passent par
+ * `PeriodAnchorGate`, qui ne livre le `planId` qu'après avoir traité `loading` et `failed`.
  */
-export function usePeriodAnchor(calendarEntryId: string | null): { planId: string | null; ready: boolean; isLoading: boolean } {
-  const { data, isLoading } = useSchedulePlanForEntry(calendarEntryId);
+export type PeriodAnchor =
+  | { state: "loading"; planId: null }
+  | { state: "failed"; planId: null; retry: () => void }
+  | { state: "absent"; planId: null }
+  | { state: "base"; planId: null }
+  | { state: "period"; planId: string };
+
+export function usePeriodAnchor(calendarEntryId: string | null): PeriodAnchor {
+  const { data, isSuccess, isFetching, isError, refetch } = useSchedulePlanForEntry(calendarEntryId);
   const planId = data?.id ?? null;
 
-  return { planId, ready: null === calendarEntryId || null !== planId, isLoading };
+  // Hors mode période : aucune requête n'est lancée, `null` est la réponse.
+  if (null === calendarEntryId) {
+    return { state: "base", planId: null };
+  }
+  // Une ancre EN CACHE reste valide même si un refetch d'arrière-plan a échoué :
+  // react-query conserve `data` et bascule `status` à error (d'où `isRefetchError`).
+  // Basculer l'écran en erreur ici détruirait une vue qui fonctionne — `queryClient.ts`
+  // applique déjà ce raisonnement à ses toasts.
+  if (null !== planId) {
+    return { state: "period", planId };
+  }
+  if (isError) {
+    return {
+      state: "failed",
+      planId: null,
+      retry: () => {
+        void refetch();
+      },
+    };
+  }
+  // `absent` ne se conclut que sur une réponse RÉUSSIE et AU REPOS :
+  //  - `isSuccess` — une query jamais résolue (offline : fetchStatus `paused`,
+  //    isFetching faux) n'est PAS « pas de plan », c'est « on ne sait pas » ;
+  //  - `!isFetching` — après « Adapter », la clé est invalidée et re-fetchée avec
+  //    un `null` PÉRIMÉ en cache : conclure disait « adaptez cette période » un
+  //    clic après que le gestionnaire l'a fait.
+  if (isSuccess && !isFetching) {
+    return { state: "absent", planId: null };
+  }
+
+  return { state: "loading", planId: null };
+}
+
+/** L'écriture d'un réglage n'est licite que sur une ancre CERTAINE. */
+export function anchorIsWritable(anchor: PeriodAnchor): boolean {
+  return "period" === anchor.state || "base" === anchor.state;
 }
 
 /**

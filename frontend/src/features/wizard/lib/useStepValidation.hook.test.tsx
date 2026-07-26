@@ -12,7 +12,8 @@ let coaches: ReturnType<typeof q>;
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
-  usePeriodAnchor: () => ({ planId: "plan-1", ready: true, isLoading: false }),
+  usePeriodAnchor: () => ({ state: "period", planId: "plan-1" }),
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => teams,
@@ -23,6 +24,7 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => q([]),
   useConstraintValidation: () => q(undefined),
   useReservations: () => q([]),
+  useTeamPeriodOverrides: () => ({ data: [] }),
   usePeriodSlots: () => q([]),
   useVenuePeriodOverrides: () => q([]),
 }));

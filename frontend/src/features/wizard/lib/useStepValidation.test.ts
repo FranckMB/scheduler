@@ -5,6 +5,9 @@ import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { computeReservationWarnings, useStepValidation } from "./useStepValidation";
 import { useWizardStore } from "../store";
 
+// Pilote l'état de l'ancre de période dans les mocks (union discriminée, P4-20).
+const anchorState: { failed: boolean; absent: boolean } = { failed: false, absent: false };
+
 // A gym with NO availability slot — the "sans créneau" rule fires on it in base
 // mode but must stay silent in period mode (slots are inherited & read-only).
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
@@ -12,7 +15,15 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   // Ancre résolue seulement si une entrée est fournie : mode période sans entrée = plan
   // non résolu (planId null), comme dans le vrai code.
-  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: false, isLoading: false } : { planId: "plan-1", ready: true, isLoading: false }),
+  usePeriodAnchor: (entryId: string | null) =>
+    null === entryId
+      ? { state: "base", planId: null }
+      : anchorState.failed
+        ? { state: "failed", planId: null, retry: () => {} }
+        : anchorState.absent
+          ? { state: "absent", planId: null }
+          : { state: "period", planId: "plan-1" },
+  anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),
@@ -23,11 +34,13 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useConstraintValidation: () => ({ data: undefined, isLoading: false }),
   useReservations: () => ({ data: [] }),
-  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading }),
-  useVenuePeriodOverrides: () => ({ data: [] }),
+  usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading, isError: periodSlotsState.isError }),
+  useVenuePeriodOverrides: () => ({ data: [], isError: false }),
+  useTeamPeriodOverrides: () => ({ data: [], isError: teamOverridesState.isError }),
 }));
 
-const periodSlotsState: { data: unknown[]; isLoading: boolean } = { data: [], isLoading: false };
+const periodSlotsState: { data: unknown[] | undefined; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
+const teamOverridesState = { isError: false };
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -139,14 +152,63 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
   });
 
+  // NR T3 (P4-20, décision fondateur option A) — quand l'ancre de la période n'a pas pu
+  // être chargée, on ne sait RIEN de ses réglages. Le récap doit le dire et bloquer :
+  // un verdict vert sur une période cassée est le pire des deux mensonges, et un simple
+  // `pending` ressemblerait à « ça charge » — le travers qu'on corrige.
+  it("BLOQUE et le dit quand l'ancre de la période a échoué (jamais un récap vert)", () => {
+    anchorState.failed = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "recap" });
+
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.errors).toContain("La période n'a pas pu être chargée — impossible de vérifier ses réglages.");
+    expect(result.current.pending).not.toBe(true);
+    anchorState.failed = false;
+  });
+
+  // NR — une grille de période qui n'a PAS chargé ne doit pas être lue comme vide.
+  // Le panneau disait correctement « Impossible de charger la grille », pendant que le
+  // VERDICT fabriquait « Gymnase(s) sans créneau : … » en nommant tous les gymnases :
+  // deux écrans, deux vérités, et le gestionnaire poussé à re-dessiner des créneaux
+  // qui existent déjà (doublons).
+  it("dit l'échec de la grille au lieu de fabriquer « gymnase sans créneau »", () => {
+    periodSlotsState.isError = true;
+    periodSlotsState.data = undefined; // échec SANS cache : le seul cas qui doit bloquer
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+
+    const { result } = renderHook(() => useStepValidation("venues"));
+
+    expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
+    expect(result.current.errors).toContain("La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux.");
+    periodSlotsState.isError = false;
+    periodSlotsState.data = [];
+  });
+
+  // NR — une période SANS espace de travail est un état réel, pas un chargement.
+  it("dit qu'une période sans espace de travail doit être adaptée (pas un pending éternel)", () => {
+    anchorState.absent = true;
+    useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "recap" });
+
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.pending).not.toBe(true);
+    expect(result.current.errors.some((e) => /Adapter/.test(e))).toBe(true);
+    anchorState.absent = false;
+  });
+
   it("ne bloque PAS pendant que la query des créneaux de période charge (faux positif)", () => {
     // Round 2 finding #4 : le plan peut être résolu (ready) alors que la query period_slots
     // n'a pas encore chargé (data []). Armer la règle là dessus criait « sans créneau » sur
     // une grille en fait pleine. On attend que la query ait chargé.
+    // Premier chargement = AUCUNE donnée encore (pas seulement `isLoading`) : c'est
+    // l'absence de donnée qui interdit de conclure, pas le drapeau (readState).
     periodSlotsState.isLoading = true;
+    periodSlotsState.data = undefined;
     useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
     periodSlotsState.isLoading = false;
+    periodSlotsState.data = [];
   });
 });;
