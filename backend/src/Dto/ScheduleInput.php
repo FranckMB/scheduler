@@ -26,6 +26,8 @@ class ScheduleInput
      * période) ; omis → le plan SEASON de la saison (le socle). Ignoré sur PUT. Le back valide
      * que le plan appartient au club.
      */
+    #[Assert\NotBlank(allowNull: true)]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $schedulePlanId = null;
 }

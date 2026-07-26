@@ -18,8 +18,9 @@ use Symfony\Component\Messenger\Transport\TransportInterface;
 #[Group('phase1')]
 final class AdminHealthServiceTest extends KernelTestCase
 {
-    public function testContainersReturnsElevenEntries(): void
+    public function testContainersListsEveryServiceOfADevDeployment(): void
     {
+        // MAILER_DSN pointe mailpit (dev) → la sonde mailpit est listée.
         $httpClient = new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
         $service = $this->buildService($httpClient);
         $health = $service->health();
@@ -39,6 +40,36 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::assertContains('messenger-worker', $keys);
         self::assertContains('cron-runner', $keys);
         self::assertContains('pdf-worker', $keys);
+    }
+
+    /**
+     * P4-29 — la prod n'embarque PAS mailpit : le sonder afficherait une carte
+     * « Mailpit » rouge à vie sur le board (le statut GLOBAL, lui, n'agrège que
+     * db/redis/engine/mercure/worker/messenger — mailpit n'y entre pas).
+     *
+     * Deux portes, testées séparément : un DSN SMTP réel, ET l'environnement prod
+     * même si le DSN a gardé le défaut mailpit committé dans backend/.env — sans
+     * cette seconde porte, un `.env.prod` incomplet re-sonderait mailpit.
+     */
+    public function testMailpitIsAbsentWhenTheMailerDsnIsARealSmtpTransport(): void
+    {
+        $service = $this->buildService($this->okHttpClient(), null, 'redis://localhost:6379', 'smtp://smtp.example.com:587');
+        $keys = array_column($service->health()['containers'], 'key');
+
+        self::assertNotContains('mailpit', $keys, 'aucune sonde mailpit quand le mailer est un vrai SMTP');
+        // On retire UNE sonde, pas la liste : les autres conteneurs restent listés.
+        self::assertContains('php-fpm', $keys);
+        self::assertContains('pdf-worker', $keys);
+        self::assertCount(10, $keys);
+    }
+
+    public function testMailpitIsAbsentInProdEvenIfTheDsnStillDefaultsToMailpit(): void
+    {
+        $service = $this->buildService($this->okHttpClient(), null, 'redis://localhost:6379', 'smtp://mailpit:1025', 'prod');
+        $keys = array_column($service->health()['containers'], 'key');
+
+        self::assertNotContains('mailpit', $keys, 'la prod ne sonde jamais mailpit, même DSN par défaut');
+        self::assertCount(10, $keys);
     }
 
     public function testHeartbeatProbesReturnUnknownWhenCacheMisses(): void
@@ -128,6 +159,11 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::assertSame('etalab', $deps[2]['key']);
     }
 
+    private function okHttpClient(): MockHttpClient
+    {
+        return new MockHttpClient(fn (string $method, string $url): MockResponse => new MockResponse('', ['http_code' => 200]));
+    }
+
     /**
      * @param array<string, mixed> $health
      *
@@ -143,7 +179,7 @@ final class AdminHealthServiceTest extends KernelTestCase
         self::fail("Container $key absent");
     }
 
-    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null, string $redisUrl = 'redis://localhost:6379'): AdminHealthService
+    private function buildService(?MockHttpClient $httpClient = null, ?CacheItemPoolInterface $cache = null, string $redisUrl = 'redis://localhost:6379', string $mailerDsn = 'smtp://mailpit:1025', string $appEnv = 'dev'): AdminHealthService
     {
         return new AdminHealthService(
             $this->createMock(ManagerRegistry::class),
@@ -153,6 +189,8 @@ final class AdminHealthServiceTest extends KernelTestCase
             $cache ?? $this->createMock(CacheItemPoolInterface::class),
             $redisUrl,
             '',
+            $appEnv,
+            $mailerDsn,
         );
     }
 }

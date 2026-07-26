@@ -38,6 +38,17 @@ final readonly class AdminHealthService
         private string $redisUrl,
         #[Autowire('%env(default::MERCURE_URL)%')]
         private string $mercureUrl,
+        // Mailpit est un catch-all de DEV : la stack prod n'embarque pas ce
+        // conteneur. Le sonder là-bas afficherait une carte « Mailpit » rouge à
+        // vie sur le board (le statut GLOBAL, lui, n'agrège que db/redis/engine/
+        // mercure/worker/messenger — mailpit n'y entre pas). Deux conditions pour
+        // fail-closed : l'environnement n'est pas la prod ET le DSN pointe
+        // effectivement mailpit — un `.env.prod` incomplet retomberait sinon sur
+        // le défaut mailpit committé dans backend/.env et on re-sonderait.
+        #[Autowire('%kernel.environment%')]
+        private string $appEnv = 'dev',
+        #[Autowire('%env(default::MAILER_DSN)%')]
+        private string $mailerDsn = '',
     ) {}
 
     /** @return array<string, mixed> */
@@ -172,21 +183,30 @@ final readonly class AdminHealthService
     {
         $nginx = $this->http('http://nginx/api/health', true, 1.0, 1.5);
         $frontend = $this->http('http://frontend/health', false, 1.0, 1.5);
-        $mailpit = $this->http('http://mailpit:8025/', false, 1.0, 1.5);
+        $mailpitExpected = 'prod' !== $this->appEnv && str_contains($this->mailerDsn, 'mailpit');
+        $mailpit = $mailpitExpected ? $this->http('http://mailpit:8025/', false, 1.0, 1.5) : null;
         $messengerWorker = $this->heartbeatProbe('admin_monitoring.messenger.heartbeat', 30);
         $cronRunner = $this->heartbeatProbe('admin_monitoring.cron_runner.heartbeat', 180);
         // pdf-worker écrit son heartbeat depuis NODE (clé RAW, secondes) — hors du pool
         // cache.app (qui namespace+sérialise) : lecture Redis brute dédiée.
         $pdfWorker = $this->rawHeartbeatProbe('admin_monitoring.pdf_worker.heartbeat', 60);
 
-        return [
+        $containers = [
             ['key' => 'postgres', 'name' => 'PostgreSQL', 'status' => $database['status'], 'latencyMs' => $database['latencyMs']],
             ['key' => 'redis', 'name' => 'Redis', 'status' => $redis['status'], 'latencyMs' => $redis['latencyMs']],
             ['key' => 'nginx', 'name' => 'Nginx', 'status' => $nginx['status'], 'latencyMs' => $nginx['latencyMs']],
             ['key' => 'frontend', 'name' => 'Frontend', 'status' => $frontend['status'], 'latencyMs' => $frontend['latencyMs']],
             ['key' => 'engine', 'name' => 'Engine', 'status' => $engine['status'], 'latencyMs' => $engine['latencyMs']],
             ['key' => 'mercure', 'name' => 'Mercure', 'status' => $mercure['status'], 'latencyMs' => $mercure['latencyMs']],
-            ['key' => 'mailpit', 'name' => 'Mailpit', 'status' => $mailpit['status'], 'latencyMs' => $mailpit['latencyMs']],
+        ];
+
+        // Listé seulement si le déploiement le fait réellement tourner (dev).
+        if (null !== $mailpit) {
+            $containers[] = ['key' => 'mailpit', 'name' => 'Mailpit', 'status' => $mailpit['status'], 'latencyMs' => $mailpit['latencyMs']];
+        }
+
+        return [
+            ...$containers,
             ['key' => 'php-fpm', 'name' => 'PHP-FPM', 'status' => 'up', 'latencyMs' => 0],
             ['key' => 'messenger-worker', 'name' => 'Messenger Worker', 'status' => $messengerWorker['status'], 'lastHeartbeatAt' => $messengerWorker['lastHeartbeatAt'], 'ageSeconds' => $messengerWorker['ageSeconds']],
             ['key' => 'cron-runner', 'name' => 'Cron Runner', 'status' => $cronRunner['status'], 'lastHeartbeatAt' => $cronRunner['lastHeartbeatAt'], 'ageSeconds' => $cronRunner['ageSeconds']],

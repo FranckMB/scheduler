@@ -11,10 +11,12 @@ use Symfony\Component\Validator\Constraints as Assert;
 class ReservationInput
 {
     #[Assert\NotBlank]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $teamId = null;
 
     #[Assert\NotBlank]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $venueId = null;
 
@@ -33,7 +35,15 @@ class ReservationInput
     #[Groups(['write'])]
     public ?int $durationMinutes = 90;
 
-    /** NULL = base plan; set = a period overlay. */
+    /**
+     * NULL = base plan; set = a period overlay.
+     *
+     * NotBlank(allowNull) EN PLUS de Uuid : le validateur Uuid de Symfony
+     * court-circuite sur la chaîne vide, donc `""` passerait la validation et
+     * partirait dans une colonne uuid → 500. `null` reste licite (socle).
+     */
+    #[Assert\NotBlank(allowNull: true)]
+    #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $schedulePlanId = null;
 }

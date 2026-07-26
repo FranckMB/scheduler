@@ -12,6 +12,8 @@ use App\Entity\Constraint;
  */
 class ConstraintStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return Constraint::class;
@@ -53,9 +55,10 @@ class ConstraintStateProvider extends AbstractStateProvider
                 $qb->andWhere('e.ruleType = :ruleType')
                    ->setParameter('ruleType', $request->query->get('ruleType'));
             }
-            if ($request->query->has('calendarEntryId')) {
+            $calendarEntryId = $this->uuidQueryParam($request, 'calendarEntryId');
+            if (null !== $calendarEntryId) {
                 $qb->andWhere('e.calendarEntryId = :calendarEntryId')
-                   ->setParameter('calendarEntryId', $request->query->get('calendarEntryId'));
+                   ->setParameter('calendarEntryId', $calendarEntryId);
             }
             // permanent=1 → base-plan constraints only (dated/period ones excluded),
             // so the wizard's season Constraints step doesn't show period constraints.

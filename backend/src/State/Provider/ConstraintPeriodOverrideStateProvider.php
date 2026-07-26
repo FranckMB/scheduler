@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class ConstraintPeriodOverrideStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return ConstraintPeriodOverride::class;
@@ -45,13 +47,13 @@ class ConstraintPeriodOverrideStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // Overrides are always consulted per period; a constraintId narrows further.
-            $schedulePlanId = $request->query->get('schedulePlanId');
-            if (null !== $schedulePlanId && '' !== $schedulePlanId) {
+            $schedulePlanId = $this->uuidQueryParam($request, 'schedulePlanId');
+            if (null !== $schedulePlanId) {
                 $qb->andWhere('e.schedulePlanId = :schedulePlanId')->setParameter('schedulePlanId', $schedulePlanId);
             }
 
-            $constraintId = $request->query->get('constraintId');
-            if (null !== $constraintId && '' !== $constraintId) {
+            $constraintId = $this->uuidQueryParam($request, 'constraintId');
+            if (null !== $constraintId) {
                 $qb->andWhere('e.constraintId = :constraintId')->setParameter('constraintId', $constraintId);
             }
         }

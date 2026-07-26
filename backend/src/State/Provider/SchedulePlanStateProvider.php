@@ -16,6 +16,8 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 class SchedulePlanStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return SchedulePlan::class;
@@ -42,8 +44,8 @@ class SchedulePlanStateProvider extends AbstractStateProvider
             return false;
         }
 
-        $calendarEntryId = $request->query->get('calendarEntryId');
-        if (\is_string($calendarEntryId) && '' !== $calendarEntryId) {
+        $calendarEntryId = $this->uuidQueryParam($request, 'calendarEntryId');
+        if (null !== $calendarEntryId) {
             $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
         }
 

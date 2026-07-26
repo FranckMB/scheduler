@@ -10,6 +10,7 @@ use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -20,9 +21,12 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class MembershipController extends AbstractController
 {
+    use ResolvesCurrentClubTrait;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
+        private readonly RequestStack $requestStack,
     ) {}
 
     #[Route('/api/memberships/pending', name: 'api_memberships_pending', methods: ['GET'])]
@@ -92,7 +96,21 @@ final class MembershipController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $membership = $this->clubUserRepository->findOneBy(['userId' => $user->getId(), 'isActive' => true]);
+        // BCK-10 (partiel) — l'adhésion suit le club de la REQUÊTE, résolu par
+        // le trait partagé, au lieu d'être un second tirage indépendant
+        // (`findOneBy(userId, isActive)`). Ce que ça corrige : deux endroits ne
+        // peuvent plus répondre différemment à « quel club ? » dans une même
+        // requête. Ce que ça NE corrige PAS : pour un gestionnaire multi-club
+        // SANS `X-Club-Id` (le front n'en envoie pas), c'est
+        // `TenantFilterListener::resolveClubId` qui choisit arbitrairement —
+        // le non-déterminisme vit là, et sa résolution est un choix produit
+        // (quel club est « courant » ?) rattaché à P1-1. Voir P4-8 (rouverte).
+        $clubId = $this->resolveCurrentClubId($this->requestStack);
+        if (null === $clubId) {
+            return $this->json(['error' => 'Forbidden'], 403);
+        }
+
+        $membership = $this->clubUserRepository->findActiveMembership($user->getId(), $clubId);
         // isManagementRole (owner|admin), not a hardcoded 'admin' — an owner
         // must be able to approve members too (review note, PR SEC-07).
         if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {

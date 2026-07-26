@@ -11,12 +11,14 @@ use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
+use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -395,7 +397,17 @@ final class PeriodPlanBirthTest extends WebTestCase
         $planId = $this->adaptPeriod($user, $entryId);
 
         $this->scopeGucToClub($club->getId());
-        $venueId = '99999999-9999-4999-8999-999999999999';
+        // Un vrai gymnase : le payload de base sérialise les créneaux PAR gymnase,
+        // un venueId fantôme rendrait l'assertion vide (donc verte à tort).
+        $venue = new Venue;
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName('Gymnase du NR');
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+        $this->em->flush();
+        $venueId = $venue->getId();
+
         // Un créneau SAISONNIER (ancre nulle) et un créneau PRÊTÉ à ce plan.
         foreach ([null, $planId] as $anchor) {
             $slot = new VenueTrainingSlot;
@@ -413,9 +425,33 @@ final class PeriodPlanBirthTest extends WebTestCase
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
 
-        $repo = $this->em->getRepository(VenueTrainingSlot::class);
-        self::assertCount(1, $repo->findBy(['schedulePlanId' => null]), 'le créneau saisonnier reste SANS ancre : c’est la structure partagée (inv. 6), pas un réglage de période');
-        self::assertCount(1, $repo->findBy(['schedulePlanId' => $planId]), 'le créneau prêté pend au plan');
+        // On sort par le CHEMIN DE PROD (P4-21) : relire les deux lignes via
+        // l'EntityManager ne prouvait que le mapping Doctrine — `ScheduleConstraintBuilder`
+        // pouvait cesser de filtrer sur l'ancre, le test restait vert alors que le
+        // socle héritait d'un gymnase prêté pour une semaine de vacances.
+        // Le payload de BASE est la vraie assertion : il ne voit que l'ancre nulle.
+        $builder = self::getContainer()->get(ScheduleConstraintBuilder::class);
+        self::assertInstanceOf(ScheduleConstraintBuilder::class, $builder);
+        // `buildForClubSeason` sert d'abord le pool `cache.schedule` : les fixtures
+        // ci-dessus sont écrites hors requête, donc sans invalidation. Sans ce purge,
+        // un hit rendrait l'assertion creuse — verte quoi qu'il arrive. Ne pas
+        // dépendre du fait que l'env de test mappe ce pool sur un adaptateur array.
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId()));
+        $payload = $builder->buildForClubSeason($club->getId(), $season->getId());
+
+        $slots = [];
+        foreach ($payload['venues'] ?? [] as $venue) {
+            if (($venue['id'] ?? null) === $venueId) {
+                $slots = $venue['trainingSlots'] ?? [];
+            }
+        }
+        $days = array_map(static fn (array $slot): int => (int) $slot['dayOfWeek'], $slots);
+        sort($days);
+        self::assertSame(
+            [1],
+            $days,
+            'le payload de base ne doit porter QUE le créneau saisonnier (jour 1) : le créneau prêté au plan de période (jour 2) n’appartient pas au socle (inv. 6)',
+        );
     }
 
     /**
