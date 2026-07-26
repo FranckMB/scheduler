@@ -12,7 +12,7 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   // Ancre résolue seulement si une entrée est fournie : mode période sans entrée = plan
   // non résolu (planId null), comme dans le vrai code.
-  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: false, isLoading: false, isError: false, refetch: () => {} } : { planId: "plan-1", ready: true, isLoading: false, isError: false, refetch: () => {} }),
+  usePeriodAnchor: (entryId: string | null) => (null === entryId ? { planId: null, ready: false, isLoading: false } : { planId: "plan-1", ready: true, isLoading: false }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 1, isActive: true }], isLoading: false }),

@@ -2,7 +2,6 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
-import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -78,7 +77,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
   // Le PLAN entier est nécessaire ici (le garde de seed lit teamSelectionInitialized) ;
   // `usePeriodAnchor` fournit l'ancre ET son état — ne pas re-dériver un `?? null` nu.
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
-  const { planId: schedulePlanId, ready: anchorReady, isError: anchorFailed, refetch: retryAnchor } = usePeriodAnchor(calendarEntryId);
+  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
   const { data: overrides = [], isLoading } = useTeamPeriodOverrides(schedulePlanId);
   const create = useCreateTeamPeriodOverride(schedulePlanId);
   const update = useUpdateTeamPeriodOverride(schedulePlanId);
@@ -197,12 +196,6 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
     return <EmptyHint>Aucune équipe.</EmptyHint>;
   }
 
-  // P4-20 : sans ancre, toute écriture bail en silence (cf. `toggle`) — la liste
-  // aurait l'air interactive sans rien enregistrer. On le dit, avec une issue.
-  if (anchorFailed) {
-    return <LoadErrorHint onRetry={retryAnchor}>Impossible de charger la période : les modifications ne seraient pas enregistrées.</LoadErrorHint>;
-  }
-
   return (
     <div className="space-y-3" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">
@@ -291,7 +284,7 @@ export function PeriodTeams({ calendarEntryId }: { calendarEntryId: string }) {
  */
 export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const { data: venues = [] } = useWizardVenues();
-  const { planId: schedulePlanId, ready: anchorReady, isError: anchorFailed, refetch: retryAnchor } = usePeriodAnchor(calendarEntryId);
+  const { planId: schedulePlanId, ready: anchorReady } = usePeriodAnchor(calendarEntryId);
   const periodSlotsQuery = usePeriodSlots(schedulePlanId);
   const overridesQuery = useVenuePeriodOverrides(schedulePlanId);
   const { data: conflicts } = useEntryConflicts(calendarEntryId);
@@ -299,11 +292,6 @@ export function PeriodVenues({ calendarEntryId }: { calendarEntryId: string }) {
   const [selectedId, setSelectedId] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
 
-  // P4-20 : un GET du plan en échec affichait « Chargement… » à l'infini, sans
-  // issue. L'échec se dit, et se rejoue.
-  if (anchorFailed) {
-    return <LoadErrorHint onRetry={retryAnchor}>Impossible de charger les créneaux de la période.</LoadErrorHint>;
-  }
   if (!anchorReady || null === schedulePlanId) {
     return <p className="text-xs text-muted-foreground">Chargement des créneaux de la période…</p>;
   }
