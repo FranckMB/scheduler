@@ -35,8 +35,11 @@ describe("readState", () => {
     expect(readLoading({ data: [], isError: false })).toBe(false);
   });
 
-  it("`null` n'est pas une donnée exploitable (réponse vide → on n'a rien à montrer)", () => {
-    expect(readState({ data: null, isError: false })).toBe("loading");
-    expect(readState({ data: null, isError: true })).toBe("failed");
+  it("`null` est une RÉPONSE (« il n'y a rien »), pas un chargement", () => {
+    // Convention react-query : seul `undefined` veut dire « pas de donnée ».
+    // Classer `null` en loading ferait tourner un spinner éternel sur une
+    // réponse arrivée (ex. le plan d'une période jamais adaptée).
+    expect(readState({ data: null, isError: false })).toBe("ready");
+    expect(readState({ data: null, isError: true })).toBe("ready");
   });
 });

@@ -22,7 +22,11 @@
 export type ReadState = "loading" | "failed" | "ready";
 
 export function readState(query: { data: unknown; isError: boolean }): ReadState {
-  if (undefined !== query.data && null !== query.data) {
+  // `undefined` seul signifie « pas de donnée » (convention react-query). `null`
+  // est une RÉPONSE — « il n'y a rien » — pour les endpoints où c'est légitime
+  // (ex. le plan d'une période jamais adaptée) : le classer « loading » ferait
+  // tourner un spinner éternel sur une réponse arrivée.
+  if (undefined !== query.data) {
     return "ready";
   }
 

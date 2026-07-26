@@ -259,6 +259,39 @@ describe("PeriodTeams — default team selection (E3) + toggles", () => {
     entryState.data = { periodType: "closure" };
   });
 
+  // NR — le contrat du toast de ramp (revue #303 r3 : l'ancien test avait été réécrit
+  // en assertion d'absence, laissant le contrat upsertAsync/toast sans couverture).
+  it("un ramp qui ÉCRIT confirme « Sélection appliquée »", async () => {
+    const user = userEvent.setup();
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
+    planState.data = { id: "plan-1", teamSelectionInitialized: true }; // pas de seed
+
+    render(<PeriodTeams calendarEntryId="ramp-writes" />);
+    await user.click(screen.getByRole("button", { name: "Fanion seul" }));
+
+    // t2 (importante) et t3 (loisir) sortent du défaut saison → 2 écritures réelles.
+    expect(createOverride).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("Sélection appliquée");
+    entryState.data = { periodType: "closure" };
+  });
+
+  it("un ramp SANS effet constate « Aucune modification » — jamais « appliquée »", async () => {
+    const user = userEvent.setup();
+    entryState.data = { periodType: "holiday" };
+    withThreeTiers();
+    planState.data = { id: "plan-1", teamSelectionInitialized: true };
+
+    render(<PeriodTeams calendarEntryId="ramp-noop" />);
+    // « Tout le club » quand tout le monde est déjà au défaut saison : zéro écriture.
+    await user.click(screen.getByRole("button", { name: "Tout le club" }));
+
+    expect(createOverride).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalledWith("Sélection appliquée");
+    expect(toast.success).toHaveBeenCalledWith("Aucune modification à enregistrer");
+    entryState.data = { periodType: "closure" };
+  });
+
   it("fermeture (closure): seeds nobody — tout le club reste actif (structure verrouillée)", () => {
     entryState.data = { periodType: "closure" };
     withThreeTiers();

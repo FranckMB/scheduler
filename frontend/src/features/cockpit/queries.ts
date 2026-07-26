@@ -110,7 +110,7 @@ export type PeriodAnchor =
   | { state: "period"; planId: string };
 
 export function usePeriodAnchor(calendarEntryId: string | null): PeriodAnchor {
-  const { data, isFetching, isError, refetch } = useSchedulePlanForEntry(calendarEntryId);
+  const { data, isSuccess, isFetching, isError, refetch } = useSchedulePlanForEntry(calendarEntryId);
   const planId = data?.id ?? null;
 
   // Hors mode période : aucune requête n'est lancée, `null` est la réponse.
@@ -133,19 +133,17 @@ export function usePeriodAnchor(calendarEntryId: string | null): PeriodAnchor {
       },
     };
   }
-  // `isFetching`, pas `isLoading` : après « Adapter », la clé est invalidée et
-  // re-fetchée alors qu'un `null` PÉRIMÉ est encore en cache — `isLoading` est
-  // faux (il y a une donnée), et conclure `absent` disait au gestionnaire
-  // « adaptez cette période » un clic après qu'il l'a fait. Tant que ça vole,
-  // on ne conclut rien.
-  if (isFetching) {
-    return { state: "loading", planId: null };
+  // `absent` ne se conclut que sur une réponse RÉUSSIE et AU REPOS :
+  //  - `isSuccess` — une query jamais résolue (offline : fetchStatus `paused`,
+  //    isFetching faux) n'est PAS « pas de plan », c'est « on ne sait pas » ;
+  //  - `!isFetching` — après « Adapter », la clé est invalidée et re-fetchée avec
+  //    un `null` PÉRIMÉ en cache : conclure disait « adaptez cette période » un
+  //    clic après que le gestionnaire l'a fait.
+  if (isSuccess && !isFetching) {
+    return { state: "absent", planId: null };
   }
 
-  // Requête RÉGLÉE et au repos, sans plan et sans erreur : la période n'a pas
-  // d'espace de travail. Écrire y est interdit (ancre `null` = socle), mais ce
-  // n'est PAS un chargement — l'annoncer ainsi produisait un spinner éternel.
-  return { state: "absent", planId: null };
+  return { state: "loading", planId: null };
 }
 
 /** L'écriture d'un réglage n'est licite que sur une ancre CERTAINE. */

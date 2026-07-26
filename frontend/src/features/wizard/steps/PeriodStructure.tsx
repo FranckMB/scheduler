@@ -213,11 +213,12 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
       // « déjà au défaut saison ») donnait zéro rejet, donc « Sélection appliquée » sur
       // une période intouchée. Un succès qui ment est pire qu'une erreur.
       if (0 === writes.length) {
-        // Rien à écrire = la sélection demandée est DÉJÀ en place. Le taire laissait
-        // le gestionnaire sans le moindre retour, à recliquer en croyant que rien ne
-        // se passe — alors que confirmer « appliquée » sur zéro écriture mentirait
-        // quand la carte des overrides n'est pas chargée (garde ci-dessus).
-        toast.success("Sélection déjà à jour");
+        // Rien à écrire D'APRÈS LA CARTE LOCALE. Elle peut être périmée (un refetch
+        // d'invalidation raté après le seed laisse un [] pré-seed en cache) : on ne
+        // dit donc pas « appliquée », on constate — et on RESYNCHRONISE pour que la
+        // carte re-reflète le serveur au prochain geste.
+        toast.success("Aucune modification à enregistrer");
+        void retryOverrides();
       } else if (!results.some((r) => "rejected" === r.status)) {
         toast.success("Sélection appliquée");
       }
@@ -362,7 +363,10 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   // `readState` plutôt que les drapeaux bruts : un refetch d'arrière-plan raté
   // laisse la donnée en cache intacte — céder la place à une erreur détruirait un
   // écran qui fonctionne. Seul un échec SANS rien à montrer s'affiche.
-  if (readLoading(periodSlotsQuery) || readLoading(overridesQuery)) {
+  if (readLoading(periodSlotsQuery) || readLoading(overridesQuery) || readLoading(conflictsQuery)) {
+    // Les conflits font partie du chargement : sans eux, la grille se rend avec ZÉRO
+    // badge « INTERDIT cette période » — tout paraît permis, et le gestionnaire pose
+    // des créneaux dans un gymnase fermé (le vide crédible, version interdits).
     return <p className="text-xs text-muted-foreground">Chargement de la grille de la période…</p>;
   }
   // Les conflits portent l'interdit « ce gymnase est fermé cette période » : les

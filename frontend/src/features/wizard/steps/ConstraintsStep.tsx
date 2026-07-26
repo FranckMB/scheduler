@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
-import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
+import { PeriodAnchorGate } from "./PeriodAnchorGate";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -422,23 +422,17 @@ export function ConstraintsStep() {
       ) : null}
 
       {"reserve" === mode ? (
-        // L'union force à nommer les trois issues (P4-20) : hors ancre certaine on
-        // n'écrit pas — une réservation posée sur le socle deviendrait permanente —
-        // et un ÉCHEC se dit, au lieu d'un « Chargement… » qui ne finit jamais.
-        "failed" === anchor.state ? (
-          <LoadErrorHint onRetry={anchor.retry}>Impossible de charger le planning de la période.</LoadErrorHint>
-        ) : "absent" === anchor.state ? (
-          <EmptyHint>Cette période n’a pas encore d’espace de travail — utilisez « Adapter » pour en créer un.</EmptyHint>
-        ) : periodMode ? (
-          "period" === anchor.state ? (
-            <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={anchor.planId} />
-          ) : "base" === anchor.state ? (
-            // Mode période SANS entrée résolue : anomalie de store rehydraté. Un
-            // « Chargement… » ici ne finirait jamais.
-            <EmptyHint>Aucune période sélectionnée — revenez au calendrier et rouvrez la période.</EmptyHint>
-          ) : (
-            <EmptyHint>Chargement du planning de la période…</EmptyHint>
-          )
+        // Une seule échelle d'états pour l'ancre — la PORTE. Le premier jet
+        // re-implémentait ses quatre cas en ternaire imbriqué : les libellés
+        // divergeaient déjà entre les deux copies au round suivant.
+        periodMode ? (
+          <PeriodAnchorGate
+            anchor={anchor}
+            loadingLabel="Chargement du planning de la période…"
+            errorLabel="Impossible de charger le planning de la période."
+          >
+            {(schedulePlanId) => <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />}
+          </PeriodAnchorGate>
         ) : (
           <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={null} />
         )
