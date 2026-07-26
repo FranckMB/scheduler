@@ -36,9 +36,11 @@ vi.mock("../queries", () => ({
   useReservations: () => ({ data: [] }),
   usePeriodSlots: () => ({ data: periodSlotsState.data, isLoading: periodSlotsState.isLoading, isError: periodSlotsState.isError }),
   useVenuePeriodOverrides: () => ({ data: [], isError: false }),
+  useTeamPeriodOverrides: () => ({ data: [], isError: teamOverridesState.isError }),
 }));
 
-const periodSlotsState: { data: unknown[]; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
+const periodSlotsState: { data: unknown[] | undefined; isLoading: boolean; isError: boolean } = { data: [], isLoading: false, isError: false };
+const teamOverridesState = { isError: false };
 
 const team = (id: string, name: string, sessionsPerWeek: number): Team => ({
   id,
@@ -172,6 +174,7 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
   // qui existent déjà (doublons).
   it("dit l'échec de la grille au lieu de fabriquer « gymnase sans créneau »", () => {
     periodSlotsState.isError = true;
+    periodSlotsState.data = undefined; // échec SANS cache : le seul cas qui doit bloquer
     useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
 
     const { result } = renderHook(() => useStepValidation("venues"));
@@ -179,6 +182,7 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
     expect(result.current.errors).toContain("La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux.");
     periodSlotsState.isError = false;
+    periodSlotsState.data = [];
   });
 
   // NR — une période SANS espace de travail est un état réel, pas un chargement.
@@ -197,10 +201,14 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     // Round 2 finding #4 : le plan peut être résolu (ready) alors que la query period_slots
     // n'a pas encore chargé (data []). Armer la règle là dessus criait « sans créneau » sur
     // une grille en fait pleine. On attend que la query ait chargé.
+    // Premier chargement = AUCUNE donnée encore (pas seulement `isLoading`) : c'est
+    // l'absence de donnée qui interdit de conclure, pas le drapeau (readState).
     periodSlotsState.isLoading = true;
+    periodSlotsState.data = undefined;
     useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(false);
     periodSlotsState.isLoading = false;
+    periodSlotsState.data = [];
   });
 });;

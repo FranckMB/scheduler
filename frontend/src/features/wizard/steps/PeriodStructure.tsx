@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -93,7 +94,9 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
   // Le PLAN entier est nécessaire ici (le garde de seed lit teamSelectionInitialized) ;
   // `usePeriodAnchor` fournit l'ancre ET son état — ne pas re-dériver un `?? null` nu.
   const { data: plan, isLoading: planLoading } = useSchedulePlanForEntry(calendarEntryId);
-  const { data: overrides = [], isLoading, isError: overridesFailed, refetch: retryOverrides } = useTeamPeriodOverrides(schedulePlanId);
+  const overridesQueryState = useTeamPeriodOverrides(schedulePlanId);
+  const { data: overrides = [], isLoading, refetch: retryOverrides } = overridesQueryState;
+  const overridesFailed = readFailed(overridesQueryState);
   const create = useCreateTeamPeriodOverride(schedulePlanId);
   const update = useUpdateTeamPeriodOverride(schedulePlanId);
   const del = useDeleteTeamPeriodOverride(schedulePlanId);
@@ -209,7 +212,13 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
       // Sans le premier test, zéro requête (overrides pas encore chargés → tout le monde
       // « déjà au défaut saison ») donnait zéro rejet, donc « Sélection appliquée » sur
       // une période intouchée. Un succès qui ment est pire qu'une erreur.
-      if (writes.length > 0 && !results.some((r) => "rejected" === r.status)) {
+      if (0 === writes.length) {
+        // Rien à écrire = la sélection demandée est DÉJÀ en place. Le taire laissait
+        // le gestionnaire sans le moindre retour, à recliquer en croyant que rien ne
+        // se passe — alors que confirmer « appliquée » sur zéro écriture mentirait
+        // quand la carte des overrides n'est pas chargée (garde ci-dessus).
+        toast.success("Sélection déjà à jour");
+      } else if (!results.some((r) => "rejected" === r.status)) {
         toast.success("Sélection appliquée");
       }
     } finally {
@@ -219,7 +228,15 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
 
   // P4-1 — un GET d'overrides en échec rendait des cases « par défaut » crédibles :
   // le gestionnaire re-cochait une sélection déjà posée. L'échec passe avant le vide.
-  if (overridesFailed) {
+  // Sans la carte des overrides, `isActive()`/`sessionsOf()` retombent sur les
+  // valeurs de SAISON : une équipe mise en pause s'affiche cochée, et un clic
+  // calcule son écriture contre un état faux (POST sur une ligne existante → 422,
+  // ou DELETE jamais envoyé → équipe qui reste en pause en croyant l'inverse).
+  // Le panneau voisin (`PeriodConstraintsPanel`) garde déjà exactement ça.
+  if (readLoading(overridesQueryState)) {
+    return <p className="text-xs text-muted-foreground">Chargement de la sélection d’équipes…</p>;
+  }
+  if (readFailed(overridesQueryState)) {
     return (
       <LoadErrorHint onRetry={() => void retryOverrides()}>Impossible de charger la sélection d’équipes de la période.</LoadErrorHint>
     );
@@ -332,7 +349,8 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   const { data: venues = [] } = useWizardVenues();
   const periodSlotsQuery = usePeriodSlots(schedulePlanId);
   const overridesQuery = useVenuePeriodOverrides(schedulePlanId);
-  const { data: conflicts } = useEntryConflicts(calendarEntryId);
+  const conflictsQuery = useEntryConflicts(calendarEntryId);
+  const conflicts = conflictsQuery.data;
 
   const [selectedId, setSelectedId] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
@@ -341,10 +359,22 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   // « 0 créneau », indistinguable d'une période délibérément vidée. Le gestionnaire
   // re-dessine sa semaine → doublons de créneaux, ou valide une période qu'il croit
   // sans entraînement. L'échec passe donc avant tout rendu de grille.
-  if (periodSlotsQuery.isLoading || overridesQuery.isLoading) {
+  // `readState` plutôt que les drapeaux bruts : un refetch d'arrière-plan raté
+  // laisse la donnée en cache intacte — céder la place à une erreur détruirait un
+  // écran qui fonctionne. Seul un échec SANS rien à montrer s'affiche.
+  if (readLoading(periodSlotsQuery) || readLoading(overridesQuery)) {
     return <p className="text-xs text-muted-foreground">Chargement de la grille de la période…</p>;
   }
-  if (periodSlotsQuery.isError || overridesQuery.isError) {
+  // Les conflits portent l'interdit « ce gymnase est fermé cette période » : les
+  // avaler en `[]` rendrait une grille où tout paraît permis.
+  if (readFailed(conflictsQuery)) {
+    return (
+      <LoadErrorHint onRetry={() => void conflictsQuery.refetch()}>
+        Impossible de vérifier les fermetures de gymnase sur cette période.
+      </LoadErrorHint>
+    );
+  }
+  if (readFailed(periodSlotsQuery) || readFailed(overridesQuery)) {
     return (
       <LoadErrorHint
         onRetry={() => {

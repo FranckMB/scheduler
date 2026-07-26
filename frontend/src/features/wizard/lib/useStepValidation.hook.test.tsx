@@ -24,6 +24,7 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => q([]),
   useConstraintValidation: () => q(undefined),
   useReservations: () => q([]),
+  useTeamPeriodOverrides: () => ({ data: [] }),
   usePeriodSlots: () => q([]),
   useVenuePeriodOverrides: () => q([]),
 }));

@@ -41,6 +41,17 @@ export function PeriodAnchorGate({
       </p>
     );
   }
+  // `base` ne devrait pas arriver ici (ces écrans ne vivent qu'en mode période) :
+  // c'est un appelant qui passe un `calendarEntryId` nul — état atteignable après
+  // une rehydratation partielle du store. Le rendre comme un chargement donnait
+  // un spinner qui ne finit jamais ; on nomme l'anomalie et on offre la sortie.
+  if ("base" === anchor.state) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Aucune période sélectionnée — revenez au calendrier et rouvrez la période.
+      </p>
+    );
+  }
   if ("period" !== anchor.state) {
     return <p className="text-xs text-muted-foreground">{loadingLabel}</p>;
   }

@@ -95,6 +95,22 @@ describe("usePeriodAnchor — la vraie précédence", () => {
     expect(anchorIsWritable(result.current)).toBe(false);
   });
 
+  it("un `null` PÉRIMÉ en cours de refetch reste `loading`, jamais `absent`", async () => {
+    // Le piège : après « Adapter », la clé est invalidée et re-fetchée alors qu'un
+    // `null` périmé est encore en cache. `isLoading` est faux (il y a une donnée) —
+    // conclure `absent` disait « adaptez cette période » un clic après que le
+    // gestionnaire l'a fait. On ne conclut rien tant que ça vole.
+    getPlan.mockResolvedValueOnce(null);
+    const { result } = renderHook(() => usePeriodAnchor("e1"), { wrapper });
+    await waitFor(() => expect(result.current.state).toBe("absent"));
+
+    // Refetch en vol (la réponse ne revient pas tout de suite).
+    getPlan.mockReturnValue(new Promise(() => {}));
+    void client.refetchQueries({ queryKey: ["calendar-entries", "plan", "e1"] });
+
+    await waitFor(() => expect(result.current.state).toBe("loading"));
+  });
+
   it("pendant le vol : `loading`, jamais écrivable", () => {
     getPlan.mockReturnValue(new Promise(() => {})); // ne se résout jamais
 

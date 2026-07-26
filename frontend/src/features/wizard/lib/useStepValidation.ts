@@ -1,6 +1,7 @@
 import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
-import { useConstraintValidation, usePeriodSlots, useReservations, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
+import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
@@ -105,6 +106,11 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const periodSlots = periodSlotsQuery.data ?? [];
   const periodOverridesQuery = useVenuePeriodOverrides(periodMode ? periodAnchor.planId : null);
   const periodOverrides = periodOverridesQuery.data ?? [];
+  // La SÉLECTION d'équipes de la période : le verdict ne la lisait pas, donc le récap
+  // pouvait rester vert pendant que le panneau Équipes affichait « Impossible de charger
+  // la sélection ». Deux écrans, deux vérités — le défaut que cette PR corrige ailleurs.
+  // Même clé react-query que le panneau : pas de requête supplémentaire en pratique.
+  const periodTeamOverridesQuery = useTeamPeriodOverrides(periodMode ? periodAnchor.planId : null);
   // The pre-solve constraint check is only needed for the recap verdict, and only
   // while the user is actually on the recap OR generate step — firing it on every
   // earlier step is a wasted backend round-trip.
@@ -138,8 +144,11 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // laissait `[]` passer pour une grille vide et fabriquait un blocage « Gymnase(s) sans
   // créneau » nommant TOUS les gymnases — sur une grille en fait pleine. Le panneau, lui,
   // affichait correctement l'échec : deux écrans, deux vérités.
-  if (periodMode && (periodSlotsQuery.isError || periodOverridesQuery.isError)) {
+  if (periodMode && (readFailed(periodSlotsQuery) || readFailed(periodOverridesQuery))) {
     return { errors: ["La grille de la période n'a pas pu être chargée — impossible de vérifier ses créneaux."], warnings: [] };
+  }
+  if (periodMode && readFailed(periodTeamOverridesQuery)) {
+    return { errors: ["La sélection d'équipes de la période n'a pas pu être chargée — impossible de la vérifier."], warnings: [] };
   }
 
   if ("teams" === stepId) {
@@ -157,7 +166,12 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // faut attendre qu'elle ait CHARGÉ, pas seulement que le plan soit résolu, sinon on
   // confond « pas encore chargé » (undefined→[]) et « vraiment vide » et on crie « sans
   // créneau » sur une grille pleine (revue #8 PR-B round 2).
-  const periodGridReady = "period" === periodAnchor.state && !periodSlotsQuery.isLoading;
+  // Les DEUX queries portent la grille : `periodSlots` dit les créneaux,
+  // `periodOverrides` dit quels gymnases sont désactivés (donc légitimement sans
+  // créneau). Armer la règle sur l'une sans l'autre criait « gymnase sans créneau »
+  // sur un gymnase volontairement désactivé, le temps que les overrides arrivent.
+  const periodGridReady =
+    "period" === periodAnchor.state && !readLoading(periodSlotsQuery) && !readLoading(periodOverridesQuery);
   const emptyVenues = periodMode
     ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
     : venuesWithoutSlot(venues, slots);

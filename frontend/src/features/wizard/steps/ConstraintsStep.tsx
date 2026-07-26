@@ -432,6 +432,10 @@ export function ConstraintsStep() {
         ) : periodMode ? (
           "period" === anchor.state ? (
             <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={anchor.planId} />
+          ) : "base" === anchor.state ? (
+            // Mode période SANS entrée résolue : anomalie de store rehydraté. Un
+            // « Chargement… » ici ne finirait jamais.
+            <EmptyHint>Aucune période sélectionnée — revenez au calendrier et rouvrez la période.</EmptyHint>
           ) : (
             <EmptyHint>Chargement du planning de la période…</EmptyHint>
           )

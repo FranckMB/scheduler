@@ -83,7 +83,14 @@ vi.mock("../queries", () => ({
   useTeamPeriodOverrides: (anchor: string | null) => {
     teamOverridesAnchor.value = anchor;
 
-    return { data: overridesState.data, isLoading: teamOverridesLoadingState.value, isError: teamOverridesErrorState.value, refetch: vi.fn() };
+    // readState : un échec « sans rien à montrer » se signale par `data: undefined`
+    // (une donnée en cache, même périmée, reste exploitable).
+    return {
+      data: teamOverridesErrorState.value || teamOverridesLoadingState.value ? undefined : overridesState.data,
+      isLoading: teamOverridesLoadingState.value,
+      isError: teamOverridesErrorState.value,
+      refetch: vi.fn(),
+    };
   },
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
@@ -94,7 +101,9 @@ vi.mock("../queries", () => ({
     periodSlotsAnchor.value = anchor;
 
     return {
-      data: periodSlotOverride.value ?? [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }],
+      data: periodSlotsState.failed
+        ? undefined
+        : (periodSlotOverride.value ?? [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }]),
       isError: periodSlotsState.failed,
       refetch: periodSlotsState.retry,
     };
