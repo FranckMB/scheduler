@@ -25,7 +25,11 @@ export async function errorMessage(error: unknown): Promise<string> {
     // already read". A non-JSON body leaves data as a string/undefined → the
     // object guard falls through to the status-based sentence.
     const data = (error as { data?: unknown }).data;
-    if (null !== data && typeof data === "object") {
+    // SEC-08 / P4-5 — un 5xx ne dit RIEN d'actionnable à l'utilisateur, et son
+    // corps peut porter des détails internes (message de driver, trace). Les
+    // messages du serveur ne sont repris que pour les erreurs CLIENT (4xx), où
+    // ils sont des messages métier écrits pour être lus.
+    if (status < 500 && null !== data && typeof data === "object") {
       const body = data as ApiErrorBody;
       const direct = body.error ?? body.message ?? body.detail;
       if (typeof direct === "string" && direct.trim() !== "") {
