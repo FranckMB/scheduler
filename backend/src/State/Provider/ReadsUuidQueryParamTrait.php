@@ -21,14 +21,22 @@ use Symfony\Component\Uid\Uuid;
  */
 trait ReadsUuidQueryParamTrait
 {
-    /** @return string|null null si le paramètre est absent ou vide */
+    /**
+     * ABSENT ⇒ null (le provider applique son défaut : socle, pas de filtre…).
+     * PRÉSENT ⇒ doit être un UUID, sinon 400 — y compris **vide** : `?x=` est une
+     * erreur d'appel, pas « absent ». Les confondre ferait répondre au filtre d'une
+     * PÉRIODE par les données du SOCLE — plausible et faux, exactement le mode de
+     * panne que garde le NR C3.
+     *
+     * @return string|null null si et seulement si le paramètre est absent
+     */
     private function uuidQueryParam(Request $request, string $name): ?string
     {
-        $value = $request->query->get($name);
-        if (!\is_string($value) || '' === $value) {
+        if (!$request->query->has($name)) {
             return null;
         }
-        if (!Uuid::isValid($value)) {
+        $value = $request->query->get($name);
+        if (!\is_string($value) || !Uuid::isValid($value)) {
             throw new BadRequestHttpException(\sprintf('Le paramètre "%s" doit être un UUID.', $name));
         }
 

@@ -432,6 +432,11 @@ final class PeriodPlanBirthTest extends WebTestCase
         // Le payload de BASE est la vraie assertion : il ne voit que l'ancre nulle.
         $builder = self::getContainer()->get(ScheduleConstraintBuilder::class);
         self::assertInstanceOf(ScheduleConstraintBuilder::class, $builder);
+        // `buildForClubSeason` sert d'abord le pool `cache.schedule` : les fixtures
+        // ci-dessus sont écrites hors requête, donc sans invalidation. Sans ce purge,
+        // un hit rendrait l'assertion creuse — verte quoi qu'il arrive. Ne pas
+        // dépendre du fait que l'env de test mappe ce pool sur un adaptateur array.
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId()));
         $payload = $builder->buildForClubSeason($club->getId(), $season->getId());
 
         $slots = [];

@@ -18,6 +18,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  */
 class TeamStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
@@ -74,8 +76,8 @@ class TeamStateProvider extends AbstractStateProvider
     {
         $request = $this->requestStack->getCurrentRequest();
 
-        $seasonId = $request?->query->get('seasonId');
-        if (\is_string($seasonId) && '' !== $seasonId) {
+        $seasonId = null === $request ? null : $this->uuidQueryParam($request, 'seasonId');
+        if (null !== $seasonId) {
             $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
         }
 

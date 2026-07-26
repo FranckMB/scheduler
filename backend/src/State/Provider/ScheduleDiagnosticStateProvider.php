@@ -13,6 +13,8 @@ use Doctrine\ORM\QueryBuilder;
  */
 class ScheduleDiagnosticStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return ScheduleDiagnostic::class;
@@ -20,8 +22,9 @@ class ScheduleDiagnosticStateProvider extends AbstractStateProvider
 
     protected function applyRequestFilters(QueryBuilder $qb): bool
     {
-        $scheduleId = $this->requestStack->getCurrentRequest()?->query->get('scheduleId');
-        if (\is_string($scheduleId) && '' !== $scheduleId) {
+        $request = $this->requestStack->getCurrentRequest();
+        $scheduleId = null === $request ? null : $this->uuidQueryParam($request, 'scheduleId');
+        if (null !== $scheduleId) {
             $qb->andWhere('e.scheduleId = :scheduleId')->setParameter('scheduleId', $scheduleId);
 
             return true;

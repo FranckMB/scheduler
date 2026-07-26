@@ -19,6 +19,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  */
 class CoachWishCampaignStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
@@ -74,8 +76,8 @@ class CoachWishCampaignStateProvider extends AbstractStateProvider
 
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
-            $calendarEntryId = $request->query->get('calendarEntryId');
-            if (null !== $calendarEntryId && '' !== $calendarEntryId) {
+            $calendarEntryId = $this->uuidQueryParam($request, 'calendarEntryId');
+            if (null !== $calendarEntryId) {
                 $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
             }
         }

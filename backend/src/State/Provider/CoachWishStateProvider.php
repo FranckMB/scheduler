@@ -14,6 +14,8 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class CoachWishStateProvider extends AbstractStateProvider
 {
+    use ReadsUuidQueryParamTrait;
+
     protected function getEntityClass(): string
     {
         return CoachWish::class;
@@ -45,13 +47,13 @@ class CoachWishStateProvider extends AbstractStateProvider
         $request = $this->requestStack->getCurrentRequest();
         if ($request instanceof Request) {
             // La todo-list se consulte toujours par période ; teamId affine.
-            $calendarEntryId = $request->query->get('calendarEntryId');
-            if (null !== $calendarEntryId && '' !== $calendarEntryId) {
+            $calendarEntryId = $this->uuidQueryParam($request, 'calendarEntryId');
+            if (null !== $calendarEntryId) {
                 $qb->andWhere('e.calendarEntryId = :calendarEntryId')->setParameter('calendarEntryId', $calendarEntryId);
             }
 
-            $teamId = $request->query->get('teamId');
-            if (null !== $teamId && '' !== $teamId) {
+            $teamId = $this->uuidQueryParam($request, 'teamId');
+            if (null !== $teamId) {
                 $qb->andWhere('e.teamId = :teamId')->setParameter('teamId', $teamId);
             }
         }
