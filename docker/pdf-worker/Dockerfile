@@ -2,12 +2,19 @@ FROM ghcr.io/puppeteer/puppeteer:latest
 
 WORKDIR /app/frontend
 
-# worker.js only imports node builtins + puppeteer — the frontend package.json no
-# longer declares puppeteer (dropped in 92763d3), so `npm ci` here would NOT install
-# it. Reuse the base image's install instead: its version always matches the Chrome
-# cached in the same image, where an `npm install puppeteer` could drift from that
-# cache and find no browser. Being a symlink, it resolves at runtime against the
-# running container, so the pdf_worker_node_modules volume can never pin a stale copy.
+# worker.js imports node builtins + puppeteer, et c'est le SEUL consommateur.
+#
+# `frontend/package.json` ne déclare DÉLIBÉRÉMENT pas puppeteer : seule la paire
+# puppeteer↔Chrome de l'image de base est garantie cohérente. Un paquet installé
+# par npm dériverait de ce cache et le worker ne trouverait aucun navigateur.
+# D'où le lien symbolique — et, étant un lien, il se résout à l'exécution contre
+# le conteneur courant, donc le volume pdf_worker_node_modules ne peut jamais
+# figer une copie périmée.
+#
+# Le déclarer côté npm n'apporterait rien et coûterait : ni `tsc` (limité à
+# `src`) ni ESLint (limité aux `.ts/.tsx`) ne voient ce fichier, aucun test ne
+# l'importe, et son postinstall téléchargerait un Chrome complet à chaque
+# `npm ci` — deux fois par run de CI — pour un binaire jamais utilisé.
 RUN mkdir -p node_modules \
     && ln -s /home/pptruser/node_modules/puppeteer node_modules/puppeteer
 
