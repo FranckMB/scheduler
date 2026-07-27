@@ -98,7 +98,7 @@ jobs:
       # fresh unpinned resolve. `pip freeze` omits pip/setuptools tooling by default, and
       # auditing the frozen list via an isolated pipx-run pip-audit means the tool never
       # perturbs (upgrades) the set it is meant to check. The local non-PyPI package is stripped.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: pip-audit
