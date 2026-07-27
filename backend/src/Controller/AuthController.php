@@ -4,23 +4,24 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\Basketball\FfbbCommittee;
+use App\Entity\Basketball\FfbbLeague;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\EmailVerificationToken;
-use App\Entity\FfbbCommittee;
-use App\Entity\FfbbLeague;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\User;
 use App\Enum\AuditAction;
-use App\Message\PopulateClubFromFfbbMessage;
+use App\Message\Basketball\PopulateClubFromFfbbMessage;
+use App\Repository\Basketball\FfbbCommitteeRepository;
+use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
-use App\Repository\FfbbCommitteeRepository;
-use App\Repository\FfbbLeagueRepository;
 use App\Repository\SportRepository;
 use App\Service\AuditTrail;
+use App\Service\Basketball\CategoryCatalog;
 use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
@@ -28,7 +29,6 @@ use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
-use App\Sport\BasketballCategoryCatalog;
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
@@ -676,7 +676,7 @@ final class AuthController extends AbstractController
         // register → EmailVerificationToken → ici (patron de $intentClubName).
         $club->setSportId($sport->getId());
 
-        $categories = BasketballCategoryCatalog::categories();
+        $categories = CategoryCatalog::categories();
         foreach ($categories as $categoryData) {
             $sportCategory = new SportCategory;
             $sportCategory->setClubId($club->getId());

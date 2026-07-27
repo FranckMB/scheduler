@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
-use App\Message\PopulateClubFromFfbbMessage;
+use App\Message\Basketball\PopulateClubFromFfbbMessage;
 use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;

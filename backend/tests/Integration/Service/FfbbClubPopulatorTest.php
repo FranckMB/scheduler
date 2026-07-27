@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Service;
 
+use App\Entity\Basketball\FfbbCommittee;
+use App\Entity\Basketball\FfbbLeague;
 use App\Entity\Club;
-use App\Entity\FfbbCommittee;
-use App\Entity\FfbbLeague;
-use App\Repository\FfbbCommitteeRepository;
-use App\Repository\FfbbLeagueRepository;
-use App\Service\FfbbApiClient;
-use App\Service\FfbbClubPopulator;
-use App\Service\FfbbLogoFetcher;
+use App\Repository\Basketball\FfbbCommitteeRepository;
+use App\Repository\Basketball\FfbbLeagueRepository;
+use App\Service\Basketball\FfbbApiClient;
+use App\Service\Basketball\FfbbClubPopulator;
+use App\Service\Basketball\FfbbLogoFetcher;
 use App\Storage\LogoStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
