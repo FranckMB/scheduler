@@ -203,6 +203,14 @@ jobs:
       - name: UserInterfaceContractTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Unit/Entity/UserInterfaceContractTest.php --group phase1'
 
+      # Même racine, prise en amont : `UserInterfaceContractTest` attrape la
+      # CONSÉQUENCE (une méthode d'interface disparue), celui-ci attrape la
+      # CAUSE (un paquet Symfony qui quitte la LTS 7.4). Bloquant parce qu'une
+      # dérive est silencieuse — elle n'apparaît qu'au bump suivant, ou en
+      # production sur une CVE jamais corrigée d'une branche hors support.
+      - name: SymfonyStackAlignmentTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Unit/Dependency/SymfonyStackAlignmentTest.php --group phase1'
+
       - name: TenantIsolationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
 
