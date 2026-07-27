@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -78,7 +78,13 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
     renderWithFailingLazy(new TypeError("Failed to fetch dynamically imported module: /assets/x.js"));
 
     await screen.findByRole("button", { name: /Recharger la page/i });
-    expect(captureException).toHaveBeenCalled();
+
+    // `waitFor` et non une assertion sèche : l'envoi à Sentry se fait dans un
+    // `useEffect`, or trouver le bouton ne prouve QUE le rendu — pas que les
+    // effets ont été purgés. La version sèche passait en local et sur une CI peu
+    // chargée, puis a rougi une fois sur un run à 97 fichiers en parallèle (PR
+    // #316), pour repasser au re-run : le flake exact que cette forme produit.
+    await waitFor(() => expect(captureException).toHaveBeenCalled());
     expect(captureException.mock.calls[0][1]).toMatchObject({ tags: { chunkFailed: "true" } });
   });
 });
