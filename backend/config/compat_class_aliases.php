@@ -3,7 +3,7 @@
 declare(strict_types=1);
 use App\Message\Basketball\PopulateClubFromFfbbMessage;
 
-/**
+/*
  * Alias de compatibilité pour les messages DÉJÀ EN FILE au moment d'un déploiement.
  *
  * Le transport `async` utilise le `PhpSerializer` par défaut : une enveloppe
