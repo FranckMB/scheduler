@@ -22,45 +22,9 @@ final class EnvHygieneTest extends TestCase
     /** The concrete APP_SECRET that used to live in .env.dev/.env.test. */
     private const LEAKED_SECRET = '6be95ec77f384792f8abcaf31cf2f807';
 
-    /**
-     * Non-comment, non-blank `KEY=value` lines of a committed env file.
-     *
-     * @return list<string>
-     */
-    private static function assignments(string $file): array
-    {
-        $content = (string) file_get_contents(self::BACKEND . $file);
-
-        return array_values(array_filter(
-            array_map('trim', explode("\n", $content)),
-            static fn (string $line): bool => '' !== $line && !str_starts_with($line, '#'),
-        ));
-    }
-
-    /**
-     * Committed (git-tracked) env files under backend/, so a newly-added tracked
-     * file is covered and an untracked local override is not. Falls back to the
-     * known set if git is unavailable.
-     *
-     * @return list<string> paths relative to backend/
-     */
-    private static function trackedEnvFiles(): array
-    {
-        $backend = realpath(self::BACKEND);
-        if (false !== $backend) {
-            $out = [];
-            exec('git -C ' . escapeshellarg($backend) . ' ls-files -- ' . escapeshellarg('.env*') . ' 2>/dev/null', $out, $code);
-            if (0 === $code && [] !== $out) {
-                return array_map(static fn (string $p): string => '/' . $p, $out);
-            }
-        }
-
-        return ['/.env', '/.env.dev', '/.env.test', '/.env.prod', '/.env.dist'];
-    }
-
     public function testProdProfileOnlyTurnsDebugOffAndCommitsNoSecretValue(): void
     {
-        $lines = self::assignments('/.env.prod');
+        $lines = $this->assignments('/.env.prod');
         self::assertContains('APP_DEBUG=0', $lines, 'backend/.env.prod must set APP_DEBUG=0.');
         // No secret-bearing key may carry a value here (DATABASE_URL/CORS/MAILER
         // embed credentials too). Non-secret prod flags stay allowed.
@@ -95,10 +59,46 @@ final class EnvHygieneTest extends TestCase
 
     public function testTheLeakedSecretNeverComesBackInATrackedFile(): void
     {
-        $files = self::trackedEnvFiles();
+        $files = $this->trackedEnvFiles();
         self::assertNotEmpty($files, 'expected to enumerate tracked backend env files.');
         foreach ($files as $file) {
             self::assertStringNotContainsString(self::LEAKED_SECRET, (string) file_get_contents(self::BACKEND . $file), \sprintf('The once-committed APP_SECRET must not reappear in backend%s.', $file));
         }
+    }
+
+    /**
+     * Non-comment, non-blank `KEY=value` lines of a committed env file.
+     *
+     * @return list<string>
+     */
+    private function assignments(string $file): array
+    {
+        $content = (string) file_get_contents(self::BACKEND . $file);
+
+        return array_values(array_filter(
+            array_map('trim', explode("\n", $content)),
+            static fn (string $line): bool => '' !== $line && !str_starts_with($line, '#'),
+        ));
+    }
+
+    /**
+     * Committed (git-tracked) env files under backend/, so a newly-added tracked
+     * file is covered and an untracked local override is not. Falls back to the
+     * known set if git is unavailable.
+     *
+     * @return list<string> paths relative to backend/
+     */
+    private function trackedEnvFiles(): array
+    {
+        $backend = realpath(self::BACKEND);
+        if (false !== $backend) {
+            $out = [];
+            exec('git -C ' . escapeshellarg($backend) . ' ls-files -- ' . escapeshellarg('.env*') . ' 2>/dev/null', $out, $code);
+            if (0 === $code && [] !== $out) {
+                return array_map(static fn (string $p): string => '/' . $p, $out);
+            }
+        }
+
+        return ['/.env', '/.env.dev', '/.env.test', '/.env.prod', '/.env.dist'];
     }
 }

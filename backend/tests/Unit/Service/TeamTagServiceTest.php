@@ -24,16 +24,16 @@ final class TeamTagServiceTest extends TestCase
     private TeamTagService $service;
 
     /** @var EntityManagerInterface&MockObject */
-    private EntityManagerInterface $entityManager;
+    private MockObject $entityManager;
 
     /** @var EntityRepository<TeamTagAssignment>&MockObject */
-    private EntityRepository $assignmentRepository;
+    private MockObject $assignmentRepository;
 
     /** @var EntityRepository<TeamTag>&MockObject */
-    private EntityRepository $teamTagRepository;
+    private MockObject $teamTagRepository;
 
     /** @var EntityRepository<SportCategory>&MockObject */
-    private EntityRepository $sportCategoryRepository;
+    private MockObject $sportCategoryRepository;
 
     public function testSyncTeamTagsForU15F(): void
     {

@@ -630,7 +630,7 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
      */
     private function periodSchedule(): Schedule
     {
-        if (null === $this->periodSchedule) {
+        if (!$this->periodSchedule instanceof Schedule) {
             $this->periodSchedule = (new Schedule)
                 ->setClubId($this->club->getId())
                 ->setSeasonId($this->season->getId())

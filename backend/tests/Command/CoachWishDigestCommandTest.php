@@ -255,7 +255,7 @@ final class CoachWishDigestCommandTest extends KernelTestCase
             ->setTeamId($teamId)->setCoachId($coach->getId())->setRole(TeamCoachRole::MAIN));
 
         $token = (new CoachWishToken)->setCampaignId($campaign->getId())->setCoachId($coach->getId())->setClubId($club->getId());
-        if (null !== $respondedAt) {
+        if ($respondedAt instanceof DateTimeImmutable) {
             $token->markResponded($respondedAt);
         }
         $this->em->persist($token);

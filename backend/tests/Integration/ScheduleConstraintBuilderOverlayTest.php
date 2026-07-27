@@ -712,7 +712,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         // Toute version est liée à son plan en prod (linkSchedule, au POST) : un overlay au
         // plan de sa période, une version de BASE au plan SEASON (le socle). buildForOverlay
         // l'exige (C2) et findBaseSlotTemplates ne prend QUE les versions du plan SEASON (C4).
-        $schedule->setSchedulePlanId(null !== $entry ? $this->planIdOf($entry) : $this->seasonPlanIdOf($season));
+        $schedule->setSchedulePlanId($entry instanceof CalendarEntry ? $this->planIdOf($entry) : $this->seasonPlanIdOf($season));
         $this->em->persist($schedule);
 
         return $schedule;

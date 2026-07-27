@@ -154,7 +154,7 @@ final class ContractSchemaTest extends TestCase
         self::assertIsBool($payload['venues'][0]['isActive']);
         self::assertArrayHasKey('trainingSlots', $payload['venues'][0]);
         self::assertIsArray($payload['venues'][0]['trainingSlots']);
-        if (!empty($payload['venues'][0]['trainingSlots'])) {
+        if (isset($payload['venues'][0]['trainingSlots']) && [] !== $payload['venues'][0]['trainingSlots']) {
             $slot = $payload['venues'][0]['trainingSlots'][0];
             self::assertArrayHasKey('dayOfWeek', $slot);
             self::assertArrayHasKey('startTime', $slot);
