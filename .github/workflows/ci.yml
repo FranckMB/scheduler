@@ -203,6 +203,17 @@ jobs:
       - name: UserInterfaceContractTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Unit/Entity/UserInterfaceContractTest.php --group phase1'
 
+      # NOTE : `SymfonyStackAlignmentTest` (dérive du stack hors LTS 7.4) tourne
+      # dans `unit-tests`, PAS ici. Une chaîne de version n'a pas sa place dans
+      # le job qui gate `build-docker` : un bump dependabot remontant un split
+      # Symfony ferait rougir `blocking-tests` AVANT même que
+      # TenantIsolationTest/RlsIsolationTest ne s'exécutent (étapes suivantes du
+      # même job), et bloquerait le déploiement du correctif de sécurité que ce
+      # bump apportait. C'est la raison exacte pour laquelle Rector a quitté le
+      # job `phpstan` (P4-24 b) et pour laquelle `dependency-audit` n'a pas de
+      # `needs` : une dérive de dépendance se signale, elle ne prend pas la
+      # livraison en otage.
+
       - name: TenantIsolationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'
 
