@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useNavigation } from "react-router";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
@@ -13,6 +13,8 @@ import { useLogin } from "./queries";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  // Le chunk du cockpit se télécharge après le login : la navigation n'est pas instantanée.
+  const navigating = "idle" !== useNavigation().state;
   const login = useLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,8 +57,12 @@ export function LoginPage() {
           <PasswordInput id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="submit" disabled={login.isPending}>
-          {login.isPending ? <Spinner className="size-4" /> : null}
+        {/* P4-6 — `navigate("/")` ne commite plus dans le même rendu : le chunk du
+            cockpit se télécharge d'abord. Sans `navigating`, le bouton se ré-activait
+            sur un formulaire encore affiché → double POST /api/login → throttle SEC-11
+            pour un utilisateur en fait DÉJÀ authentifié. */}
+        <Button type="submit" disabled={login.isPending || navigating}>
+          {login.isPending || navigating ? <Spinner className="size-4" /> : null}
           Se connecter
         </Button>
       </form>

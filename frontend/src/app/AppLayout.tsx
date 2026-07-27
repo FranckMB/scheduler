@@ -1,5 +1,5 @@
 import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User, ShieldCheck } from "lucide-react";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useNavigation } from "react-router";
 
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
@@ -27,6 +27,8 @@ function NavItem({ to, children }: { to: string; children: string }) {
 }
 
 export function AppLayout() {
+  // `idle` = rien en vol ; toute autre valeur = une navigation attend (chunk lazy).
+  const navigating = "idle" !== useNavigation().state;
   const { data } = useMe();
   const logout = useLogout();
   useApplyClubTheme();
@@ -85,7 +87,7 @@ export function AppLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8" aria-busy={navigating}>
         <ReadonlySeasonBanner />
         <SeasonTransitionBanner />
         <Outlet />

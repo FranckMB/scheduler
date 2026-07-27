@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, useNavigation } from "react-router";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
@@ -24,6 +24,10 @@ export function AdminLoginPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // P4-6 — `/admin` charge maintenant deux chunks lazy : sans ce verrou, le bouton
+  // se ré-active sur le formulaire encore affiché, le superadmin resoumet un code
+  // TOTP DÉJÀ consommé → échec + incrément du throttle par IP du firewall SA0.
+  const navigating = "idle" !== useNavigation().state;
 
   async function submitPassword(event: FormEvent) {
     event.preventDefault();
@@ -75,7 +79,7 @@ export function AdminLoginPage() {
             />
           </div>
           {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
-          <Button type="submit" className="h-11 bg-cyan-300 text-slate-950 hover:bg-cyan-200" disabled={pending || 6 !== code.length}>
+          <Button type="submit" className="h-11 bg-cyan-300 text-slate-950 hover:bg-cyan-200" disabled={pending || navigating || 6 !== code.length}>
             {pending ? <Spinner className="size-4 text-slate-950" /> : null}
             Ouvrir la console
           </Button>
@@ -99,7 +103,7 @@ export function AdminLoginPage() {
           <PasswordInput id="admin-password" className="text-white" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
         </div>
         {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
-        <Button type="submit" className="h-11 bg-cyan-300 text-slate-950 hover:bg-cyan-200" disabled={pending || !email || !password}>
+        <Button type="submit" className="h-11 bg-cyan-300 text-slate-950 hover:bg-cyan-200" disabled={pending || navigating || !email || !password}>
           {pending ? <Spinner className="size-4 text-slate-950" /> : null}
           Continuer
         </Button>
