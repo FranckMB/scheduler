@@ -25,7 +25,7 @@ d'accumuler l'écart.
 **C'est quoi** : outillage de dev/test frontend — `@types/node` (types Node pour TypeScript),
 `jsdom` (DOM simulé pour les tests unitaires Vitest), + un groupe (Storybook & co, lockfile).
 **Ça apporte** : types et environnement de test à jour, correctifs. Aucun impact runtime (dev-only).
-**Adapté chez nous** : rien — 521 tests verts, `tsc` + `eslint` + `vite build` OK.
+**Adapté chez nous** : rien — suite Vitest verte, `tsc` + `eslint` + `vite build` OK.
 
 ### actions/setup-node 6 → 7 (CI, GitHub Actions)
 **C'est quoi** : l'action GitHub qui installe Node.js dans les jobs de CI.
