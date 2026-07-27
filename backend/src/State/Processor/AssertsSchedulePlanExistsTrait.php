@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\State\Processor;
 
 use App\Entity\SchedulePlan;
+use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
@@ -26,10 +27,47 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 trait AssertsSchedulePlanExistsTrait
 {
+    /**
+     * Le filet de la COURSE, complément indispensable du contrôle ci-dessous.
+     *
+     * `assertSchedulePlanExists` est un check-then-insert : entre son SELECT et le
+     * flush, une autre requête peut supprimer le plan (suppression de période, ou
+     * `OverlayManager::deletePeriodPlanForEntry(force: true)` déclenché par une
+     * validation/réouverture du plan de saison). La FK remonterait alors une
+     * `ForeignKeyConstraintViolationException` que personne n'attrape → 500 opaque,
+     * là où avant la FK la ligne s'écrivait simplement.
+     *
+     * On ne prend PAS de verrou : le résultat utile est le même 422 que si le plan
+     * avait déjà disparu au moment du contrôle, et sérialiser toute écriture ancrée
+     * sur le verrou de cycle de vie des plans coûterait plus que le cas ne le vaut.
+     *
+     * @template T
+     *
+     * @param callable(): T $write
+     *
+     * @return T
+     */
+    private function rejectingConcurrentPlanDeletion(callable $write): mixed
+    {
+        try {
+            return $write();
+        } catch (ForeignKeyConstraintViolationException $e) {
+            throw new UnprocessableEntityHttpException('Unknown schedule plan.', $e);
+        }
+    }
+
     private function assertSchedulePlanExists(EntityManagerInterface $entityManager, ?string $schedulePlanId): void
     {
         if (null === $schedulePlanId) {
             return;
+        }
+
+        // ABSENT (null) ≠ PRÉSENT-MAIS-VIDE. `Assert\Uuid` laisse passer la chaîne
+        // vide (le validateur Symfony sort immédiatement dessus), et `find('')`
+        // enverrait `WHERE id = ''` contre une PK `uuid` native → 22P02, soit
+        // exactement le 500 que ce garde existe pour supprimer.
+        if ('' === $schedulePlanId) {
+            throw new UnprocessableEntityHttpException('Unknown schedule plan.');
         }
 
         if (!$entityManager->getRepository(SchedulePlan::class)->find($schedulePlanId) instanceof SchedulePlan) {

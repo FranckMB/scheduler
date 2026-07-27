@@ -21,6 +21,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 #[AsController]
 final class ImportController extends AbstractController
@@ -101,6 +102,12 @@ final class ImportController extends AbstractController
         } catch (ImportRejectedException $e) {
             // Le SEUL type relayé : son message est écrit pour le gestionnaire.
             return $this->json(['error' => $e->getMessage()], $e->getStatusCode());
+        } catch (HttpException $e) {
+            // `HttpException` étend `RuntimeException` : sans ce relais AVANT le filet
+            // générique, un 403/409 levé sous `import()` perdrait son statut ET son sens,
+            // remplacé par « le fichier n'a pas pu être lu ». La supervision verrait un
+            // 4xx là où il y a une faute serveur, et personne ne serait réveillé.
+            throw $e;
         } catch (InvalidArgumentException|RuntimeException $e) {
             // Tout le reste vient d'une dépendance (PhpSpreadsheet étend RuntimeException)
             // et peut porter un chemin serveur — journalisé, jamais renvoyé (P4-5).

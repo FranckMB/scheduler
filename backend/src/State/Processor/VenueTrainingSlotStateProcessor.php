@@ -33,6 +33,27 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
     /**
      * @param VenueTrainingSlotInput $input
      */
+
+    /**
+     * Le flush a lieu dans le socle : la violation de FK d'une suppression de plan
+     * CONCURRENTE ne peut être rattrapée qu'ici, autour de l'appel parent.
+     *
+     * @param VenueTrainingSlotInput $input
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPost($input, $clubId, $seasonId));
+    }
+
+    /**
+     * @param array<string, mixed>   $uriVariables
+     * @param VenueTrainingSlotInput $input
+     */
+    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId));
+    }
+
     protected function createEntityFromInput(object $input): VenueTrainingSlot
     {
         $entity = new VenueTrainingSlot;

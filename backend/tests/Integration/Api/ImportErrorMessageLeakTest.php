@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\Club;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
@@ -97,6 +98,37 @@ final class ImportErrorMessageLeakTest extends WebTestCase
         self::assertStringContainsString('Required columns missing', $error, 'Le message métier doit continuer d’atteindre le gestionnaire.');
     }
 
+    /**
+     * Le MÊME contrat sur l'import d'ÉQUIPES FFBB (`ImportController`).
+     *
+     * C'est cet endpoint que le docblock accuse : `FfbbExcelImporter` appelle
+     * `IOFactory::load()` SANS reader épinglé — contrairement à l'import de
+     * rencontres qui force `READER_XLSX` — donc c'est le chemin le plus exposé à
+     * l'exception fuyante. Ne tester que l'autre contrôleur laisserait une
+     * réécriture de ce `catch` réintroduire la divulgation, CI verte.
+     */
+    public function testTheTeamsImportAlsoHidesLibraryMessages(): void
+    {
+        [$token, , , $clubId, $seasonId] = $this->registerWithTeam();
+
+        $path = tempnam(sys_get_temp_dir(), 'leak') . '.xlsx';
+        file_put_contents($path, "PK\x03\x04 ceci n'est pas un classeur");
+        $this->tempFiles[] = $path;
+
+        $this->client->request('POST', '/api/clubs/' . $clubId . '/import-teams', ['seasonId' => $seasonId], [
+            'file' => new UploadedFile($path, 'ffbb.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+
+        // Le test doit atteindre le PARSEUR, pas s'arrêter à un garde amont : sinon il
+        // vérifierait l'absence de fuite sur une réponse qui n'a jamais lu le fichier.
+        self::assertResponseStatusCodeSame(422);
+        $error = (string) (json_decode((string) $this->client->getResponse()->getContent(), true)['error'] ?? '');
+        self::assertStringContainsString('Le fichier n’a pas pu être lu', str_replace('\'', '’', $error));
+        foreach (['/var/www', '/tmp', sys_get_temp_dir(), 'PhpOffice', 'Spreadsheet'] as $forbidden) {
+            self::assertStringNotContainsString($forbidden, $error, \sprintf('L’import d’équipes ne doit rien révéler du serveur — « %s » trouvé.', $forbidden));
+        }
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -128,7 +160,7 @@ final class ImportErrorMessageLeakTest extends WebTestCase
      * écriture du module matchs, refusée en 409 tant que le plan de la saison ne
      * pointe pas une version — d'où `settleSeasonPlan`.
      *
-     * @return array{0: string, 1: string, 2: string} [token, clubName, teamId]
+     * @return array{0: string, 1: string, 2: string, 3: string, 4: string} [token, clubName, teamId, clubId, seasonId]
      */
     private function registerWithTeam(): array
     {
@@ -169,8 +201,16 @@ final class ImportErrorMessageLeakTest extends WebTestCase
         $team->setSessionsPerWeek(2);
         $team->setIsActive(true);
         $this->em->persist($team);
+
+        // Sans code FFBB, l'import s'arrête sur un refus MÉTIER en amont du parseur :
+        // le test vérifierait alors l'absence de fuite sur une réponse qui n'a jamais
+        // ouvert le fichier.
+        $club = $this->em->getRepository(Club::class)->find($clubId);
+        self::assertNotNull($club);
+        $club->setFfbbClubCode('BC0001');
+
         $this->em->flush();
 
-        return [$token, $clubName, $team->getId()];
+        return [$token, $clubName, $team->getId(), $clubId, $season->getId()];
     }
 }

@@ -11,6 +11,7 @@ use App\Entity\Team;
 use App\Exception\ImportRejectedException;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use RuntimeException;
 
 final class FfbbExcelImporter
 {
@@ -51,7 +52,12 @@ final class FfbbExcelImporter
 
         $sport = $this->findDefaultSport();
         if (!$sport instanceof Sport) {
-            throw ImportRejectedException::unprocessable('No default sport found for category creation.');
+            // PAS un refus métier : l'absence du sport par défaut est une installation
+            // cassée, sur laquelle le gestionnaire ne peut rien. Exception NUE, donc
+            // branche générique du contrôleur → message neutre ET `logger->error`.
+            // La classer en `ImportRejectedException` l'aurait affichée telle quelle
+            // au club tout en la privant de journalisation.
+            throw new RuntimeException('No default sport found for category creation.');
         }
 
         $created = 0;

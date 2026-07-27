@@ -24,6 +24,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * FBI fixtures import (module matchs PR-4): upload one FBI export for ONE team
@@ -105,6 +106,12 @@ final class ImportFixturesController extends AbstractController
             // cannot see the racing request; the partial unique index wins →
             // a clean retryable 409 instead of a raw 500.
             return $this->json(['error' => 'Un import concurrent a créé les mêmes rencontres — réessayez.'], Response::HTTP_CONFLICT);
+        } catch (HttpException $e) {
+            // `HttpException` étend `RuntimeException` : sans ce relais AVANT le filet
+            // générique, un 403/409 levé sous `import()` perdrait son statut ET son sens,
+            // remplacé par « le fichier n'a pas pu être lu ». La supervision verrait un
+            // 4xx là où il y a une faute serveur, et personne ne serait réveillé.
+            throw $e;
         } catch (InvalidArgumentException|RuntimeException $e) {
             // Tout le reste vient d'une dépendance (PhpSpreadsheet étend RuntimeException)
             // et peut porter un chemin serveur — journalisé, jamais renvoyé (P4-5).
