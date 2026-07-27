@@ -6,4 +6,4 @@ framework:
             # other messages keep their real async→Redis routing.
             ffbb_in_memory: 'in-memory://'
         routing:
-            App\Message\PopulateClubFromFfbbMessage: ffbb_in_memory
+            App\Message\Basketball\PopulateClubFromFfbbMessage: ffbb_in_memory

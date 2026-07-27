@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Service;
+namespace App\Service\Basketball;
 
 use App\Entity\Club;
 use App\Entity\Sport;

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Entity;
+namespace App\Entity\Basketball;
 
-use App\Repository\FfbbLeagueRepository;
+use App\Repository\Basketball\FfbbLeagueRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 

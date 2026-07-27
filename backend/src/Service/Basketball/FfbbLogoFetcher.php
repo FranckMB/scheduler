@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Service;
+namespace App\Service\Basketball;
 
 use finfo;
 use Psr\Log\LoggerInterface;

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\MessageHandler;
+namespace App\MessageHandler\Basketball;
 
 use App\Entity\Club;
-use App\Message\PopulateClubFromFfbbMessage;
-use App\Service\FfbbClubPopulator;
+use App\Message\Basketball\PopulateClubFromFfbbMessage;
+use App\Service\Basketball\FfbbClubPopulator;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;

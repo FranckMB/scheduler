@@ -8,7 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
-use App\Service\FfbbExcelImporter;
+use App\Service\Basketball\FfbbExcelImporter;
 use App\Service\SeasonAccessGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;

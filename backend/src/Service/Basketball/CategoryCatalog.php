@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Sport;
+namespace App\Service\Basketball;
 
 /**
  * Canonical basketball sport-category catalog — the single source of truth for
@@ -17,7 +17,7 @@ namespace App\Sport;
  * the JEUNE/SENIOR tags; the U-x tags key off the name token ("U15"), both
  * preserved by these names.
  */
-final class BasketballCategoryCatalog
+final class CategoryCatalog
 {
     /**
      * @return list<array{name: string, ageMin: int|null, ageMax: int|null, sortOrder: int}>

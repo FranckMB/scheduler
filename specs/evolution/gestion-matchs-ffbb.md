@@ -197,7 +197,7 @@ Chaque ligue/comité publie ses **fenêtres autorisées par catégorie × niveau
 d'envoi). C'est une **contrainte HARD imposée** : le gestionnaire place **dedans**. Décision produit :
 
 > **On seede ces fenêtres comme un catalogue de référence** (comme `school_holidays` / `public_holidays` /
-> `BasketballCategoryCatalog`). Le club **hérite** de la base de sa ligue à la création → **base de travail
+> `Service\Basketball\CategoryCatalog`). Le club **hérite** de la base de sa ligue à la création → **base de travail
 > pré-remplie, éditable** : le gestionnaire narrow/préfère pour son club (« nos U15 toujours le samedi »),
 > ce qui alimente le `PREFERRED TIME` par équipe (§6). **Il ne saisit jamais les règles ligue à la main.**
 

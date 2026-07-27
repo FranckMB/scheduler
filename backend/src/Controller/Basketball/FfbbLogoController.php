@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller;
+namespace App\Controller\Basketball;
 
 use App\Storage\LogoStorage;
 use finfo;

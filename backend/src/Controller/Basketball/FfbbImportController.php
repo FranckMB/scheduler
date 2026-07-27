@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Controller;
+namespace App\Controller\Basketball;
 
+use App\Controller\ResolvesCurrentClubTrait;
 use App\Repository\ClubRepository;
-use App\Service\FfbbClubPopulator;
+use App\Service\Basketball\FfbbClubPopulator;
 use App\Service\ManagementAccessGuard;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;

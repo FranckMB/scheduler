@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Service;
+namespace App\Service\Basketball;
 
+use App\Entity\Basketball\FfbbCommittee;
+use App\Entity\Basketball\FfbbLeague;
 use App\Entity\Club;
-use App\Entity\FfbbCommittee;
-use App\Entity\FfbbLeague;
-use App\Repository\FfbbCommitteeRepository;
-use App\Repository\FfbbLeagueRepository;
+use App\Repository\Basketball\FfbbCommitteeRepository;
+use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Storage\LogoStorage;
 use App\Storage\LogoUrl;
 use Doctrine\ORM\EntityManagerInterface;

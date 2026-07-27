@@ -53,7 +53,10 @@
     "autoload": {
         "psr-4": {
             "App\\": "src/"
-        }
+        },
+        "files": [
+            "config/compat_class_aliases.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

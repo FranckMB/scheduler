@@ -27,10 +27,10 @@ use App\Enum\Gender;
 use App\Enum\LockLevel;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
+use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
-use App\Sport\BasketballCategoryCatalog;
 use App\Storage\LogoStorage;
 use App\Storage\LogoUrl;
 use DateTimeImmutable;
@@ -138,8 +138,8 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // Le club connaît son sport de première main (comme le register).
         $club->setSportId($sport->getId());
 
-        // --- Categories (ungendered age brackets — see BasketballCategoryCatalog) ---
-        $categories = BasketballCategoryCatalog::categories();
+        // --- Categories (ungendered age brackets — see CategoryCatalog) ---
+        $categories = CategoryCatalog::categories();
 
         foreach ($categories as $cat) {
             $existing = $manager->getRepository(SportCategory::class)->findOneBy([
@@ -1038,7 +1038,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             }
             $club->setSportId($sport->getId());
 
-            $categories = BasketballCategoryCatalog::categories();
+            $categories = CategoryCatalog::categories();
             foreach ($categories as $categoryData) {
                 $sportCategory = new SportCategory;
                 $sportCategory->setClubId($club->getId());
