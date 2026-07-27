@@ -22,6 +22,7 @@ use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
+use App\Tests\CreatesPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -39,6 +40,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 final class StructureSnapshotterTest extends KernelTestCase
 {
     use ChoosesPlanVersionTrait;
+    use CreatesPeriodPlanTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -59,10 +61,11 @@ final class StructureSnapshotterTest extends KernelTestCase
             ->setName('Fermeture vacances')->setScope(ConstraintScope::FACILITY)->setScopeTargetId('22222222-2222-4222-8222-222222222222')
             ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig([])
             ->setCalendarEntryId('44444444-4444-4444-8444-444444444444');
+        $overlayPlanId = $this->createPeriodPlan($club->getId(), $season->getId());
         $overlayReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(2)->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)
-            ->setSchedulePlanId('44444444-4444-4444-8444-444444444444');
+            ->setSchedulePlanId($overlayPlanId);
         $baseReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(4)->setStartTime(new DateTimeImmutable('20:30'))->setDurationMinutes(120);

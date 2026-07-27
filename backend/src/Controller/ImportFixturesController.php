@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Exception\ImportRejectedException;
 use App\Repository\ClubUserRepository;
 use App\Service\FbiFixtureImporter;
 use App\Service\SeasonAccessGuard;
@@ -15,6 +16,7 @@ use App\Service\SocleGuard;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -22,6 +24,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * FBI fixtures import (module matchs PR-4): upload one FBI export for ONE team
@@ -31,12 +34,16 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 #[AsController]
 final class ImportFixturesController extends AbstractController
 {
+    /** Même règle que `ImportController` : aucun détail d'origine dans la réponse (P4-5). */
+    private const GENERIC_FAILURE = 'Le fichier n\'a pas pu être lu. Vérifiez qu\'il s\'agit bien d\'un export FBI au format .xlsx, puis réessayez.';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly FbiFixtureImporter $importer,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonAccessGuard $seasonAccessGuard,
         private readonly SocleGuard $socleGuard,
+        private readonly LoggerInterface $logger,
     ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
@@ -91,15 +98,26 @@ final class ImportFixturesController extends AbstractController
 
         try {
             $result = $this->importer->import((string) $file->getRealPath(), $team, $club);
-        } catch (InvalidArgumentException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
+        } catch (ImportRejectedException $e) {
+            // Le SEUL type relayé : son message est écrit pour le gestionnaire.
+            return $this->json(['error' => $e->getMessage()], $e->getStatusCode());
         } catch (UniqueConstraintViolationException) {
             // Two simultaneous uploads of the same file: the in-memory dedupe
             // cannot see the racing request; the partial unique index wins →
             // a clean retryable 409 instead of a raw 500.
             return $this->json(['error' => 'Un import concurrent a créé les mêmes rencontres — réessayez.'], Response::HTTP_CONFLICT);
-        } catch (RuntimeException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (HttpException $e) {
+            // `HttpException` étend `RuntimeException` : sans ce relais AVANT le filet
+            // générique, un 403/409 levé sous `import()` perdrait son statut ET son sens,
+            // remplacé par « le fichier n'a pas pu être lu ». La supervision verrait un
+            // 4xx là où il y a une faute serveur, et personne ne serait réveillé.
+            throw $e;
+        } catch (InvalidArgumentException|RuntimeException $e) {
+            // Tout le reste vient d'une dépendance (PhpSpreadsheet étend RuntimeException)
+            // et peut porter un chemin serveur — journalisé, jamais renvoyé (P4-5).
+            $this->logger->error('Import rencontres en échec', ['teamId' => $team->getId(), 'exception' => $e]);
+
+            return $this->json(['error' => self::GENERIC_FAILURE], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return $this->json([

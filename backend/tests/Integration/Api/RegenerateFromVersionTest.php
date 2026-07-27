@@ -24,6 +24,7 @@ use App\Enum\TeamLevel;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
+use App\Tests\CreatesPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -42,6 +43,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 final class RegenerateFromVersionTest extends WebTestCase
 {
     use ChoosesPlanVersionTrait;
+    use CreatesPeriodPlanTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -96,11 +98,12 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // A period's own training slot (schedulePlanId set) is calendar/overlay, not
         // base structure — a base-version restore must not wipe it.
+        $periodPlanId = $this->createPeriodPlan($this->club->getId(), $this->season->getId());
         $periodSlot = (new VenueTrainingSlot)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setVenueId($venue->getId())
             ->setDayOfWeek(1)->setStartTime(new DateTimeImmutable('20:00'))->setDurationMinutes(90)->setCapacity(1)
-            ->setSchedulePlanId('22222222-2222-4222-8222-222222222222');
+            ->setSchedulePlanId($periodPlanId);
         $this->em->persist($periodSlot);
         $this->em->flush();
 
@@ -108,7 +111,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        self::assertCount(1, $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => '22222222-2222-4222-8222-222222222222']), 'the period slot survives a base-version restore');
+        self::assertCount(1, $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $periodPlanId]), 'the period slot survives a base-version restore');
     }
 
     public function testLoadVersionPurgesDanglingTeamOverride(): void

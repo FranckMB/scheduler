@@ -19,6 +19,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class ReservationStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     protected function getEntityClass(): string
     {
         return Reservation::class;
@@ -72,6 +74,27 @@ class ReservationStateProcessor extends AbstractStateProcessor
     /**
      * @param ReservationInput $input
      */
+
+    /**
+     * Le flush a lieu dans le socle : la violation de FK d'une suppression de plan
+     * CONCURRENTE ne peut être rattrapée qu'ici, autour de l'appel parent.
+     *
+     * @param ReservationInput $input
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPost($input, $clubId, $seasonId));
+    }
+
+    /**
+     * @param array<string, mixed> $uriVariables
+     * @param ReservationInput     $input
+     */
+    protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId));
+    }
+
     protected function createEntityFromInput(object $input): Reservation
     {
         // clubId + seasonId are set by AbstractStateProcessor from the tenant/season
@@ -93,6 +116,7 @@ class ReservationStateProcessor extends AbstractStateProcessor
         if (null !== $input->durationMinutes) {
             $entity->setDurationMinutes($input->durationMinutes);
         }
+        $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
         $entity->setSchedulePlanId($input->schedulePlanId);
 
         return $entity;

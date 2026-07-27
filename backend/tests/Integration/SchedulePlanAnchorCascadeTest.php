@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Integration;
+
+use App\Tests\TenantGucTrait;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+
+/**
+ * NR — supprimer un plan emporte ses lignes ancrées, et RIEN d'autre (P4-30).
+ *
+ * `Reservation.schedulePlanId` et `VenueTrainingSlot.schedulePlanId` étaient des
+ * colonnes `guid` nues, sans FK : `deletePeriodPlan` fait un `DELETE FROM
+ * schedule_plan` sec, donc chaque suppression laissait des lignes à l'ancre
+ * pendante. Invisibles (`StructureSnapshotter` filtre `IS NULL`) mais éternelles.
+ *
+ * Ce test tient les quatre bords qui comptent :
+ *  1. la contrainte EXISTE et casse bien en CASCADE — Doctrine ignore ces FK
+ *     (colonne nue), donc `migration-diff` propose de les DROPper ; sans cette
+ *     assertion, un `migration-diff` committé sans relecture les ferait
+ *     disparaître en silence et la dette reviendrait ;
+ *  2. la cascade emporte les lignes du plan supprimé ;
+ *  3. les lignes de BASE (ancre NULL) survivent — c'est l'inverse du piège
+ *     `ON DELETE SET NULL`, qui les aurait au contraire fabriquées ;
+ *  4. les lignes d'un AUTRE plan survivent.
+ */
+#[Group('phase1')]
+final class SchedulePlanAnchorCascadeTest extends KernelTestCase
+{
+    use TenantGucTrait;
+
+    private Connection $connection;
+
+    /**
+     * @return iterable<string, array{0: string}>
+     */
+    public static function anchoredTableProvider(): iterable
+    {
+        yield 'reservation' => ['reservation'];
+        yield 'venue_training_slot' => ['venue_training_slot'];
+    }
+
+    /**
+     * La contrainte est là ET son action est CASCADE (`confdeltype = 'c'`).
+     *
+     * Vérifier seulement l'existence laisserait passer un `NO ACTION`, qui
+     * ferait ÉCHOUER la suppression d'un plan au lieu de nettoyer — une panne
+     * fonctionnelle, pas une fuite de lignes.
+     */
+    #[DataProvider('anchoredTableProvider')]
+    public function testTheForeignKeyExistsAndCascades(string $table): void
+    {
+        $deleteAction = $this->connection->fetchOne(
+            'SELECT confdeltype FROM pg_constraint
+             WHERE conrelid = ?::regclass AND contype = \'f\' AND conname = ?',
+            [$table, \sprintf('fk_%s_schedule_plan', $table)],
+        );
+
+        self::assertSame('c', $deleteAction, \sprintf(
+            'La FK `fk_%s_schedule_plan` doit exister en ON DELETE CASCADE. '
+            . 'Doctrine ne la connaît pas (colonne `guid` nue) : `migration-diff` propose de la DROPper — ne jamais committer ce DROP.',
+            $table,
+        ));
+    }
+
+    #[DataProvider('anchoredTableProvider')]
+    public function testDeletingAPlanTakesItsAnchoredRowsAndSparesTheOthers(string $table): void
+    {
+        $clubId = $this->uuid();
+        $seasonId = $this->uuid();
+        // Tables en RLS FORCE : sans le GUC, les INSERT seraient refusés.
+        $this->scopeGucToClub($clubId);
+        $doomedPlanId = $this->uuid();
+        $survivingPlanId = $this->uuid();
+
+        // Le plan supprimé est un plan de PÉRIODE — c'est celui que `deletePeriodPlan`
+        // emporte. Le survivant est le plan de SAISON (un seul par saison : index partiel
+        // `uniq_schedule_plan_season_base`), donc deux SEASON se heurteraient.
+        $this->insertPlan($doomedPlanId, $clubId, $seasonId, 'HOLIDAY');
+        $this->insertPlan($survivingPlanId, $clubId, $seasonId, 'SEASON');
+
+        $doomedRow = $this->insertAnchoredRow($table, $clubId, $seasonId, $doomedPlanId);
+        $survivingRow = $this->insertAnchoredRow($table, $clubId, $seasonId, $survivingPlanId);
+        $baseRow = $this->insertAnchoredRow($table, $clubId, $seasonId, null);
+
+        // Le geste réel : `deletePeriodPlan` supprime le plan en SQL brut.
+        $this->connection->executeStatement('DELETE FROM schedule_plan WHERE id = ?', [$doomedPlanId]);
+
+        self::assertFalse($this->rowExists($table, $doomedRow), 'La ligne du plan supprimé doit être emportée par la cascade.');
+        self::assertTrue($this->rowExists($table, $survivingRow), 'La ligne d’un AUTRE plan ne doit pas être touchée.');
+        self::assertTrue(
+            $this->rowExists($table, $baseRow),
+            'La ligne de BASE (ancre NULL) doit survivre : NULL signifie « partagée par la saison », pas « orpheline ».',
+        );
+    }
+
+    protected function setUp(): void
+    {
+        self::bootKernel();
+        $this->connection = self::getContainer()->get(EntityManagerInterface::class)->getConnection();
+    }
+
+    private function insertPlan(string $id, string $clubId, string $seasonId, string $type): void
+    {
+        $this->connection->executeStatement(
+            'INSERT INTO schedule_plan (id, version, created_at, updated_at, club_id, season_id, type, name,
+                start_date, end_date, last_version_number, team_selection_initialized)
+             VALUES (?, 1, NOW(), NOW(), ?, ?, ?, ?, NOW(), NOW(), 0, false)',
+            [$id, $clubId, $seasonId, $type, 'Plan ' . substr($id, 0, 8)],
+        );
+    }
+
+    /** @return string l'identifiant de la ligne insérée */
+    private function insertAnchoredRow(string $table, string $clubId, string $seasonId, ?string $planId): string
+    {
+        $id = $this->uuid();
+
+        if ('reservation' === $table) {
+            $this->connection->executeStatement(
+                'INSERT INTO reservation (id, version, created_at, updated_at, club_id, season_id, schedule_plan_id,
+                    team_id, venue_id, day_of_week, start_time, duration_minutes)
+                 VALUES (?, 1, NOW(), NOW(), ?, ?, ?, ?, ?, 1, ?, 90)',
+                [$id, $clubId, $seasonId, $planId, $this->uuid(), $this->uuid(), '18:00:00'],
+            );
+
+            return $id;
+        }
+
+        $this->connection->executeStatement(
+            'INSERT INTO venue_training_slot (id, version, created_at, updated_at, club_id, season_id, schedule_plan_id,
+                venue_id, day_of_week, start_time, duration_minutes, capacity)
+             VALUES (?, 1, NOW(), NOW(), ?, ?, ?, ?, 1, ?, 120, 1)',
+            [$id, $clubId, $seasonId, $planId, $this->uuid(), '18:00:00'],
+        );
+
+        return $id;
+    }
+
+    private function rowExists(string $table, string $id): bool
+    {
+        return (bool) $this->connection->fetchOne(\sprintf('SELECT 1 FROM %s WHERE id = ?', $table), [$id]);
+    }
+
+    private function uuid(): string
+    {
+        return (string) $this->connection->fetchOne('SELECT gen_random_uuid()');
+    }
+}

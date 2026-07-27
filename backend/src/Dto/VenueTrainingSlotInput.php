@@ -35,6 +35,10 @@ class VenueTrainingSlotInput
     public ?int $capacity = 1;
 
     /** Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive). */
+    // `NotBlank(allowNull: true)` en plus d'`Uuid` : le validateur Uuid de Symfony
+    // laisse passer la chaîne VIDE, qui atteindrait la colonne `uuid` en base (22P02).
+    // Même garde que `ReservationInput` — ce DTO ne l'avait jamais eu.
+    #[Assert\NotBlank(allowNull: true)]
     #[Assert\Uuid]
     #[Groups(['write'])]
     public ?string $schedulePlanId = null;
