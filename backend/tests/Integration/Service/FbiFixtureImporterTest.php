@@ -13,12 +13,12 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Exception\ImportRejectedException;
 use App\Service\FbiFixtureImporter;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PHPUnit\Framework\Attributes\Group;
@@ -219,7 +219,9 @@ final class FbiFixtureImporterTest extends KernelTestCase
         $spreadsheet->getActiveSheet()->fromArray([['Division', 'Numéro', 'Équipe 1']], null, 'A1');
         $file = $this->write($spreadsheet);
 
-        $this->expectException(InvalidArgumentException::class);
+        // Type dédié depuis P4-5 : SEUL `ImportRejectedException` voit son message
+        // relayé à l'utilisateur ; une exception nue serait masquée par le contrôleur.
+        $this->expectException(ImportRejectedException::class);
         $this->importer->import($file, $this->team, $this->club);
     }
 

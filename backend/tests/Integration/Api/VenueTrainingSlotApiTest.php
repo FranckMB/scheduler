@@ -11,6 +11,7 @@ use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Service\TenantConnectionContext;
+use App\Tests\CreatesPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,6 +25,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 #[Group('phase1')]
 final class VenueTrainingSlotApiTest extends WebTestCase
 {
+    use CreatesPeriodPlanTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -178,7 +180,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 
     public function testPeriodSlotIsScopedAndSeasonalListingExcludesIt(): void
     {
-        $period = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $period = $this->createPeriodPlan($this->club->getId(), $this->season->getId());
         $venue = $this->createVenue(false);
         // Seasonal slot at 18:00; a period slot for the SAME gym at a DIFFERENT time.
         $this->postSlot($venue->getId(), 1, '18:00', 90);
@@ -208,19 +210,21 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
 
         // Couche différente (une période) au même horaire : jamais servi ensemble → OK.
-        $this->postPeriodSlot($venue->getId(), 1, '18:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+        $period = $this->createPeriodPlan($this->club->getId(), $this->season->getId());
+        $this->postPeriodSlot($venue->getId(), 1, '18:00', 90, $period);
         self::assertResponseStatusCodeSame(201);
 
         // Deux périodes DIFFÉRENTES au même horaire : jamais servies ensemble non plus.
-        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+        $otherPeriod = $this->createPeriodPlan($this->club->getId(), $this->season->getId());
+        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, $period);
         self::assertResponseStatusCodeSame(201);
-        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+        $this->postPeriodSlot($venue->getId(), 3, '20:00', 90, $otherPeriod);
         self::assertResponseStatusCodeSame(201);
 
         // MÊME couche, en revanche : le double-booking reste refusé, des deux côtés.
         $this->postSlot($venue->getId(), 1, '18:30', 90); // saison vs saison
         self::assertResponseStatusCodeSame(422);
-        $this->postPeriodSlot($venue->getId(), 1, '18:30', 90, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'); // période vs même période
+        $this->postPeriodSlot($venue->getId(), 1, '18:30', 90, $period); // période vs même période
         self::assertResponseStatusCodeSame(422);
     }
 

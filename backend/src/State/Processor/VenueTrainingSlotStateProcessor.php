@@ -16,6 +16,8 @@ use DateTimeImmutable;
  */
 class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     protected function getEntityClass(): string
     {
         return VenueTrainingSlot::class;
@@ -36,6 +38,7 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         $entity = new VenueTrainingSlot;
         // Period slot (schedulePlanId set) vs seasonal (null) — set only on create;
         // a slot never migrates between the seasonal and a period layer.
+        $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
         $entity->setSchedulePlanId($input->schedulePlanId);
         if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);

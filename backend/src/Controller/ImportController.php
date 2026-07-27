@@ -7,11 +7,13 @@ namespace App\Controller;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Exception\ImportRejectedException;
 use App\Repository\ClubUserRepository;
 use App\Service\Basketball\FfbbExcelImporter;
 use App\Service\SeasonAccessGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -23,11 +25,19 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 #[AsController]
 final class ImportController extends AbstractController
 {
+    /**
+     * Message unique pour tout échec non métier. Volontairement sans détail : le
+     * gestionnaire n'a aucune action à tirer de « unable to identify a reader »,
+     * et la chaîne d'origine peut porter un chemin serveur.
+     */
+    private const GENERIC_FAILURE = 'Le fichier n\'a pas pu être lu. Vérifiez qu\'il s\'agit bien d\'un export au format .xlsx, puis réessayez.';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly FfbbExcelImporter $importer,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly SeasonAccessGuard $seasonAccessGuard,
+        private readonly LoggerInterface $logger,
     ) {}
 
     public function __invoke(Request $request, string $id): JsonResponse
@@ -88,10 +98,15 @@ final class ImportController extends AbstractController
 
         try {
             $result = $this->importer->import($file->getRealPath(), $id, $seasonId);
-        } catch (InvalidArgumentException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
-        } catch (RuntimeException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (ImportRejectedException $e) {
+            // Le SEUL type relayé : son message est écrit pour le gestionnaire.
+            return $this->json(['error' => $e->getMessage()], $e->getStatusCode());
+        } catch (InvalidArgumentException|RuntimeException $e) {
+            // Tout le reste vient d'une dépendance (PhpSpreadsheet étend RuntimeException)
+            // et peut porter un chemin serveur — journalisé, jamais renvoyé (P4-5).
+            $this->logger->error('Import équipes en échec', ['clubId' => $id, 'exception' => $e]);
+
+            return $this->json(['error' => self::GENERIC_FAILURE], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return $this->json([

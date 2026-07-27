@@ -8,10 +8,9 @@ use App\Entity\Club;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Exception\ImportRejectedException;
 use Doctrine\ORM\EntityManagerInterface;
-use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use RuntimeException;
 
 final class FfbbExcelImporter
 {
@@ -27,12 +26,12 @@ final class FfbbExcelImporter
     {
         $club = $this->entityManager->getRepository(Club::class)->find($clubId);
         if (!$club instanceof Club) {
-            throw new InvalidArgumentException('Club not found.');
+            throw ImportRejectedException::badRequest('Club not found.');
         }
 
         $expectedClubCode = $club->getFfbbClubCode();
         if (null === $expectedClubCode || '' === $expectedClubCode) {
-            throw new InvalidArgumentException('Club does not have an FFBB club code configured.');
+            throw ImportRejectedException::badRequest('Club does not have an FFBB club code configured.');
         }
 
         $spreadsheet = IOFactory::load($filePath);
@@ -47,12 +46,12 @@ final class FfbbExcelImporter
         $columnMap = $this->buildColumnMap($header);
 
         if (!isset($columnMap['nom'], $columnMap['catégorie'], $columnMap['numéro'], $columnMap['organisme'])) {
-            throw new InvalidArgumentException('Required columns missing: Nom, Catégorie, Numéro, Organisme.');
+            throw ImportRejectedException::badRequest('Required columns missing: Nom, Catégorie, Numéro, Organisme.');
         }
 
         $sport = $this->findDefaultSport();
         if (!$sport instanceof Sport) {
-            throw new RuntimeException('No default sport found for category creation.');
+            throw ImportRejectedException::unprocessable('No default sport found for category creation.');
         }
 
         $created = 0;
@@ -77,7 +76,9 @@ final class FfbbExcelImporter
             }
 
             if ($extractedClubCode !== $expectedClubCode) {
-                throw new RuntimeException(\sprintf('Identity theft prevention: extracted club code "%s" does not match club code "%s".', $extractedClubCode, $expectedClubCode));
+                // Règle métier relayée telle quelle : les deux codes viennent du club
+                // appelant et du fichier qu'il vient lui-même de déposer — rien d'un tiers.
+                throw ImportRejectedException::unprocessable(\sprintf('Identity theft prevention: extracted club code "%s" does not match club code "%s".', $extractedClubCode, $expectedClubCode));
             }
 
             $existingTeam = $this->entityManager->getRepository(Team::class)->findOneBy([

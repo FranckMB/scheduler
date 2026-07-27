@@ -11,6 +11,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\LockLevel;
+use App\Tests\CreatesPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -22,6 +23,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('phase1')]
 final class ReservationApiTest extends WebTestCase
 {
+    use CreatesPeriodPlanTrait;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -89,10 +91,11 @@ final class ReservationApiTest extends WebTestCase
 
     public function testOverlayReservationIsScopedToItsEntry(): void
     {
-        $this->post('33333333-3333-4333-8333-333333333333');
+        $planId = $this->createPeriodPlan($this->club->getId(), $this->season->getId());
+        $this->post($planId);
         self::assertResponseStatusCodeSame(201);
 
-        $this->get('33333333-3333-4333-8333-333333333333');
+        $this->get($planId);
         self::assertCount(1, $this->members());
 
         // Not visible on the base plan (schedulePlanId IS NULL).

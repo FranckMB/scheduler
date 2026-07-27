@@ -19,6 +19,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class ReservationStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     protected function getEntityClass(): string
     {
         return Reservation::class;
@@ -93,6 +95,7 @@ class ReservationStateProcessor extends AbstractStateProcessor
         if (null !== $input->durationMinutes) {
             $entity->setDurationMinutes($input->durationMinutes);
         }
+        $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
         $entity->setSchedulePlanId($input->schedulePlanId);
 
         return $entity;

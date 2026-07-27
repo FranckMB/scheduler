@@ -10,9 +10,9 @@ use App\Entity\Fixture;
 use App\Entity\Team;
 use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
+use App\Exception\ImportRejectedException;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
@@ -65,7 +65,7 @@ final class FbiFixtureImporter
         $columnMap = $this->buildColumnMap($header);
         foreach (['division', 'numero', 'equipe 1', 'equipe 2', 'date de rencontre'] as $required) {
             if (!isset($columnMap[$required])) {
-                throw new InvalidArgumentException('Required columns missing: Division, Numéro, Équipe 1, Équipe 2, Date de rencontre.');
+                throw ImportRejectedException::badRequest('Required columns missing: Division, Numéro, Équipe 1, Équipe 2, Date de rencontre.');
             }
         }
 
