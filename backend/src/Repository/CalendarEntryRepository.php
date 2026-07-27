@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\CalendarEntry;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\CalendarEntryStatus;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -80,7 +83,7 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->andWhere('e.kind = :kind')
             ->andWhere('e.endDate < :today')
             ->setParameter('clubId', $clubId)
-            ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
+            ->setParameter('kind', CalendarEntryKind::PERIOD)
             ->setParameter('today', $today->format('Y-m-d'))
             ->orderBy('e.endDate', 'ASC')
             ->getQuery()
@@ -102,8 +105,8 @@ final class CalendarEntryRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('e')
             ->andWhere('e.kind = :kind')
             ->andWhere('e.status = :status')
-            ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
-            ->setParameter('status', \App\Enum\CalendarEntryStatus::ACTIVE)
+            ->setParameter('kind', CalendarEntryKind::PERIOD)
+            ->setParameter('status', CalendarEntryStatus::ACTIVE)
             ->orderBy('e.startDate', 'ASC')
             ->addOrderBy('e.id', 'ASC')
             ->getQuery()
@@ -143,9 +146,9 @@ final class CalendarEntryRepository extends ServiceEntityRepository
             ->andWhere('e.startDate <= :to')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
-            ->setParameter('kind', \App\Enum\CalendarEntryKind::PERIOD)
-            ->setParameter('status', \App\Enum\CalendarEntryStatus::ACTIVE)
-            ->setParameter('generatingTypes', [\App\Enum\CalendarEntryPeriodType::CLOSURE, \App\Enum\CalendarEntryPeriodType::HOLIDAY])
+            ->setParameter('kind', CalendarEntryKind::PERIOD)
+            ->setParameter('status', CalendarEntryStatus::ACTIVE)
+            ->setParameter('generatingTypes', [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY])
             ->setParameter('from', $today->format('Y-m-d'))
             ->setParameter('to', $today->modify(\sprintf('+%d days', $horizonDays))->format('Y-m-d'))
             ->orderBy('e.startDate', 'ASC')

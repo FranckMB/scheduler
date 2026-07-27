@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\AdminJob\AdminActionCatalog;
 use App\AdminJob\AdminJobDefinition;
 use App\AdminJob\AdminJobRunStore;
 use App\AdminJob\AdminJobSchedule;
+use App\Entity\Club;
+use App\Entity\Season;
 use App\Entity\SuperAdmin;
+use App\Entity\Team;
 use App\Security\TotpService;
 use App\Tests\Double\RecordingAdminJobExecutor;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -148,7 +154,7 @@ final class AdminClubActionTest extends WebTestCase
     public function testResetSeasonCommandResolvesTheCurrentSeasonAndDryRunDeletesNothing(): void
     {
         [$clubId, $seasonId] = $this->seedRuntimeClubWithCurrentSeason('Club reset SA4');
-        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
+        $em = self::getContainer()->get(EntityManagerInterface::class);
 
         $application = new Application(self::$kernel);
         $dryRun = new CommandTester($application->find('app:clubs:reset-season'));
@@ -158,7 +164,7 @@ final class AdminClubActionTest extends WebTestCase
         // Rien supprimé : la ligne Season est intacte (lecture runtime, même porte).
         $em->clear();
         $this->scopeGucToClub($clubId);
-        self::assertNotNull($em->getRepository(\App\Entity\Season::class)->find($seasonId));
+        self::assertNotNull($em->getRepository(Season::class)->find($seasonId));
 
         $unknown = new CommandTester($application->find('app:clubs:reset-season'));
         self::assertSame(Command::FAILURE, $unknown->execute(['--club' => Uuid::v4()->toRfc4122()]));
@@ -169,8 +175,8 @@ final class AdminClubActionTest extends WebTestCase
         // Le chemin DESTRUCTIF réel (pas seulement le dry-run) : la structure part,
         // la ligne Season et le club survivent (revue SA4, finding 8).
         [$clubId, $seasonId] = $this->seedRuntimeClubWithCurrentSeason('Club wipe SA4');
-        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
-        $team = (new \App\Entity\Team)->setClubId($clubId)->setSeasonId($seasonId)
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $team = (new Team)->setClubId($clubId)->setSeasonId($seasonId)
             ->setSportCategoryId('33333333-3333-3333-3333-333333333333')->setPriorityTierId(1)
             ->setName('SM1')->setSessionsPerWeek(1)->setIsActive(true);
         $em->persist($team);
@@ -183,8 +189,8 @@ final class AdminClubActionTest extends WebTestCase
 
         $em->clear();
         $this->scopeGucToClub($clubId);
-        self::assertNull($em->getRepository(\App\Entity\Team::class)->find($teamId), 'la structure de la saison est vidée');
-        self::assertNotNull($em->getRepository(\App\Entity\Season::class)->find($seasonId), 'la ligne Season survit — le club repart au wizard');
+        self::assertNull($em->getRepository(Team::class)->find($teamId), 'la structure de la saison est vidée');
+        self::assertNotNull($em->getRepository(Season::class)->find($seasonId), 'la ligne Season survit — le club repart au wizard');
     }
 
     public function testTheCatalogCommandsExistAndAcceptTheClubOption(): void
@@ -192,7 +198,7 @@ final class AdminClubActionTest extends WebTestCase
         // Contrat catalogue ↔ commandes : chaque entrée nomme une commande RÉELLE qui
         // accepte --club (une typo de catalogue doit rougir ici, pas en prod — finding 9).
         $application = new Application(self::$kernel);
-        $catalog = self::getContainer()->get(\App\AdminJob\AdminActionCatalog::class);
+        $catalog = self::getContainer()->get(AdminActionCatalog::class);
         foreach ($catalog->all() as $action) {
             $command = $application->find($action->command);
             self::assertTrue($command->getDefinition()->hasOption('club'), \sprintf('%s doit accepter --club', $action->command));
@@ -217,11 +223,11 @@ final class AdminClubActionTest extends WebTestCase
     protected function tearDown(): void
     {
         if ([] !== $this->jobRunIds) {
-            $this->admin()->executeStatement('DELETE FROM admin_job_run WHERE id IN (:ids)', ['ids' => $this->jobRunIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM admin_job_run WHERE id IN (:ids)', ['ids' => $this->jobRunIds], ['ids' => ArrayParameterType::STRING]);
         }
         if ([] !== $this->clubIds) {
-            $this->admin()->executeStatement('DELETE FROM season WHERE club_id IN (:ids)', ['ids' => $this->clubIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
-            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->clubIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM season WHERE club_id IN (:ids)', ['ids' => $this->clubIds], ['ids' => ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->clubIds], ['ids' => ArrayParameterType::STRING]);
         }
         if (isset($this->adminId)) {
             $this->admin()->executeStatement('DELETE FROM admin_audit_log WHERE super_admin_id = :id OR super_admin_id IS NULL', ['id' => $this->adminId]);
@@ -240,13 +246,13 @@ final class AdminClubActionTest extends WebTestCase
      */
     private function seedRuntimeClubWithCurrentSeason(string $name): array
     {
-        $em = self::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
-        $club = (new \App\Entity\Club)->setName($name)->setSlug('sa4-' . strtolower(substr(md5(uniqid('', true)), 0, 10)))
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $club = (new Club)->setName($name)->setSlug('sa4-' . strtolower(substr(md5(uniqid('', true)), 0, 10)))
             ->setTimezone('Europe/Paris')->setLocale('fr')->setOnboardingCompleted(true);
         $em->persist($club);
         $em->flush();
         $this->scopeGucToClub($club->getId());
-        $season = (new \App\Entity\Season)->setClubId($club->getId())->setName('SA4')
+        $season = (new Season)->setClubId($club->getId())->setName('SA4')
             ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
             ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
             ->setStatus('active');

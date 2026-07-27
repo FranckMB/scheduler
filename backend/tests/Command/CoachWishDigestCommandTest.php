@@ -21,6 +21,7 @@ use App\Enum\TeamCoachRole;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
 use App\Service\CoachWishMailBuilder;
+use App\Service\CoachWishPerimeter;
 use App\Service\TenantConnectionContext;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -284,7 +285,7 @@ final class CoachWishDigestCommandTest extends KernelTestCase
             $container->get(ClubUserRepository::class),
             $container->get(CoachWishTokenRepository::class),
             new CoachWishMailBuilder('http://localhost:5173'),
-            $container->get(\App\Service\CoachWishPerimeter::class),
+            $container->get(CoachWishPerimeter::class),
             $container->get(ClockInterface::class),
         );
 

@@ -88,7 +88,7 @@ final class PurgeErasedClubsCommand extends Command
                 // Un membre actif = le workspace est utilisé → auto-annulation,
                 // jamais de destruction sous les pieds de quelqu'un.
                 $scheduledAt = $freshClub->getErasureScheduledAt();
-                if (null === $scheduledAt || $scheduledAt > $now) {
+                if (!$scheduledAt instanceof DateTimeImmutable || $scheduledAt > $now) {
                     continue;
                 }
                 if ($this->accountErasureService->hasActiveMember($clubId)) {

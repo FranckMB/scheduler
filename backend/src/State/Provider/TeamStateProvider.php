@@ -11,6 +11,7 @@ use App\Entity\Team;
 use App\Service\TeamEngagementGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
@@ -76,7 +77,7 @@ class TeamStateProvider extends AbstractStateProvider
     {
         $request = $this->requestStack->getCurrentRequest();
 
-        $seasonId = null === $request ? null : $this->uuidQueryParam($request, 'seasonId');
+        $seasonId = $request instanceof Request ? $this->uuidQueryParam($request, 'seasonId') : null;
         if (null !== $seasonId) {
             $qb->andWhere('e.seasonId = :seasonId')->setParameter('seasonId', $seasonId);
         }

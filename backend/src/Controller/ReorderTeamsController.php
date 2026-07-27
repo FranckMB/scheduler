@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Team;
+use App\Service\ManagementAccessGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,7 +25,7 @@ final class ReorderTeamsController extends AbstractController implements SeasonS
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/teams/reorder', name: 'api_teams_reorder', methods: ['POST'])]

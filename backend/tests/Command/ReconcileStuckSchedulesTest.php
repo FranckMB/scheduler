@@ -12,6 +12,7 @@ use App\Enum\ScheduleStatus;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -92,7 +93,7 @@ final class ReconcileStuckSchedulesTest extends KernelTestCase
         $em->getConnection()->executeStatement(
             'UPDATE schedule SET updated_at = :old WHERE id IN (:ids)',
             ['old' => new DateTimeImmutable('-2 hours')->format('Y-m-d H:i:sP'), 'ids' => [$stuckId, $pendingId]],
-            ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING],
+            ['ids' => ArrayParameterType::STRING],
         );
 
         $em->clear();

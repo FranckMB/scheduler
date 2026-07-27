@@ -72,16 +72,6 @@ final class SchedulePlanProvisioner
         return 'season:' . $seasonId;
     }
 
-    /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
-    private static function periodPlanType(?string $periodType): ?SchedulePlanType
-    {
-        return match ($periodType) {
-            'closure' => SchedulePlanType::CLOSURE,
-            'holiday' => SchedulePlanType::HOLIDAY,
-            default => null,
-        };
-    }
-
     /**
      * The season's SEASON plan, created if absent. NOTE: an already-existing plan
      * is returned as a lazy ORM reference — read only its getId() unless the
@@ -589,6 +579,16 @@ final class SchedulePlanProvisioner
         $this->copySeasonalSlotRows($schedulePlanId, (string) $row['club_id'], (string) $row['season_id'], $venueId);
     }
 
+    /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
+    private function periodPlanType(?string $periodType): ?SchedulePlanType
+    {
+        return match ($periodType) {
+            'closure' => SchedulePlanType::CLOSURE,
+            'holiday' => SchedulePlanType::HOLIDAY,
+            default => null,
+        };
+    }
+
     /**
      * @throws LogicException le plan du schedule a disparu (reset concurrent)
      *
@@ -695,8 +695,8 @@ final class SchedulePlanProvisioner
             return null;
         }
 
-        $type = self::periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
-        if (null === $type) {
+        $type = $this->periodPlanType(\is_string($row['period_type']) ? $row['period_type'] : null);
+        if (!$type instanceof SchedulePlanType) {
             return null;
         }
 

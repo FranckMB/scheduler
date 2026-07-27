@@ -11,6 +11,8 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
@@ -61,7 +63,7 @@ final class OverlayGenerationTest extends KernelTestCase
 
         // P2-5 5b : le gym fermé (toute la fenêtre — config sans dates) perd ses
         // créneaux du snapshot gelé. Un venue + créneau saisonnier pour le vérifier.
-        $venue = new \App\Entity\Venue;
+        $venue = new Venue;
         $venue->setId(self::VENUE_CLOSED);
         $venue->setClubId($club->getId());
         $venue->setSeasonId($season->getId());
@@ -69,7 +71,7 @@ final class OverlayGenerationTest extends KernelTestCase
         $venue->setCanSplit(false);
         $venue->setSource('manual');
         $em->persist($venue);
-        $slot = new \App\Entity\VenueTrainingSlot;
+        $slot = new VenueTrainingSlot;
         $slot->setClubId($club->getId());
         $slot->setSeasonId($season->getId());
         $slot->setVenueId(self::VENUE_CLOSED);

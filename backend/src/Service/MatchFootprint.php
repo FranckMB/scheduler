@@ -41,7 +41,7 @@ final class MatchFootprint
     public function occupancy(Fixture $fixture, int $roundTripTravelMinutes = 0): ?array
     {
         $kickoff = $this->kickoffMoment($fixture);
-        if (null === $kickoff) {
+        if (!$kickoff instanceof DateTimeImmutable) {
             return null;
         }
 
@@ -61,7 +61,7 @@ final class MatchFootprint
      */
     public function occupancyMinutes(Fixture $fixture, int $roundTripTravelMinutes = 0): ?int
     {
-        if (null === $this->kickoffMoment($fixture)) {
+        if (!$this->kickoffMoment($fixture) instanceof DateTimeImmutable) {
             return null;
         }
 
@@ -87,7 +87,7 @@ final class MatchFootprint
     private function kickoffMoment(Fixture $fixture): ?DateTimeImmutable
     {
         $time = $fixture->getKickoffTime();
-        if (null === $time) {
+        if (!$time instanceof DateTimeImmutable) {
             return null;
         }
 

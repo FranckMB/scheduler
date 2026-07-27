@@ -196,7 +196,7 @@ final class AuthController extends AbstractController
         $rawToken = \is_array($data) && isset($data['token']) && \is_string($data['token']) ? $data['token'] : '';
 
         $token = $this->emailVerifier->resolve($rawToken);
-        if (null === $token) {
+        if (!$token instanceof EmailVerificationToken) {
             return $this->json(['error' => 'Invalid or expired verification token'], 400);
         }
 

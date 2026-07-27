@@ -12,6 +12,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -110,7 +111,7 @@ final class RegenerateTest extends WebTestCase
 
         // A real season: the versions live in its SEASON plan, and the pointer is
         // what says "in force". Fabricating a seasonId would leave them plan-less.
-        $year = \App\Service\SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+        $year = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
         $this->season = (new Season)
             ->setClubId($this->club->getId())
             ->setName((string) $year)

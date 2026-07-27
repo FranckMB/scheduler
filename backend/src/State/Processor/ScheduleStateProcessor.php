@@ -10,9 +10,12 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
+use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
+use App\Service\SocleGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -28,10 +31,10 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
-        \App\Service\ManagementAccessGuard $managementAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
-        private readonly \App\Service\SocleGuard $socleGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SocleGuard $socleGuard,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }

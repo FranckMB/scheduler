@@ -8,18 +8,20 @@ use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Service\SchedulePlanProvisioner;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Contracts\Service\Attribute\Required;
 
 /**
  * @extends AbstractStateProcessor<ScheduleSlotTemplate, ScheduleSlotTemplateInput, ScheduleSlotTemplateResource>
  */
 class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
 {
-    private \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner;
+    private SchedulePlanProvisioner $schedulePlanProvisioner;
 
     /** #[Required] plutôt que le ctor : la classe hérite celui d'AbstractStateProcessor. */
-    #[\Symfony\Contracts\Service\Attribute\Required]
-    public function setSchedulePlanProvisioner(\App\Service\SchedulePlanProvisioner $schedulePlanProvisioner): void
+    #[Required]
+    public function setSchedulePlanProvisioner(SchedulePlanProvisioner $schedulePlanProvisioner): void
     {
         $this->schedulePlanProvisioner = $schedulePlanProvisioner;
     }

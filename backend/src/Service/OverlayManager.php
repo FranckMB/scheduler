@@ -11,6 +11,7 @@ use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
@@ -217,7 +218,7 @@ final class OverlayManager
         foreach ($this->entityManager->getRepository(ConstraintConflict::class)->findBy(['scheduleId' => $scheduleId]) as $conflict) {
             $this->entityManager->remove($conflict);
         }
-        foreach ($this->entityManager->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $scheduleId]) as $snapshot) {
+        foreach ($this->entityManager->getRepository(ScheduleStructureSnapshot::class)->findBy(['scheduleId' => $scheduleId]) as $snapshot) {
             $this->entityManager->remove($snapshot);
         }
         // Les métriques du solveur (SolverMetric) ne sont VOLONTAIREMENT pas purgées :

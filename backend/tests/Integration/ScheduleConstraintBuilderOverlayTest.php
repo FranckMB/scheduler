@@ -8,17 +8,25 @@ use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\TeamPeriodOverride;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Entity\User;
+use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Enum\VenuePeriodMode;
 use App\Service\ScheduleConstraintBuilder;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
@@ -289,7 +297,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $facility->setScopeTargetId($off->getId());
         $facility->setCalendarEntryId($entry->getId());
         $this->em->persist($facility);
-        $this->venueMode($club, $season, $entry, $off->getId(), \App\Enum\VenuePeriodMode::DISABLED);
+        $this->venueMode($club, $season, $entry, $off->getId(), VenuePeriodMode::DISABLED);
         $this->em->flush();
 
         $payload = $this->builder->buildForOverlay($schedule, $entry);
@@ -307,7 +315,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->clear();
         self::assertCount(
             1,
-            $this->em->getRepository(\App\Entity\VenueTrainingSlot::class)->findBy(['schedulePlanId' => $this->planIdOf($entry), 'venueId' => $off->getId()]),
+            $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $this->planIdOf($entry), 'venueId' => $off->getId()]),
             'désactiver n’est pas supprimer — les créneaux de la période survivent',
         );
     }
@@ -407,11 +415,11 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->teamOverride($club, $season, $entry, $paused, false, null); // en pause
 
         // A club-wide constraint targeting a tag BOTH teams carry → expands per-team.
-        $tag = (new \App\Entity\TeamTag)->setClubId($club->getId())->setName('loisir')->setIsSystem(false);
+        $tag = (new TeamTag)->setClubId($club->getId())->setName('loisir')->setIsSystem(false);
         $this->em->persist($tag);
         $this->em->flush();
         foreach ([$active, $paused] as $t) {
-            $this->em->persist((new \App\Entity\TeamTagAssignment)->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
+            $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
         }
         $c = new Constraint;
         $c->setClubId($club->getId());
@@ -484,7 +492,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
     private function teamOverride(Club $club, Season $season, CalendarEntry $entry, Team $team, bool $isActive, ?int $sessions): void
     {
-        $o = new \App\Entity\TeamPeriodOverride;
+        $o = new TeamPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
         $o->setSchedulePlanId($this->planIdOf($entry));
@@ -494,9 +502,9 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->persist($o);
     }
 
-    private function venue(Club $club, Season $season, string $id, string $name): \App\Entity\Venue
+    private function venue(Club $club, Season $season, string $id, string $name): Venue
     {
-        $venue = new \App\Entity\Venue;
+        $venue = new Venue;
         $venue->setId($id);
         $venue->setClubId($club->getId());
         $venue->setSeasonId($season->getId());
@@ -510,9 +518,9 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
     /** $schedulePlanId : null = créneau saisonnier (base) ; set = prêté à ce plan (lot C3). */
     /** #8 — mode d'un gymnase POUR la période (sparse : pas de ligne = hériter). */
-    private function venueMode(Club $club, Season $season, CalendarEntry $entry, string $venueId, \App\Enum\VenuePeriodMode $mode): void
+    private function venueMode(Club $club, Season $season, CalendarEntry $entry, string $venueId, VenuePeriodMode $mode): void
     {
-        $o = new \App\Entity\VenuePeriodOverride;
+        $o = new VenuePeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
         $o->setSchedulePlanId($this->planIdOf($entry));
@@ -523,7 +531,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
     private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): void
     {
-        $slot = new \App\Entity\VenueTrainingSlot;
+        $slot = new VenueTrainingSlot;
         $slot->setClubId($club->getId());
         $slot->setSeasonId($season->getId());
         $slot->setVenueId($venueId);
@@ -640,7 +648,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
     private function constraintOverride(Club $club, Season $season, CalendarEntry $entry, Constraint $constraint, bool $isActive): void
     {
-        $o = new \App\Entity\ConstraintPeriodOverride;
+        $o = new ConstraintPeriodOverride;
         $o->setClubId($club->getId());
         $o->setSeasonId($season->getId());
         $o->setSchedulePlanId($this->planIdOf($entry));

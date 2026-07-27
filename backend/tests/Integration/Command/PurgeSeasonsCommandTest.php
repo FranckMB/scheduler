@@ -5,11 +5,19 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Command;
 
 use App\Command\PurgeSeasonsCommand;
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
+use App\Entity\Coach;
+use App\Entity\CoachWish;
+use App\Entity\CoachWishCampaign;
+use App\Entity\CoachWishToken;
+use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -70,11 +78,11 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         self::assertCount(0, $this->em->getRepository(Team::class)->findBy(['seasonId' => $old->getId()]));
         self::assertCount(0, $this->em->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $old->getId()]));
         // #10 — la doléance coach de la saison purgée est partie.
-        self::assertNull($this->em->getRepository(\App\Entity\CoachWish::class)->find($this->oldWishId));
-        self::assertNull($this->em->getRepository(\App\Entity\CoachWishCampaign::class)->find($this->oldCampaignId), 'la campagne de collecte N-2 est purgée');
-        self::assertNull($this->em->getRepository(\App\Entity\CoachWishToken::class)->find($this->oldTokenId), 'son token part par la FK CASCADE');
+        self::assertNull($this->em->getRepository(CoachWish::class)->find($this->oldWishId));
+        self::assertNull($this->em->getRepository(CoachWishCampaign::class)->find($this->oldCampaignId), 'la campagne de collecte N-2 est purgée');
+        self::assertNull($this->em->getRepository(CoachWishToken::class)->find($this->oldTokenId), 'son token part par la FK CASCADE');
         // planning-versions D2: the structure photos die with their season.
-        self::assertCount(0, $this->em->getRepository(\App\Entity\ScheduleStructureSnapshot::class)->findBy(['seasonId' => $old->getId()]));
+        self::assertCount(0, $this->em->getRepository(ScheduleStructureSnapshot::class)->findBy(['seasonId' => $old->getId()]));
         // current, N-1 and the future draft survive.
         self::assertNotNull($this->em->getRepository(Season::class)->find($past->getId()));
         self::assertNotNull($this->em->getRepository(Season::class)->find($current->getId()));
@@ -156,18 +164,18 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
 
         // #10 — une doléance coach dans la saison N-2, ancrée à une entrée vacances : la
         // purge de rétention doit l'emporter (SeasonDataPurger, sous-requête calendarEntryId).
-        $entry = new \App\Entity\CalendarEntry;
+        $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($old->getId());
-        $entry->setKind(\App\Enum\CalendarEntryKind::PERIOD);
-        $entry->setPeriodType(\App\Enum\CalendarEntryPeriodType::HOLIDAY);
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
         $entry->setTitle('Vacances N-2');
         $entry->setStartDate(new DateTimeImmutable(($year - 2) . '-02-16'));
         $entry->setEndDate(new DateTimeImmutable(($year - 2) . '-02-22'));
         $this->em->persist($entry);
         $this->em->flush();
 
-        $wish = new \App\Entity\CoachWish;
+        $wish = new CoachWish;
         $wish->setClubId($club->getId());
         $wish->setSeasonId($old->getId());
         $wish->setCalendarEntryId($entry->getId());
@@ -179,7 +187,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
 
         // #10 C2 — une campagne de collecte (+ son token) ancrée à la même entrée N-2 : la
         // purge la supprime par sous-requête calendarEntryId (le token part par la FK CASCADE).
-        $campaign = new \App\Entity\CoachWishCampaign;
+        $campaign = new CoachWishCampaign;
         $campaign->setClubId($club->getId());
         $campaign->setSeasonId($old->getId());
         $campaign->setCalendarEntryId($entry->getId());
@@ -190,7 +198,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->flush();
         $this->oldCampaignId = $campaign->getId();
 
-        $coach = new \App\Entity\Coach;
+        $coach = new Coach;
         $coach->setClubId($club->getId());
         $coach->setSeasonId($old->getId());
         $coach->setFirstName('Vieux');
@@ -198,7 +206,7 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->persist($coach);
         $this->em->flush();
 
-        $token = (new \App\Entity\CoachWishToken)
+        $token = (new CoachWishToken)
             ->setCampaignId($campaign->getId())
             ->setCoachId($coach->getId())
             ->setClubId($club->getId());

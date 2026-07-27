@@ -12,6 +12,7 @@ use App\AdminJob\AdminJobExecutorInterface;
 use App\AdminJob\AdminJobSchedule;
 use App\Entity\SuperAdmin;
 use App\Security\AdminSessionCsrf;
+use App\Service\TenantConnectionContext;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Command\Command;
@@ -40,7 +41,7 @@ final readonly class AdminClubActionController
         private AdminSessionCsrf $csrf,
         private TokenStorageInterface $tokens,
         private ManagerRegistry $managerRegistry,
-        private \App\Service\TenantConnectionContext $tenantContext,
+        private TenantConnectionContext $tenantContext,
     ) {}
 
     #[Route('/actions', methods: ['GET'])]

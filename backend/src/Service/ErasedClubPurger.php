@@ -7,8 +7,10 @@ namespace App\Service;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
+use App\Entity\SolverMetric;
 use App\Entity\SportCategory;
 use App\Entity\TeamTag;
+use App\Enum\AuditAction;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -60,7 +62,7 @@ final class ErasedClubPurger
             // le reset de saison ne le purgent plus. CE chemin est donc sa SEULE porte de
             // sortie — « seule l'identité FFBB survit » doit être vrai à la lettre, et la
             // suppression par clubId emporte tout l'historique, rattaché ou orphelin.
-            \App\Entity\SolverMetric::class,
+            SolverMetric::class,
             TeamTag::class, SportCategory::class, ClubUser::class,
         ] as $entityClass) {
             $deleted += (int) $this->entityManager->createQueryBuilder()
@@ -90,7 +92,7 @@ final class ErasedClubPurger
         $this->entityManager->clear();
 
         // Audit APRÈS le clear (l'insert DBAL ne touche pas l'unit of work).
-        $this->auditTrail->record(\App\Enum\AuditAction::CLUB_PURGED, null, $clubId, 'Club', $clubId, ['rowsDeleted' => $deleted]);
+        $this->auditTrail->record(AuditAction::CLUB_PURGED, null, $clubId, 'Club', $clubId, ['rowsDeleted' => $deleted]);
 
         return $deleted;
     }

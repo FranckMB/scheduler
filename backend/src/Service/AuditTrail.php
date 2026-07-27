@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Enum\AuditAction;
+use DAMA\DoctrineTestBundle\Doctrine\DBAL\StaticDriver;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -49,7 +50,7 @@ final class AuditTrail
         // de test dama (niveau driver) lui est invisible : on la détecte par
         // le driver pour que le même filet joue en suite phase1 (revue PR-4).
         $inTransaction = $connection->isTransactionActive()
-            || $connection->getDriver() instanceof \DAMA\DoctrineTestBundle\Doctrine\DBAL\StaticDriver;
+            || $connection->getDriver() instanceof StaticDriver;
         try {
             if ($inTransaction) {
                 $connection->executeStatement('SAVEPOINT audit_trail');

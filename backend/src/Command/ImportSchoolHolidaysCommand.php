@@ -96,7 +96,7 @@ final class ImportSchoolHolidaysCommand extends Command
         $updated = 0;
         foreach ($deduped as $row) {
             $entity = $this->repository->findOneByNaturalKey($row['zone'], $row['type'], $row['year']);
-            if (null === $entity) {
+            if (!$entity instanceof SchoolHolidayPeriod) {
                 $entity = new SchoolHolidayPeriod;
                 $entity->setZone($row['zone']);
                 $entity->setHolidayType($row['type']);
@@ -176,7 +176,7 @@ final class ImportSchoolHolidaysCommand extends Command
         $start = $this->parseApiDate($record['start_date'] ?? null);
         $endExclusive = $this->parseApiDate($record['end_date'] ?? null);
 
-        if ('' === $label || '' === $year || null === $start || null === $endExclusive) {
+        if ('' === $label || '' === $year || !$start instanceof DateTimeImmutable || !$endExclusive instanceof DateTimeImmutable) {
             return null;
         }
 

@@ -64,10 +64,10 @@ final readonly class BackupCoverage
     /** Le dump couvre-t-il cette activité ? (tolérance d'arrondi comprise) */
     public function covers(?DateTimeImmutable $dump, ?DateTimeImmutable $activity): bool
     {
-        if (null === $activity) {
+        if (!$activity instanceof DateTimeImmutable) {
             return true;
         }
-        if (null === $dump) {
+        if (!$dump instanceof DateTimeImmutable) {
             return false;
         }
 
@@ -82,7 +82,7 @@ final readonly class BackupCoverage
      */
     public function bootstrapNeeded(?DateTimeImmutable $dump, ?DateTimeImmutable $activity): bool
     {
-        return null === $activity && null === $dump && $this->hasAnyData();
+        return !$activity instanceof DateTimeImmutable && !$dump instanceof DateTimeImmutable && $this->hasAnyData();
     }
 
     private function admin(): Connection

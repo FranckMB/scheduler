@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Entity\Season;
 use App\Enum\AuditAction;
 use App\Service\AuditTrail;
 use App\Service\SeasonDataPurger;
@@ -111,7 +112,7 @@ final class PurgeSeasonsCommand extends Command
 
         $seasons = $this->seasonResolver->seasonsForClub($clubId);
         $current = SeasonResolver::currentAmong($seasons, $today);
-        if (null === $current) {
+        if (!$current instanceof Season) {
             return 0;
         }
 

@@ -62,14 +62,14 @@ final class HolidaySeeder
             $year = $row['schoolYear'] ?? '';
             $start = $this->parseDate($row['startDate'] ?? null);
             $end = $this->parseDate($row['endDate'] ?? null);
-            if ('' === $zone || '' === $type || '' === $year || null === $start || null === $end) {
+            if (\in_array('', [$zone, $type, $year], true) || !$start instanceof DateTimeImmutable || !$end instanceof DateTimeImmutable) {
                 ++$skipped;
 
                 continue;
             }
 
             $entity = $this->schoolRepository->findOneByNaturalKey($zone, $type, $year);
-            if (null === $entity) {
+            if (!$entity instanceof SchoolHolidayPeriod) {
                 $entity = (new SchoolHolidayPeriod)->setZone($zone)->setHolidayType($type)->setSchoolYear($year);
                 $this->entityManager->persist($entity);
                 ++$created;
@@ -98,14 +98,14 @@ final class HolidaySeeder
         $created = $updated = $skipped = 0;
         foreach ($holidays as $dateStr => $label) {
             $date = $this->parseDate((string) $dateStr);
-            if (null === $date || '' === (string) $label) {
+            if (!$date instanceof DateTimeImmutable || '' === (string) $label) {
                 ++$skipped;
 
                 continue;
             }
 
             $entity = $this->publicRepository->findOneByNaturalKey(PublicHoliday::NATIONAL, $date);
-            if (null === $entity) {
+            if (!$entity instanceof PublicHoliday) {
                 $entity = (new PublicHoliday)->setZone(PublicHoliday::NATIONAL)->setDate($date);
                 $this->entityManager->persist($entity);
                 ++$created;

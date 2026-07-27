@@ -44,7 +44,7 @@ final class SeasonResolver
     public static function isReadonlyAmong(Season $season, array $seasons, ?DateTimeImmutable $today = null): bool
     {
         $current = self::currentAmong($seasons, $today);
-        if (null === $current || $current->getId() === $season->getId()) {
+        if (!$current instanceof Season || $current->getId() === $season->getId()) {
             return false;
         }
 
@@ -172,7 +172,7 @@ final class SeasonResolver
     {
         $current = $this->currentSeason($season->getClubId(), $today);
 
-        return null !== $current && $current->getId() === $season->getId();
+        return $current instanceof Season && $current->getId() === $season->getId();
     }
 
     /**

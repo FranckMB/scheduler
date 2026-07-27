@@ -8,6 +8,8 @@ use App\ApiResource\ReservationResource;
 use App\Dto\ReservationInput;
 use App\Entity\Reservation;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\User;
+use App\Enum\AuditAction;
 use App\Enum\LockLevel;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -59,8 +61,8 @@ class ReservationStateProcessor extends AbstractStateProcessor
         // lui-même la trace RGPD (revue PR-4 : angle mort du choke point).
         $actor = $this->actorSecurity?->getUser();
         $this->auditTrail?->record(
-            \App\Enum\AuditAction::ENTITY_DELETED,
-            $actor instanceof \App\Entity\User ? $actor->getId() : null,
+            AuditAction::ENTITY_DELETED,
+            $actor instanceof User ? $actor->getId() : null,
             $clubId,
             'Reservation',
             $reservation->getId(),

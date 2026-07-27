@@ -136,8 +136,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     {
         // Un seul réglage par (période, gymnase) — l'index unique remonterait sinon en 500
         // sur un double-submit ; on rend un 422 propre (l'édition passe par PUT).
-        if (null !== $input->schedulePlanId && null !== $input->venueId
-            && null !== $this->entityManager->getRepository(VenuePeriodOverride::class)->findOneBy(['schedulePlanId' => $input->schedulePlanId, 'venueId' => $input->venueId])) {
+        if (!\in_array(null, [$input->schedulePlanId, $input->venueId, $this->entityManager->getRepository(VenuePeriodOverride::class)->findOneBy(['schedulePlanId' => $input->schedulePlanId, 'venueId' => $input->venueId])], true)) {
             throw new ValidationException('Ce gymnase a déjà un réglage pour cette période — modifiez-le.');
         }
 

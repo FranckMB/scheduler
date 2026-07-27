@@ -128,7 +128,7 @@ final class AccountErasureService
                 continue;
             }
             $club = $this->entityManager->getRepository(Club::class)->find($clubId);
-            if ($club instanceof Club && null === $club->getErasureScheduledAt()) {
+            if ($club instanceof Club && !$club->getErasureScheduledAt() instanceof DateTimeImmutable) {
                 $club->setErasureScheduledAt($now->modify(self::GRACE_PERIOD));
                 $scheduled[] = $clubId;
             }

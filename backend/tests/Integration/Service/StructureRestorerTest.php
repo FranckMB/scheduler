@@ -13,6 +13,7 @@ use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\Venue;
 use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -163,7 +164,7 @@ final class StructureRestorerTest extends KernelTestCase
 
         // Later: a permanent constraint, a closure period, and an override disabling it.
         $entry = (new CalendarEntry)->setClubId($club->getId())->setSeasonId($season->getId())
-            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(\App\Enum\CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::CLOSURE)->setTitle('Fermeture')
             ->setStartDate(new DateTimeImmutable('2026-02-01'))->setEndDate(new DateTimeImmutable('2026-02-15'));
         $this->em->persist($entry);
         $permanent = (new Constraint)->setClubId($club->getId())->setSeasonId($season->getId())

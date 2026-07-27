@@ -14,10 +14,12 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -137,7 +139,7 @@ final class CalendarEntryConflictsTest extends WebTestCase
         $this->slot($club, $season, $schedule, self::VENUE_X, 1, self::TEAM_MON);
         $this->em->flush();
         // Le plan redevient un espace de travail — l'état après un reopen.
-        self::getContainer()->get(\App\Service\SchedulePlanProvisioner::class)->releaseSchedule($schedule->getId());
+        self::getContainer()->get(SchedulePlanProvisioner::class)->releaseSchedule($schedule->getId());
 
         $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10');
 
@@ -158,7 +160,7 @@ final class CalendarEntryConflictsTest extends WebTestCase
 
         // Same setup as a conflicting closure — but the manager dismissed it.
         $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10');
-        $entry->setStatus(\App\Enum\CalendarEntryStatus::IGNORED);
+        $entry->setStatus(CalendarEntryStatus::IGNORED);
         $this->em->flush();
 
         $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));

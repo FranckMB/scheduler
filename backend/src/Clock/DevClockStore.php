@@ -46,7 +46,7 @@ final class DevClockStore
     /** Pin the clock to a given instant, or null to release it back to real time. */
     public function set(?DateTimeImmutable $at): void
     {
-        if (null === $at) {
+        if (!$at instanceof DateTimeImmutable) {
             $this->cache->deleteItem(self::KEY);
 
             return;

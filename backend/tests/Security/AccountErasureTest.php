@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
+use App\Entity\Season;
 use App\Entity\User;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
@@ -225,7 +226,7 @@ final class AccountErasureTest extends WebTestCase
         $em->clear();
         // Workspace A vidé (coach + saison), identité FFBB épargnée.
         self::assertSame(0, $this->countRows(Coach::class, $clubA), 'coachs du club A purgés');
-        self::assertSame([], $em->getRepository(\App\Entity\Season::class)->findBy(['clubId' => $clubA]), 'saisons du club A purgées');
+        self::assertSame([], $em->getRepository(Season::class)->findBy(['clubId' => $clubA]), 'saisons du club A purgées');
         $survivor = $em->getRepository(Club::class)->find($clubA);
         self::assertInstanceOf(Club::class, $survivor, 'la fiche club survit');
         self::assertSame('B CHARPENNES TEST', $survivor->getName(), 'identité (nom) épargnée');
@@ -245,7 +246,7 @@ final class AccountErasureTest extends WebTestCase
 
         // Club B intact (frontière tenant).
         self::assertSame(1, $this->countRows(Coach::class, $clubB), 'club B intact');
-        self::assertNotSame([], $em->getRepository(\App\Entity\Season::class)->findBy(['clubId' => $clubB]));
+        self::assertNotSame([], $em->getRepository(Season::class)->findBy(['clubId' => $clubB]));
         $this->scopeGucToClub($clubB);
         self::assertGreaterThan(
             0,

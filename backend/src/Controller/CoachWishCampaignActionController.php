@@ -153,7 +153,7 @@ final class CoachWishCampaignActionController extends AbstractController
 
             $coach = $this->entityManagerCoach($token->getCoachId());
             $email = $coach?->getEmail();
-            if (null === $coach || null === $email || false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
+            if (!$coach instanceof Coach || null === $email || false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
                 continue; // pas d'email exploitable → badge « pas d'email » côté écran.
             }
 

@@ -38,9 +38,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Post(
         uriTemplate: '/teams/{id}/fixtures/import',
         controller: 'App\Controller\ImportFixturesController',
-        read: false,
-        deserialize: false,
-        name: 'import_fixtures',
         openapi: new OpenApiOperation(
             summary: 'Import an FBI fixtures export (.xlsx) for this team',
             description: 'Multipart upload (field "file"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team · 403 non-management member · 409 archived season or concurrent duplicate import · 400 missing/invalid file or columns.',
@@ -52,6 +49,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
                 ]),
             ),
         ),
+        read: false,
+        deserialize: false,
+        name: 'import_fixtures',
     ),
 ], input: TeamInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: TeamStateProvider::class, processor: TeamStateProcessor::class)]
 // Honored by TeamStateProvider::applyRequestFilters (the custom provider bypasses

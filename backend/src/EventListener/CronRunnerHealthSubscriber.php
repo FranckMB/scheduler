@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\EventListener;
 
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Event\ConsoleCommandEvent;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -35,7 +36,7 @@ final class CronRunnerHealthSubscriber implements EventSubscriberInterface
     public function onCommand(ConsoleCommandEvent $event): void
     {
         $command = $event->getCommand();
-        if (null === $command || 'app:jobs:run-due' !== $command->getName()) {
+        if (!$command instanceof Command || 'app:jobs:run-due' !== $command->getName()) {
             return;
         }
 

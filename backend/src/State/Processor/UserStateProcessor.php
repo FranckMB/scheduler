@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\UserResource;
 use App\Dto\UserInput;
 use App\Entity\User;
+use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,7 +25,7 @@ class UserStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
-        \App\Service\ManagementAccessGuard $managementAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
         private readonly Security $security,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);

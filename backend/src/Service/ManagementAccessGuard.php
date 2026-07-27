@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -55,7 +56,7 @@ final class ManagementAccessGuard
             ? $this->clubUserRepository->findActiveMembership($user->getId(), $clubId)
             : null;
 
-        if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
+        if (!$membership instanceof ClubUser || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
             throw new AccessDeniedHttpException('Management role required.');
         }
     }

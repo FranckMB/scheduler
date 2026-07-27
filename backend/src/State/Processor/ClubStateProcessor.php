@@ -7,8 +7,10 @@ namespace App\State\Processor;
 use App\ApiResource\ClubResource;
 use App\Dto\ClubInput;
 use App\Entity\Club;
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
+use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -27,7 +29,7 @@ class ClubStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
-        \App\Service\ManagementAccessGuard $managementAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
         private readonly Security $security,
         private readonly ClubUserRepository $clubUserRepository,
     ) {
@@ -57,7 +59,7 @@ class ClubStateProcessor extends AbstractStateProcessor
         }
 
         $membership = $this->clubUserRepository->findActiveMembership($user->getId(), $id);
-        if (null === $membership) {
+        if (!$membership instanceof ClubUser) {
             throw new NotFoundHttpException('Resource not found');
         }
         if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {

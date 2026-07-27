@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
+use App\Entity\Reservation;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\TeamCoach;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Service\DisablesTenantFilters;
@@ -42,17 +45,17 @@ final class PurgeOrphansCommand extends Command
     /** DQL fragments identifying each orphan class, keyed by a human label. Each references its own alias. */
     private const ORPHAN_DQL = [
         'réservations sans créneau' => [
-            'entity' => \App\Entity\Reservation::class,
+            'entity' => Reservation::class,
             'alias' => 'r',
             'where' => 'NOT EXISTS (SELECT 1 FROM App\Entity\VenueTrainingSlot s WHERE s.clubId = r.clubId AND s.seasonId = r.seasonId AND s.venueId = r.venueId AND s.dayOfWeek = r.dayOfWeek AND s.startTime = r.startTime)',
         ],
         'liens équipe-coach pendants' => [
-            'entity' => \App\Entity\TeamCoach::class,
+            'entity' => TeamCoach::class,
             'alias' => 'tc',
             'where' => 'NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = tc.teamId) OR NOT EXISTS (SELECT 1 FROM App\Entity\Coach c WHERE c.id = tc.coachId)',
         ],
         'liens coach-joueur pendants' => [
-            'entity' => \App\Entity\CoachPlayerMembership::class,
+            'entity' => CoachPlayerMembership::class,
             'alias' => 'cp',
             'where' => 'NOT EXISTS (SELECT 1 FROM App\Entity\Coach c WHERE c.id = cp.coachId) OR NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = cp.teamId)',
         ],

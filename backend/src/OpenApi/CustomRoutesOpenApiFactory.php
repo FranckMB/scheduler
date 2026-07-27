@@ -97,100 +97,104 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             ]),
         )));
 
-        $paths->addPath('/api/me', new PathItem(get: new Operation(
-            operationId: 'getApiMe',
-            tags: ['Auth'],
-            responses: [
-                '200' => new Response('The authenticated user + its club context', new ArrayObject([
-                    'application/json' => ['schema' => ['type' => 'object', 'properties' => [
-                        'id' => ['type' => 'string'],
-                        'email' => ['type' => 'string'],
-                        'firstName' => ['type' => 'string'],
-                        'lastName' => ['type' => 'string'],
-                        'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
-                        'role' => ['type' => 'string', 'nullable' => true],
-                        'club' => ['type' => 'object', 'nullable' => true, 'properties' => [
+        $paths->addPath('/api/me', new PathItem(
+            get: new Operation(
+                operationId: 'getApiMe',
+                tags: ['Auth'],
+                responses: [
+                    '200' => new Response('The authenticated user + its club context', new ArrayObject([
+                        'application/json' => ['schema' => ['type' => 'object', 'properties' => [
                             'id' => ['type' => 'string'],
-                            'name' => ['type' => 'string'],
-                            'onboardingCompleted' => ['type' => 'boolean'],
-                            'logoUrl' => ['type' => 'string', 'nullable' => true],
-                            'accentColor' => ['type' => 'string', 'nullable' => true],
-                            'accentColorDark' => ['type' => 'string', 'nullable' => true],
-                            'accentPalette' => ['type' => 'array', 'nullable' => true, 'items' => ['type' => 'string']],
-                        ]],
-                        // ADR-0002 : le plan de saison — le calendrier de base. null si
-                        // la saison n'en a pas encore. `chosenScheduleId` = la version
-                        // choisie (« validée ») ; `hasFinishedVersion` = le plan porte au
-                        // moins une version terminée ; `currentStructureHash` = le hash
-                        // du payload solver courant, pour griser « Régénérer » quand
-                        // la structure sélectionnée est déjà à l'identique.
-                        // Le document est en OpenAPI 3.1 : `nullable` y a disparu, un
-                        // consommateur l'ignore. Il faut l'union JSON-Schema, sinon le
-                        // contrat promet du non-null là où null est l'état NORMAL
-                        // (saison sans plan ; aucune version choisie = espace de travail)
-                        // et un client généré déréférence null.
-                        'seasonPlan' => ['type' => ['object', 'null'], 'properties' => [
-                            'id' => ['type' => 'string'],
-                            'name' => ['type' => 'string'],
-                            'chosenScheduleId' => ['type' => ['string', 'null']],
-                            'hasFinishedVersion' => ['type' => 'boolean'],
-                            'currentStructureHash' => ['type' => ['string', 'null']],
-                        ]],
-                        'hasGenerated' => ['type' => 'boolean'],
-                    ]]],
-                ])),
-                '401' => new Response('Unauthorized'),
-            ],
-            summary: 'Hydrate the authenticated user and its active club context',
-        ), patch: new Operation(
-            operationId: 'patchApiMe',
-            tags: ['Auth'],
-            responses: [
-                '200' => $this->jsonResponse('Updated profile', [
+                            'email' => ['type' => 'string'],
+                            'firstName' => ['type' => 'string'],
+                            'lastName' => ['type' => 'string'],
+                            'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
+                            'role' => ['type' => 'string', 'nullable' => true],
+                            'club' => ['type' => 'object', 'nullable' => true, 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'name' => ['type' => 'string'],
+                                'onboardingCompleted' => ['type' => 'boolean'],
+                                'logoUrl' => ['type' => 'string', 'nullable' => true],
+                                'accentColor' => ['type' => 'string', 'nullable' => true],
+                                'accentColorDark' => ['type' => 'string', 'nullable' => true],
+                                'accentPalette' => ['type' => 'array', 'nullable' => true, 'items' => ['type' => 'string']],
+                            ]],
+                            // ADR-0002 : le plan de saison — le calendrier de base. null si
+                            // la saison n'en a pas encore. `chosenScheduleId` = la version
+                            // choisie (« validée ») ; `hasFinishedVersion` = le plan porte au
+                            // moins une version terminée ; `currentStructureHash` = le hash
+                            // du payload solver courant, pour griser « Régénérer » quand
+                            // la structure sélectionnée est déjà à l'identique.
+                            // Le document est en OpenAPI 3.1 : `nullable` y a disparu, un
+                            // consommateur l'ignore. Il faut l'union JSON-Schema, sinon le
+                            // contrat promet du non-null là où null est l'état NORMAL
+                            // (saison sans plan ; aucune version choisie = espace de travail)
+                            // et un client généré déréférence null.
+                            'seasonPlan' => ['type' => ['object', 'null'], 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'name' => ['type' => 'string'],
+                                'chosenScheduleId' => ['type' => ['string', 'null']],
+                                'hasFinishedVersion' => ['type' => 'boolean'],
+                                'currentStructureHash' => ['type' => ['string', 'null']],
+                            ]],
+                            'hasGenerated' => ['type' => 'boolean'],
+                        ]]],
+                    ])),
+                    '401' => new Response('Unauthorized'),
+                ],
+                summary: 'Hydrate the authenticated user and its active club context',
+            ),
+            delete: new Operation(
+                operationId: 'deleteApiMe',
+                tags: ['Auth'],
+                responses: [
+                    '200' => $this->jsonResponse('Account anonymized (RGPD erasure)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'message' => ['type' => 'string'],
+                            'clubPurgeScheduled' => ['type' => 'boolean'],
+                            'gracePeriodDays' => ['type' => 'integer'],
+                        ],
+                    ]),
+                    '400' => new Response('Wrong password'),
+                    '401' => new Response('Unauthorized'),
+                ],
+                summary: 'RGPD erasure: anonymize the connected account (re-authentication: current password required); if no active member remains, schedule the club workspace purge (30-day grace, auto-cancelled if a member returns)',
+                requestBody: $this->jsonBody([
                     'type' => 'object',
+                    'required' => ['password'],
                     'properties' => [
-                        'id' => ['type' => 'string'],
-                        'email' => ['type' => 'string'],
-                        'firstName' => ['type' => 'string'],
-                        'lastName' => ['type' => 'string'],
+                        'password' => ['type' => 'string'],
                     ],
                 ]),
-                '400' => new Response('Validation error (empty name / invalid email)'),
-                '409' => new Response('E-mail already in use'),
-            ],
-            summary: 'Update the connected user profile (name / e-mail)',
-            requestBody: $this->jsonBody([
-                'type' => 'object',
-                'properties' => [
-                    'firstName' => ['type' => 'string'],
-                    'lastName' => ['type' => 'string'],
-                    'email' => ['type' => 'string', 'format' => 'email'],
+            ),
+            patch: new Operation(
+                operationId: 'patchApiMe',
+                tags: ['Auth'],
+                responses: [
+                    '200' => $this->jsonResponse('Updated profile', [
+                        'type' => 'object',
+                        'properties' => [
+                            'id' => ['type' => 'string'],
+                            'email' => ['type' => 'string'],
+                            'firstName' => ['type' => 'string'],
+                            'lastName' => ['type' => 'string'],
+                        ],
+                    ]),
+                    '400' => new Response('Validation error (empty name / invalid email)'),
+                    '409' => new Response('E-mail already in use'),
                 ],
-            ]),
-        ), delete: new Operation(
-            operationId: 'deleteApiMe',
-            tags: ['Auth'],
-            responses: [
-                '200' => $this->jsonResponse('Account anonymized (RGPD erasure)', [
+                summary: 'Update the connected user profile (name / e-mail)',
+                requestBody: $this->jsonBody([
                     'type' => 'object',
                     'properties' => [
-                        'message' => ['type' => 'string'],
-                        'clubPurgeScheduled' => ['type' => 'boolean'],
-                        'gracePeriodDays' => ['type' => 'integer'],
+                        'firstName' => ['type' => 'string'],
+                        'lastName' => ['type' => 'string'],
+                        'email' => ['type' => 'string', 'format' => 'email'],
                     ],
                 ]),
-                '400' => new Response('Wrong password'),
-                '401' => new Response('Unauthorized'),
-            ],
-            summary: 'RGPD erasure: anonymize the connected account (re-authentication: current password required); if no active member remains, schedule the club workspace purge (30-day grace, auto-cancelled if a member returns)',
-            requestBody: $this->jsonBody([
-                'type' => 'object',
-                'required' => ['password'],
-                'properties' => [
-                    'password' => ['type' => 'string'],
-                ],
-            ]),
-        )));
+            ),
+        ));
 
         $paths->addPath('/api/me/export', new PathItem(get: new Operation(
             operationId: 'getApiMeExport',

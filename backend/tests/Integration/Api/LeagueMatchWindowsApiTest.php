@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\LeagueMatchWindow;
 use App\Entity\User;
+use App\Service\LeagueResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -98,7 +99,7 @@ final class LeagueMatchWindowsApiTest extends WebTestCase
     {
         $uid = uniqid('', true);
         $hasher = self::getContainer()->get('security.user_password_hasher');
-        $resolver = self::getContainer()->get(\App\Service\LeagueResolver::class);
+        $resolver = self::getContainer()->get(LeagueResolver::class);
 
         $club = new Club;
         $club->setName('Club catalog');

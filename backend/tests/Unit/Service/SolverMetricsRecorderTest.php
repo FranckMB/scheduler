@@ -6,11 +6,13 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Schedule;
 use App\Entity\SolverMetric;
+use App\Entity\Team;
 use App\Enum\ScheduleStatus;
 use App\Service\SolverMetricsRecorder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -105,7 +107,7 @@ final class SolverMetricsRecorderTest extends TestCase
         new SolverMetricsRecorder($entityManager)->record($schedule);
     }
 
-    /** @return EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject */
+    /** @return EntityManagerInterface&MockObject */
     private function em(string $planType, int $teamCount, int $venueCount): EntityManagerInterface
     {
         $connection = $this->createMock(Connection::class);
@@ -117,7 +119,7 @@ final class SolverMetricsRecorderTest extends TestCase
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getConnection')->willReturn($connection);
         $entityManager->method('getRepository')->willReturnCallback(
-            static fn (string $class) => \App\Entity\Team::class === $class ? $teams : $venues,
+            static fn (string $class) => Team::class === $class ? $teams : $venues,
         );
 
         return $entityManager;

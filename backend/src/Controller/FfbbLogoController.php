@@ -22,7 +22,7 @@ final class FfbbLogoController extends AbstractController
 {
     public function __construct(private readonly LogoStorage $storage) {}
 
-    #[Route('/api/ffbb-logos/{scope}/{code}', name: 'ffbb_logo_serve', methods: ['GET'], requirements: ['scope' => 'league|committee', 'code' => '[A-Za-z0-9]{1,24}'])]
+    #[Route('/api/ffbb-logos/{scope}/{code}', name: 'ffbb_logo_serve', requirements: ['scope' => 'league|committee', 'code' => '[A-Za-z0-9]{1,24}'], methods: ['GET'])]
     public function serve(string $scope, string $code): Response
     {
         $bytes = $this->storage->read(\sprintf('ffbb-%s-%s', $scope, $code));

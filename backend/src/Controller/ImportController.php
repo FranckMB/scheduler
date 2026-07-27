@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Club;
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use App\Service\FfbbExcelImporter;
@@ -41,7 +42,7 @@ final class ImportController extends AbstractController
         $membership = $user instanceof User
             ? $this->clubUserRepository->findActiveMembership($user->getId(), $id)
             : null;
-        if (null === $membership) {
+        if (!$membership instanceof ClubUser) {
             return $this->json(['error' => 'Club not found.'], Response::HTTP_NOT_FOUND);
         }
         if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {

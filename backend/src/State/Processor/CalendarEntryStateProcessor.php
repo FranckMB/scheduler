@@ -7,12 +7,16 @@ namespace App\State\Processor;
 use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
+use App\Entity\CoachWish;
+use App\Entity\CoachWishCampaign;
 use App\Entity\Constraint;
 use App\Entity\PeriodReminderLog;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use DateTimeImmutable;
@@ -36,9 +40,9 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         RequestStack $requestStack,
         SeasonResolver $seasonResolver,
         SeasonAccessGuard $seasonAccessGuard,
-        \App\Service\ManagementAccessGuard $managementAccessGuard,
+        ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -429,11 +433,11 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             // #10 — les doléances coachs pendent à l'entrée MÈRE des vacances. Supprimer une
             // SEMAINE enfant n'en emporte aucune (elles ne vivent que sur la mère, voulu) ;
             // supprimer la mère les emporte toutes.
-            foreach ($this->entityManager->getRepository(\App\Entity\CoachWish::class)->findBy(['calendarEntryId' => $id]) as $wish) {
+            foreach ($this->entityManager->getRepository(CoachWish::class)->findBy(['calendarEntryId' => $id]) as $wish) {
                 $this->entityManager->remove($wish);
             }
             // #10 C2 — et la campagne de collecte de la période (ses tokens partent par FK CASCADE).
-            foreach ($this->entityManager->getRepository(\App\Entity\CoachWishCampaign::class)->findBy(['calendarEntryId' => $id]) as $campaign) {
+            foreach ($this->entityManager->getRepository(CoachWishCampaign::class)->findBy(['calendarEntryId' => $id]) as $campaign) {
                 $this->entityManager->remove($campaign);
             }
             $this->entityManager->flush();

@@ -6,8 +6,11 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Reservation;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\LockLevel;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -60,18 +63,18 @@ final class ReservationApiTest extends WebTestCase
         // as a durable ScheduleSlotTemplate. Deleting the reservation must undo the
         // pin — else findBaseSlotTemplates re-injects it forever.
         $start = new DateTimeImmutable('20:30');
-        $reservation = (new \App\Entity\Reservation)
+        $reservation = (new Reservation)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')
             ->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(2)->setStartTime($start)->setDurationMinutes(120);
-        $template = (new \App\Entity\ScheduleSlotTemplate)
+        $template = (new ScheduleSlotTemplate)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setScheduleId($this->season->getId())
             ->setTeamId('11111111-1111-4111-8111-111111111111')
             ->setVenueId('22222222-2222-4222-8222-222222222222')
             ->setDayOfWeek(2)->setStartTime($start)->setDurationMinutes(120)
-            ->setLockLevel(\App\Enum\LockLevel::HARD);
+            ->setLockLevel(LockLevel::HARD);
         $this->em->persist($reservation);
         $this->em->persist($template);
         $this->em->flush();
@@ -81,7 +84,7 @@ final class ReservationApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(204);
 
         $this->em->clear();
-        self::assertNull($this->em->getRepository(\App\Entity\ScheduleSlotTemplate::class)->find($templateId), 'the materialised HARD pin must be purged with the reservation');
+        self::assertNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($templateId), 'the materialised HARD pin must be purged with the reservation');
     }
 
     public function testOverlayReservationIsScopedToItsEntry(): void

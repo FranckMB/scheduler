@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\State\Processor;
 
+use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\SeasonResource;
 use App\Dto\SeasonInput;
 use App\Entity\Season;
@@ -86,7 +87,7 @@ class SeasonStateProcessor extends AbstractStateProcessor
     {
         $entity = new Season;
         if (null === $input->startDate || null === $input->endDate) {
-            throw new \ApiPlatform\Validator\Exception\ValidationException('startDate and endDate are required to create a season.');
+            throw new ValidationException('startDate and endDate are required to create a season.');
         }
         // Nom absent/blanc → défaut « 2026-2027 » dérivé de la fenêtre (jamais une
         // saison sans nom ni un nom mono-année — décision fondateur 2026-07-24).

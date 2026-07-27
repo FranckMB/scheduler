@@ -84,7 +84,7 @@ final class PublicHolidayMapper
         foreach ($entries as $rawDate => $rawLabel) {
             $date = \is_string($rawDate) ? $this->parseDate($rawDate) : null;
             $label = \is_string($rawLabel) ? trim($rawLabel) : '';
-            if (null === $date || '' === $label) {
+            if (!$date instanceof DateTimeImmutable || '' === $label) {
                 continue;
             }
             $year = (int) $date->format('Y');

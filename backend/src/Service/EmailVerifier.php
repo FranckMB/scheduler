@@ -62,7 +62,7 @@ final class EmailVerifier
         }
 
         $token = $this->repository->findOneByHashedToken(hash('sha256', $raw));
-        if (null === $token || $token->isExpired($this->clock->now())) {
+        if (!$token instanceof EmailVerificationToken || $token->isExpired($this->clock->now())) {
             return null;
         }
 

@@ -200,7 +200,7 @@ final class GenerateScheduleHandler
         // season-scoped; overlays get their own tier later). Non-fatal: a read
         // failure cannot poison the EntityManager, nothing is written yet.
         $structureData = null;
-        if (null === $overlayEntry) {
+        if (!$overlayEntry instanceof CalendarEntry) {
             // null === overlayEntry ⟺ plan SEASON (le socle) : la photo D2 est saison-scopée.
             try {
                 $structureData = $this->structureSnapshotter->serialize($schedule->getClubId(), $schedule->getSeasonId());
@@ -246,7 +246,7 @@ final class GenerateScheduleHandler
         // even if Mercure is momentarily down (publish is best-effort below).
         // « socle ? » est déjà connu ici (null === overlayEntry) — on le passe pour
         // éviter de re-lire le plan à la complétion (C4 / code-review).
-        $this->applyEngineResult($schedule, $result, null === $overlayEntry);
+        $this->applyEngineResult($schedule, $result, !$overlayEntry instanceof CalendarEntry);
         $this->metricsRecorder?->record($schedule, $result);
         $this->entityManager->flush();
 

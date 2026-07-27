@@ -9,6 +9,7 @@ use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Assert;
 
 /**
  * ADR-0002 : « le planning de la saison est arrêté » se dit désormais d'UNE façon —
@@ -41,7 +42,7 @@ trait ChoosesPlanVersionTrait
             $this->linkSeededSchedule($schedule);
         }
 
-        \PHPUnit\Framework\Assert::assertTrue(
+        Assert::assertTrue(
             $provisioner->choose($schedule),
             'seed: la version n\'a pu être pointée — son plan existe-t-il ?',
         );
@@ -81,7 +82,7 @@ trait ChoosesPlanVersionTrait
         $planId = null === $calendarEntryId
             ? $provisioner->ensureSeasonPlanId($schedule->getSeasonId())
             : $provisioner->provisionPeriodPlan($calendarEntryId);
-        \PHPUnit\Framework\Assert::assertIsString($planId, 'seed: la saison/période doit porter un plan');
+        Assert::assertIsString($planId, 'seed: la saison/période doit porter un plan');
 
         $schedule->setSchedulePlanId($planId);
         $em->persist($schedule);

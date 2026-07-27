@@ -103,9 +103,9 @@ final class DatabaseBackupCommand extends Command
             if ($this->coverage->bootstrapNeeded($lastDumpAt, $lastActivityAt)) {
                 $io->writeln('No activity signal but the database holds data and no dump exists — bootstrap dump.');
             } elseif ($this->coverage->covers($lastDumpAt, $lastActivityAt)) {
-                $io->writeln(null === $lastActivityAt
-                    ? 'No activity at all — nothing to protect, skipping.'
-                    : \sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt?->format('Y-m-d H:i') ?? '?'));
+                $io->writeln($lastActivityAt instanceof DateTimeImmutable
+                    ? \sprintf('No activity since last dump (%s) — skipping.', $lastDumpAt?->format('Y-m-d H:i') ?? '?')
+                    : 'No activity at all — nothing to protect, skipping.');
 
                 return Command::SUCCESS;
             }
