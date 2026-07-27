@@ -23,6 +23,7 @@ use App\Service\ManagementAccessGuard;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
+use App\Service\TrainingCapacityChecker;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -40,6 +41,7 @@ final class ValidateConstraintsController extends AbstractController
 {
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
+        private readonly TrainingCapacityChecker $capacityChecker,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
@@ -70,6 +72,11 @@ final class ValidateConstraintsController extends AbstractController
         }
 
         $warnings = [];
+        // L'ancre de la vérification de capacité : la grille de la PÉRIODE quand on
+        // valide une période (elle possède sa propre copie de créneaux, #8), sinon
+        // celle de la saison. Confondre les deux comparerait la demande d'une
+        // période à l'offre de la saison entière.
+        $schedulePlanId = null;
         $calendarEntryId = $this->requestedCalendarEntryId($request);
         if (null !== $calendarEntryId) {
             $calendarEntry = $this->calendarEntryRepository->find($calendarEntryId);
@@ -78,6 +85,7 @@ final class ValidateConstraintsController extends AbstractController
             }
 
             ['constraints' => $constraints, 'warnings' => $warnings] = $this->constraintsForPeriod($clubId, $seasonId, $calendarEntry);
+            $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntry->getId());
         } else {
             /** @var list<Constraint> $constraints */
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
@@ -105,6 +113,13 @@ final class ValidateConstraintsController extends AbstractController
                 $errors[$constraint->getId()] = $messages;
             }
         }
+
+        // P2-9 (volet capacité) — dire AVANT la génération qu'il manque des créneaux.
+        // Le solveur le signale déjà après coup (`session_below_effective_min`), mais
+        // le gestionnaire l'apprend alors au bout d'une génération, sur un planning
+        // déjà bancal. C'est un avertissement : la comparaison est nécessaire mais
+        // pas suffisante, et `sessionsPerWeek` est une demande, pas une garantie.
+        $warnings = [...$warnings, ...$this->capacityChecker->warnings($clubId, $seasonId, $schedulePlanId)];
 
         $conflicts = array_map(
             static fn (array $c): array => [

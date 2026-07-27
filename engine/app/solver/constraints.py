@@ -1977,5 +1977,130 @@ __all__ = [
     "add_salarie_distribution_constraints",
     "add_team_no_overlap",
     "add_time_window_constraints",
+    "diagnose_locked_slot_violations",
     "parse_v2_constraints",
 ]
+
+
+def diagnose_locked_slot_violations(
+    locked_slots: Iterable[Mapping[str, Any]],
+    parsed: Mapping[str, Any],
+    *,
+    team_names: Mapping[str, str] | None = None,
+    coach_names: Mapping[str, str] | None = None,
+    venue_names: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Warn about the HARD constraints a HARD lock silently annuls (P2-9).
+
+    A HARD lock is pre-placed OUTSIDE the solver: ``model.py`` never creates the
+    ``x[team, venue, day, start]`` variable for it. Every constraint below works
+    by forcing that variable to 0, so with no variable there is nothing to force
+    — the lock doesn't *beat* the constraint, it makes it unreachable. Measured
+    before this function existed: the same payload placed SM1 on Tuesday without
+    a lock (coach off on Saturday, honoured) and on Saturday WITH one, with an
+    empty ``diagnostics`` and a ``completed`` status.
+
+    The lock stays sovereign — that is the founder's ALIGN-07 ruling, and it is
+    not reopened here. What changes is the silence: the manager is told what his
+    pin overrode, so he can decide. Hence INFO warnings, never errors.
+
+    Scope is deliberately the constraints the manager ENTERED (coach
+    availability, team time/day windows, forbidden venues). The structural rules
+    a lock also bypasses — one coach in two gyms at once — are a different
+    animal: they describe physical impossibility rather than a preference, so
+    they block generation instead of warning, and land in their own change.
+
+    Mirrors the enforcement rules exactly (start-based interval match for
+    coaches, min/max start for windows, team+venue pair for forbidden venues);
+    any drift between the two would make this lie about what the solver did.
+    """
+    rules: Mapping[Any, Any] = parsed.get("coach_unavailability") or {}
+    coach_map: Mapping[str, Any] = parsed.get("team_coach_map") or {}
+    windows = parsed.get("time_windows") or ()
+    forbidden = parsed.get("forbidden_assignments") or ()
+
+    def _team(team_id: str) -> str:
+        return (team_names or {}).get(team_id) or team_id
+
+    def _coach(coach_id: str) -> str:
+        return (coach_names or {}).get(coach_id) or coach_id
+
+    def _venue(venue_id: str) -> str:
+        return (venue_names or {}).get(venue_id) or venue_id
+
+    warnings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _emit(constraint: Mapping[str, Any], team_id: str, message: str) -> None:
+        # One warning per (constraint, team): a lock spanning several 30-min slot
+        # starts must not shout the same sentence three times.
+        key = (str(constraint.get("id")), team_id)
+        if key in seen:
+            return
+        seen.add(key)
+        warning = _not_honored_warning(dict(constraint), "INFO", message)
+        warning["teamId"] = team_id
+        warnings.append(warning)
+
+    for slot in locked_slots:
+        team_id = str(slot.get("team_id") or slot.get("teamId") or "")
+        venue_id = str(slot.get("venue_id") or slot.get("venueId") or "")
+        day = slot.get("day_of_week")
+        start_text = str(slot.get("start_time") or slot.get("startTime") or "")
+        if not team_id or day is None or not start_text:
+            continue
+        day_int = int(day)
+        start = _time_to_minutes(start_text)
+        where = f"{_venue(venue_id)} à {start_text}"
+
+        # 1. Coach availability — every required coach of the team, like the solver.
+        coach_ids = [str(c) for c in (coach_map.get(team_id) or [])]
+        for coach_id in coach_ids:
+            for iv_day, iv_from, iv_to in rules.get(coach_id) or ():
+                if iv_day == day_int and iv_from <= start < iv_to:
+                    _emit(
+                        _constraint_of_coach(coach_id, _coach(coach_id)),
+                        team_id,
+                        f"Réservation maintenue pour {_team(team_id)} ({where}) alors que "
+                        f"{_coach(coach_id)} est indisponible : le verrou prime, la contrainte est ignorée.",
+                    )
+
+        # 2. Team time/day windows.
+        for constraint in windows:
+            if str(constraint.get("scope_target_id") or constraint.get("scopeTargetId") or "") != team_id:
+                continue
+            config = constraint.get("config") or {}
+            family = str(constraint.get("family") or "").upper()
+            if family == "DAY":
+                forbidden_days = _day_int_set(config.get("forbiddenDays"))
+                allowed_days = _day_int_set(config.get("allowedDays"))
+                if day_int in forbidden_days or (allowed_days and day_int not in allowed_days):
+                    _emit(constraint, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) un jour exclu par sa règle de jours.")
+                continue
+            min_start = config.get("minStartTime")
+            max_start = config.get("maxStartTime")
+            if (min_start is not None and start < _time_to_minutes(min_start)) or (
+                max_start is not None and start > _time_to_minutes(max_start)
+            ):
+                _emit(constraint, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) hors de sa fenêtre horaire.")
+
+        # 3. Forbidden (team, venue) pairs — venue closures land here.
+        for item in forbidden:
+            if not isinstance(item, dict):
+                continue
+            tid = item.get("scope_target_id") or item.get("team_id")
+            vid = item.get("venue_id") or item.get("room_id")
+            if tid is not None and vid is not None and str(tid) == team_id and str(vid) == venue_id:
+                _emit(item, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) dans un gymnase qui lui est interdit.")
+
+    return warnings
+
+
+def _constraint_of_coach(coach_id: str, label: str) -> dict[str, Any]:
+    """The COACH_AVAILABILITY constraint behind a blocked interval, for naming.
+
+    `coach_unavailability` is flattened to intervals at parse time, losing the
+    source constraint. A synthetic entry keeps the warning shape valid; the real
+    label rides in the message, which names the coach.
+    """
+    return {"id": f"coach-availability-{coach_id}", "name": f"indisponibilité de {label}"}
