@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, RouterProvider, type RouteObject } from 
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
+import { RootShell } from "@/app/RootShell";
 import { RouteErrorBoundary } from "@/app/RouteErrorBoundary";
 import { AdminGuard } from "@/features/admin/AdminGuard";
 import { LoginPage } from "@/features/auth/LoginPage";
@@ -29,15 +30,23 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
  *  - un indicateur d'attente (`useNavigation`, cf. AppLayout) — sinon un clic de
  *    navigation ne produit AUCUN retour tant que le chunk n'est pas là.
  *
- * Les GARDES restent eager : un `AdminGuard` lazy ferait télécharger son chunk
- * pour décider d'une redirection.
+ * Les GARDES restent eager (`AuthGuard`, `AdminGuard`) : leur code doit être là
+ * pour décider. ⚠ Cela n'empêche PAS le téléchargement des chunks enfants : le
+ * data router résout le `lazy` de TOUTES les routes appariées avant d'en rendre
+ * une seule, donc un visiteur anonyme sur `/planning` télécharge la page avant
+ * d'être redirigé vers `/login`. Ce n'est pas une fuite (ce JS est public et sans
+ * donnée), c'est de la bande passante pour un cas rare — l'éviter demanderait de
+ * dupliquer la décision d'auth dans un `loader` par route, ce qui remettrait la
+ * garde à deux endroits. Compromis assumé, pas propriété acquise.
  */
 // Exporté pour le NR des filets (router.test.tsx) : la présence de `errorElement`
 // et `HydrateFallback` ne casse aucun test de page si elle disparaît.
 export const routes: RouteObject[] = [
   {
-    // Route racine technique : elle ne rend rien elle-même, elle porte les filets
-    // pour TOUT l'arbre (une erreur de route remonte au parent le plus proche).
+    // Route racine technique : aucune UI propre, elle porte les filets de TOUT
+    // l'arbre — l'attente de navigation (RootShell) et l'erreur de route (une
+    // erreur remonte au parent le plus proche qui en déclare une).
+    element: <RootShell />,
     errorElement: <RouteErrorBoundary />,
     HydrateFallback: FullPageSpinner,
     children: [
@@ -57,9 +66,11 @@ export const routes: RouteObject[] = [
                 index: true,
                 lazy: async () => ({ Component: (await import("@/features/admin/AdminDashboardPage")).AdminDashboardPage }),
               },
-              { path: "*", element: <Navigate to="/admin" replace /> },
             ],
           },
+          // Hors du shell LAZY : une URL admin inconnue ne doit pas télécharger la
+          // console entière pour être simplement redirigée.
+          { path: "*", element: <Navigate to="/admin" replace /> },
         ],
       },
       {
@@ -95,9 +106,13 @@ export const routes: RouteObject[] = [
       {
         element: <AuthGuard />,
         children: [
-      {
-        element: <AppLayout />,
-        children: [
+          {
+            element: <AppLayout />,
+            // Filet IMBRIQUÉ : sans lui, l'échec du chunk d'UNE page démontait
+            // l'en-tête, la navigation et les bandeaux — pour une panne réseau
+            // passagère, avec le rechargement complet pour unique issue.
+            errorElement: <RouteErrorBoundary />,
+            children: [
           {
             path: "/",
             lazy: async () => ({ Component: (await import("@/features/cockpit/CockpitPage")).CockpitPage }),
@@ -132,8 +147,15 @@ export const routes: RouteObject[] = [
   },
 ];
 
-const router = createBrowserRouter(routes);
+/**
+ * Construit à la PREMIÈRE utilisation, pas à l'import : `createBrowserRouter`
+ * s'initialise tout seul (il lit l'historique et lance une navigation). Au
+ * niveau module, il s'exécutait donc dans chaque test important `routes`.
+ */
+let router: ReturnType<typeof createBrowserRouter> | null = null;
 
 export function AppRouter() {
+  router ??= createBrowserRouter(routes);
+
   return <RouterProvider router={router} />;
 }

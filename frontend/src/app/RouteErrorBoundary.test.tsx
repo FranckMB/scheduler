@@ -51,6 +51,22 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
     expect(screen.queryByText(/Unexpected Application Error/i)).toBeNull();
   });
 
+  it("hors ligne, le MÊME message navigateur ne doit pas être pris pour une mise à jour", async () => {
+    // Chrome/Safari rendent exactement la même erreur qu'un chunk 404 après
+    // déploiement — le navigateur ne distingue pas les deux causes. Dire
+    // « rechargez » à quelqu'un hors ligne lui fait perdre le shell encore
+    // utilisable pour tomber sur la page d'erreur du navigateur.
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+    renderWithFailingLazy(new TypeError("Failed to fetch dynamically imported module: /assets/PlanningPage-abc.js"));
+
+    expect(await screen.findByText(/hors ligne/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nouvelle version est disponible/i)).toBeNull();
+    // Et une issue qui ne dépend pas du réseau du document.
+    expect(screen.getByRole("button", { name: /Réessayer/i })).toBeInTheDocument();
+    onLine.mockRestore();
+  });
+
   it("toute autre erreur de route reste actionnable (et n'est pas confondue avec une MAJ)", async () => {
     renderWithFailingLazy(new Error("boom"));
 
@@ -63,6 +79,6 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
 
     await screen.findByRole("button", { name: /Recharger la page/i });
     expect(captureException).toHaveBeenCalled();
-    expect(captureException.mock.calls[0][1]).toMatchObject({ tags: { staleChunk: "true" } });
+    expect(captureException.mock.calls[0][1]).toMatchObject({ tags: { chunkFailed: "true" } });
   });
 });

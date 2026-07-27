@@ -87,15 +87,6 @@ export function AppLayout() {
           </nav>
         </div>
       </header>
-      {/* P4-6 — depuis le découpage, une navigation attend un chunk réseau : sans
-          retour visible, le clic paraît perdu et le gestionnaire reclique (et
-          atterrit sur la page dont le chunk arrive en dernier). Barre fine en tête,
-          annoncée aux lecteurs d'écran. */}
-      {navigating ? (
-        <div className="h-0.5 w-full overflow-hidden bg-transparent" role="status" aria-label="Chargement de la page">
-          <div className="h-full w-1/3 animate-[loading-bar_1s_ease-in-out_infinite] bg-accent" />
-        </div>
-      ) : null}
       <main className="mx-auto max-w-5xl px-4 py-8" aria-busy={navigating}>
         <ReadonlySeasonBanner />
         <SeasonTransitionBanner />

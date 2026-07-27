@@ -5,19 +5,20 @@ import { routes } from "./router";
 /**
  * NR du découpage en chunks (P4-6) — les FILETS, pas le contenu des pages.
  *
- * Découper est gratuit tant que trois choses existent ; les perdre ne casse
+ * Découper est gratuit tant que ces garde-fous existent ; les perdre ne casse
  * aucun test de page, mais transforme un incident réseau banal en panne muette :
- *  - `errorElement` : sinon un chunk 404 (déploiement pendant la session) remplace
- *    toute l'app par l'écran anglais du router, invisible de Sentry ;
+ *  - `errorElement` à la racine ET sur `AppLayout` : sans le second, l'échec du
+ *    chunk d'UNE page démonte l'en-tête, la navigation et les bandeaux ;
  *  - `HydrateFallback` : sinon react-router rend `null` — page BLANCHE à chaque
  *    ouverture directe ou F5 d'une route lazy ;
- *  - les GARDES eager : un garde lazy ferait télécharger son chunk pour décider
- *    d'une redirection.
+ *  - le shell racine : il porte le retour d'attente de TOUTE navigation, zone
+ *    non authentifiée comprise (le tunnel d'inscription y enchaîne ses étapes).
  */
 describe("router — les filets du découpage", () => {
   const root = routes[0];
 
-  it("la racine porte errorElement ET HydrateFallback", () => {
+  it("la racine porte le shell d'attente, errorElement ET HydrateFallback", () => {
+    expect(root.element).toBeDefined();
     expect(root.errorElement).toBeDefined();
     expect(root.HydrateFallback).toBeDefined();
   });
@@ -29,17 +30,31 @@ describe("router — les filets du découpage", () => {
     expect(root.children?.length).toBeGreaterThan(5);
   });
 
-  it("les gardes d'accès restent EAGER (jamais `lazy`)", () => {
-    const guarded = collect(root).filter((r) => undefined !== r.element && undefined === r.path);
-    // AuthGuard et AdminGuard : ils décident d'une redirection, ils ne doivent pas
-    // coûter un aller-retour réseau.
-    expect(guarded.length).toBeGreaterThanOrEqual(1);
-    for (const route of guarded) {
-      expect(route.lazy).toBeUndefined();
-    }
+  it("le shell authentifié porte SON PROPRE errorElement (l'app survit à l'échec d'une page)", () => {
+    const appLayout = findLayoutWithChildren(root, ["/planning", "/wizard"]);
+    expect(appLayout, "le groupe de routes authentifiées est introuvable").toBeDefined();
+    expect(appLayout?.errorElement).toBeDefined();
+  });
+
+  it("les gardes d'accès sont EAGER — nommément, pas par déduction", () => {
+    // La version précédente de ce test filtrait les routes PARCE QU'elles avaient
+    // un `element` : passer un garde en `lazy` le faisait sortir du filtre et le
+    // test restait vert. On vise donc les routes par leur chemin.
     const admin = root.children?.find((r) => "/admin" === r.path);
-    expect(admin?.element).toBeDefined();
+    expect(admin?.element, "AdminGuard doit rester eager").toBeDefined();
     expect(admin?.lazy).toBeUndefined();
+
+    const authed = findLayoutWithChildren(root, ["/planning", "/wizard"]);
+    const guard = root.children?.find((r) => r.children?.includes(authed as never));
+    expect(guard?.element, "AuthGuard doit rester eager").toBeDefined();
+    expect(guard?.lazy).toBeUndefined();
+  });
+
+  it("la redirection des URL /admin inconnues ne dépend PAS du chunk de la console", () => {
+    const admin = root.children?.find((r) => "/admin" === r.path);
+    const catchAll = admin?.children?.find((r) => "*" === r.path);
+    expect(catchAll, "le catch-all /admin doit être frère du shell, pas son enfant").toBeDefined();
+    expect(catchAll?.element).toBeDefined();
   });
 
   it("les pages lourdes sont bien LAZY (sinon le découpage ne sert à rien)", () => {
@@ -50,7 +65,14 @@ describe("router — les filets du découpage", () => {
   });
 });
 
+type Route = (typeof routes)[number];
+
+/** Le groupe de routes qui contient ces chemins (le shell authentifié). */
+function findLayoutWithChildren(root: Route, paths: string[]): Route | undefined {
+  return collect(root).find((r) => paths.every((p) => r.children?.some((c) => p === c.path)));
+}
+
 /** Aplatit l'arbre de routes. */
-function collect(route: (typeof routes)[number]): Array<(typeof routes)[number]> {
+function collect(route: Route): Route[] {
   return [route, ...(route.children ?? []).flatMap(collect)];
 }

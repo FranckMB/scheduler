@@ -62,7 +62,7 @@ export function LoginPage() {
             sur un formulaire encore affiché → double POST /api/login → throttle SEC-11
             pour un utilisateur en fait DÉJÀ authentifié. */}
         <Button type="submit" disabled={login.isPending || navigating}>
-          {login.isPending ? <Spinner className="size-4" /> : null}
+          {login.isPending || navigating ? <Spinner className="size-4" /> : null}
           Se connecter
         </Button>
       </form>
