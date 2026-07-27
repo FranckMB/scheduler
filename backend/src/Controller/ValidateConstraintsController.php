@@ -16,13 +16,17 @@ use App\Enum\ConstraintScope;
 use App\Enum\VenuePeriodMode;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ConstraintRepository;
+use App\Repository\TeamRepository;
 use App\Repository\VenueRepository;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\ScheduleConstraintBuilder;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -41,9 +45,9 @@ final class ValidateConstraintsController extends AbstractController
         private readonly ConstraintValidationService $validationService,
         private readonly RequestStack $requestStack,
         private readonly ManagementAccessGuard $managementAccessGuard,
-        private readonly \App\Repository\TeamRepository $teamRepository,
-        private readonly \Doctrine\ORM\EntityManagerInterface $entityManager,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly TeamRepository $teamRepository,
+        private readonly EntityManagerInterface $entityManager,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenueRepository $venueRepository,
     ) {}
 
@@ -122,7 +126,7 @@ final class ValidateConstraintsController extends AbstractController
         );
     }
 
-    private function requestedCalendarEntryId(?\Symfony\Component\HttpFoundation\Request $request): ?string
+    private function requestedCalendarEntryId(?Request $request): ?string
     {
         $content = $request?->getContent();
         if (!\is_string($content) || '' === $content) {

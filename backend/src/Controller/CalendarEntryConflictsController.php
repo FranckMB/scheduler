@@ -11,6 +11,7 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\VenueClosureDays;
 use DateInterval;
 use DatePeriod;
@@ -39,7 +40,7 @@ final class CalendarEntryConflictsController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/calendar-entries/{id}/conflicts', name: 'api_calendar_entry_conflicts', methods: ['GET'])]

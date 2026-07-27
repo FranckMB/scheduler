@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Data-freshness board (console superadmin) : « mes données de référence
@@ -28,7 +29,7 @@ final readonly class AdminDataFreshnessService
         private ManagerRegistry $registry,
         private ClockInterface $clock,
         private BackupCoverage $backupCoverage,
-        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%kernel.project_dir%/var/backups')]
+        #[Autowire('%kernel.project_dir%/var/backups')]
         private string $backupDir,
     ) {}
 
@@ -66,7 +67,7 @@ final readonly class AdminDataFreshnessService
         // BackupCoverage, source unique avec la commande.
         $uncovered = !$this->backupCoverage->covers($lastDumpAt, $lastActivityAt)
             || $this->backupCoverage->bootstrapNeeded($lastDumpAt, $lastActivityAt);
-        $stale = $uncovered && (null === $lastDumpAt || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', BackupCoverage::STALE_AFTER_HOURS)));
+        $stale = $uncovered && (!$lastDumpAt instanceof DateTimeImmutable || $lastDumpAt < $this->clock->now()->modify(\sprintf('-%d hours', BackupCoverage::STALE_AFTER_HOURS)));
 
         return [
             'key' => 'db-backup',

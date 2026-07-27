@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
+use App\Entity\SolverMetric;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
 use App\MessageHandler\GenerateScheduleHandler;
@@ -78,7 +79,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $reloaded->getStatus(),
             'a persisted COMPLETED solve must survive a best-effort Mercure publish failure',
         );
-        self::assertSame(1, $em->getRepository(\App\Entity\SolverMetric::class)->count(['scheduleId' => $scheduleId]));
+        self::assertSame(1, $em->getRepository(SolverMetric::class)->count(['scheduleId' => $scheduleId]));
     }
 
     /**
@@ -133,7 +134,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $em->getRepository(ScheduleDiagnostic::class)->findBy(['scheduleId' => $scheduleId]),
         );
         self::assertContains('internal_error', $types, 'a failure diagnostic must be recorded');
-        self::assertSame(1, $em->getRepository(\App\Entity\SolverMetric::class)->count(['scheduleId' => $scheduleId]));
+        self::assertSame(1, $em->getRepository(SolverMetric::class)->count(['scheduleId' => $scheduleId]));
     }
 
     /**

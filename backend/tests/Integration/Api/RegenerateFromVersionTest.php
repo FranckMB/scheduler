@@ -7,13 +7,20 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Fixture;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\TeamPeriodOverride;
 use App\Entity\User;
+use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\FixtureHomeAway;
+use App\Enum\FixtureStatus;
 use App\Enum\ScheduleStatus;
+use App\Enum\TeamLevel;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -80,7 +87,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         $this->persistTeam('SM1');
         // A venue captured in the snapshot so it survives the restore (else the
         // period slot on it would be purged as dangling — the sibling guard).
-        $venue = (new \App\Entity\Venue)->setId('11111111-1111-4111-8111-111111111111')
+        $venue = (new Venue)->setId('11111111-1111-4111-8111-111111111111')
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())->setName('Gym')->setCanSplit(false)->setSource('manual');
         $this->em->persist($venue);
         $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
@@ -89,7 +96,7 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // A period's own training slot (schedulePlanId set) is calendar/overlay, not
         // base structure — a base-version restore must not wipe it.
-        $periodSlot = (new \App\Entity\VenueTrainingSlot)
+        $periodSlot = (new VenueTrainingSlot)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setVenueId($venue->getId())
             ->setDayOfWeek(1)->setStartTime(new DateTimeImmutable('20:00'))->setDurationMinutes(90)->setCapacity(1)
@@ -101,7 +108,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        self::assertCount(1, $this->em->getRepository(\App\Entity\VenueTrainingSlot::class)->findBy(['schedulePlanId' => '22222222-2222-4222-8222-222222222222']), 'the period slot survives a base-version restore');
+        self::assertCount(1, $this->em->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => '22222222-2222-4222-8222-222222222222']), 'the period slot survives a base-version restore');
     }
 
     public function testLoadVersionPurgesDanglingTeamOverride(): void
@@ -113,7 +120,7 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // A team added AFTER the snapshot, with a period override on it.
         $sm2 = $this->persistTeam('SM2');
-        $override = (new \App\Entity\TeamPeriodOverride)
+        $override = (new TeamPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setSchedulePlanId('33333333-3333-4333-8333-333333333333')
             ->setTeamId($sm2->getId())->setIsActive(false);
@@ -125,7 +132,7 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // Restore removed SM2 (not in the snapshot) → its override is a ghost → purged.
         $this->em->clear();
-        self::assertCount(0, $this->em->getRepository(\App\Entity\TeamPeriodOverride::class)->findBy(['teamId' => $sm2->getId()]), 'a dangling period override is purged on restore');
+        self::assertCount(0, $this->em->getRepository(TeamPeriodOverride::class)->findBy(['teamId' => $sm2->getId()]), 'a dangling period override is purged on restore');
     }
 
     public function testLoadVersionIsRefusedWhenItWouldRemoveAnEngagedTeam(): void
@@ -143,13 +150,13 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // Une équipe née APRÈS la photo, puis engagée en compétition.
         $sm2 = $this->persistTeam('SM2');
-        $fixture = (new \App\Entity\Fixture)
+        $fixture = (new Fixture)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setTeamId($sm2->getId())
             ->setMatchDate(new DateTimeImmutable('2026-10-04'))
-            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setHomeAway(FixtureHomeAway::HOME)
             ->setOpponentLabel('AS Voisins')
-            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+            ->setStatus(FixtureStatus::PLACED);
         $this->em->persist($fixture);
         $this->em->flush();
 
@@ -158,7 +165,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(409, 'charger une photo qui ignore une équipe engagée doit être refusé');
         $this->em->clear();
         self::assertNotNull($this->em->getRepository(Team::class)->find($sm2->getId()), 'l\'équipe engagée survit');
-        self::assertNotNull($this->em->getRepository(\App\Entity\Fixture::class)->find($fixture->getId()), 'et son match aussi');
+        self::assertNotNull($this->em->getRepository(Fixture::class)->find($fixture->getId()), 'et son match aussi');
     }
 
     public function testLoadVersionStillWorksWhenTheEngagedTeamIsInThePhoto(): void
@@ -168,13 +175,13 @@ final class RegenerateFromVersionTest extends WebTestCase
         // refuse TOUT — y compris ce cas parfaitement légitime — et le test précédent,
         // lui, resterait vert. L'équipe engagée est ici DANS la photo : rien ne se perd.
         $sm1 = $this->persistTeam('SM1');
-        $fixture = (new \App\Entity\Fixture)
+        $fixture = (new Fixture)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setTeamId($sm1->getId())
             ->setMatchDate(new DateTimeImmutable('2026-10-04'))
-            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setHomeAway(FixtureHomeAway::HOME)
             ->setOpponentLabel('AS Voisins')
-            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+            ->setStatus(FixtureStatus::PLACED);
         $this->em->persist($fixture);
         $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
         $this->em->flush();
@@ -196,7 +203,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         // correction du niveau le rétablirait — et le processor refuserait ensuite (409)
         // toute correction : le club resterait avec un niveau faux, sans issue.
         $sm1 = $this->persistTeam('SM1');
-        $sm1->setLevel(\App\Enum\TeamLevel::DEPARTEMENTAL);
+        $sm1->setLevel(TeamLevel::DEPARTEMENTAL);
         $v1 = $this->makeSchedule(ScheduleStatus::COMPLETED, null);
         $this->em->flush();
         $snapshotter = self::getContainer()->get(StructureSnapshotter::class);
@@ -204,14 +211,14 @@ final class RegenerateFromVersionTest extends WebTestCase
 
         // Le niveau est corrigé APRÈS la photo (encore permis : pas de match), puis
         // l'équipe est engagée — elle est désormais inscrite REGIONAL à la fédération.
-        $sm1->setLevel(\App\Enum\TeamLevel::REGIONAL);
-        $fixture = (new \App\Entity\Fixture)
+        $sm1->setLevel(TeamLevel::REGIONAL);
+        $fixture = (new Fixture)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setTeamId($sm1->getId())
             ->setMatchDate(new DateTimeImmutable('2026-10-04'))
-            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setHomeAway(FixtureHomeAway::HOME)
             ->setOpponentLabel('AS Voisins')
-            ->setStatus(\App\Enum\FixtureStatus::PLACED);
+            ->setStatus(FixtureStatus::PLACED);
         $this->em->persist($fixture);
         $this->em->flush();
 
@@ -220,7 +227,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(409, 'une photo qui rétablirait un autre niveau sur une équipe engagée doit être refusée');
         $this->em->clear();
         self::assertSame(
-            \App\Enum\TeamLevel::REGIONAL,
+            TeamLevel::REGIONAL,
             $this->em->getRepository(Team::class)->find($sm1->getId())?->getLevel(),
             'le niveau sous lequel elle est inscrite ne bouge pas',
         );
@@ -240,18 +247,18 @@ final class RegenerateFromVersionTest extends WebTestCase
         $snapshotter->store($v1, $snapshotter->serialize($this->club->getId(), $this->season->getId()));
 
         // Un gymnase né APRÈS la photo, et un match posé dedans.
-        $venue = (new \App\Entity\Venue)
+        $venue = (new Venue)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setName('Halle B')->setCanSplit(false)->setSource('manual');
         $this->em->persist($venue);
         $this->em->flush();
-        $fixture = (new \App\Entity\Fixture)
+        $fixture = (new Fixture)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setTeamId($sm1->getId())
             ->setMatchDate(new DateTimeImmutable('2026-10-04'))
-            ->setHomeAway(\App\Enum\FixtureHomeAway::HOME)
+            ->setHomeAway(FixtureHomeAway::HOME)
             ->setOpponentLabel('AS Voisins')
-            ->setStatus(\App\Enum\FixtureStatus::PLACED)
+            ->setStatus(FixtureStatus::PLACED)
             ->setVenueId($venue->getId());
         $this->em->persist($fixture);
         $this->em->flush();
@@ -262,7 +269,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
 
         $this->em->clear();
-        $reloaded = $this->em->getRepository(\App\Entity\Fixture::class)->find($fixture->getId());
+        $reloaded = $this->em->getRepository(Fixture::class)->find($fixture->getId());
         self::assertNotNull($reloaded, 'le match survit — il perd juste son gymnase');
         self::assertNull($reloaded->getVenueId(), 'et il redevient « à placer » au lieu de nommer un gymnase mort');
     }

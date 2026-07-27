@@ -10,6 +10,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
 use App\Repository\CalendarEntryRepository;
 use App\Service\MatchConflictDetector;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -39,7 +40,7 @@ final class FixtureConflictsController extends AbstractController
         private readonly RequestStack $requestStack,
         private readonly SeasonResolver $seasonResolver,
         private readonly MatchConflictDetector $detector,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     // priority > 0: this static path must win over API Platform's /api/fixtures/{id}

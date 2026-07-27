@@ -55,7 +55,7 @@ final class PublicHolidaysController extends AbstractController
         if (false === $from || false === $to) {
             return $this->json(['error' => 'Query params from/to must be valid dates (YYYY-MM-DD).'], Response::HTTP_BAD_REQUEST);
         }
-        if (null === $from || null === $to) {
+        if (!$from instanceof DateTimeImmutable || !$to instanceof DateTimeImmutable) {
             return $this->json(['error' => 'No window: pass from/to or have an active season.'], Response::HTTP_BAD_REQUEST);
         }
 

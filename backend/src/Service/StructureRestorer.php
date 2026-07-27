@@ -16,6 +16,7 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\ConstraintScope;
 use BackedEnum;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -119,7 +120,7 @@ final class StructureRestorer
             . '(c.scope = :team AND NOT EXISTS (SELECT 1 FROM App\Entity\Team t WHERE t.id = c.scopeTargetId)) '
             . 'OR (c.scope = :coach AND NOT EXISTS (SELECT 1 FROM App\Entity\Coach co WHERE co.id = c.scopeTargetId)) '
             . 'OR (c.scope = :facility AND NOT EXISTS (SELECT 1 FROM App\Entity\Venue v WHERE v.id = c.scopeTargetId)))',
-            $tenant + ['team' => \App\Enum\ConstraintScope::TEAM, 'coach' => \App\Enum\ConstraintScope::COACH, 'facility' => \App\Enum\ConstraintScope::FACILITY],
+            $tenant + ['team' => ConstraintScope::TEAM, 'coach' => ConstraintScope::COACH, 'facility' => ConstraintScope::FACILITY],
             'DELETE App\Entity\Constraint c WHERE c.id IN (:ids)',
         );
 

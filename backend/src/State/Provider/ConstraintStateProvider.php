@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\State\Provider;
 
+use ApiPlatform\Metadata\Operation;
 use App\ApiResource\ConstraintResource;
 use App\Entity\Constraint;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @extends AbstractStateProvider<Constraint, ConstraintResource>
@@ -24,7 +26,7 @@ class ConstraintStateProvider extends AbstractStateProvider
      *
      * @return array<int, ConstraintResource>
      */
-    protected function provideCollection(\ApiPlatform\Metadata\Operation $operation, array $context, ?string $clubId): array
+    protected function provideCollection(Operation $operation, array $context, ?string $clubId): array
     {
         $qb = $this->entityManager->createQueryBuilder()
             ->select('e')
@@ -42,7 +44,7 @@ class ConstraintStateProvider extends AbstractStateProvider
         }
 
         $request = $this->requestStack->getCurrentRequest();
-        if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
+        if ($request instanceof Request) {
             if ($request->query->has('scope')) {
                 $qb->andWhere('e.scope = :scope')
                    ->setParameter('scope', $request->query->get('scope'));

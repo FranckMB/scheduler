@@ -17,6 +17,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
@@ -25,7 +26,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
 {
     use TenantGucTrait;
 
-    private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
+    private KernelBrowser $client;
 
     private EntityManagerInterface $em;
 

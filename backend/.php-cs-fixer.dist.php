@@ -99,8 +99,13 @@ return (new PhpCsFixer\Config())
         // Nullable type declaration: null at the end (equivalent to DNFTypeHintFormat nullPosition=last)
         'nullable_type_declaration' => ['syntax' => 'question_mark'],
 
-        // Fully qualified strict types
-        'fully_qualified_strict_types' => true,
+        // Fully qualified strict types — avec IMPORT des symboles.
+        // P4-24 : Rector (FlipTypeControlToUseExclusiveTypeRector) écrit ses
+        // `instanceof` avec un FQCN inline (`\App\Entity\ClubUser`). Sans
+        // `import_symbols`, CS-Fixer ne le raccourcit que si la classe était DÉJÀ
+        // importée — d'où deux styles dans le même fichier. Avec, il ajoute le
+        // `use` et raccourcit : les deux outils convergent au lieu de se contredire.
+        'fully_qualified_strict_types' => ['import_symbols' => true],
 
         // ########################
         // Best practices rules

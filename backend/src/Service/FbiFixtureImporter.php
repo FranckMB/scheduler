@@ -101,7 +101,7 @@ final class FbiFixtureImporter
             $rawDate = $row[$columnMap['date de rencontre']] ?? null;
             $rawTime = isset($columnMap['heure']) ? ($row[$columnMap['heure']] ?? null) : null;
 
-            if ('' === $division || '' === $numero || '' === $equipe1 || '' === $equipe2) {
+            if (\in_array('', [$division, $numero, $equipe1, $equipe2], true)) {
                 $errors[] = \sprintf('Ligne %d : Division, Numéro, Équipe 1 et Équipe 2 sont requis.', $line);
                 continue;
             }
@@ -130,7 +130,7 @@ final class FbiFixtureImporter
             }
 
             $matchDate = $this->parseDate($rawDate);
-            if (null === $matchDate) {
+            if (!$matchDate instanceof DateTimeImmutable) {
                 $errors[] = \sprintf('Ligne %d : date de rencontre invalide (attendu jj/mm/aaaa).', $line);
                 continue;
             }
@@ -138,7 +138,7 @@ final class FbiFixtureImporter
             $kickoffTime = null;
             if (null !== $rawTime && '' !== $this->stringValue($rawTime)) {
                 $kickoffTime = $this->parseTime($rawTime);
-                if (null === $kickoffTime) {
+                if (!$kickoffTime instanceof DateTimeImmutable) {
                     $errors[] = \sprintf('Ligne %d : heure invalide (attendu HH:MM).', $line);
                     continue;
                 }

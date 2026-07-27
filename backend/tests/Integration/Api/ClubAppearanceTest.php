@@ -11,6 +11,7 @@ use App\Entity\User;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -51,7 +52,7 @@ final class ClubAppearanceTest extends WebTestCase
         // /api/me exposes both accents so the theme applies the right one per mode.
         // The stateless JWT firewall needs a Bearer on this request (loginUser's
         // session is ignored there).
-        $token = self::getContainer()->get(\Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface::class)->create($this->user);
+        $token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->user);
         $this->client->request('GET', '/api/me', [], [], ['HTTP_X-Club-Id' => $this->club->getId(), 'HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseIsSuccessful();
         $me = json_decode((string) $this->client->getResponse()->getContent(), true);

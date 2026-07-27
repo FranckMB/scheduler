@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
 use App\Entity\Season;
+use App\Entity\Team;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
@@ -332,7 +333,7 @@ final class ValidateConstraintsTest extends WebTestCase
     /** Persist a minimal team scoped to the test club/season, return its id. */
     private function team(int $sessionsPerWeek): string
     {
-        $team = new \App\Entity\Team;
+        $team = new Team;
         $team->setClubId($this->club->getId());
         $team->setSeasonId($this->season->getId());
         $team->setSportCategoryId($this->club->getId()); // any guid — unused by the gate

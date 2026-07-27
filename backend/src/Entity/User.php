@@ -261,8 +261,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this->passwordHash;
     }
 
-    public function eraseCredentials(): void {}
-
     private function newUuid(): string
     {
         $bytes = random_bytes(16);

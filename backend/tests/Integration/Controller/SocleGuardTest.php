@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Controller;
 
+use App\Service\SocleGuard;
 use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -15,7 +16,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
  * freshly registered club has no baseline / no validated socle → creating a
  * fixture is refused with 409 (SocleGuard), before any other validation.
  *
- * @see \App\Service\SocleGuard
+ * @see SocleGuard
  */
 #[Group('phase1')]
 #[Group('integration')]

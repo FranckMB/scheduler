@@ -7,6 +7,8 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
@@ -235,7 +237,7 @@ final class CalendarEntryApiTest extends WebTestCase
 
         // The dated constraint is gone.
         $this->em->clear();
-        self::assertNull($this->em->getRepository(\App\Entity\Constraint::class)->find($constraintId));
+        self::assertNull($this->em->getRepository(Constraint::class)->find($constraintId));
     }
 
     public function testDeletingPeriodCascadesConstraintPeriodOverrides(): void
@@ -275,7 +277,7 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(204);
 
         $this->em->clear();
-        self::assertNull($this->em->getRepository(\App\Entity\ConstraintPeriodOverride::class)->find($overrideId), 'a period constraint override must not survive its period');
+        self::assertNull($this->em->getRepository(ConstraintPeriodOverride::class)->find($overrideId), 'a period constraint override must not survive its period');
     }
 
     public function testCollectionScopedToActiveSeason(): void

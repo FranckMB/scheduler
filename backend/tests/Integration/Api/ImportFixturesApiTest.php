@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Api;
 
 use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -154,9 +156,9 @@ final class ImportFixturesApiTest extends WebTestCase
             $this->settleSeasonPlan($season);
         }
 
-        $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
+        $sport = $this->em->getRepository(Sport::class)->findOneBy(['isActive' => true]);
         self::assertNotNull($sport, 'register seeds the basketball sport');
-        $category = new \App\Entity\SportCategory;
+        $category = new SportCategory;
         $category->setClubId($clubId);
         $category->setSportId($sport->getId());
         $category->setName('U13-' . uniqid('', true));

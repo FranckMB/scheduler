@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Entity\ClubUser;
 use App\Entity\Coach;
+use App\Entity\User;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -118,7 +121,7 @@ final class RgpdExportTest extends WebTestCase
     private function createActiveMemberWithToken(string $clubId, string $email, string $role): string
     {
         $em = $this->em();
-        $user = new \App\Entity\User;
+        $user = new User;
         $user->setEmail($email);
         $user->setFirstName('Edi');
         $user->setLastName('Tor');
@@ -126,7 +129,7 @@ final class RgpdExportTest extends WebTestCase
         $user->setEmailVerifiedAt(new DateTimeImmutable);
         $em->persist($user);
         $this->scopeGucToClub($clubId);
-        $membership = new \App\Entity\ClubUser;
+        $membership = new ClubUser;
         $membership->setClubId($clubId);
         $membership->setUserId($user->getId());
         $membership->setRole($role);
@@ -136,7 +139,7 @@ final class RgpdExportTest extends WebTestCase
         $this->clearGuc();
 
         return self::getContainer()
-            ->get(\Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface::class)
+            ->get(JWTTokenManagerInterface::class)
             ->create($user);
     }
 

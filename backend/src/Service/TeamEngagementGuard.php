@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -78,7 +79,7 @@ final class TeamEngagementGuard
         $rows = $this->entityManager->getConnection()->fetchFirstColumn(
             'SELECT DISTINCT team_id FROM fixture WHERE team_id IN (:tids)',
             ['tids' => $teamIds],
-            ['tids' => \Doctrine\DBAL\ArrayParameterType::STRING],
+            ['tids' => ArrayParameterType::STRING],
         );
 
         $set = [];

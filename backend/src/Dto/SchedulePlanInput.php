@@ -18,7 +18,7 @@ class SchedulePlanInput
     // normalizer 'trim' : sans lui «   » passe NotBlank puis se stocke vide, et
     // Length s'évaluerait sur une valeur différente de celle réellement écrite.
     #[Assert\NotBlank(message: 'Le nom du planning ne peut pas être vide.', normalizer: 'trim')]
-    #[Assert\Length(max: 180, maxMessage: 'Le nom du planning ne peut pas dépasser {{ limit }} caractères.', normalizer: 'trim')]
+    #[Assert\Length(max: 180, normalizer: 'trim', maxMessage: 'Le nom du planning ne peut pas dépasser {{ limit }} caractères.')]
     #[Groups(['write'])]
     public string $name = '';
 }

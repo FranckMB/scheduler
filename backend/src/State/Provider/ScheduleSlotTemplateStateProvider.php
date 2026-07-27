@@ -7,6 +7,7 @@ namespace App\State\Provider;
 use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Entity\ScheduleSlotTemplate;
 use Doctrine\ORM\QueryBuilder;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @extends AbstractStateProvider<ScheduleSlotTemplate, ScheduleSlotTemplateResource>
@@ -23,7 +24,7 @@ class ScheduleSlotTemplateStateProvider extends AbstractStateProvider
     protected function applyRequestFilters(QueryBuilder $qb): bool
     {
         $request = $this->requestStack->getCurrentRequest();
-        $scheduleId = null === $request ? null : $this->uuidQueryParam($request, 'scheduleId');
+        $scheduleId = $request instanceof Request ? $this->uuidQueryParam($request, 'scheduleId') : null;
         if (null !== $scheduleId) {
             $qb->andWhere('e.scheduleId = :scheduleId')->setParameter('scheduleId', $scheduleId);
 

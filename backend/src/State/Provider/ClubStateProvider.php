@@ -7,6 +7,7 @@ namespace App\State\Provider;
 use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\ClubResource;
 use App\Entity\Club;
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Repository\ClubUserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -71,7 +72,7 @@ class ClubStateProvider extends AbstractStateProvider
             return null;
         }
 
-        if (null === $this->clubUserRepository->findActiveMembership($user->getId(), $id)) {
+        if (!$this->clubUserRepository->findActiveMembership($user->getId(), $id) instanceof ClubUser) {
             return null;
         }
 

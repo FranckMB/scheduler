@@ -6,6 +6,8 @@ namespace App\Tests\Security;
 
 use App\Entity\ClubUser;
 use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
 use App\Service\SeasonResolver;
@@ -134,16 +136,16 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
             $seasonId = $season->getId();
         }
 
-        $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
+        $sport = $this->em->getRepository(Sport::class)->findOneBy(['isActive' => true]);
         if (null === $sport) {
             $uid = uniqid('', true);
-            $sport = new \App\Entity\Sport;
+            $sport = new Sport;
             $sport->setName('Basket ' . $uid);
             $sport->setSlug('basket-' . $uid);
             $sport->setIsActive(true);
             $this->em->persist($sport);
         }
-        $category = new \App\Entity\SportCategory;
+        $category = new SportCategory;
         $category->setClubId($clubId);
         $category->setSportId($sport->getId());
         $category->setName('U13-' . uniqid('', true));

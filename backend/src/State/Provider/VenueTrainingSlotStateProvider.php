@@ -7,6 +7,7 @@ namespace App\State\Provider;
 use ApiPlatform\Metadata\Operation;
 use App\ApiResource\VenueTrainingSlotResource;
 use App\Entity\VenueTrainingSlot;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @extends AbstractStateProvider<VenueTrainingSlot, VenueTrainingSlotResource>
@@ -44,7 +45,7 @@ class VenueTrainingSlotStateProvider extends AbstractStateProvider
         }
 
         $request = $this->requestStack->getCurrentRequest();
-        if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
+        if ($request instanceof Request) {
             $venueId = $this->uuidQueryParam($request, 'venueId');
             if (null !== $venueId) {
                 $qb->andWhere('e.venueId = :venueId')->setParameter('venueId', $venueId);

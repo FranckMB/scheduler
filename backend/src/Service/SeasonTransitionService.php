@@ -64,7 +64,7 @@ final class SeasonTransitionService
         $clubId = $source->getClubId();
 
         $current = $this->seasonResolver->currentSeason($clubId, $today);
-        if (null === $current || $current->getId() !== $source->getId()) {
+        if (!$current instanceof Season || $current->getId() !== $source->getId()) {
             throw new ConflictHttpException('Only the current season can be transitioned.');
         }
 

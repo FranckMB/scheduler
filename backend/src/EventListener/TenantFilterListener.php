@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
 class TenantFilterListener implements EventSubscriberInterface
 {
@@ -42,11 +43,6 @@ class TenantFilterListener implements EventSubscriberInterface
         return [
             KernelEvents::REQUEST => ['onKernelRequest', 7],
         ];
-    }
-
-    private static function isUuid(string $value): bool
-    {
-        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value);
     }
 
     public function onKernelRequest(RequestEvent $event): void
@@ -74,7 +70,7 @@ class TenantFilterListener implements EventSubscriberInterface
             // cannot be checked without a club, but the UUID shape can — a
             // garbage value must never reach a downstream _season_id consumer.
             $explicitSeason = $this->resolveExplicitSeasonId($request);
-            if (null !== $explicitSeason && self::isUuid($explicitSeason)) {
+            if (null !== $explicitSeason && $this->isUuid($explicitSeason)) {
                 $request->attributes->set('_season_id', $explicitSeason);
             }
 
@@ -122,7 +118,7 @@ class TenantFilterListener implements EventSubscriberInterface
             // Unknown, malformed or foreign-club season → 403, never a silent
             // fallback (mirror of the spoofed X-Club-Id check above). RLS
             // already hides other clubs' seasons from the lookup.
-            if (null === $season) {
+            if (!$season instanceof Season) {
                 // Distinct signal so the frontend self-heals a STALE selected
                 // season (drop the header, reload) without conflating it with a
                 // legitimate authorization 403 (role/voter denials).
@@ -144,7 +140,7 @@ class TenantFilterListener implements EventSubscriberInterface
             $readonly = false;
         }
 
-        if (null !== $season) {
+        if ($season instanceof Season) {
             $request->attributes->set('_season_id', $season->getId());
             $request->attributes->set('_season_readonly', $readonly);
 
@@ -152,6 +148,11 @@ class TenantFilterListener implements EventSubscriberInterface
             $seasonFilter = $filterCollection->enable('season_filter');
             $seasonFilter->setParameter('season_id', $season->getId(), 'uuid');
         }
+    }
+
+    private function isUuid(string $value): bool
+    {
+        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value);
     }
 
     /**
@@ -162,7 +163,7 @@ class TenantFilterListener implements EventSubscriberInterface
      */
     private function findClubSeason(string $seasonId, string $clubId): ?Season
     {
-        if (!self::isUuid($seasonId)) {
+        if (!$this->isUuid($seasonId)) {
             return null;
         }
 
@@ -177,7 +178,7 @@ class TenantFilterListener implements EventSubscriberInterface
     private function authenticatedUser(): ?User
     {
         $token = $this->tokenStorage->getToken();
-        if (null === $token) {
+        if (!$token instanceof TokenInterface) {
             return null;
         }
 

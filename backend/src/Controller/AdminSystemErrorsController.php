@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -107,7 +108,7 @@ final readonly class AdminSystemErrorsController
             . ' ORDER BY created_at DESC'
             . ' LIMIT :limit OFFSET :offset',
             [...$params, 'limit' => $limit, 'offset' => $offset],
-            ['limit' => \Doctrine\DBAL\ParameterType::INTEGER, 'offset' => \Doctrine\DBAL\ParameterType::INTEGER],
+            ['limit' => ParameterType::INTEGER, 'offset' => ParameterType::INTEGER],
         );
 
         $items = array_map(static fn (array $row): array => [

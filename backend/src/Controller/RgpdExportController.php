@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Enum\AuditAction;
 use App\Repository\ClubUserRepository;
@@ -45,7 +46,7 @@ final class RgpdExportController extends AbstractController
         if (!$user instanceof User) {
             return $this->json(['error' => 'Unauthorized'], 401);
         }
-        if (null !== ($throttled = $this->throttle($user))) {
+        if (($throttled = $this->throttle($user)) instanceof JsonResponse) {
             return $throttled;
         }
 
@@ -65,7 +66,7 @@ final class RgpdExportController extends AbstractController
             return $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        if (null !== ($throttled = $this->throttle($user))) {
+        if (($throttled = $this->throttle($user)) instanceof JsonResponse) {
             return $throttled;
         }
 
@@ -77,7 +78,7 @@ final class RgpdExportController extends AbstractController
         // Même sémantique que les autres écritures/gates club (SEC-04/07) :
         // pas de membership actif → 404 ; membre non-management → 403.
         $membership = $this->clubUserRepository->findActiveMembership($user->getId(), $clubId);
-        if (null === $membership) {
+        if (!$membership instanceof ClubUser) {
             return $this->json(['error' => 'Club not found.'], Response::HTTP_NOT_FOUND);
         }
         if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {

@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
@@ -163,10 +164,10 @@ final class AuditTrailTest extends WebTestCase
         $this->client = self::createClient();
     }
 
-    private function admin(): \Doctrine\DBAL\Connection
+    private function admin(): Connection
     {
         $connection = self::getContainer()->get(ManagerRegistry::class)->getConnection('admin');
-        \assert($connection instanceof \Doctrine\DBAL\Connection);
+        \assert($connection instanceof Connection);
 
         return $connection;
     }

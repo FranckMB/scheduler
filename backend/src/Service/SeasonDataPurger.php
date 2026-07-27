@@ -7,20 +7,27 @@ namespace App\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
+use App\Entity\CoachWish;
+use App\Entity\CoachWishCampaign;
 use App\Entity\Competition;
 use App\Entity\Constraint;
 use App\Entity\ConstraintConflict;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Fixture;
 use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -72,9 +79,9 @@ final class SeasonDataPurger
         $deleted += $this->deleteBySubQuery(PeriodReminderLog::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
         // #10 — doléances coachs (ancrées à l'entrée de vacances). Table club_id, mais on
         // borne par la saison via l'entrée, comme le reminder log.
-        $deleted += $this->deleteBySubQuery(\App\Entity\CoachWish::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
+        $deleted += $this->deleteBySubQuery(CoachWish::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
         // #10 C2 — campagnes de collecte (leurs tokens partent par FK CASCADE).
-        $deleted += $this->deleteBySubQuery(\App\Entity\CoachWishCampaign::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
+        $deleted += $this->deleteBySubQuery(CoachWishCampaign::class, 'calendarEntryId', CalendarEntry::class, $clubId, $seasonId);
 
         // TeamTagAssignment has a season_id but NO club_id → deleted by season.
         $deleted += (int) $this->entityManager->createQueryBuilder()
@@ -86,13 +93,13 @@ final class SeasonDataPurger
 
         foreach ([
             ScheduleDiagnostic::class,
-            \App\Entity\ScheduleStructureSnapshot::class,
+            ScheduleStructureSnapshot::class,
             ScheduleSlotTemplate::class,
             Constraint::class,
             Reservation::class,
-            \App\Entity\TeamPeriodOverride::class,
-            \App\Entity\ConstraintPeriodOverride::class,
-            \App\Entity\VenuePeriodOverride::class,
+            TeamPeriodOverride::class,
+            ConstraintPeriodOverride::class,
+            VenuePeriodOverride::class,
             // Module matchs (ajouté après ce purger — gap RGPD constaté PR-1) :
             // Fixture avant Competition (competitionId y pointe). Changement
             // ASSUMÉ pour ResetSeasonController aussi : « réinitialiser la
@@ -107,7 +114,7 @@ final class SeasonDataPurger
             // ADR-0002: the named container of a season/period's versions — a
             // club_id+season_id table, so it must be purged with the season
             // (RGPD erasure + retention purge + season reset). No DB FK cascades.
-            \App\Entity\SchedulePlan::class,
+            SchedulePlan::class,
             Schedule::class,
             Team::class,
             Coach::class,

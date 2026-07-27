@@ -8,6 +8,7 @@ use App\Entity\SuperAdmin;
 use App\Security\TotpService;
 use App\Tests\Double\RecordingAdminJobExecutor;
 use App\Tests\VerifiesRegistration;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\Persistence\ManagerRegistry;
@@ -342,13 +343,13 @@ final class SuperAdminAccessTest extends WebTestCase
     protected function tearDown(): void
     {
         if ([] !== $this->jobRunIds) {
-            $this->admin()->executeStatement('DELETE FROM admin_job_run WHERE id IN (:ids)', ['ids' => $this->jobRunIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM admin_job_run WHERE id IN (:ids)', ['ids' => $this->jobRunIds], ['ids' => ArrayParameterType::STRING]);
         }
         if ([] !== $this->metricIds) {
-            $this->admin()->executeStatement('DELETE FROM solver_metrics WHERE id IN (:ids)', ['ids' => $this->metricIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM solver_metrics WHERE id IN (:ids)', ['ids' => $this->metricIds], ['ids' => ArrayParameterType::STRING]);
         }
         if ([] !== $this->monitoringClubIds) {
-            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->monitoringClubIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->monitoringClubIds], ['ids' => ArrayParameterType::STRING]);
         }
         if (isset($this->adminId)) {
             $this->admin()->executeStatement('DELETE FROM admin_audit_log WHERE super_admin_id = :id OR super_admin_id IS NULL', ['id' => $this->adminId]);

@@ -66,8 +66,7 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
     {
         // One override per (period, team) — the DB unique index would otherwise
         // surface as a 500 on a double-submit; give a clean 422 instead (edit via PUT).
-        if (null !== $input->schedulePlanId && null !== $input->teamId
-            && null !== $this->entityManager->getRepository(TeamPeriodOverride::class)->findOneBy(['schedulePlanId' => $input->schedulePlanId, 'teamId' => $input->teamId])) {
+        if (!\in_array(null, [$input->schedulePlanId, $input->teamId, $this->entityManager->getRepository(TeamPeriodOverride::class)->findOneBy(['schedulePlanId' => $input->schedulePlanId, 'teamId' => $input->teamId])], true)) {
             throw new ValidationException('This team already has an override for this period — edit it instead.');
         }
 

@@ -8,6 +8,7 @@ use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
+use App\Entity\CoachWishToken;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Repository\CoachWishTokenRepository;
@@ -226,7 +227,7 @@ final class PublicCoachWishController extends AbstractController
     /**
      * Résout le token (forme + existence). Réponse 404 identique pour malformé et inconnu.
      *
-     * @return array{token: \App\Entity\CoachWishToken}|null
+     * @return array{token: CoachWishToken}|null
      */
     private function resolveToken(string $token): ?array
     {
@@ -235,7 +236,7 @@ final class PublicCoachWishController extends AbstractController
         }
         $entity = $this->tokenRepository->findOneByToken($token);
 
-        return null === $entity ? null : ['token' => $entity];
+        return $entity instanceof CoachWishToken ? ['token' => $entity] : null;
     }
 
     private function isExpired(CoachWishCampaign $campaign): bool

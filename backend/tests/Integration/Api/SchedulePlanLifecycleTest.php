@@ -14,6 +14,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
 use App\Enum\ScheduleStatus;
+use App\Service\OverlayManager;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -106,7 +107,7 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         self::assertSame($v1->getId(), $this->chosenOfSeason($season));
 
         // Chemin de suppression réel (purge des artefacts + release du pointeur).
-        self::getContainer()->get(\App\Service\OverlayManager::class)->purgeScheduleArtifacts($v1);
+        self::getContainer()->get(OverlayManager::class)->purgeScheduleArtifacts($v1);
         $this->em->remove($v1);
         $this->em->flush();
 
@@ -126,7 +127,7 @@ final class SchedulePlanLifecycleTest extends WebTestCase
         self::assertSame([1, 2, 3], [$v1->getVersionNumber(), $v2->getVersionNumber(), $v3->getVersionNumber()]);
 
         // Supprimer la plus haute : un MAX+1 réattribuerait « 3 ».
-        self::getContainer()->get(\App\Service\OverlayManager::class)->purgeScheduleArtifacts($v3);
+        self::getContainer()->get(OverlayManager::class)->purgeScheduleArtifacts($v3);
         $this->em->remove($v3);
         $this->em->flush();
 

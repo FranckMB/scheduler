@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -129,7 +130,7 @@ final class ManagementRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(403, 'schedule DELETE must be management-only');
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('apiPlatformWriteEndpoints')]
+    #[DataProvider('apiPlatformWriteEndpoints')]
     public function testNonManagementMemberIsForbiddenOnApiPlatformWrites(string $method, string $url, string $body): void
     {
         [, , $clubA] = $this->register('MGC');
@@ -143,7 +144,7 @@ final class ManagementRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(403, \sprintf('%s %s must be management-only', $method, $url));
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('clubUserWriteVerbs')]
+    #[DataProvider('clubUserWriteVerbs')]
     public function testClubUserWritesAreRemoved(string $method, string $url): void
     {
         // Even a management member gets 405 — the write routes no longer exist.
@@ -207,7 +208,7 @@ final class ManagementRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(409, 'a schedule must be created as DRAFT only');
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('managementEndpoints')]
+    #[DataProvider('managementEndpoints')]
     public function testNonManagementMemberIsForbidden(string $method, string $url): void
     {
         [, , $clubA] = $this->register('MGA');

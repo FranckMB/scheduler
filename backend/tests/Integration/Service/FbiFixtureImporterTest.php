@@ -8,6 +8,8 @@ use App\Entity\Club;
 use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
@@ -271,16 +273,16 @@ final class FbiFixtureImporterTest extends KernelTestCase
 
     private function createCategoryId(): string
     {
-        $sport = $this->em->getRepository(\App\Entity\Sport::class)->findOneBy(['isActive' => true]);
+        $sport = $this->em->getRepository(Sport::class)->findOneBy(['isActive' => true]);
         if (null === $sport) {
             $uid = uniqid('', true);
-            $sport = new \App\Entity\Sport;
+            $sport = new Sport;
             $sport->setName('Basket ' . $uid);
             $sport->setSlug('basket-' . $uid);
             $sport->setIsActive(true);
             $this->em->persist($sport);
         }
-        $category = new \App\Entity\SportCategory;
+        $category = new SportCategory;
         $category->setClubId($this->club->getId());
         $category->setSportId($sport->getId());
         $category->setName('U13-' . uniqid('', true));

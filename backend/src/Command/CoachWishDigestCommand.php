@@ -25,6 +25,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
 use Throwable;
 
 /**
@@ -251,7 +252,7 @@ final class CoachWishDigestCommand extends Command
                 continue;
             }
             $responded[] = $name;
-            if (null === $lastDigestAt || $respondedAt > $lastDigestAt) {
+            if (!$lastDigestAt instanceof DateTimeImmutable || $respondedAt > $lastDigestAt) {
                 $new[] = $name;
             }
         }
@@ -264,7 +265,7 @@ final class CoachWishDigestCommand extends Command
         return $this->entityManager->getRepository(CalendarEntry::class)->find($campaign->getCalendarEntryId())?->getTitle() ?? 'la période';
     }
 
-    private function send(\Symfony\Component\Mime\Email $email, SymfonyStyle $io): int
+    private function send(Email $email, SymfonyStyle $io): int
     {
         try {
             $this->mailer->send($email);

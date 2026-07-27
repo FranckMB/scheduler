@@ -8,6 +8,7 @@ use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Reservation;
+use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
@@ -17,6 +18,7 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\LockLevel;
+use App\Enum\ScheduleStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
@@ -66,7 +68,7 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
 
     private string $planId;
 
-    private ?\App\Entity\Schedule $periodSchedule = null;
+    private ?Schedule $periodSchedule = null;
 
     /**
      * @return iterable<string, array{string}>
@@ -626,15 +628,15 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
      * verrous du planning principal). La fixture doit donc porter une vraie version de
      * CETTE période — un scheduleId fictif ne modélisait rien de réel.
      */
-    private function periodSchedule(): \App\Entity\Schedule
+    private function periodSchedule(): Schedule
     {
         if (null === $this->periodSchedule) {
-            $this->periodSchedule = (new \App\Entity\Schedule)
+            $this->periodSchedule = (new Schedule)
                 ->setClubId($this->club->getId())
                 ->setSeasonId($this->season->getId())
                 ->setSchedulePlanId($this->planId)
                 ->setName('V1 période');
-            $this->periodSchedule->setStatus(\App\Enum\ScheduleStatus::COMPLETED);
+            $this->periodSchedule->setStatus(ScheduleStatus::COMPLETED);
             $this->em->persist($this->periodSchedule);
             $this->em->flush();
         }

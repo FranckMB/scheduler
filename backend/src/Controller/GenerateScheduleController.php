@@ -8,6 +8,11 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
 use App\Message\GenerateScheduleMessage;
+use App\Service\GenerationComplexityGuard;
+use App\Service\ManagementAccessGuard;
+use App\Service\OrphanPinGuard;
+use App\Service\SchedulePlanProvisioner;
+use App\Service\SocleGuard;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -26,11 +31,11 @@ final class GenerateScheduleController extends AbstractController implements Sea
         private EntityManagerInterface $entityManager,
         private MessageBusInterface $messageBus,
         private RequestStack $requestStack,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
-        private readonly \App\Service\SocleGuard $socleGuard,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
-        private readonly \App\Service\GenerationComplexityGuard $complexityGuard,
-        private readonly \App\Service\OrphanPinGuard $orphanPinGuard,
+        private readonly ManagementAccessGuard $managementAccessGuard,
+        private readonly SocleGuard $socleGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly GenerationComplexityGuard $complexityGuard,
+        private readonly OrphanPinGuard $orphanPinGuard,
         private readonly ClockInterface $clock,
     ) {}
 

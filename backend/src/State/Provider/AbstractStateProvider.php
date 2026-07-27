@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\State\Provider;
 
+use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\Pagination\Pagination;
 use ApiPlatform\State\Pagination\TraversablePaginator;
@@ -37,7 +38,7 @@ abstract class AbstractStateProvider implements ProviderInterface
         $request = $this->requestStack->getCurrentRequest();
         $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
 
-        if ($operation instanceof \ApiPlatform\Metadata\GetCollection) {
+        if ($operation instanceof GetCollection) {
             return $this->provideCollection($operation, $context, $clubId);
         }
 

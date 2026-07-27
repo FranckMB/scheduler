@@ -132,7 +132,7 @@ final class FfbbClubPopulator
     private function upsertCommittee(array $parent, ?array $ligue, bool $refresh): void
     {
         $code = $this->str($parent['code'] ?? null);
-        if (null === $code || (!$refresh && null !== $this->committees->findByCode($code))) {
+        if (null === $code || (!$refresh && $this->committees->findByCode($code) instanceof FfbbCommittee)) {
             return; // cache-first: already known → no fetch/write
         }
 
@@ -156,7 +156,7 @@ final class FfbbClubPopulator
             return;
         }
         $code = $this->str($ligue['code'] ?? null);
-        if (null === $code || (!$refresh && null !== $this->leagues->findByCode($code))) {
+        if (null === $code || (!$refresh && $this->leagues->findByCode($code) instanceof FfbbLeague)) {
             return;
         }
 

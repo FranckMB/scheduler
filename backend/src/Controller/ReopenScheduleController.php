@@ -7,7 +7,9 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
+use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,8 +31,8 @@ final class ReopenScheduleController extends AbstractController implements Seaso
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly OverlayManager $overlayManager,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ManagementAccessGuard $managementAccessGuard,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedules/{id}/reopen', name: 'api_schedule_reopen', methods: ['POST'])]

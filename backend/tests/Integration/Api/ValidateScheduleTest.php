@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Schedule;
 use App\Entity\Season;
+use App\Entity\SolverMetric;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
@@ -78,8 +79,8 @@ final class ValidateScheduleTest extends WebTestCase
         $v1 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         $v2 = $this->createSchedule($season, ScheduleStatus::COMPLETED);
         // Une tentative de génération par version (comme la prod : une ligne par attempt).
-        $m1 = new \App\Entity\SolverMetric($v1->getId(), $club->getId(), 'COMPLETED', 1200, null, null, null, 9000, 'v1', null, 'SEASON', 12, 3);
-        $m2 = new \App\Entity\SolverMetric($v2->getId(), $club->getId(), 'COMPLETED', 900, null, null, null, 9100, 'v1', null, 'SEASON', 12, 3);
+        $m1 = new SolverMetric($v1->getId(), $club->getId(), 'COMPLETED', 1200, null, null, null, 9000, 'v1', null, 'SEASON', 12, 3);
+        $m2 = new SolverMetric($v2->getId(), $club->getId(), 'COMPLETED', 900, null, null, null, 9100, 'v1', null, 'SEASON', 12, 3);
         $this->em->persist($m1);
         $this->em->persist($m2);
         $this->em->flush();
@@ -91,8 +92,8 @@ final class ValidateScheduleTest extends WebTestCase
         $this->em->clear();
         $this->scopeGucToClub($club->getId());
         self::assertNull($this->em->getRepository(Schedule::class)->find($v1->getId()), 'la version sœur est supprimée (inv. 1)');
-        self::assertNotNull($this->em->getRepository(\App\Entity\SolverMetric::class)->find($m1->getId()), 'la métrique de la sœur SURVIT (append-only) même si sa version est morte');
-        self::assertNotNull($this->em->getRepository(\App\Entity\SolverMetric::class)->find($m2->getId()));
+        self::assertNotNull($this->em->getRepository(SolverMetric::class)->find($m1->getId()), 'la métrique de la sœur SURVIT (append-only) même si sa version est morte');
+        self::assertNotNull($this->em->getRepository(SolverMetric::class)->find($m2->getId()));
     }
 
     /**

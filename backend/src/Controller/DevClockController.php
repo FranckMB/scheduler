@@ -82,7 +82,7 @@ final class DevClockController extends AbstractController
 
         return [
             'now' => $now->format(DateTimeInterface::ATOM),
-            'pinned' => null !== $pinned,
+            'pinned' => $pinned instanceof DateTimeImmutable,
         ];
     }
 

@@ -43,8 +43,8 @@ final class LoginSuccessListener
         }
 
         $now = DateTimeImmutable::createFromInterface($this->clock->now());
-        $stale = null === $user->getLastLoginAt() || $user->getLastLoginAt() < $now->modify(self::REFRESH_AFTER);
-        if (!$stale && null === $user->getInactivityWarnedAt()) {
+        $stale = !$user->getLastLoginAt() instanceof DateTimeImmutable || $user->getLastLoginAt() < $now->modify(self::REFRESH_AFTER);
+        if (!$stale && !$user->getInactivityWarnedAt() instanceof DateTimeImmutable) {
             return; // trace du jour déjà posée, rien à annuler → zéro écriture.
         }
 

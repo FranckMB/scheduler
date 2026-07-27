@@ -91,7 +91,7 @@ class SolverMetric implements TenantOwnedInterface
         ?int $nbTeams = null,
         ?int $nbVenues = null,
     ) {
-        $this->id = self::newUuid();
+        $this->id = $this->newUuid();
         $this->scheduleId = $scheduleId;
         $this->clubId = $clubId;
         $this->status = $status;
@@ -105,15 +105,6 @@ class SolverMetric implements TenantOwnedInterface
         $this->planType = $planType;
         $this->nbTeams = $nbTeams;
         $this->nbVenues = $nbVenues;
-    }
-
-    private static function newUuid(): string
-    {
-        $data = random_bytes(16);
-        $data[6] = \chr((\ord($data[6]) & 0x0F) | 0x40);
-        $data[8] = \chr((\ord($data[8]) & 0x3F) | 0x80);
-
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
     public function getId(): string
@@ -191,5 +182,14 @@ class SolverMetric implements TenantOwnedInterface
     public function getNbVenues(): ?int
     {
         return $this->nbVenues;
+    }
+
+    private function newUuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = \chr((\ord($data[6]) & 0x0F) | 0x40);
+        $data[8] = \chr((\ord($data[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 }

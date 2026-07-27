@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -48,7 +49,7 @@ final class PurgeAuditLogCommand extends Command
         $threshold = $this->clock->now()->modify(self::RETENTION)->format('Y-m-d H:i:s');
 
         $connection = $this->managerRegistry->getConnection('admin');
-        \assert($connection instanceof \Doctrine\DBAL\Connection);
+        \assert($connection instanceof Connection);
 
         // GARDE BRUYANT (revue PR-4, patron RlsIsolationTest) : si la connexion
         // « admin » régresse vers app_user, le DELETE sous RLS affecterait 0

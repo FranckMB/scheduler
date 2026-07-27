@@ -139,6 +139,14 @@ jobs:
       - name: Run PHP-CS-Fixer (dry-run)
         run: docker compose exec -T php-fpm composer cs-fix -- --dry-run --diff
 
+      # P4-24 : Rector devient BLOQUANT. Sans ce garde, un bump de `rector/rector`
+      # (groupe composer, dependabot) élargit une règle et fait diverger 54 fichiers
+      # du style sans que rien ne le signale — `make -C backend rector` en dry-run
+      # local était le seul endroit qui le voyait, et personne n'y passe avant merge.
+      # Dry-run : la CI rapporte le diff, elle ne réécrit pas.
+      - name: Run Rector (dry-run)
+        run: docker compose exec -T php-fpm composer rector -- --dry-run
+
   blocking-tests:
     name: Blocking Tests
     runs-on: ubuntu-latest

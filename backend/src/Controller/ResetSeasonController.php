@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Enum\AuditAction;
 use App\Repository\ClubUserRepository;
@@ -47,7 +48,7 @@ final class ResetSeasonController extends AbstractController
         $membership = $user instanceof User
             ? $this->clubUserRepository->findActiveMembership($user->getId(), $clubId)
             : null;
-        if (null === $membership || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
+        if (!$membership instanceof ClubUser || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
             return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
         }
 

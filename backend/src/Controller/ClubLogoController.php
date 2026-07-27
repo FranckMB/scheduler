@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Repository\ClubRepository;
+use App\Service\ManagementAccessGuard;
 use App\Storage\LogoStorage;
 use App\Storage\LogoUrl;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,7 +37,7 @@ final class ClubLogoController extends AbstractController
         private readonly ClubRepository $clubRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
 
     #[Route('/api/club/logo', name: 'club_logo_upload', methods: ['POST'])]

@@ -7,10 +7,14 @@ namespace App\Controller;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use App\Service\ManagementAccessGuard;
 use App\Service\ManualEditService;
+use App\Service\SchedulePlanProvisioner;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\ORMInvalidArgumentException;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,9 +27,9 @@ final class ManualEditController extends AbstractController implements SeasonSco
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ManualEditService $manualEditService,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
-        private readonly \Psr\Log\LoggerInterface $logger,
-        private readonly \App\Service\SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ManagementAccessGuard $managementAccessGuard,
+        private readonly LoggerInterface $logger,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
@@ -152,7 +156,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         } catch (InvalidArgumentException $e) {
             // Doctrine's ORMInvalidArgumentException extends InvalidArgumentException:
             // only the service's own domain messages may reach the client (SEC-08).
-            if ($e instanceof \Doctrine\ORM\ORMInvalidArgumentException) {
+            if ($e instanceof ORMInvalidArgumentException) {
                 $this->logger->error('Manual edit failed.', ['exception' => $e]);
 
                 return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);

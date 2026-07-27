@@ -15,6 +15,7 @@ use App\Service\TeamTagService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 #[Group('unit')]
@@ -22,16 +23,16 @@ final class TeamTagServiceTest extends TestCase
 {
     private TeamTagService $service;
 
-    /** @var EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject */
+    /** @var EntityManagerInterface&MockObject */
     private EntityManagerInterface $entityManager;
 
-    /** @var EntityRepository<TeamTagAssignment>&\PHPUnit\Framework\MockObject\MockObject */
+    /** @var EntityRepository<TeamTagAssignment>&MockObject */
     private EntityRepository $assignmentRepository;
 
-    /** @var EntityRepository<TeamTag>&\PHPUnit\Framework\MockObject\MockObject */
+    /** @var EntityRepository<TeamTag>&MockObject */
     private EntityRepository $teamTagRepository;
 
-    /** @var EntityRepository<SportCategory>&\PHPUnit\Framework\MockObject\MockObject */
+    /** @var EntityRepository<SportCategory>&MockObject */
     private EntityRepository $sportCategoryRepository;
 
     public function testSyncTeamTagsForU15F(): void

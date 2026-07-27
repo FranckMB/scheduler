@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Entity\Club;
+use App\Entity\Season;
 use App\Enum\AuditAction;
 use App\Service\AuditTrail;
 use App\Service\SeasonDataPurger;
@@ -77,7 +78,7 @@ final class ResetClubSeasonCommand extends Command
             // statique prendrait l'horloge murale et pourrait viser une autre saison que
             // celle que la console affiche (revue SA4, finding 0).
             $current = $this->seasonResolver->currentSeason($clubId);
-            if (null === $current) {
+            if (!$current instanceof Season) {
                 $io->error(\sprintf('Club %s has no current season — nothing to reset.', $clubId));
 
                 return Command::FAILURE;

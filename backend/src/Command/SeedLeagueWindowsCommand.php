@@ -73,13 +73,13 @@ final class SeedLeagueWindowsCommand extends Command
             $min = $this->parseTime($row['kickoffMin'] ?? null);
             $max = $this->parseTime($row['kickoffMax'] ?? null);
 
-            if ('' === $league || '' === $category || '' === $level || $dayOfWeek < 1 || $dayOfWeek > 7 || null === $min || null === $max) {
+            if (\in_array('', [$league, $category, $level], true) || $dayOfWeek < 1 || $dayOfWeek > 7 || !$min instanceof DateTimeImmutable || !$max instanceof DateTimeImmutable) {
                 $io->error(\sprintf('Malformed row (nothing written): %s', json_encode($row)));
 
                 return Command::FAILURE;
             }
 
-            $parsed[] = compact('league', 'category', 'level', 'gender', 'dayOfWeek', 'min', 'max');
+            $parsed[] = ['league' => $league, 'category' => $category, 'level' => $level, 'gender' => $gender, 'dayOfWeek' => $dayOfWeek, 'min' => $min, 'max' => $max];
         }
 
         $leagues = array_values(array_unique(array_column($parsed, 'league')));
@@ -91,7 +91,7 @@ final class SeedLeagueWindowsCommand extends Command
         $kept = [];
         foreach ($parsed as $row) {
             $entity = $this->repository->findOneByNaturalKey($row['league'], $row['category'], $row['level'], $row['gender'], $row['dayOfWeek'], $row['min']);
-            if (null === $entity) {
+            if (!$entity instanceof LeagueMatchWindow) {
                 $entity = new LeagueMatchWindow;
                 $entity->setLeague($row['league']);
                 $entity->setCategory($row['category']);

@@ -8,6 +8,7 @@ use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
+use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,7 +37,7 @@ final class ValidateScheduleController extends AbstractController implements Sea
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
-        private readonly \App\Service\ManagementAccessGuard $managementAccessGuard,
+        private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}

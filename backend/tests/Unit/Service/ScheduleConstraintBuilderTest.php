@@ -6,6 +6,7 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Reservation;
 use App\Entity\Team;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
@@ -236,7 +237,7 @@ final class ScheduleConstraintBuilderTest extends TestCase
 
     public function testReservationsAreSerializedIntoSlotTemplatesAsHardPins(): void
     {
-        $reservation = (new \App\Entity\Reservation)
+        $reservation = (new Reservation)
             ->setClubId('club-1')
             ->setSeasonId('season-1')
             ->setSchedulePlanId(null) // réservation de BASE

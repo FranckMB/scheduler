@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
+use App\Entity\CoachWish;
 use App\Entity\Competition;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
@@ -17,8 +18,10 @@ use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
@@ -73,9 +76,9 @@ final class EntityCascadeDeleter
             // TeamTagAssignment has a season_id but NO club_id (scoped by season).
             $this->deleteByField(TeamTagAssignment::class, 'teamId', $teamId, null, $seasonId);
             // Period-editable structure (B1): a team's per-period overrides key on teamId.
-            $this->deleteByField(\App\Entity\TeamPeriodOverride::class, 'teamId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(TeamPeriodOverride::class, 'teamId', $teamId, $clubId, $seasonId);
             // #10 — sans équipe, une doléance n'a plus de sens : elle part.
-            $this->deleteByField(\App\Entity\CoachWish::class, 'teamId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(CoachWish::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
             $this->clearParentRef(Team::class, 'parentTeamId', $teamId, $clubId, $seasonId);
         });
@@ -89,7 +92,7 @@ final class EntityCascadeDeleter
 
         $this->withoutTenantFilters(function () use ($clubId, $seasonId, $venueId): void {
             $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(\App\Entity\VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleDiagnostic::class, 'venueId', $venueId, $clubId, $seasonId);
@@ -118,7 +121,7 @@ final class EntityCascadeDeleter
             $this->clearParentRef(ScheduleSlotTemplate::class, 'coachId', $coachId, $clubId, $seasonId);
             // #10 — la doléance SURVIT au coach supprimé, dé-attribuée : son info d'équipe
             // reste utile au plan de vacances.
-            $this->clearParentRef(\App\Entity\CoachWish::class, 'coachId', $coachId, $clubId, $seasonId);
+            $this->clearParentRef(CoachWish::class, 'coachId', $coachId, $clubId, $seasonId);
             $this->clearParentRef(Coach::class, 'parentCoachId', $coachId, $clubId, $seasonId);
         });
     }

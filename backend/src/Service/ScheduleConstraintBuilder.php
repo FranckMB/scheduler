@@ -34,6 +34,7 @@ use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
+use Psr\Cache\CacheItemInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -158,7 +159,7 @@ final class ScheduleConstraintBuilder
 
         $this->currentAvailabilitiesByVenue = [];
 
-        if ($cacheItem instanceof \Psr\Cache\CacheItemInterface) {
+        if ($cacheItem instanceof CacheItemInterface) {
             $cacheItem->set($payload);
             $cacheItem->expiresAfter(self::CACHE_TTL_SECONDS);
             $this->scheduleCachePool->save($cacheItem);

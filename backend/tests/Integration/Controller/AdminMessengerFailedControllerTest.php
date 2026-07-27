@@ -15,12 +15,14 @@ use PHPUnit\Framework\Attributes\Group;
 use Redis;
 use ReflectionClass;
 use RuntimeException;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection as RedisConnection;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Stamp\ErrorDetailsStamp;
 use Symfony\Component\Messenger\Stamp\RedeliveryStamp;
+use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Uid\Uuid;
 use Throwable;
@@ -33,7 +35,7 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
 
     private string $requestIp;
 
-    private \Symfony\Bundle\FrameworkBundle\KernelBrowser $client;
+    private KernelBrowser $client;
 
     /** @var list<string> */
     private array $redisMessageIds = [];
@@ -178,8 +180,8 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
         ]);
 
         $sent = $transport->send($envelope);
-        /** @var \Symfony\Component\Messenger\Stamp\TransportMessageIdStamp|null $stamp */
-        $stamp = $sent->last(\Symfony\Component\Messenger\Stamp\TransportMessageIdStamp::class);
+        /** @var TransportMessageIdStamp|null $stamp */
+        $stamp = $sent->last(TransportMessageIdStamp::class);
 
         return (string) ($stamp?->getId() ?? Uuid::v4()->toRfc4122());
     }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Command;
 
 use App\Service\AdminDataFreshnessService;
+use App\Service\BackupCoverage;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
@@ -12,6 +14,7 @@ use Psr\Clock\ClockInterface;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Uid\Uuid;
 
@@ -42,7 +45,7 @@ final class DatabaseBackupCommandTest extends KernelTestCase
 
         // Re-run : le dump est plus récent que l'activité → SKIP (pas de 2e fichier).
         $second = $backup();
-        self::assertSame(Command::SUCCESS, $second->execute(['--dir' => $this->dir], ['verbosity' => \Symfony\Component\Console\Output\OutputInterface::VERBOSITY_VERBOSE]));
+        self::assertSame(Command::SUCCESS, $second->execute(['--dir' => $this->dir], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]));
         self::assertStringContainsString('skipping', $second->getDisplay());
         self::assertCount(1, $this->dumps(), 'sans activité nouvelle, aucun dump supplémentaire');
 
@@ -105,8 +108,8 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         $this->seedActivity();
         $registry = self::getContainer()->get(ManagerRegistry::class);
         $clock = self::getContainer()->get(ClockInterface::class);
-        $coverage = self::getContainer()->get(\App\Service\BackupCoverage::class);
-        \assert($registry instanceof ManagerRegistry && $clock instanceof ClockInterface && $coverage instanceof \App\Service\BackupCoverage);
+        $coverage = self::getContainer()->get(BackupCoverage::class);
+        \assert($registry instanceof ManagerRegistry && $clock instanceof ClockInterface && $coverage instanceof BackupCoverage);
         $service = new AdminDataFreshnessService($registry, $clock, $coverage, $this->dir);
 
         // Activité mais AUCUN dump → périmé (fail-visible).
@@ -135,7 +138,7 @@ final class DatabaseBackupCommandTest extends KernelTestCase
         }
         @rmdir($this->dir);
         if ([] !== $this->clubIds) {
-            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->clubIds], ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING]);
+            $this->admin()->executeStatement('DELETE FROM club WHERE id IN (:ids)', ['ids' => $this->clubIds], ['ids' => ArrayParameterType::STRING]);
         }
         parent::tearDown();
     }

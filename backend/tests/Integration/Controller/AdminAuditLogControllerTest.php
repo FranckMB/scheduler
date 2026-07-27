@@ -6,6 +6,7 @@ namespace App\Tests\Integration\Controller;
 
 use App\Entity\SuperAdmin;
 use App\Security\TotpService;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\Persistence\ManagerRegistry;
@@ -203,7 +204,7 @@ final class AdminAuditLogControllerTest extends WebTestCase
             $this->admin()->executeStatement(
                 'DELETE FROM admin_audit_log WHERE id IN (:ids)',
                 ['ids' => $this->auditLogIds],
-                ['ids' => \Doctrine\DBAL\ArrayParameterType::STRING],
+                ['ids' => ArrayParameterType::STRING],
             );
         }
         if (isset($this->adminId)) {
